@@ -6,8 +6,9 @@ import numpy as np
 import numpy.typing as npt
 
 import math
-from pydrake.math import ge, eq
+from pydrake.math import le, ge, eq
 import pydrake.symbolic as sym
+import pydrake.geometry.optimization as opt
 
 from pydrake.geometry.optimization import GraphOfConvexSets
 from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
@@ -42,9 +43,9 @@ class BezierCurve:
         self, A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
     ):
         # NOTE: Would like to do:
-        # self.prog.AddLinearConstraint(A.dot(self.ctrl_points) >= b)
+        # self.prog.AddLinearConstraint(A.dot(self.ctrl_points) <= b)
         # But this doesnt work, see https://github.com/RobotLocomotion/drake/issues/16025
-        constraint = ge(A.dot(self.ctrl_points), b)
+        constraint = le(A.dot(self.ctrl_points), b)
         self.prog.AddLinearConstraint(constraint)
 
     def constrain_start_pos(self, x0: npt.NDArray[np.float64]) -> None:
@@ -97,25 +98,21 @@ class BernsteinPolynomial:
         return value_at_s
 
 
-@dataclass
-class Polyhedron:
-    A: npt.NDArray[np.float64]
-    b: npt.NDArray[np.float64]
-
-    def __post_init__(self):
-        self.dim = self.A.shape[1]
-
+class Polyhedron(opt.HPolyhedron):
     def get_vertices(self) -> npt.NDArray[np.float64]:  # [N, 2]
         # NOTE: Use cdd to calculate vertices
         # cdd expects: [b -A], where A'x <= b
         # We have A'x >= b ==> -A'x <= -b
         # Hence we need [-b A]
-        cdd_matrix = cdd.Matrix(np.hstack((-self.b, self.A)))
+        A = self.A()
+        b = self.b().reshape((-1, 1))
+        dim = A.shape[0]
+        cdd_matrix = cdd.Matrix(np.hstack((b, -A)))
         cdd_matrix.rep_type = cdd.RepType.INEQUALITY
         cdd_poly = cdd.Polyhedron(cdd_matrix)
         generators = np.array(cdd_poly.get_generators())
         # cdd specific, see https://pycddlib.readthedocs.io/en/latest/polyhedron.html
-        vertices = generators[:, 1 : 1 + self.dim]
+        vertices = generators[:, 1 : 1 + dim]
         return vertices
 
 
@@ -123,8 +120,9 @@ def test_bezier_curve() -> None:
     deg = 2
     dim = 2
 
-    A = np.array([[1, -1], [-1, -1], [0, 1], [1, 0]], dtype=np.float64)
-    b = np.array([-1, -5, 0, 0], dtype=np.float64).reshape((-1, 1))
+    # NOTE: In my example I used the other halfspace notation
+    A = -np.array([[1, -1], [-1, -1], [0, 1], [1, 0]], dtype=np.float64)
+    b = -np.array([-1, -5, 0, 0], dtype=np.float64).reshape((-1, 1))
 
     poly = Polyhedron(A, b)
     vertices = poly.get_vertices()
