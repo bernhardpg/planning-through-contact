@@ -44,19 +44,61 @@ class Polyhedron(opt.HPolyhedron):
 
 @dataclass
 class BezierCurve:
-    deg: int
+    order: int
+    dim: int
+
+    def __post_init__(self):  # TODO add initial conditions here
+        self.num_ctrl_points = self.order + 1
+        self.coeffs = [
+            BernsteinPolynomial(order=self.order, k=k) for k in range(0, self.order + 1)
+        ]
+
+    @classmethod
+    def create_from_ctrl_points(
+        cls, dim: int, ctrl_points: npt.NDArray[np.float64]
+    ) -> "BezierCurve":
+        assert ctrl_points.size % dim == 0
+        order = ctrl_points.size // dim - 1
+
+        ctrl_points_reshaped = ctrl_points.reshape((order + 1), dim).T  # TODO ugly code
+        curve = cls(order, dim)
+        curve.set_ctrl_points(ctrl_points_reshaped)
+        return curve
+
+    def set_ctrl_points(self, ctrl_points: npt.NDArray[np.float64]) -> None:
+        assert ctrl_points.shape[0] == self.dim
+        assert ctrl_points.shape[1] == self.order + 1
+        self.ctrl_points = ctrl_points
+
+    def eval_coeffs(self, at_s: float) -> npt.NDArray[np.float64]:
+        evaluated_coeffs = np.array(
+            [coeff.eval(at_s) for coeff in self.coeffs]
+        ).reshape((-1, 1))
+        return evaluated_coeffs
+
+    def eval(self, at_s: float) -> npt.NDArray[np.float64]:
+        assert self.ctrl_points is not None
+        evaluated_coeffs = self.eval_coeffs(at_s)
+        path_value = self.ctrl_points.dot(evaluated_coeffs)
+        return path_value
+
+
+# TODO remove this
+@dataclass
+class BezierCurveMathProgram:
+    order: int
     dim: int
 
     def __post_init__(self):  # TODO add initial conditions here
         self.prog = MathematicalProgram()
 
-        self.num_ctrl_points = self.deg + 1
+        self.num_ctrl_points = self.order + 1
         self.ctrl_points = self.prog.NewContinuousVariables(
             self.dim, self.num_ctrl_points, "gamma"
         )
 
         self.coeffs = [
-            BernsteinPolynomial(deg=self.deg, k=k) for k in range(0, self.deg + 1)
+            BernsteinPolynomial(order=self.order, k=k) for k in range(0, self.order + 1)
         ]
 
     def constrain_to_polyhedron(self, poly: opt.HPolyhedron):
@@ -100,15 +142,15 @@ class BezierCurve:
 
 @dataclass
 class BernsteinPolynomial:
-    deg: int
+    order: int
     k: int
 
     def __post_init__(self) -> sym.Expression:
         self.s = sym.Variable("s")
         self.poly = (
-            math.comb(self.deg, self.k)
+            math.comb(self.order, self.k)
             * np.power(self.s, self.k)
-            * np.power((1 - self.s), (self.deg - self.k))
+            * np.power((1 - self.s), (self.order - self.k))
         )
 
     def eval(self, at_s: float) -> float:
@@ -170,7 +212,7 @@ class BezierGCS:
         p: npt.NDArray[np.float64],
         name: str,
         flow_direction: Literal["in", "out"],
-    ) -> None:
+    ) -> GraphOfConvexSets.Vertex:
         singleton_set = opt.Point(p)
         point_vertex = self.gcs.AddVertex(singleton_set, name)
 
@@ -190,7 +232,40 @@ class BezierGCS:
                         f"({v.name()}, {point_vertex.name()})",
                     )
                 self._add_continuity_constraint(edge)
-        return
+        return point_vertex
+
+    def _solve(
+        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
+    ) -> MathematicalProgramResult:
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = True  # TODO implement rounding
+
+        result = self.gcs.SolveShortestPath(source, target, options)
+        return result
+
+    def _reconstruct_path(
+        self, result: MathematicalProgramResult
+    ) -> List[npt.NDArray[np.float64]]:
+        edges = self.gcs.Edges()
+        flow_variables = [e.phi() for e in edges]
+        flow_results = [result.GetSolution(p) for p in flow_variables]
+        ROUNDING_TRESHOLD = 0.8
+        active_edges = [
+            edge for edge, flow in zip(edges, flow_results) if flow >= ROUNDING_TRESHOLD
+        ]
+        names = [e.name() for e in active_edges]
+        # Observe that we only need the first vertex in every edge to reconstruct the entire graph
+        vertices_in_path = [edge.xu() for edge in active_edges]
+        vertex_values = [result.GetSolution(v) for v in vertices_in_path]
+
+        return vertex_values
+
+    def calculate_path(
+        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
+    ):  # TODO typing
+        result = self._solve(source, target)
+        vertex_values = self._reconstruct_path(result)
+        return vertex_values
 
 
 def create_test_polyhedron_1() -> Polyhedron:
@@ -216,7 +291,7 @@ def create_test_polyhedrons() -> List[Polyhedron]:
 
 
 def test_bezier_curve() -> None:
-    deg = 2
+    order = 2
     dim = 2
 
     poly = create_test_polyhedron_1()
@@ -226,7 +301,7 @@ def test_bezier_curve() -> None:
     x0 = np.array([0, 0.5]).reshape((-1, 1))
     xf = np.array([4, 1]).reshape((-1, 1))
 
-    bezier_curve = BezierCurve(deg, dim)
+    bezier_curve = BezierCurveMathProgram(order, dim)
     bezier_curve.constrain_to_polyhedron(poly)
     bezier_curve.constrain_start_pos(x0)
     bezier_curve.constrain_end_pos(xf)
@@ -251,27 +326,46 @@ def plot_polyhedrons(polys: List[Polyhedron]) -> None:
 
 def test_gcs() -> None:
     order = 2
+    dim = 2
 
     polys = create_test_polyhedrons()
 
     path = BezierGCS(order, polys)
-    # plot_polyhedrons(polys)
 
     x0 = np.array([0, 0.5]).reshape((-1, 1))
-    xf = np.array([4, 1]).reshape((-1, 1))
+    xf = np.array([7, 1.5]).reshape((-1, 1))
 
-    path.add_point_vertex(x0, "source", "out")
-    path.add_point_vertex(xf, "target", "in")
-    breakpoint()
+    v0 = path.add_point_vertex(x0, "source", "out")
+    vf = path.add_point_vertex(xf, "target", "in")
+    ctrl_points = path.calculate_path(v0, vf)
+    curves = [
+        BezierCurve.create_from_ctrl_points(dim, points) for points in ctrl_points
+    ]
+
+    # Plotting
+    for poly in polys:
+        vertices = poly.get_vertices()
+        plt.fill(vertices[:, 0], vertices[:, 1], alpha=0.3)
+
+    for curve in curves:
+        plt.scatter(curve.ctrl_points[0, :], curve.ctrl_points[1, :])
+
+        curve_values = np.concatenate(
+            [curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+        ).T
+
+        plt.plot(curve_values[:, 0], curve_values[:, 1])
+
+    plt.show()
 
     return
 
 
 def test_bernstein_polynomial() -> None:
-    deg = 2
+    order = 2
     k = 0
 
-    bp = BernsteinPolynomial(deg, k)
+    bp = BernsteinPolynomial(order, k)
 
 
 def main():
