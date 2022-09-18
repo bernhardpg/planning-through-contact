@@ -25,11 +25,8 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 # TODO: Replace with VPolytope
 class Polyhedron(opt.HPolyhedron):
+    # TODO remove this
     def get_vertices(self) -> npt.NDArray[np.float64]:  # [N, 2]
-        # NOTE: Use cdd to calculate vertices
-        # cdd expects: [b -A], where A'x <= b
-        # We have A'x >= b ==> -A'x <= -b
-        # Hence we need [-b A]
         A = self.A()
         b = self.b().reshape((-1, 1))
         dim = A.shape[0]
@@ -40,6 +37,18 @@ class Polyhedron(opt.HPolyhedron):
         # cdd specific, see https://pycddlib.readthedocs.io/en/latest/polyhedron.html
         vertices = generators[:, 1 : 1 + dim]
         return vertices
+
+    @classmethod
+    def from_vertices(cls, vertices: npt.NDArray[np.float64]) -> "Polyhedron":
+        ones = np.ones((vertices.shape[0], 1))
+        cdd_matrix = cdd.Matrix(np.hstack((ones, vertices)))
+        cdd_matrix.rep_type = cdd.RepType.GENERATOR
+        cdd_poly = cdd.Polyhedron(cdd_matrix)
+        inequalities = np.array(cdd_poly.get_inequalities())
+        b = inequalities[:, 0:1]
+        A = -inequalities[:, 1:]
+
+        return cls(A, b)
 
 
 @dataclass
@@ -196,6 +205,7 @@ class BezierGCS:
                 sets_are_overlapping = set_u.IntersectsWith(set_v)
                 if sets_are_overlapping:
                     self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
+                    self.gcs.AddEdge(v.id(), u.id(), f"({u.name()}, {v.name()})")
 
     def _add_continuity_constraint(self, edge: GraphOfConvexSets.Edge):
         u = edge.xu()  # (order + 1, dim)
@@ -241,6 +251,7 @@ class BezierGCS:
         options.convex_relaxation = True  # TODO implement rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
+        assert result.is_success
         return result
 
     def _reconstruct_path(
@@ -249,11 +260,11 @@ class BezierGCS:
         edges = self.gcs.Edges()
         flow_variables = [e.phi() for e in edges]
         flow_results = [result.GetSolution(p) for p in flow_variables]
-        ROUNDING_TRESHOLD = 0.8
+        ROUNDING_TRESHOLD = 0.6
         active_edges = [
             edge for edge, flow in zip(edges, flow_results) if flow >= ROUNDING_TRESHOLD
         ]
-        names = [e.name() for e in active_edges]
+        names = [e.name() for e in active_edges]  # TODO only used for debugging
         # Observe that we only need the first vertex in every edge to reconstruct the entire graph
         vertices_in_path = [edge.xu() for edge in active_edges]
         vertex_values = [result.GetSolution(v) for v in vertices_in_path]
@@ -268,26 +279,19 @@ class BezierGCS:
         return vertex_values
 
 
-def create_test_polyhedron_1() -> Polyhedron:
-    # NOTE: In my example I used the other halfspace notation, hence the sign flips
-    A = -np.array([[1, -1], [-1, -1], [0, 1], [1, 0]], dtype=np.float64)
-    b = -np.array([-1, -5, 0, 0], dtype=np.float64).reshape((-1, 1))
-
-    poly = Polyhedron(A, b)
-    return poly
-
-
-def create_test_polyhedron_2() -> Polyhedron:
-    # NOTE: In my example I used the other halfspace notation, hence the sign flips
-    A = -np.array([[1, -3], [-1, -0.7], [0, 1], [1, 0]], dtype=np.float64)
-    b = -np.array([0.2, -9, 1, 3.5], dtype=np.float64).reshape((-1, 1))
-
-    poly = Polyhedron(A, b)
-    return poly
-
-
 def create_test_polyhedrons() -> List[Polyhedron]:
-    return [create_test_polyhedron_1(), create_test_polyhedron_2()]
+    vertices = [
+        np.array([[0, 0], [0, 2], [1.5, 3], [2, 0]]),
+        np.array([[1, 2], [1, 4.5], [3, 4.5], [4, 1]]),
+        np.array([[3, 2], [3, 3], [5, 3], [5, 2]]),
+        np.array([[3, 4], [3, 5], [6, 5], [6, 4]]),
+        np.array([[5, 4], [7, 6], [8, 2.5], [4.5, 2.5]]),
+        # For some reason, this violates continuity
+        # np.array([[4, 4], [7, 6], [8, 2.5], [4.5, 2.5]]),
+    ]
+    polyhedrons = [Polyhedron.from_vertices(v) for v in vertices]
+
+    return polyhedrons
 
 
 def test_bezier_curve() -> None:
@@ -332,8 +336,8 @@ def test_gcs() -> None:
 
     path = BezierGCS(order, polys)
 
-    x0 = np.array([0, 0.5]).reshape((-1, 1))
-    xf = np.array([7, 1.5]).reshape((-1, 1))
+    x0 = np.array([0.5, 0.5]).reshape((-1, 1))
+    xf = np.array([7.0, 3.0]).reshape((-1, 1))
 
     v0 = path.add_point_vertex(x0, "source", "out")
     vf = path.add_point_vertex(xf, "target", "in")
