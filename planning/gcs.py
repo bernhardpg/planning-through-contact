@@ -21,9 +21,6 @@ from pydrake.solvers import (
     Binding,
 )
 
-# TODO:
-# 1. Replace costs and constraints by Binding, much cleaner and more efficient
-
 
 @dataclass
 class GcsPlanner:
