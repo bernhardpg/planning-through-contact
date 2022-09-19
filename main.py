@@ -249,6 +249,7 @@ class BezierGCS:
     ) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = True  # TODO implement rounding
+        options.max_rounded_paths = 10 # Must be >0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
         assert result.is_success
