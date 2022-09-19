@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import cdd
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal
+from typing import List, Literal, Union, Optional
 
 import math
 from pydrake.math import le, ge, eq
@@ -19,7 +19,68 @@ from pydrake.solvers import (
     L1NormCost,
     Cost,
     Binding,
+    Constraint,
 )
+
+# Need some way of automatically generating convex sets
+
+# TODO: get rid of this class
+@dataclass
+class BezierPath:
+    dim: int
+    order: int  # Bezier curve order
+    name: str
+
+    def __post_init__(self):
+        self.n_vars = self.order + 1
+        self.x = sym.MakeMatrixContinuousVariable(self.dim, self.order + 1, self.name)
+
+
+class ContactMode:
+    def __init__(
+        self,
+        variables: List[BezierPath],
+        constraints: Optional[List[sym.Expression]] = [],
+    ):
+        self.variables = np.array(variables).flatten()
+        self.constraints = constraints
+
+    def add_constraint(self, constraint: sym.Expression) -> None:
+        self.constraints.append(constraint)
+
+    def add_constraints(self, constraints: List[sym.Expression]) -> None:
+        for c in constraints:
+            self.add_constraint(c)
+
+    def create_convex_set(self):
+        expressions = []
+        for constraint in self.constraints:
+            # TODO: everything is flattened here, need to have general handling of this!
+            for formula in constraint:
+                kind = formula.get_kind()
+                lhs, rhs = formula.Unapply()[1]
+                if kind == sym.FormulaKind.Eq:
+                    # Eq constraint ax = b is
+                    # implemented as ax <= b, -ax <= -b
+                    expressions.append(lhs - rhs)
+                    expressions.append(rhs - lhs)
+                elif kind == sym.FormulaKind.Geq:
+                    # lhs >= rhs
+                    # ==> rhs - lhs <= 0
+                    expressions.append(rhs - lhs)
+                elif kind == sym.FormulaKind.Leq:
+                    # lhs <= rhs
+                    # ==> lhs - rhs <= 0
+                    expressions.append(lhs - rhs)
+
+        # We now have expr <= 0 for all expressions
+        # ==> we get Ax - b <= 0
+        A, b_neg = sym.DecomposeAffineExpressions(expressions, self.variables)
+
+        # Polyhedrons are of the form: Ax <= b
+        b = -b_neg
+        set_as_polyhedron = opt.HPolyhedron(A, b)
+        return set_as_polyhedron
 
 
 @dataclass
@@ -89,7 +150,7 @@ class GcsPlanner:
         )
         A = sym.DecomposeLinearExpressions(differences.flatten(), edge.xu())
         b = np.zeros((A.shape[0], 1))
-        l1_norm_cost = L1NormCost(A, b)
+        l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
         edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
         # TODO: no cost for source vertex
 

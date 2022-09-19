@@ -16,7 +16,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve
-from planning.gcs import GcsPlanner
+from planning.gcs import GcsPlanner, BezierPath, ContactMode
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -79,6 +79,7 @@ def test_gcs() -> None:
     x0 = np.array([0.5, 0.5]).reshape((-1, 1))
     xf = np.array([7.0, 5.5]).reshape((-1, 1))
 
+    breakpoint()
     v0 = path.add_point_vertex(x0, "source", "out")
     vf = path.add_point_vertex(xf, "target", "in")
     ctrl_points = path.calculate_path(v0, vf)
@@ -105,16 +106,37 @@ def test_gcs() -> None:
     return
 
 
-def test_bernstein_polynomial() -> None:
-    order = 2
-    k = 0
+# TODO: Parse constraints using something like ParseLinearConstraints
+# For now, we just construct the sets manually
 
-    bp = BernsteinPolynomial(order, k)
+
+def test_gcs_variable():
+    lam_n = BezierPath(dim=1, order=2, name="lambda_n")
+    lam_f = BezierPath(dim=1, order=2, name="lambda_f")
+    # TODO handle the case where dim > 1
+    x_a = BezierPath(dim=1, order=2, name="x_a")
+    x_u = BezierPath(dim=1, order=2, name="x_u")
+
+    l = 0.5
+
+    # TODO used flatten for simple 1D example
+    # Vertex: No contact
+    pos_constraint = le(x_a.x + l - x_u.x, 0).flatten()
+    no_contact_force = eq(lam_n.x, 0).flatten()
+    force_balance = eq(lam_f.x, lam_n.x).flatten()
+
+    no_contact_mode = ContactMode([x_a.x, x_u.x, lam_n.x, lam_f.x])
+    no_contact_mode.add_constraints([pos_constraint, no_contact_force, force_balance])
+
+    convex_set_for_no_contact = no_contact_mode.create_convex_set()
+
+    breakpoint()
 
 
 def main():
     # test_bezier_curve()
-    test_gcs()
+    # test_gcs()
+    test_gcs_variable()
 
     return 0
 
