@@ -77,7 +77,7 @@ def test_gcs() -> None:
     path = GcsPlanner(order, polys)
 
     x0 = np.array([0.5, 0.5]).reshape((-1, 1))
-    xf = np.array([7.0, 5.0]).reshape((-1, 1))
+    xf = np.array([7.0, 5.5]).reshape((-1, 1))
 
     v0 = path.add_point_vertex(x0, "source", "out")
     vf = path.add_point_vertex(xf, "target", "in")

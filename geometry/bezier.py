@@ -24,8 +24,8 @@ class BernsteinPolynomial:
         self.s = sym.Variable("s")
         self.poly = (
             math.comb(self.order, self.k)
-            * np.power(self.s, self.k)
-            * np.power((1 - self.s), (self.order - self.k))
+            * sym.pow(self.s, self.k)
+            * sym.pow((1 - self.s), (self.order - self.k))
         )
 
     def eval(self, at_s: float) -> float:

@@ -12,7 +12,17 @@ import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
 
 from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
+from pydrake.solvers import (
+    MathematicalProgram,
+    Solve,
+    MathematicalProgramResult,
+    L1NormCost,
+    Cost,
+    Binding,
+)
+
+# TODO:
+# 1. Replace costs and constraints by Binding, much cleaner and more efficient
 
 
 @dataclass
@@ -25,24 +35,29 @@ class GcsPlanner:
         self.n_ctrl_points = self.order + 1
         self.dim = self.convex_sets[0].A().shape[1]
 
-        self._create_vertices_from_convex_sets()
+        for i, s in enumerate(self.convex_sets):
+            self._create_vertex_from_set(s, f"v_{i}")
+
         self._create_edge_between_overlapping_sets()
         for e in self.gcs.Edges():
+            print(f"Edge name: {e.name()}")
+
+        for e in self.gcs.Edges():
             self._add_continuity_constraint(e)
+            self._add_path_length_cost(e)
 
-    def _create_vertices_from_convex_sets(self):
-        for i, s in enumerate(self.convex_sets):
-            # We need (order + 1) control variables within each set,
-            # solve this by taking the Cartesian product of the set
-            # with itself (order + 1) times:
-            # A (x) A = [A 0;
-            #            0 A]
-            one_set_per_decision_var = s.CartesianPower(self.n_ctrl_points)
-            # This creates ((order + 1) * dim) decision variables per vertex
-            # which for 2D with order=2 will be ordered (x1, y1, x2, y2, x3, y3)
-            self.gcs.AddVertex(one_set_per_decision_var, name=f"v_{i}")
+    def _create_vertex_from_set(self, s: opt.ConvexSet, name: str) -> None:
+        # We need (order + 1) control variables within each set,
+        # solve this by taking the Cartesian product of the set
+        # with itself (order + 1) times:
+        # A (x) A = [A 0;
+        #            0 A]
+        one_set_per_decision_var = s.CartesianPower(self.n_ctrl_points)
+        # This creates ((order + 1) * dim) decision variables per vertex
+        # which for 2D with order=2 will be ordered (x1, y1, x2, y2, x3, y3)
+        self.gcs.AddVertex(one_set_per_decision_var, name)
 
-    def _create_edge_between_overlapping_sets(self):
+    def _create_edge_between_overlapping_sets(self) -> None:
         for u, set_u in zip(self.gcs.Vertices(), self.convex_sets):
             for v, set_v in zip(self.gcs.Vertices(), self.convex_sets):
                 # TODO this can be speed up as we dont need to check for overlap both ways
@@ -51,9 +66,8 @@ class GcsPlanner:
                 sets_are_overlapping = set_u.IntersectsWith(set_v)
                 if sets_are_overlapping:
                     self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
-                    self.gcs.AddEdge(v.id(), u.id(), f"({u.name()}, {v.name()})")
 
-    def _add_continuity_constraint(self, edge: GraphOfConvexSets.Edge):
+    def _add_continuity_constraint(self, edge: GraphOfConvexSets.Edge) -> None:
         u = edge.xu()  # (order + 1, dim)
         v = edge.xv()
         u_last_ctrl_point = u[-self.dim :]
@@ -62,6 +76,25 @@ class GcsPlanner:
         continuity_constraints = eq(u_last_ctrl_point, v_first_ctrl_point)
         for c in continuity_constraints:
             edge.AddConstraint(c)
+
+    def _reshape_ctrl_points_to_matrix(
+        self, vec: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        matr = vec.reshape((self.dim, self.n_ctrl_points), order="F")
+        return matr
+
+    def _add_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
+        # Minimize euclidean distance between subsequent control points
+        # NOTE: we only minimize squared distance right now (which is the same)
+        ctrl_points = self._reshape_ctrl_points_to_matrix(edge.xu())
+        differences = np.array(
+            [ctrl_points[:, i + 1] - ctrl_points[:, i] for i in range(len(ctrl_points))]
+        )
+        A = sym.DecomposeLinearExpressions(differences.flatten(), edge.xu())
+        b = np.zeros((A.shape[0], 1))
+        l1_norm_cost = L1NormCost(A, b)
+        edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
+        # TODO: no cost for source vertex
 
     def add_point_vertex(
         self,
