@@ -22,11 +22,11 @@ from pydrake.solvers import (
     Constraint,
 )
 
-# Need some way of automatically generating convex sets
+# TODO: Refactor
 
 
 @dataclass
-class BezierCtrlPoints:
+class BezierCtrlPoints:  # TODO: change name
     dim: int
     order: int  # Bezier curve order
     x: Optional[npt.NDArray[sym.Expression]] = None  # TODO rename to ctrl points
@@ -170,6 +170,7 @@ class ContactMode:
     friction_coeff: float
     normal_jacobian: npt.NDArray[np.float64]
     tangential_jacobian: npt.NDArray[np.float64]
+    EPS: float = 1e-5
 
     @property
     def x(self) -> npt.NDArray[sym.Variable]:
@@ -215,35 +216,38 @@ class ContactMode:
 
         constraints = [self.position_constraints]
         if self.mode == "no_contact":
-            constraints.append(self.create_zero_contact_force_constraints())
+            constraints.append(self.create_contact_force_constraints("zero"))
         elif self.mode == "rolling_contact":
-            constraints.append(self.create_nonzero_contact_force_constraints())
+            constraints.append(self.create_contact_force_constraints("nonzero"))
             # There are multiple friction cone constraint in a list, so here we merge the lists
             constraints = sum(
-                (constraints, self.create_inside_friction_cone_constraints()), []
+                (constraints, self.create_friction_cone_constraints("inside")), []
             )
+        elif self.mode == "sliding_contact":
+            constraints.append(self.create_contact_force_constraints("nonzero"))
+            constraints = sum(
+                (constraints, self.create_friction_cone_constraints("outside")), []
+            )
+
         else:
-            raise NotImplementedError  # TODO
+            raise NotImplementedError
+
         constraints.append(self.create_force_balance_constraints())
         self.convex_set = BezierConvexSet(constraints).formulate_polyhedron(
             self.all_vars_flattened
         )
 
-    def create_zero_contact_force_constraints(self) -> npt.NDArray[sym.Formula]:
+    def create_contact_force_constraints(
+        self, type: Literal["zero", "nonzero"]
+    ) -> npt.NDArray[sym.Formula]:
         # TODO: Must also deal with contact pairs here when we have more than one!
         lam_n = self.normal_force_vars[0]
-        constraint = lam_n == 0
-        return constraint
-
-    # TODO these two functions can be merged
-    def create_nonzero_contact_force_constraints(
-        self,
-    ) -> npt.NDArray[sym.Formula]:
-        # TODO: Is this a sensible way of enforcing nonzero contact foprce?
-        EPS = 1e-5
-        lam_n = self.normal_force_vars[0]
-        constraint = lam_n >= EPS
-        return constraint
+        if type == "zero":
+            return lam_n == 0
+        elif type == "nonzero":
+            return lam_n >= self.EPS
+        else:
+            raise ValueError
 
     def create_force_balance_constraints(self) -> npt.NDArray[sym.Formula]:
         # TODO must generalize to jacobian
@@ -252,18 +256,23 @@ class ContactMode:
         constraint = lam_f == lam_n
         return constraint
 
-    def create_inside_friction_cone_constraints(
-        self,
+    def create_friction_cone_constraints(
+        self, type: Literal["inside", "outside"]
     ) -> List[npt.NDArray[sym.Formula]]:
-        EPS = 1e-5  # TODO
-        LAM_G = 9.81  # TODO: should not be hardcoded
         # TODO: Need to figure out how to handle contact pairs!
-
+        LAM_G = 9.81  # TODO: should not be hardcoded
         lam_f = self.friction_force_vars[0]
-        fc_constraint = lam_f <= self.friction_coeff * LAM_G
-        slack_constraint = self.slack_vars == 0
-        nonzero_friction_force_constraint = lam_f >= EPS
+
+        nonzero_friction_force_constraint = lam_f >= self.EPS
         rel_vel_constraint = self.slack_vars + self.rel_sliding_vel == 0
+
+        if type == "inside":
+            fc_constraint = lam_f <= self.friction_coeff * LAM_G
+            slack_constraint = self.slack_vars == 0
+        elif type == "outside":
+            fc_constraint = lam_f == self.friction_coeff * LAM_G
+            slack_constraint = self.slack_vars >= self.EPS
+
         return [
             fc_constraint,
             slack_constraint,

@@ -139,12 +139,23 @@ def test_gcs_variable():
         tangential_jacobian,
     )
     contact_pos_constraint = x_a + l == x_u
-    contact = ContactMode(
+    rolling_contact = ContactMode(
         pos_vars,
         contact_pos_constraint,
         normal_force_vars,
         friction_force_vars,
         "rolling_contact",
+        friction_coeff,
+        normal_jacobian,
+        tangential_jacobian,
+    )
+
+    sliding_contact = ContactMode(
+        pos_vars,
+        contact_pos_constraint,
+        normal_force_vars,
+        friction_force_vars,
+        "sliding_contact",
         friction_coeff,
         normal_jacobian,
         tangential_jacobian,
