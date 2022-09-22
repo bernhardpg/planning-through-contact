@@ -84,24 +84,13 @@ class BezierPath:
             return eq(self.x, other)
 
 
-class ContactMode:
-    def __init__(
-        self,
-        variables: npt.NDArray[sym.Variable],
-        constraints: Optional[List[sym.Expression]] = [],
-    ):
-        # NOTE: Internally in a contact mode, all variables and constraints are flattened
-        self.variables = np.concatenate(variables).flatten()
+class BezierConvexSet:
+    def __init__(self, constraints: List[sym.Expression]):
         self.constraints = np.concatenate(constraints).flatten()
 
-    def add_constraint(self, constraint: sym.Expression) -> None:
-        self.constraints.append(constraint)
-
-    def add_constraints(self, constraints: List[sym.Expression]) -> None:
-        for c in constraints:
-            self.add_constraint(c)
-
-    def create_convex_set(self):
+    def formulate_polyhedron(
+        self, variables: npt.NDArray[sym.Variable]
+    ) -> opt.HPolyhedron:
         expressions = []
         for formula in self.constraints:
             kind = formula.get_kind()
@@ -122,12 +111,57 @@ class ContactMode:
 
         # We now have expr <= 0 for all expressions
         # ==> we get Ax - b <= 0
-        A, b_neg = sym.DecomposeAffineExpressions(expressions, self.variables)
+        A, b_neg = sym.DecomposeAffineExpressions(expressions, variables)
 
         # Polyhedrons are of the form: Ax <= b
         b = -b_neg
-        set_as_polyhedron = opt.HPolyhedron(A, b)
-        return set_as_polyhedron
+        convex_set_as_polyhedron = opt.HPolyhedron(A, b)
+        return convex_set_as_polyhedron
+
+
+@dataclass
+class ContactMode:
+    # TODO: also needs to take in contact pairs!
+    position_vars: List[BezierPath]
+    position_constraints: List[npt.NDArray[sym.Formula]]
+    normal_force_vars: List[BezierPath]
+    friction_force_vars: List[BezierPath]
+    mode: Literal["no_contact", "rolling_contact", "sliding_contact"]
+
+    @property
+    def all_variables(self):
+        all_vars = [
+            var.x
+            for var in (
+                self.position_vars + self.normal_force_vars + self.friction_force_vars
+            )
+        ]
+        return np.concatenate(all_vars).flatten()
+
+    def __post_init__(self):
+        constraints = []
+        if self.mode == "no_contact":
+            constraints.append(self.create_no_contact_force_constraints())
+        else:
+            raise NotImplementedError  # TODO
+        constraints.append(self.create_force_balance_constraints())
+        self.convex_set = BezierConvexSet(constraints)
+        self.poly = self.convex_set.formulate_polyhedron(self.all_variables)
+
+    def create_no_contact_force_constraints(self) -> List[npt.NDArray[sym.Formula]]:
+        # TODO: Must also deal with contact pairs here when we have more than one!
+        no_contact_force_constraints = [
+            eq(lam_n, 0) for lam_n in self.normal_force_vars
+        ]
+        return no_contact_force_constraints
+
+    def create_force_balance_constraints(self) -> List[npt.NDArray[sym.Formula]]:
+        # TODO must generalize to jacobian
+        force_balance_constraints = [
+            eq(lam_f, lam_n)
+            for lam_f, lam_n in zip(self.friction_force_vars, self.normal_force_vars)
+        ]
+        return force_balance_constraints
 
 
 @dataclass

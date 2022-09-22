@@ -16,7 +16,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve
-from planning.gcs import GcsPlanner, BezierPath, ContactMode
+from planning.gcs import GcsPlanner, BezierPath, BezierConvexSet, ContactMode
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -118,17 +118,21 @@ def test_gcs_variable():
 
     l = 0.5
 
-    # Vertex: No contact
-    pos_constraint = le(x_a - x_u + l, 0)
-    no_contact_force = eq(lam_n, 0)
-    force_balance = eq(lam_f, lam_n)
-
+    no_contact_pos_constraint = le(x_a - x_u + l, 0)
     no_contact_mode = ContactMode(
-        [x_a.x, x_u.x, lam_n.x, lam_f.x],
-        [pos_constraint, no_contact_force, force_balance],
+        [x_a, x_u], no_contact_pos_constraint, [lam_n], [lam_f], "no_contact"
     )
 
-    convex_set_for_no_contact = no_contact_mode.create_convex_set()
+#    # Vertex: No contact
+#    no_contact_force = eq(lam_n, 0)
+#    force_balance = eq(lam_f, lam_n)
+#
+#    no_contact_mode = BezierConvexSet(
+#        [x_a.x, x_u.x, lam_n.x, lam_f.x],
+#        [pos_constraint, no_contact_force, force_balance],
+#    )
+
+# convex_set_for_no_contact = no_contact_mode.formulate_polyhedron()
 
 
 def main():
