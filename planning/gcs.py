@@ -26,59 +26,98 @@ from pydrake.solvers import (
 
 
 @dataclass
-class BezierPath:
+class BezierCtrlPoints:
     dim: int
     order: int  # Bezier curve order
-    name: str
+    x: Optional[npt.NDArray[sym.Expression]] = None  # TODO rename to ctrl points
+    name: Optional[str] = None
 
     def __post_init__(self):
         self.n_vars = self.order + 1
-        self.x = sym.MakeMatrixContinuousVariable(self.dim, self.order + 1, self.name)
+        if self.x is None:
+            self.x = sym.MakeMatrixContinuousVariable(
+                self.dim, self.order + 1, self.name
+            )
+
+    def get_derivative(self) -> "BezierCtrlPoints":
+        der_ctrl_points = self.order * (self.x[:, 1:] - self.x[:, 0:-1])
+        derivative = BezierCtrlPoints(self.dim, self.order - 1, der_ctrl_points)
+        return derivative
 
     def __add__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
-            return self.x + other.x
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x + other.x
         else:
-            return self.x + other
-
-    def __sub__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
-            return self.x - other.x
-        else:
-            return self.x - other
+            new_ctrl_points = self.x + other
+        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
 
     def __radd__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
-            return self.x + other.x
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        return self + other
+
+    def __sub__(
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x - other.x
         else:
-            return self.x + other
+            new_ctrl_points = self.x - other
+        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
+
+    def __rsub__(
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        return self - other
+
+    def __mul__(
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x * other.x
+        else:
+            new_ctrl_points = self.x * other
+        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
+
+    def __rmul__(
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        return self * other
 
     def __le__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
             return le(self.x, other.x)
         else:
-            return le(self.x + other)
+            return le(self.x, other)
 
     def __ge__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
             return ge(self.x, other.x)
         else:
             return ge(self.x, other)
 
     def __eq__(
-        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
-    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
-        if type(other) == BezierPath:
+        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
+    ) -> "BezierCtrlPoints":
+        if type(other) == BezierCtrlPoints:
+            assert other.dim == self.dim
+            assert other.order == self.order
             return eq(self.x, other.x)
         else:
             return eq(self.x, other)
@@ -86,7 +125,8 @@ class BezierPath:
 
 class BezierConvexSet:
     def __init__(self, constraints: List[sym.Expression]):
-        self.constraints = np.concatenate(constraints).flatten()
+        flattened_constraints = [c.flatten() for c in constraints]
+        self.constraints = np.concatenate(flattened_constraints)
 
     def formulate_polyhedron(
         self, variables: npt.NDArray[sym.Variable]
@@ -122,46 +162,114 @@ class BezierConvexSet:
 @dataclass
 class ContactMode:
     # TODO: also needs to take in contact pairs!
-    position_vars: List[BezierPath]
-    position_constraints: List[npt.NDArray[sym.Formula]]
-    normal_force_vars: List[BezierPath]
-    friction_force_vars: List[BezierPath]
+    position_vars: npt.NDArray[BezierCtrlPoints]
+    position_constraints: npt.NDArray[npt.NDArray[sym.Formula]]
+    normal_force_vars: npt.NDArray[BezierCtrlPoints]
+    friction_force_vars: npt.NDArray[BezierCtrlPoints]
     mode: Literal["no_contact", "rolling_contact", "sliding_contact"]
+    friction_coeff: float
+    normal_jacobian: npt.NDArray[np.float64]
+    tangential_jacobian: npt.NDArray[np.float64]
 
     @property
-    def all_variables(self):
-        all_vars = [
-            var.x
-            for var in (
-                self.position_vars + self.normal_force_vars + self.friction_force_vars
+    def x(self) -> npt.NDArray[sym.Variable]:
+        return self.all_vars_flattened
+
+    @property
+    def A(self) -> npt.NDArray[np.float64]:
+        return self.convex_set.A()
+
+    @property
+    def b(self) -> npt.NDArray[np.float64]:
+        return self.convex_set.b()
+
+    @property
+    def all_vars_flattened(self) -> npt.NDArray[sym.Variable]:
+        all_vars = np.concatenate(
+            (
+                self.position_vars,
+                self.normal_force_vars,
+                self.friction_force_vars,
+                [self.slack_vars],  # TODO bad code
             )
-        ]
-        return np.concatenate(all_vars).flatten()
+        )
+        return np.concatenate([var.x.flatten() for var in all_vars])
+
+    @property
+    def velocity_vars(self) -> npt.NDArray[sym.Variable]:
+        return np.array([pos.get_derivative() for pos in self.position_vars])
+
+    @property
+    def rel_sliding_vel(self) -> npt.NDArray[sym.Expression]:
+        # TODO add comment
+        # must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierCtrlPoints object
+        return self.tangential_jacobian.dot(self.velocity_vars)[0]
 
     def __post_init__(self):
-        constraints = []
+        # TODO Will need one slack variable per contact point
+        self.slack_vars = BezierCtrlPoints(
+            dim=self.position_vars[0].dim,
+            order=self.velocity_vars[0].order,
+            name="gamma",
+        )
+
+        constraints = [self.position_constraints]
         if self.mode == "no_contact":
-            constraints.append(self.create_no_contact_force_constraints())
+            constraints.append(self.create_zero_contact_force_constraints())
+        elif self.mode == "rolling_contact":
+            constraints.append(self.create_nonzero_contact_force_constraints())
+            # There are multiple friction cone constraint in a list, so here we merge the lists
+            constraints = sum(
+                (constraints, self.create_inside_friction_cone_constraints()), []
+            )
         else:
             raise NotImplementedError  # TODO
         constraints.append(self.create_force_balance_constraints())
-        self.convex_set = BezierConvexSet(constraints)
-        self.poly = self.convex_set.formulate_polyhedron(self.all_variables)
+        self.convex_set = BezierConvexSet(constraints).formulate_polyhedron(
+            self.all_vars_flattened
+        )
 
-    def create_no_contact_force_constraints(self) -> List[npt.NDArray[sym.Formula]]:
+    def create_zero_contact_force_constraints(self) -> npt.NDArray[sym.Formula]:
         # TODO: Must also deal with contact pairs here when we have more than one!
-        no_contact_force_constraints = [
-            eq(lam_n, 0) for lam_n in self.normal_force_vars
-        ]
-        return no_contact_force_constraints
+        lam_n = self.normal_force_vars[0]
+        constraint = lam_n == 0
+        return constraint
 
-    def create_force_balance_constraints(self) -> List[npt.NDArray[sym.Formula]]:
+    # TODO these two functions can be merged
+    def create_nonzero_contact_force_constraints(
+        self,
+    ) -> npt.NDArray[sym.Formula]:
+        # TODO: Is this a sensible way of enforcing nonzero contact foprce?
+        EPS = 1e-5
+        lam_n = self.normal_force_vars[0]
+        constraint = lam_n >= EPS
+        return constraint
+
+    def create_force_balance_constraints(self) -> npt.NDArray[sym.Formula]:
         # TODO must generalize to jacobian
-        force_balance_constraints = [
-            eq(lam_f, lam_n)
-            for lam_f, lam_n in zip(self.friction_force_vars, self.normal_force_vars)
+        lam_f = self.friction_force_vars[0]
+        lam_n = self.normal_force_vars[0]
+        constraint = lam_f == lam_n
+        return constraint
+
+    def create_inside_friction_cone_constraints(
+        self,
+    ) -> List[npt.NDArray[sym.Formula]]:
+        EPS = 1e-5  # TODO
+        LAM_G = 9.81  # TODO: should not be hardcoded
+        # TODO: Need to figure out how to handle contact pairs!
+
+        lam_f = self.friction_force_vars[0]
+        fc_constraint = lam_f <= self.friction_coeff * LAM_G
+        slack_constraint = self.slack_vars == 0
+        nonzero_friction_force_constraint = lam_f >= EPS
+        rel_vel_constraint = self.slack_vars + self.rel_sliding_vel == 0
+        return [
+            fc_constraint,
+            slack_constraint,
+            nonzero_friction_force_constraint,
+            rel_vel_constraint,
         ]
-        return force_balance_constraints
 
 
 @dataclass

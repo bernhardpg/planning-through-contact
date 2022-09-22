@@ -16,7 +16,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve
-from planning.gcs import GcsPlanner, BezierPath, BezierConvexSet, ContactMode
+from planning.gcs import GcsPlanner, BezierCtrlPoints, BezierConvexSet, ContactMode
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -111,28 +111,45 @@ def test_gcs() -> None:
 
 
 def test_gcs_variable():
-    lam_n = BezierPath(dim=1, order=2, name="lambda_n")
-    lam_f = BezierPath(dim=1, order=2, name="lambda_f")
-    x_a = BezierPath(dim=1, order=2, name="x_a")
-    x_u = BezierPath(dim=1, order=2, name="x_u")
+    lam_n = BezierCtrlPoints(dim=1, order=2, name="lambda_n")
+    lam_f = BezierCtrlPoints(dim=1, order=2, name="lambda_f")
+    x_a = BezierCtrlPoints(dim=2, order=2, name="x_a")
+    x_u = BezierCtrlPoints(dim=2, order=2, name="x_u")
+
+    friction_coeff = 0.5
+    contact_jacobian = np.array([[-1, 1]])
+    normal_jacobian = contact_jacobian
+    tangential_jacobian = -contact_jacobian
+
+    pos_vars = np.array([x_a, x_u])
+    normal_force_vars = np.array([lam_n])
+    friction_force_vars = np.array([lam_f])
 
     l = 0.5
 
-    no_contact_pos_constraint = le(x_a - x_u + l, 0)
-    no_contact_mode = ContactMode(
-        [x_a, x_u], no_contact_pos_constraint, [lam_n], [lam_f], "no_contact"
+    no_contact_pos_constraint = x_a + l <= x_u
+    no_contact = ContactMode(
+        pos_vars,
+        no_contact_pos_constraint,
+        normal_force_vars,
+        friction_force_vars,
+        "no_contact",
+        friction_coeff,
+        normal_jacobian,
+        tangential_jacobian,
     )
-
-#    # Vertex: No contact
-#    no_contact_force = eq(lam_n, 0)
-#    force_balance = eq(lam_f, lam_n)
-#
-#    no_contact_mode = BezierConvexSet(
-#        [x_a.x, x_u.x, lam_n.x, lam_f.x],
-#        [pos_constraint, no_contact_force, force_balance],
-#    )
-
-# convex_set_for_no_contact = no_contact_mode.formulate_polyhedron()
+    contact_pos_constraint = x_a + l == x_u
+    contact = ContactMode(
+        pos_vars,
+        contact_pos_constraint,
+        normal_force_vars,
+        friction_force_vars,
+        "rolling_contact",
+        friction_coeff,
+        normal_jacobian,
+        tangential_jacobian,
+    )
+    breakpoint()
 
 
 def main():
