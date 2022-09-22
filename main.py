@@ -113,24 +113,22 @@ def test_gcs() -> None:
 def test_gcs_variable():
     lam_n = BezierPath(dim=1, order=2, name="lambda_n")
     lam_f = BezierPath(dim=1, order=2, name="lambda_f")
-    # TODO handle the case where dim > 1
     x_a = BezierPath(dim=1, order=2, name="x_a")
     x_u = BezierPath(dim=1, order=2, name="x_u")
 
     l = 0.5
 
-    # TODO used flatten for simple 1D example
     # Vertex: No contact
-    pos_constraint = le(x_a.x + l - x_u.x, 0).flatten()
-    no_contact_force = eq(lam_n.x, 0).flatten()
-    force_balance = eq(lam_f.x, lam_n.x).flatten()
+    pos_constraint = le(x_a - x_u + l, 0)
+    no_contact_force = eq(lam_n, 0)
+    force_balance = eq(lam_f, lam_n)
 
-    no_contact_mode = ContactMode([x_a.x, x_u.x, lam_n.x, lam_f.x])
-    no_contact_mode.add_constraints([pos_constraint, no_contact_force, force_balance])
+    no_contact_mode = ContactMode(
+        [x_a.x, x_u.x, lam_n.x, lam_f.x],
+        [pos_constraint, no_contact_force, force_balance],
+    )
 
     convex_set_for_no_contact = no_contact_mode.create_convex_set()
-
-    breakpoint()
 
 
 def main():

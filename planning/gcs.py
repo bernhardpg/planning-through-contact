@@ -24,7 +24,7 @@ from pydrake.solvers import (
 
 # Need some way of automatically generating convex sets
 
-# TODO: get rid of this class
+
 @dataclass
 class BezierPath:
     dim: int
@@ -35,15 +35,64 @@ class BezierPath:
         self.n_vars = self.order + 1
         self.x = sym.MakeMatrixContinuousVariable(self.dim, self.order + 1, self.name)
 
+    def __add__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return self.x + other.x
+        else:
+            return self.x + other
+
+    def __sub__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return self.x - other.x
+        else:
+            return self.x - other
+
+    def __radd__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return self.x + other.x
+        else:
+            return self.x + other
+
+    def __le__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return le(self.x, other.x)
+        else:
+            return le(self.x + other)
+
+    def __ge__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return ge(self.x, other.x)
+        else:
+            return ge(self.x, other)
+
+    def __eq__(
+        self, other: Union["BezierPath", npt.NDArray[np.float64], float]
+    ) -> Union["BezierPath", npt.NDArray[np.float64]]:
+        if type(other) == BezierPath:
+            return eq(self.x, other.x)
+        else:
+            return eq(self.x, other)
+
 
 class ContactMode:
     def __init__(
         self,
-        variables: List[BezierPath],
+        variables: npt.NDArray[sym.Variable],
         constraints: Optional[List[sym.Expression]] = [],
     ):
-        self.variables = np.array(variables).flatten()
-        self.constraints = constraints
+        # NOTE: Internally in a contact mode, all variables and constraints are flattened
+        self.variables = np.concatenate(variables).flatten()
+        self.constraints = np.concatenate(constraints).flatten()
 
     def add_constraint(self, constraint: sym.Expression) -> None:
         self.constraints.append(constraint)
@@ -54,24 +103,22 @@ class ContactMode:
 
     def create_convex_set(self):
         expressions = []
-        for constraint in self.constraints:
-            # TODO: everything is flattened here, need to have general handling of this!
-            for formula in constraint:
-                kind = formula.get_kind()
-                lhs, rhs = formula.Unapply()[1]
-                if kind == sym.FormulaKind.Eq:
-                    # Eq constraint ax = b is
-                    # implemented as ax <= b, -ax <= -b
-                    expressions.append(lhs - rhs)
-                    expressions.append(rhs - lhs)
-                elif kind == sym.FormulaKind.Geq:
-                    # lhs >= rhs
-                    # ==> rhs - lhs <= 0
-                    expressions.append(rhs - lhs)
-                elif kind == sym.FormulaKind.Leq:
-                    # lhs <= rhs
-                    # ==> lhs - rhs <= 0
-                    expressions.append(lhs - rhs)
+        for formula in self.constraints:
+            kind = formula.get_kind()
+            lhs, rhs = formula.Unapply()[1]
+            if kind == sym.FormulaKind.Eq:
+                # Eq constraint ax = b is
+                # implemented as ax <= b, -ax <= -b
+                expressions.append(lhs - rhs)
+                expressions.append(rhs - lhs)
+            elif kind == sym.FormulaKind.Geq:
+                # lhs >= rhs
+                # ==> rhs - lhs <= 0
+                expressions.append(rhs - lhs)
+            elif kind == sym.FormulaKind.Leq:
+                # lhs <= rhs
+                # ==> lhs - rhs <= 0
+                expressions.append(lhs - rhs)
 
         # We now have expr <= 0 for all expressions
         # ==> we get Ax - b <= 0
