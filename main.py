@@ -16,6 +16,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve, BezierVariable
+from geometry.contact import ContactMode
 from planning.gcs import GcsPlanner, ContactMode
 
 
@@ -106,11 +107,7 @@ def test_gcs() -> None:
     return
 
 
-# TODO: Parse constraints using something like ParseLinearConstraints
-# For now, we just construct the sets manually
-
-
-def test_gcs_variable():
+def test_planning_through_contact():
     lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
     lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
     x_a = BezierVariable(dim=2, order=2, name="x_a")
@@ -160,13 +157,21 @@ def test_gcs_variable():
         normal_jacobian,
         tangential_jacobian,
     )
+
+    polyhedrons = [
+        no_contact.convex_set,
+        rolling_contact.convex_set,
+        sliding_contact.convex_set,
+    ]
+
+    # TODO: Now tie this to GCS
     breakpoint()
 
 
 def main():
     # test_bezier_curve()
     # test_gcs()
-    test_gcs_variable()
+    test_planning_through_contact()
 
     return 0
 
