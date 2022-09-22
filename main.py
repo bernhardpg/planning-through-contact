@@ -15,8 +15,8 @@ from pydrake.geometry.optimization import GraphOfConvexSets
 from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
 
 from geometry.polyhedron import Polyhedron
-from geometry.bezier import BezierCurve
-from planning.gcs import GcsPlanner, BezierCtrlPoints, BezierConvexSet, ContactMode
+from geometry.bezier import BezierCurve, BezierVariable
+from planning.gcs import GcsPlanner, ContactMode
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -111,10 +111,10 @@ def test_gcs() -> None:
 
 
 def test_gcs_variable():
-    lam_n = BezierCtrlPoints(dim=1, order=2, name="lambda_n")
-    lam_f = BezierCtrlPoints(dim=1, order=2, name="lambda_f")
-    x_a = BezierCtrlPoints(dim=2, order=2, name="x_a")
-    x_u = BezierCtrlPoints(dim=2, order=2, name="x_u")
+    lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
+    lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
+    x_a = BezierVariable(dim=2, order=2, name="x_a")
+    x_u = BezierVariable(dim=2, order=2, name="x_u")
 
     friction_coeff = 0.5
     contact_jacobian = np.array([[-1, 1]])

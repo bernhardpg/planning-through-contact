@@ -4,7 +4,7 @@ import cdd
 from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal
+from typing import List, Literal, Union, Optional
 
 import math
 from pydrake.math import le, ge, eq
@@ -39,3 +39,39 @@ class Polyhedron(opt.HPolyhedron):
         A = -inequalities[:, 1:]
 
         return cls(A, b)
+
+
+class PolyhedronFormulator:
+    def __init__(self, constraints: List[sym.Expression]):
+        flattened_constraints = [c.flatten() for c in constraints]
+        self.constraints = np.concatenate(flattened_constraints)
+
+    def formulate_polyhedron(
+        self, variables: npt.NDArray[sym.Variable]
+    ) -> opt.HPolyhedron:
+        expressions = []
+        for formula in self.constraints:
+            kind = formula.get_kind()
+            lhs, rhs = formula.Unapply()[1]
+            if kind == sym.FormulaKind.Eq:
+                # Eq constraint ax = b is
+                # implemented as ax <= b, -ax <= -b
+                expressions.append(lhs - rhs)
+                expressions.append(rhs - lhs)
+            elif kind == sym.FormulaKind.Geq:
+                # lhs >= rhs
+                # ==> rhs - lhs <= 0
+                expressions.append(rhs - lhs)
+            elif kind == sym.FormulaKind.Leq:
+                # lhs <= rhs
+                # ==> lhs - rhs <= 0
+                expressions.append(lhs - rhs)
+
+        # We now have expr <= 0 for all expressions
+        # ==> we get Ax - b <= 0
+        A, b_neg = sym.DecomposeAffineExpressions(expressions, variables)
+
+        # Polyhedrons are of the form: Ax <= b
+        b = -b_neg
+        convex_set_as_polyhedron = opt.HPolyhedron(A, b)
+        return convex_set_as_polyhedron

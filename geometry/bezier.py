@@ -4,7 +4,7 @@ import cdd
 from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal
+from typing import List, Literal, Union, Optional
 
 import math
 from pydrake.math import le, ge, eq
@@ -13,6 +13,105 @@ import pydrake.geometry.optimization as opt
 
 from pydrake.geometry.optimization import GraphOfConvexSets
 from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
+
+
+
+@dataclass
+class BezierVariable:
+    dim: int
+    order: int  # Bezier curve order
+    x: Optional[npt.NDArray[sym.Expression]] = None  # TODO rename to ctrl points
+    name: Optional[str] = None
+
+    def __post_init__(self):
+        self.n_vars = self.order + 1
+        if self.x is None:
+            self.x = sym.MakeMatrixContinuousVariable(
+                self.dim, self.order + 1, self.name
+            )
+
+    def get_derivative(self) -> "BezierVariable":
+        der_ctrl_points = self.order * (self.x[:, 1:] - self.x[:, 0:-1])
+        derivative = BezierVariable(self.dim, self.order - 1, der_ctrl_points)
+        return derivative
+
+    def __add__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x + other.x
+        else:
+            new_ctrl_points = self.x + other
+        return BezierVariable(self.dim, self.order, new_ctrl_points)
+
+    def __radd__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        return self + other
+
+    def __sub__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x - other.x
+        else:
+            new_ctrl_points = self.x - other
+        return BezierVariable(self.dim, self.order, new_ctrl_points)
+
+    def __rsub__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        return self - other
+
+    def __mul__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            new_ctrl_points = self.x * other.x
+        else:
+            new_ctrl_points = self.x * other
+        return BezierVariable(self.dim, self.order, new_ctrl_points)
+
+    def __rmul__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        return self * other
+
+    def __le__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            return le(self.x, other.x)
+        else:
+            return le(self.x, other)
+
+    def __ge__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            return ge(self.x, other.x)
+        else:
+            return ge(self.x, other)
+
+    def __eq__(
+        self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
+    ) -> "BezierVariable":
+        if type(other) == BezierVariable:
+            assert other.dim == self.dim
+            assert other.order == self.order
+            return eq(self.x, other.x)
+        else:
+            return eq(self.x, other)
 
 
 @dataclass

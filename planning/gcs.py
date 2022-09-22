@@ -22,150 +22,17 @@ from pydrake.solvers import (
     Constraint,
 )
 
-# TODO: Refactor
-
-
-@dataclass
-class BezierCtrlPoints:  # TODO: change name
-    dim: int
-    order: int  # Bezier curve order
-    x: Optional[npt.NDArray[sym.Expression]] = None  # TODO rename to ctrl points
-    name: Optional[str] = None
-
-    def __post_init__(self):
-        self.n_vars = self.order + 1
-        if self.x is None:
-            self.x = sym.MakeMatrixContinuousVariable(
-                self.dim, self.order + 1, self.name
-            )
-
-    def get_derivative(self) -> "BezierCtrlPoints":
-        der_ctrl_points = self.order * (self.x[:, 1:] - self.x[:, 0:-1])
-        derivative = BezierCtrlPoints(self.dim, self.order - 1, der_ctrl_points)
-        return derivative
-
-    def __add__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            new_ctrl_points = self.x + other.x
-        else:
-            new_ctrl_points = self.x + other
-        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
-
-    def __radd__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        return self + other
-
-    def __sub__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            new_ctrl_points = self.x - other.x
-        else:
-            new_ctrl_points = self.x - other
-        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
-
-    def __rsub__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        return self - other
-
-    def __mul__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            new_ctrl_points = self.x * other.x
-        else:
-            new_ctrl_points = self.x * other
-        return BezierCtrlPoints(self.dim, self.order, new_ctrl_points)
-
-    def __rmul__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        return self * other
-
-    def __le__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            return le(self.x, other.x)
-        else:
-            return le(self.x, other)
-
-    def __ge__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            return ge(self.x, other.x)
-        else:
-            return ge(self.x, other)
-
-    def __eq__(
-        self, other: Union["BezierCtrlPoints", npt.NDArray[np.float64], float, int]
-    ) -> "BezierCtrlPoints":
-        if type(other) == BezierCtrlPoints:
-            assert other.dim == self.dim
-            assert other.order == self.order
-            return eq(self.x, other.x)
-        else:
-            return eq(self.x, other)
-
-
-class BezierConvexSet:
-    def __init__(self, constraints: List[sym.Expression]):
-        flattened_constraints = [c.flatten() for c in constraints]
-        self.constraints = np.concatenate(flattened_constraints)
-
-    def formulate_polyhedron(
-        self, variables: npt.NDArray[sym.Variable]
-    ) -> opt.HPolyhedron:
-        expressions = []
-        for formula in self.constraints:
-            kind = formula.get_kind()
-            lhs, rhs = formula.Unapply()[1]
-            if kind == sym.FormulaKind.Eq:
-                # Eq constraint ax = b is
-                # implemented as ax <= b, -ax <= -b
-                expressions.append(lhs - rhs)
-                expressions.append(rhs - lhs)
-            elif kind == sym.FormulaKind.Geq:
-                # lhs >= rhs
-                # ==> rhs - lhs <= 0
-                expressions.append(rhs - lhs)
-            elif kind == sym.FormulaKind.Leq:
-                # lhs <= rhs
-                # ==> lhs - rhs <= 0
-                expressions.append(lhs - rhs)
-
-        # We now have expr <= 0 for all expressions
-        # ==> we get Ax - b <= 0
-        A, b_neg = sym.DecomposeAffineExpressions(expressions, variables)
-
-        # Polyhedrons are of the form: Ax <= b
-        b = -b_neg
-        convex_set_as_polyhedron = opt.HPolyhedron(A, b)
-        return convex_set_as_polyhedron
+from geometry.bezier import BezierVariable
+from geometry.polyhedron import PolyhedronFormulator
 
 
 @dataclass
 class ContactMode:
     # TODO: also needs to take in contact pairs!
-    position_vars: npt.NDArray[BezierCtrlPoints]
+    position_vars: npt.NDArray[BezierVariable]
     position_constraints: npt.NDArray[npt.NDArray[sym.Formula]]
-    normal_force_vars: npt.NDArray[BezierCtrlPoints]
-    friction_force_vars: npt.NDArray[BezierCtrlPoints]
+    normal_force_vars: npt.NDArray[BezierVariable]
+    friction_force_vars: npt.NDArray[BezierVariable]
     mode: Literal["no_contact", "rolling_contact", "sliding_contact"]
     friction_coeff: float
     normal_jacobian: npt.NDArray[np.float64]
@@ -203,12 +70,12 @@ class ContactMode:
     @property
     def rel_sliding_vel(self) -> npt.NDArray[sym.Expression]:
         # TODO add comment
-        # must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierCtrlPoints object
+        # must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
         return self.tangential_jacobian.dot(self.velocity_vars)[0]
 
     def __post_init__(self):
         # TODO Will need one slack variable per contact point
-        self.slack_vars = BezierCtrlPoints(
+        self.slack_vars = BezierVariable(
             dim=self.position_vars[0].dim,
             order=self.velocity_vars[0].order,
             name="gamma",
@@ -233,7 +100,7 @@ class ContactMode:
             raise NotImplementedError
 
         constraints.append(self.create_force_balance_constraints())
-        self.convex_set = BezierConvexSet(constraints).formulate_polyhedron(
+        self.convex_set = PolyhedronFormulator(constraints).formulate_polyhedron(
             self.all_vars_flattened
         )
 
