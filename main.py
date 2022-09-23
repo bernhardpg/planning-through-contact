@@ -17,7 +17,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve, BezierVariable
 from geometry.contact import ContactMode
-from planning.gcs import GcsPlanner, ContactMode
+from planning.gcs import GcsPlanner, GcsContactPlanner
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -110,8 +110,8 @@ def test_gcs() -> None:
 def test_planning_through_contact():
     lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
     lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
-    x_a = BezierVariable(dim=2, order=2, name="x_a")
-    x_u = BezierVariable(dim=2, order=2, name="x_u")
+    x_a = BezierVariable(dim=1, order=2, name="x_a")
+    x_u = BezierVariable(dim=1, order=2, name="x_u")
 
     friction_coeff = 0.5
     contact_jacobian = np.array([[-1, 1]])
@@ -146,7 +146,6 @@ def test_planning_through_contact():
         normal_jacobian,
         tangential_jacobian,
     )
-
     sliding_contact = ContactMode(
         pos_vars,
         contact_pos_constraint,
@@ -158,11 +157,15 @@ def test_planning_through_contact():
         tangential_jacobian,
     )
 
-    polyhedrons = [
-        no_contact.convex_set,
-        rolling_contact.convex_set,
-        sliding_contact.convex_set,
-    ]
+    contact_modes = [no_contact, rolling_contact, sliding_contact]
+    position_polyhedrons = [mode.convex_set_position for mode in contact_modes]
+
+    # Make sure position sets are overlapping
+    for p1, p2 in zip(position_polyhedrons[:-1], position_polyhedrons[1:]):
+        assert p1.IntersectsWith(p2)
+
+
+    planner = GcsContactPlanner([no_contact, rolling_contact, sliding_contact])
 
     # TODO: Now tie this to GCS
     breakpoint()

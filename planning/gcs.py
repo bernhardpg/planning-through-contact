@@ -20,10 +20,69 @@ from pydrake.solvers import (
     Cost,
     Binding,
     Constraint,
+    LinearConstraint,
 )
 
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
+from geometry.contact import ContactMode
+
+name_map = {
+    "no_contact": "nc",
+    "rolling_contact": "rc",
+    "sliding_contact": "sc",
+}  # TODO replace
+
+
+@dataclass
+class GcsContactPlanner:
+    contact_modes: List[ContactMode]
+    gcs: opt.GraphOfConvexSets = GraphOfConvexSets()
+
+    def __post_init__(self):
+        for i, mode in enumerate(self.contact_modes):
+            self.gcs.AddVertex(mode.convex_set, f"v{i}_{name_map[mode.mode]}")
+
+        self._create_edge_between_overlapping_sets()
+
+        breakpoint()
+
+    def _create_edge_between_overlapping_sets(self) -> None:
+        for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
+            for v, mode_v in zip(self.gcs.Vertices(), self.contact_modes):
+                # TODO this can be speed up as we dont need to check for overlap both ways
+                if u == v:
+                    continue
+                sets_are_overlapping = mode_u.convex_set_position.IntersectsWith(
+                    mode_v.convex_set_position
+                )
+                if sets_are_overlapping:
+                    edge = self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
+                    transition_type = mode_u.get_transition(mode_v)
+                    if transition_type == "breaking_contact":
+                        pos_norm_vel_const = (
+                            self.create_positive_exit_normal_vel_constraint(
+                                mode_u, u.x()
+                            )
+                        )
+                        edge.AddConstraint(pos_norm_vel_const)
+
+    # TODO: this can probably be speed up!
+    def create_positive_exit_normal_vel_constraint(
+        self, contact_mode: ContactMode, vertex_vars: npt.NDArray[sym.Variable]
+    ):
+        formulas = contact_mode.normal_vel.last >= 0
+        # lhs >= 0
+        lhs = [formula.Unapply()[1][0] for formula in formulas]
+        A = sym.DecomposeLinearExpressions(lhs, contact_mode.all_vars_flattened)
+        lb = np.zeros((A.shape[0], 1))
+        ub = np.ones(lb.shape) * np.inf
+        # Ax >= 0
+        constraint_shape = LinearConstraint(A, lb, ub)
+        positive_exit_normal_vel_constraint = Binding[LinearConstraint](
+            constraint_shape, vertex_vars
+        )
+        return positive_exit_normal_vel_constraint
 
 
 @dataclass

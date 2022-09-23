@@ -39,6 +39,42 @@ class ContactMode:
     tangential_jacobian: npt.NDArray[np.float64]
     EPS: float = 1e-5
 
+    def __post_init__(self):
+        # TODO Will need one slack variable per contact point
+        self.slack_vars = BezierVariable(
+            dim=self.position_vars[0].dim,
+            order=self.velocity_vars[0].order,
+            name="gamma",
+        )
+
+        constraints = [self.position_constraints]
+        if self.mode == "no_contact":
+            constraints.append(self.create_contact_force_constraints("zero"))
+            constraints.append(self.create_force_balance_constraints())
+        elif self.mode == "rolling_contact":
+            constraints.append(self.create_contact_force_constraints("nonzero"))
+            # There are multiple friction cone constraint in a list, so here we merge the lists
+            constraints = sum(
+                (constraints, self.create_friction_cone_constraints("inside")), []
+            )
+            constraints.append(self.create_force_balance_constraints())
+        elif self.mode == "sliding_contact":
+            constraints.append(self.create_contact_force_constraints("nonzero"))
+            constraints = sum(
+                (constraints, self.create_friction_cone_constraints("outside")), []
+            )
+            constraints.append(self.create_force_balance_constraints())
+        else:
+            raise NotImplementedError
+
+        self.convex_set = PolyhedronFormulator(constraints).formulate_polyhedron(
+            self.all_vars_flattened
+        )
+
+        self.convex_set_position = PolyhedronFormulator(
+            [self.position_constraints]
+        ).formulate_polyhedron(self.all_vars_flattened)
+
     @property
     def x(self) -> npt.NDArray[sym.Variable]:
         return self.all_vars_flattened
@@ -69,40 +105,13 @@ class ContactMode:
 
     @property
     def rel_sliding_vel(self) -> npt.NDArray[sym.Expression]:
-        # TODO add comment
-        # must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
+        # Must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
         return self.tangential_jacobian.dot(self.velocity_vars)[0]
 
-    def __post_init__(self):
-        # TODO Will need one slack variable per contact point
-        self.slack_vars = BezierVariable(
-            dim=self.position_vars[0].dim,
-            order=self.velocity_vars[0].order,
-            name="gamma",
-        )
-
-        constraints = [self.position_constraints]
-        if self.mode == "no_contact":
-            constraints.append(self.create_contact_force_constraints("zero"))
-        elif self.mode == "rolling_contact":
-            constraints.append(self.create_contact_force_constraints("nonzero"))
-            # There are multiple friction cone constraint in a list, so here we merge the lists
-            constraints = sum(
-                (constraints, self.create_friction_cone_constraints("inside")), []
-            )
-        elif self.mode == "sliding_contact":
-            constraints.append(self.create_contact_force_constraints("nonzero"))
-            constraints = sum(
-                (constraints, self.create_friction_cone_constraints("outside")), []
-            )
-
-        else:
-            raise NotImplementedError
-
-        constraints.append(self.create_force_balance_constraints())
-        self.convex_set = PolyhedronFormulator(constraints).formulate_polyhedron(
-            self.all_vars_flattened
-        )
+    @property
+    def normal_vel(self) -> npt.NDArray[sym.Expression]:
+        # Must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
+        return self.normal_jacobian.dot(self.velocity_vars)[0]
 
     def create_contact_force_constraints(
         self, type: Literal["zero", "nonzero"]
@@ -146,3 +155,19 @@ class ContactMode:
             nonzero_friction_force_constraint,
             rel_vel_constraint,
         ]
+
+    def get_transition(
+        self, other: "ContactMode"
+    ) -> Literal[
+        "breaking_contact", "making_contact", "none"
+    ]:  # TODO replace these with enums?
+        if self.mode == "no_contact" and (
+            other.mode == "rolling_contact" or other.mode == "sliding_contact"
+        ):
+            return "making_contact"
+        elif (
+            self.mode == "rolling_contact" or self.mode == "sliding_contact"
+        ) and other.mode == "no_contact":
+            return "breaking_contact"
+        else:
+            return "none"

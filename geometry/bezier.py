@@ -15,7 +15,6 @@ from pydrake.geometry.optimization import GraphOfConvexSets
 from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
 
 
-
 @dataclass
 class BezierVariable:
     dim: int
@@ -34,6 +33,16 @@ class BezierVariable:
         der_ctrl_points = self.order * (self.x[:, 1:] - self.x[:, 0:-1])
         derivative = BezierVariable(self.dim, self.order - 1, der_ctrl_points)
         return derivative
+
+    @property
+    def first(self) -> "BezierVariable":
+        new_x = self.x[:, 0]
+        return BezierVariable(self.dim, 0, new_x)
+
+    @property
+    def last(self) -> "BezierVariable":
+        new_x = self.x[:, -1]
+        return BezierVariable(self.dim, 0, new_x)
 
     def __add__(
         self, other: Union["BezierVariable", npt.NDArray[np.float64], float, int]
