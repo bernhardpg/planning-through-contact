@@ -4,7 +4,7 @@ import cdd
 from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional
+from typing import List, Literal, Union, Optional, TypedDict
 
 import math
 from pydrake.math import le, ge, eq
@@ -34,6 +34,12 @@ name_map = {
 }  # TODO replace
 
 
+class EdgeDefinition(TypedDict):
+    mode_u: ContactMode
+    mode_v: ContactMode
+    edge: GraphOfConvexSets.Edge
+
+
 @dataclass
 class GcsContactPlanner:
     contact_modes: List[ContactMode]
@@ -43,11 +49,14 @@ class GcsContactPlanner:
         for i, mode in enumerate(self.contact_modes):
             self.gcs.AddVertex(mode.convex_set, f"v{i}_{name_map[mode.mode]}")
 
-        self._create_edge_between_overlapping_sets()
+        self.edge_definitions = []
+        self._create_edges()
+        for edge_def in self.edge_definitions:
+            self._add_position_continuity_constraint(**edge_def)
+            self._add_breaking_contact_constraints(**edge_def)
+            # self._add_path_length_cost(e)
 
-        breakpoint()
-
-    def _create_edge_between_overlapping_sets(self) -> None:
+    def _create_edges(self) -> None:
         for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
             for v, mode_v in zip(self.gcs.Vertices(), self.contact_modes):
                 # TODO this can be speed up as we dont need to check for overlap both ways
@@ -58,19 +67,36 @@ class GcsContactPlanner:
                 )
                 if sets_are_overlapping:
                     edge = self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
-                    transition_type = mode_u.get_transition(mode_v)
-                    if transition_type == "breaking_contact":
-                        pos_norm_vel_const = (
-                            self.create_positive_exit_normal_vel_constraint(
-                                mode_u, u.x()
-                            )
-                        )
-                        edge.AddConstraint(pos_norm_vel_const)
+                    self.edge_definitions.append(
+                        EdgeDefinition(mode_u=mode_u, mode_v=mode_v, edge=edge)
+                    )
+
+    def _add_position_continuity_constraint(
+        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
+    ) -> None:
+        # NOTE: This is rather complicated, as we extract variables from both vertices in the edge.
+        # TODO: consider improving this
+        for u_pos, v_pos in zip(mode_u.position_vars, mode_v.position_vars):
+            formulas = u_pos.last == v_pos.first
+            lhs, rhs = zip(*[formula.Unapply()[1] for formula in formulas])
+            A_u = sym.DecomposeLinearExpressions(lhs, mode_u.x)
+            A_v = sym.DecomposeLinearExpressions(rhs, mode_v.x)
+            continuity_constraints = eq(A_u.dot(edge.xu()), A_v.dot(edge.xv()))
+            for c in continuity_constraints:
+                edge.AddConstraint(c)
+
+    def _add_breaking_contact_constraints(
+        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
+    ) -> None:
+        transition_type = mode_u.get_transition(mode_v)
+        if transition_type == "breaking_contact":
+            c = self._create_positive_exit_normal_vel_constraint(mode_u, edge.xu())
+            edge.AddConstraint(c)
 
     # TODO: this can probably be speed up!
-    def create_positive_exit_normal_vel_constraint(
+    def _create_positive_exit_normal_vel_constraint(
         self, contact_mode: ContactMode, vertex_vars: npt.NDArray[sym.Variable]
-    ):
+    ) -> Binding[LinearConstraint]:
         formulas = contact_mode.normal_vel.last >= 0
         # lhs >= 0
         lhs = [formula.Unapply()[1][0] for formula in formulas]
@@ -83,6 +109,19 @@ class GcsContactPlanner:
             constraint_shape, vertex_vars
         )
         return positive_exit_normal_vel_constraint
+
+    def _add_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
+        # Minimize euclidean distance between subsequent control points
+        # NOTE: we only minimize L1 distance right now
+        ctrl_points = self._reshape_ctrl_points_to_matrix(edge.xu())
+        differences = np.array(
+            [ctrl_points[:, i + 1] - ctrl_points[:, i] for i in range(len(ctrl_points))]
+        )
+        A = sym.DecomposeLinearExpressions(differences.flatten(), edge.xu())
+        b = np.zeros((A.shape[0], 1))
+        l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
+        edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
+        # TODO: no cost for source vertex
 
 
 @dataclass
