@@ -35,9 +35,9 @@ name_map = {
 
 
 class EdgeDefinition(TypedDict):
+    edge: GraphOfConvexSets.Edge
     mode_u: ContactMode
     mode_v: ContactMode
-    edge: GraphOfConvexSets.Edge
 
 
 @dataclass
@@ -54,7 +54,7 @@ class GcsContactPlanner:
         for edge_def in self.edge_definitions:
             self._add_position_continuity_constraint(**edge_def)
             self._add_breaking_contact_constraints(**edge_def)
-            # self._add_path_length_cost(e)
+            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
 
     def _create_edges(self) -> None:
         for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
@@ -110,14 +110,18 @@ class GcsContactPlanner:
         )
         return positive_exit_normal_vel_constraint
 
-    def _add_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
+    def _add_position_path_length_cost(
+        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode
+    ) -> None:
         # Minimize euclidean distance between subsequent control points
         # NOTE: we only minimize L1 distance right now
-        ctrl_points = self._reshape_ctrl_points_to_matrix(edge.xu())
-        differences = np.array(
-            [ctrl_points[:, i + 1] - ctrl_points[:, i] for i in range(len(ctrl_points))]
-        )
-        A = sym.DecomposeLinearExpressions(differences.flatten(), edge.xu())
+        differences = np.concatenate(
+            [
+                pos_vars.x[:, 1:] - pos_vars.x[:, :-1]
+                for pos_vars in mode_u.position_vars
+            ]
+        ).flatten()
+        A = sym.DecomposeLinearExpressions(differences, mode_u.x)
         b = np.zeros((A.shape[0], 1))
         l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
         edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
