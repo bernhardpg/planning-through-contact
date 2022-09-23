@@ -157,17 +157,37 @@ def test_planning_through_contact():
         tangential_jacobian,
     )
 
-    contact_modes = [no_contact, rolling_contact, sliding_contact]
-    position_polyhedrons = [mode.convex_set_position for mode in contact_modes]
+    initial_position_constraints = np.array([x_a == 0, x_u == 4.0])
+    source = ContactMode(
+        pos_vars,
+        initial_position_constraints,
+        normal_force_vars,
+        friction_force_vars,
+        "no_contact",
+        friction_coeff,
+        normal_jacobian,
+        tangential_jacobian,
+        name="source",
+    )
 
-    # Make sure position sets are overlapping
-    for p1, p2 in zip(position_polyhedrons[:-1], position_polyhedrons[1:]):
-        assert p1.IntersectsWith(p2)
+    # TODO: How to properly ensure that it cannot go from nc to target?
+    # Maybe it already cant because of edge constraints?
+    final_position_constraints = np.array(x_u == 8.0)
+    target = ContactMode(
+        pos_vars,
+        final_position_constraints,
+        normal_force_vars,
+        friction_force_vars,
+        "sliding_contact",
+        friction_coeff,
+        normal_jacobian,
+        tangential_jacobian,
+        name="target",
+    )
 
+    modes = [no_contact, rolling_contact, sliding_contact, source, target]
+    planner = GcsContactPlanner(modes)
 
-    planner = GcsContactPlanner([no_contact, rolling_contact, sliding_contact])
-
-    # TODO: Now tie this to GCS
     breakpoint()
 
 

@@ -47,16 +47,17 @@ class GcsContactPlanner:
 
     def __post_init__(self):
         for i, mode in enumerate(self.contact_modes):
-            self.gcs.AddVertex(mode.convex_set, f"v{i}_{name_map[mode.mode]}")
+            name = mode.name if not mode.name == None else f"v{1}_{name_map[mode.mode]}"
+            self.gcs.AddVertex(mode.convex_set, name)
 
         self.edge_definitions = []
-        self._create_edges()
+        self._create_edges_between_overlapping_position_sets()
         for edge_def in self.edge_definitions:
             self._add_position_continuity_constraint(**edge_def)
             self._add_breaking_contact_constraints(**edge_def)
             self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
 
-    def _create_edges(self) -> None:
+    def _create_edges_between_overlapping_position_sets(self) -> None:
         for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
             for v, mode_v in zip(self.gcs.Vertices(), self.contact_modes):
                 # TODO this can be speed up as we dont need to check for overlap both ways

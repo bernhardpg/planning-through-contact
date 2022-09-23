@@ -30,6 +30,7 @@ class BezierVariable:
             )
 
     def get_derivative(self) -> "BezierVariable":
+        assert self.order >= 1
         der_ctrl_points = self.order * (self.x[:, 1:] - self.x[:, 0:-1])
         derivative = BezierVariable(self.dim, self.order - 1, der_ctrl_points)
         return derivative

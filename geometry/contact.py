@@ -37,6 +37,7 @@ class ContactMode:
     friction_coeff: float
     normal_jacobian: npt.NDArray[np.float64]
     tangential_jacobian: npt.NDArray[np.float64]
+    name: Optional[str] = None
     EPS: float = 1e-5
 
     def __post_init__(self):
