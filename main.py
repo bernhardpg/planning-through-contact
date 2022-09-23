@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib import animation
 import cdd
 
 from dataclasses import dataclass
@@ -188,12 +189,101 @@ def test_planning_through_contact():
     modes = [no_contact, rolling_contact, sliding_contact, source, target]
     planner = GcsContactPlanner(modes)
 
-    breakpoint()
+    source_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "source")
+    target_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "target")
+    ctrl_points = planner.calculate_path(source_vertex, target_vertex)
+    # TODO this is very hacky just to plot something
+    ctrl_points.reverse()  # TODO: remove reverse
+
+    x_a_curves = [
+        BezierCurve.create_from_ctrl_points(1, points[0:3]) for points in ctrl_points
+    ]
+    x_u_curves = [
+        BezierCurve.create_from_ctrl_points(1, points[3:6]) for points in ctrl_points
+    ]
+
+    x_a_curve_values = np.concatenate(
+        [
+            np.concatenate(
+                [x_a_curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for x_a_curve in x_a_curves
+        ]
+    )
+    x_u_curve_values = np.concatenate(
+        [
+            np.concatenate(
+                [x_u_curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for x_u_curve in x_u_curves
+        ]
+    )
+    animate(x_a_curve_values, x_u_curve_values)
+
+    #    i = 0
+    #    for x_a_curve, x_u_curve in zip(x_a_curves, x_u_curves):
+    #        s_range = np.arange(0.0, 1.01, 0.01)
+    #        # plt.scatter(curve.ctrl_points[0, :], curve.ctrl_points[1, :])
+    #        x_a_curve_values = np.concatenate(
+    #            [x_a_curve.eval(s) for s in s_range], axis=1
+    #        ).T
+    #
+    #        x_u_curve_values = np.concatenate(
+    #            [x_u_curve.eval(s) for s in s_range], axis=1
+    #        ).T
+    #
+    #        plt.plot(s_range + i, x_a_curve_values, "r")
+    #        plt.plot(s_range + i, x_u_curve_values, "b")
+    #        i += 1
+
+    # plt.show()
+
+
+def animate(x_a, x_u):
+    # First set up the figure, the axis, and the plot element we want to animate
+    fig = plt.figure()
+    ax = plt.axes(xlim=(-4, 10), ylim=(0, 4))
+    (finger,) = ax.plot([], [], "bo", lw=2)
+    (box,) = ax.plot([], [], "r", lw=5)
+
+    # initialization function: plot the background of each frame
+    def init():
+        finger.set_data([], [])
+        box.set_data([], [])
+        return (
+            finger,
+            box,
+        )
+
+    # animation function.  This is called sequentially
+    def animate(i):
+        l = 2.0  # TODO
+        height = 1.0  # TODO
+        y = 1.0
+        finger.set_data(x_a[i], y)
+        box_com = x_u[i]
+        box_shape_x = np.array(
+            [box_com - l, box_com + l, box_com + l, box_com - l, box_com - l]
+        )
+        box_shape_y = np.array([y, y, y + height, y + height, y])
+        box.set_data(box_shape_x, box_shape_y)
+        return (
+            finger,
+            box,
+        )
+
+    # call the animator.  blit=True means only re-draw the parts that have changed.
+    anim = animation.FuncAnimation(
+        fig, animate, init_func=init, frames=200, interval=20, blit=True
+    )
+
+    plt.show()
 
 
 def main():
     # test_bezier_curve()
     # test_gcs()
+    # animate()
     test_planning_through_contact()
 
     return 0

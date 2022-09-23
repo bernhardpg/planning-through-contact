@@ -128,6 +128,37 @@ class GcsContactPlanner:
         edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
         # TODO: no cost for source vertex
 
+    def _solve(
+        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
+    ) -> MathematicalProgramResult:
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = True  # TODO implement rounding
+        options.max_rounded_paths = 10  # Must be >0 to actually do proper rounding
+
+        result = self.gcs.SolveShortestPath(source, target, options)
+        assert result.is_success
+        return result
+
+    def _reconstruct_path(
+        self, result: MathematicalProgramResult
+    ) -> List[npt.NDArray[np.float64]]:
+        edges = self.gcs.Edges()
+        flow_variables = [e.phi() for e in edges]
+        flow_results = [result.GetSolution(p) for p in flow_variables]
+        active_edges = [edge for edge, flow in zip(edges, flow_results) if flow == 1.00]
+        # Observe that we only need the first vertex in every edge to reconstruct the entire graph
+        vertices_in_path = [edge.xu() for edge in active_edges]
+        vertex_values = [result.GetSolution(v) for v in vertices_in_path]
+
+        return vertex_values
+
+    def calculate_path(
+        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
+    ) -> List[npt.NDArray[np.float64]]:
+        result = self._solve(source, target)
+        vertex_values = self._reconstruct_path(result)
+        return vertex_values
+
 
 @dataclass
 class GcsPlanner:
