@@ -49,22 +49,20 @@ class ContactMode:
         )
 
         constraints = [self.position_constraints]
+        constraints.append(self.create_force_balance_constraints())
         if self.mode == "no_contact":
             constraints.append(self.create_contact_force_constraints("zero"))
-            constraints.append(self.create_force_balance_constraints())
         elif self.mode == "rolling_contact":
             constraints.append(self.create_contact_force_constraints("nonzero"))
-            # There are multiple friction cone constraint in a list, so here we merge the lists
+            # These are multiple friction cone constraint in a list, so here we merge the lists
             constraints = sum(
                 (constraints, self.create_friction_cone_constraints("inside")), []
             )
-            constraints.append(self.create_force_balance_constraints())
         elif self.mode == "sliding_contact":
             constraints.append(self.create_contact_force_constraints("nonzero"))
             constraints = sum(
                 (constraints, self.create_friction_cone_constraints("outside")), []
             )
-            constraints.append(self.create_force_balance_constraints())
         else:
             raise NotImplementedError
 
