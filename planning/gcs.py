@@ -153,23 +153,37 @@ class GcsContactPlanner:
         result = self.gcs.SolveShortestPath(source, target, options)
 
         assert result.is_success()
-        breakpoint()
         return result
+
+    def _get_active_edges_in_result(
+        self, edges: List[GraphOfConvexSets.Edge], result: MathematicalProgramResult
+    ) -> List[GraphOfConvexSets.Edge]:
+        flow_variables = [e.phi() for e in edges]
+        flow_results = [result.GetSolution(p) for p in flow_variables]
+        active_edges = [edge for edge, flow in zip(edges, flow_results) if flow == 1.00]
+        return active_edges
+
+    def _find_path_to_target(
+        self,
+        edges: List[GraphOfConvexSets.Edge],
+        target: GraphOfConvexSets.Vertex,
+        u: GraphOfConvexSets.Vertex,
+    ) -> List[GraphOfConvexSets.Vertex]:
+        current_edge = next(e for e in edges if e.u() == u)
+        v = current_edge.v()
+        target_reached = v == target
+        if target_reached:
+            return [v]
+        else:
+            return [u] + self._find_path_to_target(edges, target, v)
 
     def _reconstruct_path(
         self, result: MathematicalProgramResult
     ) -> List[npt.NDArray[np.float64]]:
-        edges = self.gcs.Edges()
-        flow_variables = [e.phi() for e in edges]
-        flow_results = [result.GetSolution(p) for p in flow_variables]
-        active_edges = [edge for edge, flow in zip(edges, flow_results) if flow == 1.00]
-        # Observe that we only need the first vertex in every edge to reconstruct the entire graph
-        active_edge_names = [e.name() for e in active_edges]
-        print("active edges in solution:")
-        print(active_edge_names)
-        vertices_in_path = [edge.xu() for edge in active_edges]
-        vertex_values = [result.GetSolution(v) for v in vertices_in_path]
-
+        active_edges = self._get_active_edges_in_result(self.gcs.Edges(), result)
+        u = self.source
+        path = self._find_path_to_target(active_edges, self.target, u)
+        vertex_values = [result.GetSolution(v.x()) for v in path]
         return vertex_values
 
     def calculate_path(self) -> List[npt.NDArray[np.float64]]:

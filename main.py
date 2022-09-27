@@ -197,9 +197,6 @@ def test_planning_through_contact():
         "diagrams/path.svg", show_binary_edge_vars=True, use_solution=True
     )
     # TODO this is very hacky just to plot something
-    ctrl_points = [ctrl_points[0], ctrl_points[1], ctrl_points[2]]
-    breakpoint()
-
     x_a_curves = [
         BezierCurve.create_from_ctrl_points(1, points[0:3]) for points in ctrl_points
     ]
@@ -281,6 +278,7 @@ def test_planning_through_contact():
 
 
 def animate(x_a, x_u, lam_f, lam_n):
+    n_frames = x_a.shape[0]
     # First set up the figure, the axis, and the plot element we want to animate
     fig = plt.figure()
     ax = plt.axes(xlim=(-4, 10), ylim=(0, 4))
@@ -319,7 +317,7 @@ def animate(x_a, x_u, lam_f, lam_n):
 
     # call the animator.  blit=True means only re-draw the parts that have changed.
     anim = animation.FuncAnimation(
-        fig, animate, init_func=init, frames=400, interval=20, blit=True
+        fig, animate, init_func=init, frames=n_frames, interval=20, blit=True
     )
 
     plt.show()
