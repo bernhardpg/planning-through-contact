@@ -89,7 +89,17 @@ class GcsContactPlanner:
             A_v = sym.DecomposeLinearExpressions(rhs, mode_v.x)
             continuity_constraints = eq(A_u.dot(edge.xu()), A_v.dot(edge.xv()))
             for c in continuity_constraints:
+                # TODO remove this check
+                assert self.check_valid_edge_constraint(edge, c)
                 edge.AddConstraint(c)
+
+    def check_valid_edge_constraint(self, edge, c) -> bool:
+        edge_vars = sym.Variables(np.concatenate([edge.xu(), edge.xv()]))
+        return c.GetFreeVariables().IsSubsetOf(edge_vars)
+
+    def check_valid_edge_binding(self, edge, b) -> bool:
+        edge_vars = sym.Variables(np.concatenate([edge.xu(), edge.xv()]))
+        return sym.Variables(b.variables()).IsSubsetOf(edge_vars)
 
     def _add_breaking_contact_constraints(
         self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
@@ -97,6 +107,8 @@ class GcsContactPlanner:
         transition_type = mode_u.get_transition(mode_v)
         if transition_type == "breaking_contact":
             c = self._create_positive_exit_normal_vel_constraint(mode_u, edge.xu())
+            # TODO remove check
+            assert self.check_valid_edge_binding(edge, c)
             edge.AddConstraint(c)
 
     # TODO: this can probably be speed up!
@@ -219,6 +231,8 @@ class GcsPlanner:
         # TODO: if we also want continuity to a higher degree, this needs to be enforced here!
         continuity_constraints = eq(u_last_ctrl_point, v_first_ctrl_point)
         for c in continuity_constraints:
+            # TODO remove this check
+            assert self.check_valid_edge_constraint(edge, c)
             edge.AddConstraint(c)
 
     def _reshape_ctrl_points_to_matrix(
