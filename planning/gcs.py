@@ -134,6 +134,9 @@ class GcsContactPlanner:
     ) -> None:
         # Minimize euclidean distance between subsequent control points
         # NOTE: we only minimize L1 distance right now
+        if mode_u.name == "source":  # no cost for source vertex
+            return
+
         differences = np.concatenate(
             [
                 pos_vars.x[:, 1:] - pos_vars.x[:, :-1]
