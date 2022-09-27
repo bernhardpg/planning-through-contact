@@ -146,20 +146,21 @@ def test_planning_through_contact():
         friction_coeff,
         normal_jacobian,
         tangential_jacobian,
+        name="rolling",
     )
-    sliding_contact = ContactMode(
-        pos_vars,
-        contact_pos_constraint,
-        normal_force_vars,
-        friction_force_vars,
-        "sliding_contact",
-        friction_coeff,
-        normal_jacobian,
-        tangential_jacobian,
-    )
+    #    sliding_contact = ContactMode(
+    #        pos_vars,
+    #        contact_pos_constraint,
+    #        normal_force_vars,
+    #        friction_force_vars,
+    #        "sliding_contact",
+    #        friction_coeff,
+    #        normal_jacobian,
+    #        tangential_jacobian,
+    #    )
 
     initial_position_constraints = np.concatenate([x_a == 0, x_u == 4.0])
-    source = ContactMode(
+    start = ContactMode(
         pos_vars,
         initial_position_constraints,
         normal_force_vars,
@@ -168,32 +169,30 @@ def test_planning_through_contact():
         friction_coeff,
         normal_jacobian,
         tangential_jacobian,
-        name="source",
+        name="start",
     )
 
-    # TODO: How to properly ensure that it cannot go from nc to target?
-    # Maybe it already cant because of edge constraints?
-    final_position_constraints = np.concatenate([x_a + l == x_u, x_u == 8.0])
-    # final_position_constraints = np.concatenate([x_u == 8.0])
-    target = ContactMode(
-        pos_vars,
-        final_position_constraints,
-        normal_force_vars,
-        friction_force_vars,
-        "rolling_contact",  # TODO should be sliding!
-        friction_coeff,
-        normal_jacobian,
-        tangential_jacobian,
-        name="target",
-    )
+    #    final_position_constraints = np.concatenate([x_a + l == x_u, x_u == 8.0])
+    #    target = ContactMode(
+    #        pos_vars,
+    #        final_position_constraints,
+    #        normal_force_vars,
+    #        friction_force_vars,
+    #        "sliding_contact",  # TODO should be sliding!
+    #        friction_coeff,
+    #        normal_jacobian,
+    #        tangential_jacobian,
+    #        name="target",
+    #    )
 
-    modes = [source, no_contact, sliding_contact, rolling_contact, target]
+    # modes = [start, no_contact, sliding_contact, rolling_contact, target]
+    modes = [start, no_contact, rolling_contact]
     planner = GcsContactPlanner(modes)
     planner.save_graph_diagram("diagrams/graph.svg")
+    planner.set_source("start")
+    planner.set_target("rolling")
 
-    source_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "source")
-    target_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "target")
-    ctrl_points = planner.calculate_path(source_vertex, target_vertex)
+    ctrl_points = planner.calculate_path()
     planner.save_graph_diagram(
         "diagrams/path.svg", show_binary_edge_vars=True, use_solution=True
     )

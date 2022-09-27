@@ -71,8 +71,8 @@ class GcsContactPlanner:
                 if sets_are_overlapping:
                     # TODO remove this!
                     # dont add edge from nc to target
-                    if u.name() == "v1_nc" and v.name() == "target":
-                        continue
+                    #                    if u.name() == "v1_nc" and v.name() == "target":
+                    #                        continue
                     edge = self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
                     self.edge_definitions.append(
                         EdgeDefinition(mode_u=mode_u, mode_v=mode_v, edge=edge)
@@ -172,12 +172,20 @@ class GcsContactPlanner:
 
         return vertex_values
 
-    def calculate_path(
-        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
-    ) -> List[npt.NDArray[np.float64]]:
-        self.solution = self._solve(source, target)
+    def calculate_path(self) -> List[npt.NDArray[np.float64]]:
+        assert not self.source == None
+        assert not self.target == None
+        self.solution = self._solve(self.source, self.target)
         vertex_values = self._reconstruct_path(self.solution)
         return vertex_values
+
+    def set_source(self, source_name: str) -> None:
+        source_vertex = next(v for v in self.gcs.Vertices() if v.name() == source_name)
+        self.source = source_vertex
+
+    def set_target(self, target_name: str) -> None:
+        target_vertex = next(v for v in self.gcs.Vertices() if v.name() == target_name)
+        self.target = target_vertex
 
     def save_graph_diagram(
         self,
@@ -299,7 +307,7 @@ class GcsPlanner:
         self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
     ) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = True  # TODO implement rounding
+        options.convex_relaxation = True
         options.max_rounded_paths = 10  # Must be >0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
