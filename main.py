@@ -123,7 +123,7 @@ def test_planning_through_contact():
     normal_force_vars = np.array([lam_n])
     friction_force_vars = np.array([lam_f])
 
-    l = 0.5
+    l = 2.0
 
     no_contact_pos_constraint = x_a + l <= x_u
     no_contact = ContactMode(
@@ -193,13 +193,22 @@ def test_planning_through_contact():
     target_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "target")
     ctrl_points = planner.calculate_path(source_vertex, target_vertex)
     # TODO this is very hacky just to plot something
-    ctrl_points.reverse()  # TODO: remove reverse
+    ctrl_points = [ctrl_points[2], ctrl_points[0], ctrl_points[1]]
 
     x_a_curves = [
         BezierCurve.create_from_ctrl_points(1, points[0:3]) for points in ctrl_points
     ]
     x_u_curves = [
         BezierCurve.create_from_ctrl_points(1, points[3:6]) for points in ctrl_points
+    ]
+    lambda_n_curves = [
+        BezierCurve.create_from_ctrl_points(1, points[6:9]) for points in ctrl_points
+    ]
+    lambda_f_curves = [
+        BezierCurve.create_from_ctrl_points(1, points[9:12]) for points in ctrl_points
+    ]
+    slack_curves = [
+        BezierCurve.create_from_ctrl_points(1, points[12:14]) for points in ctrl_points
     ]
 
     x_a_curve_values = np.concatenate(
@@ -218,63 +227,94 @@ def test_planning_through_contact():
             for x_u_curve in x_u_curves
         ]
     )
-    animate(x_a_curve_values, x_u_curve_values)
+    lambda_f_curve_values = np.concatenate(
+        [
+            np.concatenate(
+                [lambda_f_curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for lambda_f_curve in lambda_f_curves
+        ]
+    )
+    lambda_n_curve_values = np.concatenate(
+        [
+            np.concatenate(
+                [lambda_n_curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for lambda_n_curve in lambda_n_curves
+        ]
+    )
+    slack_curve_values = np.concatenate(
+        [
+            np.concatenate(
+                [slack_curve.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for slack_curve in slack_curves
+        ]
+    )
+    animate(
+        x_a_curve_values, x_u_curve_values, lambda_f_curve_values, lambda_f_curve_values
+    )
 
-    #    i = 0
-    #    for x_a_curve, x_u_curve in zip(x_a_curves, x_u_curves):
-    #        s_range = np.arange(0.0, 1.01, 0.01)
-    #        # plt.scatter(curve.ctrl_points[0, :], curve.ctrl_points[1, :])
-    #        x_a_curve_values = np.concatenate(
-    #            [x_a_curve.eval(s) for s in s_range], axis=1
-    #        ).T
-    #
-    #        x_u_curve_values = np.concatenate(
-    #            [x_u_curve.eval(s) for s in s_range], axis=1
-    #        ).T
-    #
-    #        plt.plot(s_range + i, x_a_curve_values, "r")
-    #        plt.plot(s_range + i, x_u_curve_values, "b")
-    #        i += 1
+    if True:
+        i = 0
+        for x_a_curve, x_u_curve in zip(x_a_curves, x_u_curves):
+            s_range = np.arange(0.0, 1.01, 0.01)
+            # plt.scatter(curve.ctrl_points[0, :], curve.ctrl_points[1, :])
+            x_a_curve_values = np.concatenate(
+                [x_a_curve.eval(s) for s in s_range], axis=1
+            ).T
 
-    # plt.show()
+            x_u_curve_values = np.concatenate(
+                [x_u_curve.eval(s) for s in s_range], axis=1
+            ).T
+
+            plt.plot(s_range + i, x_a_curve_values, "r")
+            plt.plot(s_range + i, x_u_curve_values, "b")
+            i += 1
+
+        plt.show()
 
 
-def animate(x_a, x_u):
+def animate(x_a, x_u, lam_f, lam_n):
     # First set up the figure, the axis, and the plot element we want to animate
     fig = plt.figure()
     ax = plt.axes(xlim=(-4, 10), ylim=(0, 4))
-    (finger,) = ax.plot([], [], "bo", lw=2)
+    (finger,) = ax.plot([], [], "bo", lw=5)
     (box,) = ax.plot([], [], "r", lw=5)
+    (force_normal,) = ax.plot([], [], "g>-", lw=2)
+    (force_friction,) = ax.plot([], [], "g<-", lw=2)
 
     # initialization function: plot the background of each frame
     def init():
         finger.set_data([], [])
         box.set_data([], [])
-        return (
-            finger,
-            box,
-        )
+        force_normal.set_data([], [])
+        force_friction.set_data([], [])
+        return (finger, box, force_normal, force_friction)
 
     # animation function.  This is called sequentially
     def animate(i):
         l = 2.0  # TODO
         height = 1.0  # TODO
         y = 1.0
-        finger.set_data(x_a[i], y)
+        finger_height = y + 0.5
+        finger.set_data(x_a[i], finger_height)
+
         box_com = x_u[i]
         box_shape_x = np.array(
             [box_com - l, box_com + l, box_com + l, box_com - l, box_com - l]
         )
         box_shape_y = np.array([y, y, y + height, y + height, y])
         box.set_data(box_shape_x, box_shape_y)
-        return (
-            finger,
-            box,
-        )
+
+        force_normal.set_data([box_com - l, box_com - l + lam_n[i]], finger_height)
+        force_friction.set_data([box_com - lam_f[i], box_com], y)
+
+        return (finger, box, force_normal, force_friction)
 
     # call the animator.  blit=True means only re-draw the parts that have changed.
     anim = animation.FuncAnimation(
-        fig, animate, init_func=init, frames=200, interval=20, blit=True
+        fig, animate, init_func=init, frames=400, interval=20, blit=True
     )
 
     plt.show()
@@ -284,6 +324,8 @@ def main():
     # test_bezier_curve()
     # test_gcs()
     # animate()
+    # TODO: What about sets being unbounded??
+
     test_planning_through_contact()
 
     return 0

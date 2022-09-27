@@ -67,6 +67,10 @@ class GcsContactPlanner:
                     mode_v.convex_set_position
                 )
                 if sets_are_overlapping:
+                    # TODO remove this!
+                    # dont add edge from nc to target
+                    if u.name() == "v1_nc" and v.name() == "target":
+                        continue
                     edge = self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
                     self.edge_definitions.append(
                         EdgeDefinition(mode_u=mode_u, mode_v=mode_v, edge=edge)
@@ -95,6 +99,7 @@ class GcsContactPlanner:
             edge.AddConstraint(c)
 
     # TODO: this can probably be speed up!
+    # TODO is this working as expected?
     def _create_positive_exit_normal_vel_constraint(
         self, contact_mode: ContactMode, vertex_vars: npt.NDArray[sym.Variable]
     ) -> Binding[LinearConstraint]:
@@ -147,6 +152,9 @@ class GcsContactPlanner:
         flow_results = [result.GetSolution(p) for p in flow_variables]
         active_edges = [edge for edge, flow in zip(edges, flow_results) if flow == 1.00]
         # Observe that we only need the first vertex in every edge to reconstruct the entire graph
+        active_edge_names = [e.name() for e in active_edges]
+        print("active edges in solution:")
+        print(active_edge_names)
         vertices_in_path = [edge.xu() for edge in active_edges]
         vertex_values = [result.GetSolution(v) for v in vertices_in_path]
 
