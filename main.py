@@ -117,7 +117,7 @@ def test_planning_through_contact():
     friction_coeff = 0.5
     contact_jacobian = np.array([[-1, 1]])
     normal_jacobian = contact_jacobian
-    tangential_jacobian = -contact_jacobian
+    tangential_jacobian = np.array([[0, -1]])
 
     pos_vars = np.array([x_a, x_u])
     normal_force_vars = np.array([lam_n])
@@ -158,7 +158,7 @@ def test_planning_through_contact():
         tangential_jacobian,
     )
 
-    initial_position_constraints = np.array([x_a == 0, x_u == 4.0])
+    initial_position_constraints = np.concatenate([x_a == 0, x_u == 4.0])
     source = ContactMode(
         pos_vars,
         initial_position_constraints,
@@ -173,27 +173,29 @@ def test_planning_through_contact():
 
     # TODO: How to properly ensure that it cannot go from nc to target?
     # Maybe it already cant because of edge constraints?
-    final_position_constraints = np.array(x_u == 8.0)
+    final_position_constraints = np.concatenate([x_a + l == x_u, x_u == 8.0])
+    #final_position_constraints = np.concatenate([x_u == 8.0])
     target = ContactMode(
         pos_vars,
         final_position_constraints,
         normal_force_vars,
         friction_force_vars,
-        "sliding_contact",
+        "rolling_contact", # TODO should be sliding!
         friction_coeff,
         normal_jacobian,
         tangential_jacobian,
         name="target",
     )
 
-    modes = [no_contact, rolling_contact, sliding_contact, source, target]
+    modes = [source, no_contact, sliding_contact, rolling_contact, target]
     planner = GcsContactPlanner(modes)
 
     source_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "source")
     target_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "target")
     ctrl_points = planner.calculate_path(source_vertex, target_vertex)
     # TODO this is very hacky just to plot something
-    ctrl_points = [ctrl_points[2], ctrl_points[0], ctrl_points[1]]
+    ctrl_points = [ctrl_points[0], ctrl_points[1], ctrl_points[2]]
+    breakpoint()
 
     x_a_curves = [
         BezierCurve.create_from_ctrl_points(1, points[0:3]) for points in ctrl_points
