@@ -154,8 +154,9 @@ class GcsContactPlanner:
         self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
     ) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = True  # TODO implement rounding
-        options.max_rounded_paths = 10  # Must be >0 to actually do proper rounding
+        options.convex_relaxation = False
+        #options.preprocessing = True
+        #options.max_rounded_paths = 1  # Must be >0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
         assert result.is_success
