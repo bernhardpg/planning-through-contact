@@ -159,7 +159,17 @@ class GcsContactPlanner:
         #options.max_rounded_paths = 1  # Must be >0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
-        assert result.is_success
+        import pydot
+
+        graphviz = self.gcs.GetGraphvizString(result, False, precision=1)
+        data = pydot.graph_from_dot_data(graphviz)[0]
+        data.write_svg("graph.svg")
+
+        graphviz = self.gcs.GetGraphvizString(result, True, precision=1)
+        data = pydot.graph_from_dot_data(graphviz)[0]
+        data.write_svg("graph_phis.svg")
+        assert result.is_success()
+        breakpoint()
         return result
 
     def _reconstruct_path(
