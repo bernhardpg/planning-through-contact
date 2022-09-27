@@ -173,7 +173,7 @@ class GcsContactPlanner:
         v = current_edge.v()
         target_reached = v == target
         if target_reached:
-            return [v]
+            return [u] + [v]
         else:
             return [u] + self._find_path_to_target(edges, target, v)
 
