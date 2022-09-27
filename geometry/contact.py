@@ -70,11 +70,13 @@ class ContactMode:
 
         formulator = PolyhedronFormulator(constraints)
         self.convex_set = formulator.formulate_polyhedron(self.all_vars_flattened)
-        )
 
-        self.convex_set_position = PolyhedronFormulator(
-            [self.position_constraints]
-        ).formulate_polyhedron(self.all_vars_flattened)
+        relevant_pos_variables = self.all_vars_flattened[
+            [0, 1, 2, 3, 4, 5, -2, -1]
+        ]  # TODO hardcoded
+        self.convex_set_position = formulator.formulate_polyhedron(
+            self.all_vars_flattened[:6], remove_constraints_not_in_vars=True
+        )
 
     @property
     def x(self) -> npt.NDArray[sym.Variable]:
