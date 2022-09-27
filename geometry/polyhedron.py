@@ -42,13 +42,27 @@ class Polyhedron(opt.HPolyhedron):
 
 
 class PolyhedronFormulator:
-    def __init__(self, constraints: List[sym.Expression]):
+    def __init__(
+        self,
+        constraints: List[sym.Expression],
+    ):
         flattened_constraints = [c.flatten() for c in constraints]
         self.constraints = np.concatenate(flattened_constraints)
 
     def formulate_polyhedron(
-        self, variables: npt.NDArray[sym.Variable]
+        self,
+        variables: npt.NDArray[sym.Variable],
+        make_bounded: bool = True,
+        remove_constraints_not_in_vars: bool = False,
+        BOUND: float = 999,  # TODO tune?
     ) -> opt.HPolyhedron:
+        if make_bounded:
+            ub = np.ones(variables.shape) * BOUND
+            upper_limits = le(variables, ub)
+            lower_limits = le(-ub, variables)
+            limits = np.concatenate((upper_limits, lower_limits))
+            self.constraints = np.append(self.constraints, limits)
+
         expressions = []
         for formula in self.constraints:
             kind = formula.get_kind()
@@ -66,6 +80,18 @@ class PolyhedronFormulator:
                 # lhs <= rhs
                 # ==> lhs - rhs <= 0
                 expressions.append(lhs - rhs)
+
+        if remove_constraints_not_in_vars:
+
+            def check_all_vars_are_relevant(exp):
+                return all(
+                    [
+                        exp_var in sym.Variables(variables) # Need to convert this to Variables to check contents
+                        for exp_var in exp.GetVariables()
+                    ]
+                )
+
+            expressions = list(filter(check_all_vars_are_relevant, expressions))
 
         # We now have expr <= 0 for all expressions
         # ==> we get Ax - b <= 0

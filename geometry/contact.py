@@ -68,8 +68,8 @@ class ContactMode:
         else:
             raise NotImplementedError
 
-        self.convex_set = PolyhedronFormulator(constraints).formulate_polyhedron(
-            self.all_vars_flattened
+        formulator = PolyhedronFormulator(constraints)
+        self.convex_set = formulator.formulate_polyhedron(self.all_vars_flattened)
         )
 
         self.convex_set_position = PolyhedronFormulator(

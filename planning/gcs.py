@@ -48,6 +48,7 @@ class GcsContactPlanner:
     def __post_init__(self):
         for i, mode in enumerate(self.contact_modes):
             name = mode.name if not mode.name == None else f"v{1}_{name_map[mode.mode]}"
+            assert mode.convex_set.IsBounded()
             self.gcs.AddVertex(mode.convex_set, name)
 
         self.edge_definitions = []
