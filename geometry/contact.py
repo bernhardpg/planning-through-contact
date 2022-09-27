@@ -69,6 +69,7 @@ class ContactMode:
         formulator = PolyhedronFormulator(constraints)
         self.convex_set = formulator.formulate_polyhedron(self.all_vars_flattened)
 
+        # TODO remove this?
         relevant_pos_variables = self.all_vars_flattened[
             [0, 1, 2, 3, 4, 5, -2, -1]
         ]  # TODO hardcoded

@@ -174,13 +174,13 @@ def test_planning_through_contact():
     # TODO: How to properly ensure that it cannot go from nc to target?
     # Maybe it already cant because of edge constraints?
     final_position_constraints = np.concatenate([x_a + l == x_u, x_u == 8.0])
-    #final_position_constraints = np.concatenate([x_u == 8.0])
+    # final_position_constraints = np.concatenate([x_u == 8.0])
     target = ContactMode(
         pos_vars,
         final_position_constraints,
         normal_force_vars,
         friction_force_vars,
-        "rolling_contact", # TODO should be sliding!
+        "rolling_contact",  # TODO should be sliding!
         friction_coeff,
         normal_jacobian,
         tangential_jacobian,
@@ -189,10 +189,14 @@ def test_planning_through_contact():
 
     modes = [source, no_contact, sliding_contact, rolling_contact, target]
     planner = GcsContactPlanner(modes)
+    planner.save_graph_diagram("diagrams/graph.svg")
 
     source_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "source")
     target_vertex = next(v for v in planner.gcs.Vertices() if v.name() == "target")
     ctrl_points = planner.calculate_path(source_vertex, target_vertex)
+    planner.save_graph_diagram(
+        "diagrams/path.svg", show_binary_edge_vars=True, use_solution=True
+    )
     # TODO this is very hacky just to plot something
     ctrl_points = [ctrl_points[0], ctrl_points[1], ctrl_points[2]]
     breakpoint()

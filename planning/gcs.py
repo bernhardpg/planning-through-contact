@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import cdd
 
+import pydot
 from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
@@ -138,23 +139,19 @@ class GcsContactPlanner:
         edge.AddCost(c)
 
     def _solve(
-        self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
+        self,
+        source: GraphOfConvexSets.Vertex,
+        target: GraphOfConvexSets.Vertex,
+        convex_relaxation: bool = False,
     ) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = False
-        # options.preprocessing = True
-        # options.max_rounded_paths = 1  # Must be >0 to actually do proper rounding
+        options.convex_relaxation = convex_relaxation
+        if convex_relaxation:
+            options.preprocessing = True
+            options.max_rounded_paths = 10  # Must be > 0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
-        import pydot
 
-        graphviz = self.gcs.GetGraphvizString(result, False, precision=1)
-        data = pydot.graph_from_dot_data(graphviz)[0]
-        data.write_svg("graph.svg")
-
-        graphviz = self.gcs.GetGraphvizString(result, True, precision=1)
-        data = pydot.graph_from_dot_data(graphviz)[0]
-        data.write_svg("graph_phis.svg")
         assert result.is_success()
         breakpoint()
         return result
@@ -178,9 +175,26 @@ class GcsContactPlanner:
     def calculate_path(
         self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
     ) -> List[npt.NDArray[np.float64]]:
-        result = self._solve(source, target)
-        vertex_values = self._reconstruct_path(result)
+        self.solution = self._solve(source, target)
+        vertex_values = self._reconstruct_path(self.solution)
         return vertex_values
+
+    def save_graph_diagram(
+        self,
+        filename: str,
+        use_solution: bool = False,
+        show_binary_edge_vars: bool = False,
+    ) -> None:
+        if use_solution is False:
+            graphviz = self.gcs.GetGraphvizString()
+        else:
+            assert not self.solution == None
+            graphviz = self.gcs.GetGraphvizString(
+                self.solution, show_binary_edge_vars, precision=1
+            )
+
+        data = pydot.graph_from_dot_data(graphviz)[0]
+        data.write_svg(filename)
 
 
 @dataclass
