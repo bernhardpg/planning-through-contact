@@ -146,8 +146,9 @@ class GcsContactPlanner:
         A = sym.DecomposeLinearExpressions(differences, mode_u.x)
         b = np.zeros((A.shape[0], 1))
         l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
-        edge.AddCost(Binding[Cost](l1_norm_cost, edge.xu()))
-        # TODO: no cost for source vertex
+        c = Binding[Cost](l1_norm_cost, edge.xu())
+        assert self.check_valid_edge_binding(edge, c)
+        edge.AddCost(c)
 
     def _solve(
         self, source: GraphOfConvexSets.Vertex, target: GraphOfConvexSets.Vertex
