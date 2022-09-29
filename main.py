@@ -17,7 +17,7 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve, BezierVariable
-from geometry.contact import ContactMode
+from geometry.contact import ContactMode, CollisionGeometry, CollisionPair
 from planning.gcs import GcsPlanner, GcsContactPlanner
 from visualize.visualize import animate_1d_box, plot_1d_box_positions
 
@@ -110,15 +110,60 @@ def test_gcs() -> None:
 
 
 def test_planning_through_contact():
+    dim = 2
+    box_width = 2
+    box_height = 1
+    finger = CollisionGeometry("finger", dim=dim, order=2)
+    table = CollisionGeometry("table", dim=dim, order=2)
+    box = CollisionGeometry("box", dim=dim, order=2)
+
+
+    n = np.array([[1],[0]])
+    d1 = np.array([[0],[1]])
+    d2 = np.array([[0],[-1]])
+    d = np.hstack((d1,d2))
+    # TODO only local jacobians
+    # v_rel = [v_x_rel  = [v_f_x - v_b_x
+    #          v_y_rel]    v_f_y - v_b_y]
+    # v = [v_f_x, v_f_y, v_b_x, v_b_y]
+    J_c = np.array([[1, 0, -1, 0],[0, 1, 0, -1]])
+    sdf = (finger.pos + box_width - box.pos).x[0:1,:]
+
+    cp1 = CollisionPair(
+        finger,
+        box,
+        friction_coeff=0.5,
+        signed_distance_func=sdf,
+        normal_vector=n,
+        friction_cone_rays=d,
+        contact_jacobian=J_c,
+    )
+
+    # TODO this should be automatic
+    n = np.array([[0],[1]])
+    d1 = np.array([[1],[0]])
+    d2 = np.array([[-1],[0]])
+    d = np.hstack((d1,d2))
+    J_c = np.array([[1, 0, -1, 0],[0, 1, 0, -1]])
+
+    cp2 = CollisionPair(
+        box,
+        table,
+        friction_coeff=0.5,
+        signed_distance_func=sym.Expression(0),
+        onesided_friction_cone_rays=table_friction_cone,
+        contact_jacobian=contact_jacobian_box_table,
+    )
+    breakpoint()
+
     lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
     lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
     x_a = BezierVariable(dim=1, order=2, name="x_a")
     x_u = BezierVariable(dim=1, order=2, name="x_u")
 
-    friction_coeff = 0.5
     contact_jacobian = np.array([[-1, 1]])
     normal_jacobian = contact_jacobian
-    tangential_jacobian = np.array([[0, -1]])
+    tangential_jacobian = np.array([[0, -1]])  # note: hand written for this case
 
     pos_vars = np.array([x_a, x_u])
     normal_force_vars = np.array([lam_n])

@@ -56,7 +56,7 @@ class GcsContactPlanner:
         self._create_edges_between_overlapping_position_sets()
         for edge_def in self.edge_definitions:
             self._add_position_continuity_constraint(**edge_def)
-            self._add_breaking_contact_constraints(**edge_def)
+            # self._add_breaking_contact_constraints(**edge_def)
             self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
 
     def _create_edges_between_overlapping_position_sets(self) -> None:
