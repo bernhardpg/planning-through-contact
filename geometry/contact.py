@@ -23,7 +23,7 @@ from pydrake.solvers import (
 )
 
 from geometry.bezier import BezierVariable
-from geometry.polyhedron import PolyhedronFormulator
+from geometry.polyhedron import Polyhedron, PolyhedronFormulator
 
 
 @dataclass
@@ -55,7 +55,7 @@ class CollisionPair:
 
     @property
     def name(self) -> str:
-        return f"({self.body_a.name}, {self.body_b.name})"
+        return f"{self.body_a.name}_w_{self.body_b.name}"
 
     # TODO remove
     @property
@@ -87,14 +87,19 @@ class CollisionPair:
         self.dim = self.body_a.dim
 
         # Only force strength, not vector
-        self.normal_force = BezierVariable(dim=1, order=self.order, name="normal_force")
+        self.normal_force = BezierVariable(
+            dim=1, order=self.order, name=f"{self.name}_normal_force"
+        )
         # Only force strengths, not vector
         self.friction_forces = BezierVariable(
-            dim=self.n_friction_cone_rays, order=self.order, name="friction_force"
+            dim=self.n_friction_cone_rays,
+            order=self.order,
+            name=f"{self.name}_friction_force",
         )
 
         self.contact_modes = []
         no_contact = ContactMode(
+            self.name,
             "no_contact",
             self.signed_distance_func,
             self.tangential_vel,
@@ -104,6 +109,7 @@ class CollisionPair:
         )
         self.contact_modes.append(no_contact)
         rolling = ContactMode(
+            self.name,
             "rolling",
             self.signed_distance_func,
             self.tangential_vel,
@@ -114,6 +120,7 @@ class CollisionPair:
         self.contact_modes.append(rolling)
         for idx in range(self.n_friction_cone_rays):
             sliding_along_i = ContactMode(
+                self.name,
                 "sliding",
                 self.signed_distance_func,
                 self.tangential_vel,
@@ -124,17 +131,15 @@ class CollisionPair:
             )
             self.contact_modes.append(sliding_along_i)
 
-        breakpoint()
         # TODO Add extra constraints to constrain table position
 
         # TODO one big force balance constraint must be added for all unactuated forces in the entire problem
         # constraints.append(self.create_force_balance_constraints())
-        # TODO sliding
-        # self.sliding = ...
 
 
 @dataclass
 class ContactMode:
+    pair_name: str
     mode: Literal["no_contact", "rolling", "sliding"]
     signed_distance_func: npt.NDArray[npt.NDArray[sym.Formula]]
     tangential_vel: BezierVariable
@@ -146,21 +151,22 @@ class ContactMode:
 
     def __post_init__(self):
         self.name = (
-            f"{self.mode}"
+            f"{self.pair_name}_{self.mode}"
             if self.fc_direction_idx is None
-            else f"{self.mode}_in_dir_{self.fc_direction_idx}"
+            else f"{self.pair_name}_{self.mode}_in_dir_{self.fc_direction_idx}"
         )
         self.num_directions = self.tangential_vel.shape[0]  # TODO unclean?
 
         self.constraints = []
         if self.mode == "no_contact":
+            self.slack_var = None
             self.constraints.append(self.create_sdf_constraint("no_contact"))
             self.constraints.append(self.create_normal_force_constraints("zero_force"))
         elif self.mode == "rolling" or self.mode == "sliding":
             self.slack_var = BezierVariable(
                 dim=1,
                 order=self.tangential_vel.shape[1] - 1,  # TODO hardcoded
-                name="gamma",
+                name=f"{self.name}_gamma",
             )
 
             self.constraints.append(self.create_sdf_constraint("in_contact"))
@@ -200,8 +206,7 @@ class ContactMode:
         else:
             raise NotImplementedError
 
-    #        formulator = PolyhedronFormulator(constraints)
-    #        self.convex_set = formulator.formulate_polyhedron(self.all_vars_flattened)
+
     #
     #        # TODO remove this?
     #        relevant_pos_variables = self.all_vars_flattened[
@@ -292,6 +297,9 @@ class ContactMode:
         else:
             raise ValueError
 
+    def add_constraint(self, c: sym.Expression) -> None:
+        self.constraints.append(c)
+
     # TODO clean up
     @property
     def x(self) -> npt.NDArray[sym.Variable]:
@@ -352,3 +360,10 @@ class ContactMode:
             return "breaking_contact"
         else:
             return "none"
+
+    def create_polyhedron(self, vars: npt.NDArray[sym.Variable]) -> Polyhedron:
+        formulator = PolyhedronFormulator(self.constraints)
+        self.polyhedron = formulator.formulate_polyhedron(vars, make_bounded=True)
+
+
+

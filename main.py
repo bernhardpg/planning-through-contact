@@ -117,17 +117,16 @@ def test_planning_through_contact():
     table = CollisionGeometry("table", dim=dim, order=2)
     box = CollisionGeometry("box", dim=dim, order=2)
 
-
-    n = np.array([[1],[0]])
-    d1 = np.array([[0],[1]])
-    d2 = np.array([[0],[-1]])
-    d = np.hstack((d1,d2))
+    n = np.array([[1], [0]])
+    d1 = np.array([[0], [1]])
+    d2 = np.array([[0], [-1]])
+    d = np.hstack((d1, d2))
     # TODO only local jacobians
     # v_rel = [v_x_rel  = [v_f_x - v_b_x
     #          v_y_rel]    v_f_y - v_b_y]
     # v = [v_f_x, v_f_y, v_b_x, v_b_y]
-    J_c = np.array([[1, 0, -1, 0],[0, 1, 0, -1]])
-    sdf = (finger.pos + box_width - box.pos).x[0:1,:]
+    J_c = np.array([[1, 0, -1, 0], [0, 1, 0, -1]])
+    sdf = (finger.pos + box_width - box.pos).x[0:1, :]
 
     cp1 = CollisionPair(
         finger,
@@ -140,20 +139,63 @@ def test_planning_through_contact():
     )
 
     # TODO this should be automatic
-    n = np.array([[0],[1]])
-    d1 = np.array([[1],[0]])
-    d2 = np.array([[-1],[0]])
-    d = np.hstack((d1,d2))
-    J_c = np.array([[1, 0, -1, 0],[0, 1, 0, -1]])
+    n = np.array([[0], [1]])
+    d1 = np.array([[1], [0]])
+    d2 = np.array([[-1], [0]])
+    d = np.hstack((d1, d2))
+    J_c = np.array([[1, 0, -1, 0], [0, 1, 0, -1]])
 
     cp2 = CollisionPair(
         box,
         table,
         friction_coeff=0.5,
-        signed_distance_func=sym.Expression(0),
-        onesided_friction_cone_rays=table_friction_cone,
-        contact_jacobian=contact_jacobian_box_table,
+        signed_distance_func=sdf,
+        normal_vector=n,
+        friction_cone_rays=d,
+        contact_jacobian=J_c,
     )
+    # TODO normally I would need even one more collision geometry here!
+
+    # Add force balance, clean up
+    all_contact_pairs = [cp1, cp2]
+    # TODO generalize, hardcoded a bit for now
+    gravitational_force = np.array([[0], [-9.81 * 1], [0], [9.81 * 1]])
+    force_balance_constraint = eq(
+        sum(
+            [
+                pair.normal_jacobian.T.dot(pair.normal_force.x)
+                + pair.tangential_jacobian.T.dot(pair.friction_forces.x)
+                for pair in all_contact_pairs
+            ]
+        )
+        + gravitational_force,
+        0,
+    )
+    for cp in all_contact_pairs:
+        for mode in cp.contact_modes:
+            mode.constraints.append(force_balance_constraint)
+
+    all_contact_modes = [mode for mode in cp.contact_modes for cp in all_contact_pairs]
+    slack_vars = np.concatenate(
+        [m.slack_var.x.flatten() for m in all_contact_modes if m.slack_var is not None]
+    )
+
+    all_vars = np.concatenate(
+        [
+            finger.pos.x.flatten(),
+            box.pos.x.flatten(),
+            table.pos.x.flatten(),
+            cp1.normal_force.x.flatten(),
+            cp1.friction_forces.x.flatten(),
+            cp2.normal_force.x.flatten(),
+            cp2.friction_forces.x.flatten(),
+            slack_vars,
+        ]
+    )
+
+    for mode in all_contact_modes:
+        mode.create_polyhedron(all_vars)
+
     breakpoint()
 
     lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
