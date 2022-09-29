@@ -175,9 +175,17 @@ def test_planning_through_contact():
         for mode in cp.contact_modes:
             mode.constraints.append(force_balance_constraint)
 
-    all_contact_modes = [mode for mode in cp.contact_modes for cp in all_contact_pairs]
     slack_vars = np.concatenate(
-        [m.slack_var.x.flatten() for m in all_contact_modes if m.slack_var is not None]
+        [
+            np.concatenate(
+                [
+                    mode.slack_var.x.flatten()
+                    for mode in cp.contact_modes
+                    if mode.slack_var is not None
+                ]
+            )
+            for cp in all_contact_pairs
+        ]
     )
 
     all_vars = np.concatenate(
@@ -193,8 +201,21 @@ def test_planning_through_contact():
         ]
     )
 
-    for mode in all_contact_modes:
-        mode.create_polyhedron(all_vars)
+    for cp in all_contact_pairs:
+        for mode in cp.contact_modes:
+            mode.create_polyhedron(all_vars)
+
+    # TODO: for more than two contact pairs, we need to add even more sets here!
+    all_convex_sets = []
+    for pair1 in all_contact_pairs:
+        for mode1 in pair1.contact_modes:
+            for pair2 in all_contact_pairs:
+                for mode2 in pair2.contact_modes:
+                    if pair1.name == pair2.name:
+                        continue
+                    else:
+                        convex_set_where_modes_active = mode1.polyhedron.Intersection(mode2.polyhedron)
+                        all_convex_sets.append(convex_set_where_modes_active)
 
     breakpoint()
 
