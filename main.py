@@ -213,7 +213,7 @@ def test_planning_through_contact():
         for m1, m2 in possible_contact_permutations
     ]
 
-    planner = GcsContactPlanner(possible_contact_permutations, pos_vars)
+    planner = GcsContactPlanner(possible_contact_permutations, all_vars_flattened, pos_vars)
     breakpoint()
     planner.save_graph_diagram("diagrams/graph.svg")
     planner.set_source("start")

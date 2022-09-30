@@ -53,6 +53,7 @@ class VertexDefinition:
 @dataclass
 class GcsContactPlanner:
     contact_mode_permutations: List[Tuple[ContactMode, ContactMode]]
+    all_variables: npt.NDArray[sym.Variable]
     position_variables: npt.NDArray[sym.Variable]
     gcs: opt.GraphOfConvexSets = GraphOfConvexSets()
 
@@ -80,11 +81,15 @@ class GcsContactPlanner:
         ):
             if u_pos.IntersectsWith(v_pos):
                 edge = self.gcs.AddEdge(u.id(), v.id())
+                # TODO: clean up cont constraints
+                first_pos_vars = self.position_variables[:,0]
+                A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
+                last_pos_vars = self.position_variables[:,-1]
+                A_last = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
+                constraint = eq(A_last.dot(edge.xu()), A_first.dot(edge.xv()))
+                for c in constraint:
+                    edge.AddConstraint(c)
 
-#                breakpoint()
-#                u_pos_vars = np.concatenate([m.pos for m in u_modes])
-#                v_pos_vars = np.concatenate([m.pos for m in v_modes])
-#                c = self._create_pos_continuity_constraint(edge, u_pos_vars, v_pos_vars)
         self.save_graph_diagram("diagrams/graph.svg")
 
         breakpoint()
