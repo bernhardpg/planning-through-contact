@@ -49,6 +49,19 @@ class PolyhedronFormulator:
         flattened_constraints = [c.flatten() for c in constraints]
         self.constraints = np.concatenate(flattened_constraints)
 
+    def get_constraints_in_vars(
+        self, vars: npt.NDArray[sym.Variable]
+    ) -> npt.NDArray[sym.Formula]:
+
+        check_all_vars_are_relevant = lambda formula: all(
+            [var in sym.Variables(vars) for var in formula.GetFreeVariables()]
+        )
+        # Need to convert this to Variables to check contents for exp_var in exp.GetVariables()
+
+        relevant_constraints = list(filter(check_all_vars_are_relevant, self.constraints))
+        return relevant_constraints
+
+
     def formulate_polyhedron(
         self,
         variables: npt.NDArray[sym.Variable],
@@ -86,7 +99,10 @@ class PolyhedronFormulator:
             def check_all_vars_are_relevant(exp):
                 return all(
                     [
-                        exp_var in sym.Variables(variables) # Need to convert this to Variables to check contents
+                        exp_var
+                        in sym.Variables(
+                            variables
+                        )  # Need to convert this to Variables to check contents
                         for exp_var in exp.GetVariables()
                     ]
                 )

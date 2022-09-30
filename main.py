@@ -123,6 +123,10 @@ def test_planning_through_contact():
     table = CollisionGeometry("table", dim=dim, order=2)
     box = CollisionGeometry("box", dim=dim, order=2)
 
+    finger_no_y_motion = (finger.pos == box_height)[1:2,:]
+    box_no_y_motion = (box.pos == box_height)[1:2,:]
+    no_table_motion = (table.pos == 0)
+
     n = np.array([[1], [0]])
     d1 = np.array([[0], [1]])
     d2 = np.array([[0], [-1]])
@@ -143,6 +147,9 @@ def test_planning_through_contact():
         friction_cone_rays=d,
         contact_jacobian=J_c,
     )
+    cp1.add_constraint_to_modes(finger_no_y_motion)
+    cp1.add_constraint_to_modes(box_no_y_motion)
+    cp1.add_constraint_to_modes(no_table_motion)
 
     # TODO this should be automatic
     n = np.array([[0], [1]])
@@ -150,16 +157,22 @@ def test_planning_through_contact():
     d2 = np.array([[-1], [0]])
     d = np.hstack((d1, d2))
     J_c = np.array([[1, 0, -1, 0], [0, 1, 0, -1]])
+    sdf2 = (box.pos - box_height - table.pos).x[1:2, :]
 
     cp2 = CollisionPair(
         box,
         table,
         friction_coeff=0.5,
-        signed_distance_func=sdf,
+        signed_distance_func=sdf2,
         normal_vector=n,
         friction_cone_rays=d,
         contact_jacobian=J_c,
     )
+    cp2.add_constraint_to_modes(finger_no_y_motion)
+    cp2.add_constraint_to_modes(box_no_y_motion)
+    cp2.add_constraint_to_modes(no_table_motion)
+
+
     # TODO normally I would need even one more collision geometry here!
 
     # Add force balance, clean up
@@ -173,21 +186,24 @@ def test_planning_through_contact():
     for cp in all_collision_pairs:
         cp.add_constraint_to_modes(force_balance_constraint)
 
-    slack_vars = np.concatenate([cp.slack_vars for cp in all_collision_pairs])
-    force_vars = np.concatenate([cp.force_vars for cp in all_collision_pairs])
+    pos_vars = np.vstack(
+        [finger.pos.x, box.pos.x, table.pos.x]
+    )
+    force_vars = np.vstack([cp.force_vars for cp in all_collision_pairs])
+    slack_vars = np.vstack([cp.slack_vars for cp in all_collision_pairs])
 
-    all_vars = np.concatenate(
+    # TODO this will fail if order is not the same for positions and forces
+    all_vars_flattened = np.concatenate(
         [
-            finger.pos.x.flatten(),
-            box.pos.x.flatten(),
-            table.pos.x.flatten(),
-            force_vars,
-            slack_vars,
+            pos_vars.flatten(),
+            force_vars.flatten(),
+            slack_vars.flatten(),
         ]
     )
 
     for cp in all_collision_pairs:
-        cp.create_mode_polyhedrons(all_vars)
+        cp.create_mode_polyhedrons(all_vars_flattened)
+        cp.create_mode_pos_polyhedrons(pos_vars.flatten()) # TODO clean up
 
     possible_contact_permutations = create_possible_mode_combinations(
         all_collision_pairs
@@ -197,88 +213,8 @@ def test_planning_through_contact():
         for m1, m2 in possible_contact_permutations
     ]
 
+    planner = GcsContactPlanner(possible_contact_permutations, pos_vars)
     breakpoint()
-
-    # TODO delete this stuff
-
-    lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
-    lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
-    x_a = BezierVariable(dim=1, order=2, name="x_a")
-    x_u = BezierVariable(dim=1, order=2, name="x_u")
-
-    contact_jacobian = np.array([[-1, 1]])
-    normal_jacobian = contact_jacobian
-    tangential_jacobian = np.array([[0, -1]])  # note: hand written for this case
-
-    pos_vars = np.array([x_a, x_u])
-    normal_force_vars = np.array([lam_n])
-    friction_force_vars = np.array([lam_f])
-
-    l = 2.0
-
-    no_contact_pos_constraint = x_a + l <= x_u
-    no_contact = ContactMode(
-        pos_vars,
-        no_contact_pos_constraint,
-        normal_force_vars,
-        friction_force_vars,
-        "no_contact",
-        friction_coeff,
-        normal_jacobian,
-        tangential_jacobian,
-    )
-    contact_pos_constraint = x_a + l == x_u
-    rolling_contact = ContactMode(
-        pos_vars,
-        contact_pos_constraint,
-        normal_force_vars,
-        friction_force_vars,
-        "rolling_contact",
-        friction_coeff,
-        normal_jacobian,
-        tangential_jacobian,
-        name="rolling",
-    )
-    #    sliding_contact = ContactMode(
-    #        pos_vars,
-    #        contact_pos_constraint,
-    #        normal_force_vars,
-    #        friction_force_vars,
-    #        "sliding_contact",
-    #        friction_coeff,
-    #        normal_jacobian,
-    #        tangential_jacobian,
-    #    )
-
-    initial_position_constraints = np.concatenate([x_a == 0, x_u == 4.0])
-    start = ContactMode(
-        pos_vars,
-        initial_position_constraints,
-        normal_force_vars,
-        friction_force_vars,
-        "no_contact",
-        friction_coeff,
-        normal_jacobian,
-        tangential_jacobian,
-        name="start",
-    )
-
-    #    final_position_constraints = np.concatenate([x_a + l == x_u, x_u == 8.0])
-    #    target = ContactMode(
-    #        pos_vars,
-    #        final_position_constraints,
-    #        normal_force_vars,
-    #        friction_force_vars,
-    #        "sliding_contact",  # TODO should be sliding!
-    #        friction_coeff,
-    #        normal_jacobian,
-    #        tangential_jacobian,
-    #        name="target",
-    #    )
-
-    # modes = [start, no_contact, sliding_contact, rolling_contact, target]
-    modes = [start, no_contact, rolling_contact]
-    planner = GcsContactPlanner(modes)
     planner.save_graph_diagram("diagrams/graph.svg")
     planner.set_source("start")
     planner.set_target("rolling")

@@ -89,7 +89,11 @@ class CollisionPair:
         return self.body_b.vel - self.body_a.vel
 
     @property
-    def vel(self) -> BezierVariable:
+    def pos(self) -> npt.NDArray[sym.Variable]:
+        return np.vstack((self.body_a.pos.x, self.body_b.pos.x))
+
+    @property
+    def vel(self) -> npt.NDArray[sym.Expression]:
         return np.vstack((self.body_a.vel.x, self.body_b.vel.x))
 
     @property
@@ -127,6 +131,7 @@ class CollisionPair:
         no_contact = ContactMode(
             self.name,
             "no_contact",
+            self.pos,
             self.signed_distance_func,
             self.tangential_vel,
             self.normal_force,
@@ -137,6 +142,7 @@ class CollisionPair:
         rolling = ContactMode(
             self.name,
             "rolling",
+            self.pos,
             self.signed_distance_func,
             self.tangential_vel,
             self.normal_force,
@@ -148,6 +154,7 @@ class CollisionPair:
             sliding_along_i = ContactMode(
                 self.name,
                 "sliding",
+                self.pos,
                 self.signed_distance_func,
                 self.tangential_vel,
                 self.normal_force,
@@ -170,11 +177,16 @@ class CollisionPair:
         for mode in self.contact_modes:
             mode.create_polyhedron(vars)
 
+    # TODO this can be cleaned up
+    def create_mode_pos_polyhedrons(self, pos_vars: npt.NDArray[sym.Formula]) -> None:
+        for mode in self.contact_modes:
+            mode.create_pos_polyhedron(pos_vars)
+
     @property
     def slack_vars(self) -> npt.NDArray[sym.Variable]:
-        slack_vars = np.concatenate(
+        slack_vars = np.vstack(
             [
-                mode.slack_var.x.flatten()
+                mode.slack_var.x
                 for mode in self.contact_modes
                 if mode.slack_var is not None
             ]
@@ -183,20 +195,34 @@ class CollisionPair:
 
     @property
     def force_vars(self) -> npt.NDArray[sym.Variable]:
-        return np.concatenate(
-            (self.normal_force.x.flatten(), self.friction_forces.x.flatten())
+        return np.vstack(
+            (self.normal_force.x, self.friction_forces.x)
         )
 
     def create_permutations(
         self, other: "CollisionPair"
     ) -> List[Tuple["ContactMode", "ContactMode"]]:
-        return list(product(self.contact_modes, other.contact_modes))
+        def position_constraints_overlap(perm: Tuple["ContactMode","ContactMode"]):
+            m1, m2 = perm
+            overlapping = m1.pos_polyhedron.IntersectsWith(m2.pos_polyhedron)
+            if not overlapping:
+                print(f"No overlap between {m1.name} and {m2.name}")
+            return overlapping
+
+        all_overlapping_modes = list(
+            filter(
+                position_constraints_overlap,
+                product(self.contact_modes, other.contact_modes),
+            )
+        )
+        return all_overlapping_modes
 
 
 @dataclass
 class ContactMode:
     pair_name: str
     mode: Literal["no_contact", "rolling", "sliding"]
+    pos: npt.NDArray[sym.Variable]
     signed_distance_func: npt.NDArray[npt.NDArray[sym.Formula]]
     tangential_vel: BezierVariable
     normal_force: BezierVariable
@@ -285,7 +311,7 @@ class ContactMode:
         self, type: Literal["no_contact", "in_contact"]
     ) -> npt.NDArray[sym.Formula]:
         if type == "no_contact":
-            return ge(self.signed_distance_func, self.EPS)
+            return ge(self.signed_distance_func, 0) #NOTE need continuity in position!
         elif type == "in_contact":
             return eq(self.signed_distance_func, 0)
         else:
@@ -355,51 +381,19 @@ class ContactMode:
     def add_constraint(self, c: sym.Expression) -> None:
         self.constraints.append(c)
 
-    # TODO clean up
-    @property
-    def x(self) -> npt.NDArray[sym.Variable]:
-        return self.all_vars_flattened
+    def create_polyhedron(self, vars: npt.NDArray[sym.Variable]) -> None:
+        formulator = PolyhedronFormulator(self.constraints)
+        self.polyhedron = formulator.formulate_polyhedron(vars, make_bounded=True)
 
-    # TODO clean up
-    @property
-    def A(self) -> npt.NDArray[np.float64]:
-        return self.convex_set.A()
-
-    # TODO clean up
-    @property
-    def b(self) -> npt.NDArray[np.float64]:
-        return self.convex_set.b()
-
-    # TODO clean up
-    @property
-    def all_vars_flattened(self) -> npt.NDArray[sym.Variable]:
-        all_vars = np.concatenate(
-            (
-                self.position_vars,
-                self.normal_force_vars,
-                self.friction_force_vars,
-                [self.slack_var],  # TODO bad code
-            )
+    # TODO: This can be cleaned up
+    def create_pos_polyhedron(self, pos_vars: npt.NDArray[sym.Variable]) -> None:
+        formulator = PolyhedronFormulator(self.constraints)
+        self.pos_polyhedron = formulator.formulate_polyhedron(
+            pos_vars, make_bounded=True, remove_constraints_not_in_vars=True
         )
-        return np.concatenate([var.x.flatten() for var in all_vars])
+        self.pos_constraints = formulator.get_constraints_in_vars(pos_vars)
 
-    # TODO clean up
-    @property
-    def velocity_vars(self) -> npt.NDArray[sym.Variable]:
-        return np.array([pos.get_derivative() for pos in self.position_vars])
-
-    # TODO clean up
-    @property
-    def rel_sliding_vel(self) -> npt.NDArray[sym.Expression]:
-        # Must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
-        return self.tangential_jacobian.dot(self.velocity_vars)[0]
-
-    # TODO clean up
-    @property
-    def normal_vel(self) -> npt.NDArray[sym.Expression]:
-        # Must get the zero-th element, as the result will be contained in a numpy array, and we just want the BezierVariable object
-        return self.normal_jacobian.dot(self.velocity_vars)[0]
-
+    # TODO is this unused?
     def get_transition(
         self, other: "ContactMode"
     ) -> Literal[
@@ -415,7 +409,3 @@ class ContactMode:
             return "breaking_contact"
         else:
             return "none"
-
-    def create_polyhedron(self, vars: npt.NDArray[sym.Variable]) -> Polyhedron:
-        formulator = PolyhedronFormulator(self.constraints)
-        self.polyhedron = formulator.formulate_polyhedron(vars, make_bounded=True)

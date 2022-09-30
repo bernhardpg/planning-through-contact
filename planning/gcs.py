@@ -5,7 +5,8 @@ import pydot
 from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional, TypedDict
+from typing import List, Literal, Union, Optional, TypedDict, Tuple
+from itertools import combinations
 
 import math
 from pydrake.math import le, ge, eq
@@ -42,24 +43,64 @@ class EdgeDefinition(TypedDict):
 
 
 @dataclass
+class VertexDefinition:
+    name: str
+    vertex: GraphOfConvexSets.Vertex
+    pos_set: opt.HPolyhedron
+
+
+# TODO should not be a dataclass
+@dataclass
 class GcsContactPlanner:
-    contact_modes: List[ContactMode]
+    contact_mode_permutations: List[Tuple[ContactMode, ContactMode]]
+    position_variables: npt.NDArray[sym.Variable]
     gcs: opt.GraphOfConvexSets = GraphOfConvexSets()
 
     def __post_init__(self):
-        for i, mode in enumerate(self.contact_modes):
-            name = mode.name if not mode.name == None else f"v{1}_{name_map[mode.mode]}"
-            assert mode.convex_set.IsBounded()
-            self.gcs.AddVertex(mode.convex_set, name)
+        self.pos_sets = [
+            m1.pos_polyhedron.Intersection(m2.pos_polyhedron)
+            for m1, m2 in self.contact_mode_permutations
+        ]
+        self.convex_sets = [
+            m1.polyhedron.Intersection(m2.polyhedron)
+            for m1, m2 in self.contact_mode_permutations
+        ]
+        sets_bounded = [s.IsBounded() for s in self.convex_sets]
+        assert all(sets_bounded)
 
-        self.edge_definitions = []
-        self._create_edges_between_overlapping_position_sets()
-        for edge_def in self.edge_definitions:
-            self._add_position_continuity_constraint(**edge_def)
-            # self._add_breaking_contact_constraints(**edge_def)
-            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
+        self.names = [
+            f"{m1.name}_AND_{m2.name}" for m1, m2 in self.contact_mode_permutations
+        ]
 
+        for name, convex_set in zip(self.names, self.convex_sets):
+            self.gcs.AddVertex(convex_set, name)
+
+        for (u, u_pos, u_modes), (v, v_pos, v_modes) in combinations(
+            zip(self.gcs.Vertices(), self.pos_sets, self.contact_mode_permutations), 2
+        ):
+            if u_pos.IntersectsWith(v_pos):
+                edge = self.gcs.AddEdge(u.id(), v.id())
+
+#                breakpoint()
+#                u_pos_vars = np.concatenate([m.pos for m in u_modes])
+#                v_pos_vars = np.concatenate([m.pos for m in v_modes])
+#                c = self._create_pos_continuity_constraint(edge, u_pos_vars, v_pos_vars)
+        self.save_graph_diagram("diagrams/graph.svg")
+
+        breakpoint()
+        # TODO remove
+#        for edge_def in self.edge_definitions:
+#            self._create_pos_continuity_constraint(**edge_def)
+#            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
+
+    # TODO remove
     def _create_edges_between_overlapping_position_sets(self) -> None:
+        for u, v in combinations(self.gcs.Vertices(), 2):
+            breakpoint()
+            # print(f"{u.name()}, {v.name()}")
+
+        breakpoint()
+
         for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
             for v, mode_v in zip(self.gcs.Vertices(), self.contact_modes):
                 # TODO this can be speed up as we dont need to check for overlap both ways
@@ -78,20 +119,24 @@ class GcsContactPlanner:
                         EdgeDefinition(mode_u=mode_u, mode_v=mode_v, edge=edge)
                     )
 
-    def _add_position_continuity_constraint(
-        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
+    def _create_pos_continuity_constraint(
+        self, edge: GraphOfConvexSets.Edge, mode_u_pos, mode_v_pos
     ) -> None:
         # NOTE: This is rather complicated, as we extract variables from both vertices in the edge.
         # TODO: consider improving this
+        breakpoint()
         for u_pos, v_pos in zip(mode_u.position_vars, mode_v.position_vars):
             formulas = u_pos.last == v_pos.first
             lhs, rhs = zip(*[formula.Unapply()[1] for formula in formulas])
+            breakpoint()
             A_u = sym.DecomposeLinearExpressions(lhs, mode_u.x)
             A_v = sym.DecomposeLinearExpressions(rhs, mode_v.x)
             continuity_constraints = eq(A_u.dot(edge.xu()), A_v.dot(edge.xv()))
+            return continuity_constraints
             for c in continuity_constraints:
                 edge.AddConstraint(c)
 
+    # TODO remove this
     def _add_breaking_contact_constraints(
         self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
     ) -> None:
