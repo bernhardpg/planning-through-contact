@@ -4,7 +4,8 @@ import cdd
 from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional
+from typing import List, Literal, Union, Optional, Tuple
+from itertools import product, combinations
 
 import math
 from pydrake.math import le, ge, eq
@@ -24,6 +25,31 @@ from pydrake.solvers import (
 
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import Polyhedron, PolyhedronFormulator
+
+
+def create_possible_mode_combinations(
+    collision_pairs: List["CollisionPair"],
+) -> List[Tuple["ContactMode", "ContactMode"]]:
+    all_combinations = sum(
+        [
+            pair_i.create_permutations(pair_j)
+            for pair_i, pair_j in combinations(collision_pairs, 2)
+        ],
+        [],
+    )
+    return all_combinations
+
+
+def create_force_balance_constraint(
+    collision_pairs: List["CollisionPair"], gravitational_force: npt.NDArray[np.float64]
+):
+    individual_forces = [
+        pair.normal_jacobian.T.dot(pair.normal_force.x)
+        + pair.tangential_jacobian.T.dot(pair.friction_forces.x)
+        for pair in collision_pairs
+    ]
+    force_balance_constraint = eq(sum(individual_forces) + gravitational_force, 0)
+    return force_balance_constraint
 
 
 @dataclass
@@ -136,6 +162,36 @@ class CollisionPair:
         # TODO one big force balance constraint must be added for all unactuated forces in the entire problem
         # constraints.append(self.create_force_balance_constraints())
 
+    def add_constraint_to_modes(self, c: npt.NDArray[sym.Formula]) -> None:
+        for mode in self.contact_modes:
+            mode.constraints.append(c)
+
+    def create_mode_polyhedrons(self, vars: npt.NDArray[sym.Formula]) -> None:
+        for mode in self.contact_modes:
+            mode.create_polyhedron(vars)
+
+    @property
+    def slack_vars(self) -> npt.NDArray[sym.Variable]:
+        slack_vars = np.concatenate(
+            [
+                mode.slack_var.x.flatten()
+                for mode in self.contact_modes
+                if mode.slack_var is not None
+            ]
+        )
+        return slack_vars
+
+    @property
+    def force_vars(self) -> npt.NDArray[sym.Variable]:
+        return np.concatenate(
+            (self.normal_force.x.flatten(), self.friction_forces.x.flatten())
+        )
+
+    def create_permutations(
+        self, other: "CollisionPair"
+    ) -> List[Tuple["ContactMode", "ContactMode"]]:
+        return list(product(self.contact_modes, other.contact_modes))
+
 
 @dataclass
 class ContactMode:
@@ -205,7 +261,6 @@ class ContactMode:
 
         else:
             raise NotImplementedError
-
 
     #
     #        # TODO remove this?
@@ -364,6 +419,3 @@ class ContactMode:
     def create_polyhedron(self, vars: npt.NDArray[sym.Variable]) -> Polyhedron:
         formulator = PolyhedronFormulator(self.constraints)
         self.polyhedron = formulator.formulate_polyhedron(vars, make_bounded=True)
-
-
-

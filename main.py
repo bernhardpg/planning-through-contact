@@ -17,7 +17,13 @@ from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResul
 
 from geometry.polyhedron import Polyhedron
 from geometry.bezier import BezierCurve, BezierVariable
-from geometry.contact import ContactMode, CollisionGeometry, CollisionPair
+from geometry.contact import (
+    ContactMode,
+    CollisionGeometry,
+    CollisionPair,
+    create_force_balance_constraint,
+    create_possible_mode_combinations,
+)
 from planning.gcs import GcsPlanner, GcsContactPlanner
 from visualize.visualize import animate_1d_box, plot_1d_box_positions
 
@@ -157,67 +163,43 @@ def test_planning_through_contact():
     # TODO normally I would need even one more collision geometry here!
 
     # Add force balance, clean up
-    all_contact_pairs = [cp1, cp2]
+    all_collision_pairs = [cp1, cp2]
     # TODO generalize, hardcoded a bit for now
     gravitational_force = np.array([[0], [-9.81 * 1], [0], [9.81 * 1]])
-    force_balance_constraint = eq(
-        sum(
-            [
-                pair.normal_jacobian.T.dot(pair.normal_force.x)
-                + pair.tangential_jacobian.T.dot(pair.friction_forces.x)
-                for pair in all_contact_pairs
-            ]
-        )
-        + gravitational_force,
-        0,
+    force_balance_constraint = create_force_balance_constraint(
+        all_collision_pairs, gravitational_force
     )
-    for cp in all_contact_pairs:
-        for mode in cp.contact_modes:
-            mode.constraints.append(force_balance_constraint)
 
-    slack_vars = np.concatenate(
-        [
-            np.concatenate(
-                [
-                    mode.slack_var.x.flatten()
-                    for mode in cp.contact_modes
-                    if mode.slack_var is not None
-                ]
-            )
-            for cp in all_contact_pairs
-        ]
-    )
+    for cp in all_collision_pairs:
+        cp.add_constraint_to_modes(force_balance_constraint)
+
+    slack_vars = np.concatenate([cp.slack_vars for cp in all_collision_pairs])
+    force_vars = np.concatenate([cp.force_vars for cp in all_collision_pairs])
 
     all_vars = np.concatenate(
         [
             finger.pos.x.flatten(),
             box.pos.x.flatten(),
             table.pos.x.flatten(),
-            cp1.normal_force.x.flatten(),
-            cp1.friction_forces.x.flatten(),
-            cp2.normal_force.x.flatten(),
-            cp2.friction_forces.x.flatten(),
+            force_vars,
             slack_vars,
         ]
     )
 
-    for cp in all_contact_pairs:
-        for mode in cp.contact_modes:
-            mode.create_polyhedron(all_vars)
+    for cp in all_collision_pairs:
+        cp.create_mode_polyhedrons(all_vars)
 
-    # TODO: for more than two contact pairs, we need to add even more sets here!
-    all_convex_sets = []
-    for pair1 in all_contact_pairs:
-        for mode1 in pair1.contact_modes:
-            for pair2 in all_contact_pairs:
-                for mode2 in pair2.contact_modes:
-                    if pair1.name == pair2.name:
-                        continue
-                    else:
-                        convex_set_where_modes_active = mode1.polyhedron.Intersection(mode2.polyhedron)
-                        all_convex_sets.append(convex_set_where_modes_active)
+    possible_contact_permutations = create_possible_mode_combinations(
+        all_collision_pairs
+    )
+    convex_sets = [
+        m1.polyhedron.Intersection(m2.polyhedron)
+        for m1, m2 in possible_contact_permutations
+    ]
 
     breakpoint()
+
+    # TODO delete this stuff
 
     lam_n = BezierVariable(dim=1, order=2, name="lambda_n")
     lam_f = BezierVariable(dim=1, order=2, name="lambda_f")
