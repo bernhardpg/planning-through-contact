@@ -63,10 +63,12 @@ class GcsContactPlanner:
         ):
             if u_pos.IntersectsWith(v_pos):
                 edge = self.gcs.AddEdge(u.id(), v.id())
-                constraints = self._create_position_continuity_constraints(edge)
-                # TODO: clean up cont constraints
-                for c in constraints:
+                cont_constraints = self._create_position_continuity_constraints(edge)
+                for c in cont_constraints:
                     edge.AddConstraint(c)
+
+                l1_cost = self._create_position_path_length_cost(edge)
+                edge.AddCost(l1_cost)
 
         self.save_graph_diagram("diagrams/graph.svg")
 
@@ -85,26 +87,19 @@ class GcsContactPlanner:
         return constraint
 
 
-    def _add_position_path_length_cost(
-        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode
-    ) -> None:
+    def _create_position_path_length_cost( self, edge: GraphOfConvexSets.Edge) -> None:
         # Minimize euclidean distance between subsequent control points
         # NOTE: we only minimize L1 distance right now
         # TODO
 #        if mode_u.name == "source":  # no cost for source vertex
 #            return
 
-        differences = np.concatenate(
-            [
-                pos_vars.x[:, 1:] - pos_vars.x[:, :-1]
-                for pos_vars in mode_u.position_vars
-            ]
-        ).flatten()
-        A = sym.DecomposeLinearExpressions(differences, mode_u.x)
+        differences = (self.position_variables[:, 1:] - self.position_variables[:, :-1]).flatten()
+        A = sym.DecomposeLinearExpressions(differences, self.all_variables)
         b = np.zeros((A.shape[0], 1))
         l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
         c = Binding[Cost](l1_norm_cost, edge.xu())
-        edge.AddCost(c)
+        return c
 
     def _solve(
         self,
