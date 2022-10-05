@@ -29,25 +29,6 @@ from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.contact import ContactMode
 
-name_map = {
-    "no_contact": "nc",
-    "rolling_contact": "rc",
-    "sliding_contact": "sc",
-}  # TODO replace
-
-
-class EdgeDefinition(TypedDict):
-    edge: GraphOfConvexSets.Edge
-    mode_u: ContactMode
-    mode_v: ContactMode
-
-
-@dataclass
-class VertexDefinition:
-    name: str
-    vertex: GraphOfConvexSets.Vertex
-    pos_set: opt.HPolyhedron
-
 
 # TODO should not be a dataclass
 @dataclass
@@ -58,6 +39,7 @@ class GcsContactPlanner:
     gcs: opt.GraphOfConvexSets = GraphOfConvexSets()
 
     def __post_init__(self):
+        # TODO remove pos_sets
         self.pos_sets = [
             m1.pos_polyhedron.Intersection(m2.pos_polyhedron)
             for m1, m2 in self.contact_mode_permutations
@@ -97,32 +79,6 @@ class GcsContactPlanner:
 #        for edge_def in self.edge_definitions:
 #            self._create_pos_continuity_constraint(**edge_def)
 #            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
-
-    # TODO remove
-    def _create_edges_between_overlapping_position_sets(self) -> None:
-        for u, v in combinations(self.gcs.Vertices(), 2):
-            breakpoint()
-            # print(f"{u.name()}, {v.name()}")
-
-        breakpoint()
-
-        for u, mode_u in zip(self.gcs.Vertices(), self.contact_modes):
-            for v, mode_v in zip(self.gcs.Vertices(), self.contact_modes):
-                # TODO this can be speed up as we dont need to check for overlap both ways
-                if u == v:
-                    continue
-                sets_are_overlapping = mode_u.convex_set_position.IntersectsWith(
-                    mode_v.convex_set_position
-                )
-                if sets_are_overlapping:
-                    # TODO remove this!
-                    # dont add edge from nc to target
-                    #                    if u.name() == "v1_nc" and v.name() == "target":
-                    #                        continue
-                    edge = self.gcs.AddEdge(u.id(), v.id(), f"({u.name()}, {v.name()})")
-                    self.edge_definitions.append(
-                        EdgeDefinition(mode_u=mode_u, mode_v=mode_v, edge=edge)
-                    )
 
     def _create_pos_continuity_constraint(
         self, edge: GraphOfConvexSets.Edge, mode_u_pos, mode_v_pos

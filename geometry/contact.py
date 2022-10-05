@@ -229,7 +229,7 @@ class ContactMode:
     friction_forces: BezierVariable
     friction_coeff: float
     fc_direction_idx: Optional[int] = None
-    EPS: float = 1e-5
+    EPS: float = 0
 
     def __post_init__(self):
         self.name = (
