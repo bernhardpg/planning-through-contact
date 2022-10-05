@@ -63,13 +63,9 @@ class GcsContactPlanner:
         ):
             if u_pos.IntersectsWith(v_pos):
                 edge = self.gcs.AddEdge(u.id(), v.id())
+                constraints = self._create_position_continuity_constraints(edge)
                 # TODO: clean up cont constraints
-                first_pos_vars = self.position_variables[:,0]
-                A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
-                last_pos_vars = self.position_variables[:,-1]
-                A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_variables)
-                constraint = eq(A_last.dot(edge.xu()), A_first.dot(edge.xv()))
-                for c in constraint:
+                for c in constraints:
                     edge.AddConstraint(c)
 
         self.save_graph_diagram("diagrams/graph.svg")
@@ -77,60 +73,26 @@ class GcsContactPlanner:
         breakpoint()
         # TODO remove
 #        for edge_def in self.edge_definitions:
-#            self._create_pos_continuity_constraint(**edge_def)
 #            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
 
-    def _create_pos_continuity_constraint(
-        self, edge: GraphOfConvexSets.Edge, mode_u_pos, mode_v_pos
-    ) -> None:
-        # NOTE: This is rather complicated, as we extract variables from both vertices in the edge.
-        # TODO: consider improving this
-        breakpoint()
-        for u_pos, v_pos in zip(mode_u.position_vars, mode_v.position_vars):
-            formulas = u_pos.last == v_pos.first
-            lhs, rhs = zip(*[formula.Unapply()[1] for formula in formulas])
-            breakpoint()
-            A_u = sym.DecomposeLinearExpressions(lhs, mode_u.x)
-            A_v = sym.DecomposeLinearExpressions(rhs, mode_v.x)
-            continuity_constraints = eq(A_u.dot(edge.xu()), A_v.dot(edge.xv()))
-            return continuity_constraints
-            for c in continuity_constraints:
-                edge.AddConstraint(c)
+    def _create_position_continuity_constraints(self, edge: GraphOfConvexSets.Edge) -> List[sym.Formula]:
+        # TODO this can easily be sped up with bindings
+        first_pos_vars = self.position_variables[:,0]
+        A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
+        last_pos_vars = self.position_variables[:,-1]
+        A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_variables)
+        constraint = eq(A_last.dot(edge.xu()), A_first.dot(edge.xv()))
+        return constraint
 
-    # TODO remove this
-    def _add_breaking_contact_constraints(
-        self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode, mode_v: ContactMode
-    ) -> None:
-        transition_type = mode_u.get_transition(mode_v)
-        if transition_type == "breaking_contact":
-            c = self._create_positive_exit_normal_vel_constraint(mode_u, edge.xu())
-            edge.AddConstraint(c)
-
-    # TODO: this can probably be speed up!
-    # TODO is this working as expected?
-    def _create_positive_exit_normal_vel_constraint(
-        self, contact_mode: ContactMode, vertex_vars: npt.NDArray[sym.Variable]
-    ) -> Binding[LinearConstraint]:
-        formulas = contact_mode.normal_vel.last >= 0
-        # lhs >= 0
-        lhs = [formula.Unapply()[1][0] for formula in formulas]
-        A = sym.DecomposeLinearExpressions(lhs, contact_mode.all_vars_flattened)
-        lb = np.zeros((A.shape[0], 1))
-        ub = np.ones(lb.shape) * np.inf
-        # Ax >= 0
-        constraint_shape = LinearConstraint(A, lb, ub)
-        positive_exit_normal_vel_constraint = Binding[LinearConstraint](
-            constraint_shape, vertex_vars
-        )
-        return positive_exit_normal_vel_constraint
 
     def _add_position_path_length_cost(
         self, edge: GraphOfConvexSets.Edge, mode_u: ContactMode
     ) -> None:
         # Minimize euclidean distance between subsequent control points
         # NOTE: we only minimize L1 distance right now
-        if mode_u.name == "source":  # no cost for source vertex
-            return
+        # TODO
+#        if mode_u.name == "source":  # no cost for source vertex
+#            return
 
         differences = np.concatenate(
             [
