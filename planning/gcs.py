@@ -67,7 +67,7 @@ class GcsContactPlanner:
                 first_pos_vars = self.position_variables[:,0]
                 A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
                 last_pos_vars = self.position_variables[:,-1]
-                A_last = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
+                A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_variables)
                 constraint = eq(A_last.dot(edge.xu()), A_first.dot(edge.xv()))
                 for c in constraint:
                     edge.AddConstraint(c)
