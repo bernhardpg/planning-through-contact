@@ -162,7 +162,7 @@ class BezierCurve:
         assert ctrl_points.size % dim == 0
         order = ctrl_points.size // dim - 1
 
-        ctrl_points_reshaped = ctrl_points.reshape((order + 1), dim).T  # TODO ugly code
+        ctrl_points_reshaped = ctrl_points.reshape((order + 1), dim, order="F").T  # TODO ugly code
         curve = cls(order, dim)
         curve.set_ctrl_points(ctrl_points_reshaped)
         return curve

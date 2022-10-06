@@ -288,7 +288,7 @@ class GcsPlanner:
         options.max_rounded_paths = 10  # Must be >0 to actually do proper rounding
 
         result = self.gcs.SolveShortestPath(source, target, options)
-        assert result.is_success
+        assert result.is_success()
         return result
 
     def _reconstruct_path(

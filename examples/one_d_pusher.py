@@ -1,20 +1,61 @@
 from geometry.contact import CollisionGeometry
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
+from geometry.bezier import BezierCurve
+from visualize.visualize import animate_1d_box
 
 from pydrake.math import le, ge, eq
 from pydrake.geometry.optimization import GraphOfConvexSets
 import pydrake.symbolic as sym
+import pydrake.geometry.optimization as opt
 from pydrake.solvers import LinearConstraint, Binding, L1NormCost, Cost
 
 import numpy as np
+import numpy.typing as npt
 
 import itertools
+
+from typing import List
+import pydot
+
+import matplotlib.pyplot as plt
+
+
+def evaluate_curve_from_ctrl_points(
+    ctrl_points: List[npt.NDArray[np.float64]], curve_dim: int, num_curves: int
+) -> npt.NDArray[np.float64]:
+    bzs = [
+        BezierCurve.create_from_ctrl_points(
+            dim=curve_dim * num_curves, ctrl_points=points
+        )
+        for points in ctrl_points
+    ]
+    values = np.concatenate(
+        [
+            np.concatenate([bz.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1).T
+            for bz in bzs
+        ]
+    )
+    return values
+
+
+def find_path_to_target(
+    edges: List[GraphOfConvexSets.Edge],
+    target: GraphOfConvexSets.Vertex,
+    u: GraphOfConvexSets.Vertex,
+) -> List[GraphOfConvexSets.Vertex]:
+    current_edge = next(e for e in edges if e.u() == u)
+    v = current_edge.v()
+    target_reached = v == target
+    if target_reached:
+        return [u] + [v]
+    else:
+        return [u] + find_path_to_target(edges, target, v)
 
 
 def plan_for_one_d_pusher():
     # Bezier curve params
-    dim = 2
+    dim = 1
     order = 2
 
     # Physical params
@@ -80,6 +121,43 @@ def plan_for_one_d_pusher():
     for u, v in itertools.permutations(gcs.Vertices(), 2):
         gcs.AddEdge(u, v, name=f"({u.name()},{v.name()})")
 
+    # Add source node
+    x_f_0 = 0
+    x_b_0 = 4.0
+    lam_n_0 = 0.0
+    lam_f_0 = 0.0
+    source = []
+    source.append(eq(x_f, x_f_0))
+    source.append(eq(x_b, x_b_0))
+    source.append(eq(lam_n, lam_n_0))
+    source.append(eq(lam_f, lam_f_0))
+    source_polyhedron = PolyhedronFormulator(source).formulate_polyhedron(
+        variables=all_variables, make_bounded=True
+    )
+    gcs.AddVertex(source_polyhedron, "source")
+
+    # Add target node
+    x_f_T = 8.0 - l
+    x_b_T = 8.0
+    lam_n_T = 0.0
+    lam_f_T = 0.0
+    target = []
+    target.append(eq(x_f, x_f_T))
+    target.append(eq(x_b, x_b_T))
+    target.append(eq(lam_n, lam_n_T))
+    target.append(eq(lam_f, lam_f_T))
+    target_polyhedron = PolyhedronFormulator(target).formulate_polyhedron(
+        variables=all_variables, make_bounded=True
+    )
+    gcs.AddVertex(target_polyhedron, "target")
+
+    # Connect source and target node
+    vertices = {v.name(): v for v in gcs.Vertices()}
+    gcs.AddEdge(vertices["source"], vertices["no_contact"], "(source, no_contact)")
+    gcs.AddEdge(
+        vertices["pushing_right"], vertices["target"], "(pushing_right, target)"
+    )
+
     # Create position continuity constraints
     pos_vars = np.vstack((x_f, x_b))
     first_pos_vars = pos_vars[:, 0]
@@ -101,5 +179,41 @@ def plan_for_one_d_pusher():
         cost = Binding[Cost](l1_norm_cost, v.x())
         v.AddCost(cost)
 
+    # Solve the problem
+    options = opt.GraphOfConvexSetsOptions()
+    options.convex_relaxation = False
+    source = vertices["source"]
+    target = vertices["target"]
+
+    graphviz = gcs.GetGraphvizString()
+    data = pydot.graph_from_dot_data(graphviz)[0]
+    data.write_svg("graph.svg")
+
+    result = gcs.SolveShortestPath(source, target, options)
+    assert result.is_success()
+    print("Result is success!")
+
+    graphviz = gcs.GetGraphvizString(result, False, precision=1)
+    data = pydot.graph_from_dot_data(graphviz)[0]
+    data.write_svg("graph_solution.svg")
+
+    # Retrieve path from result
+    flow_variables = [e.phi() for e in gcs.Edges()]
+    flow_results = [result.GetSolution(p) for p in flow_variables]
+    active_edges = [
+        edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= 0.99
+    ]
+    path = find_path_to_target(active_edges, target, source)
+    vertex_values = [result.GetSolution(v.x()) for v in path]
+    print("Path:")
+    print([v.name() for v in path])
+
+    # Create Bezier Curve
+    curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=4)
+
+    plt.plot(curve)
+    plt.legend(["x_box", "x_finger", "normal_force", "friction_force"])
+    animate_1d_box(curve[:, 0], curve[:, 1], curve[:, 2], curve[:, 3])
     breakpoint()
+
     return
