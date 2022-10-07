@@ -91,10 +91,11 @@ def find_path_to_target(
 # Plan going forward:
 # 5. Jacobians, normal_vec, friction_vec
 # 6. Code cleanup
-# 7. Functionality for adding source and target constraints in a nice way 
+# 7. Functionality for adding source and target constraints in a nice way
 # 8. Deal with multiple visits to the same node
 # 9. Two fingers picking up box
-# 10. For 3D: extend with friction rays at some points
+# 10. Fix energy cost, should be easy!
+# 11. For 3D: extend with friction rays at some points
 
 
 @dataclass
@@ -271,7 +272,11 @@ def plan_for_one_d_pusher_2():
     no_box_y_motion = eq(y_b, h)
     finger_pos_below_box_height = le(y_f, y_b + h)
     additional_constraints_finger_box = [*no_ground_motion, finger_pos_below_box_height]
-    additional_constraints_box_ground = [*no_ground_motion, no_box_y_motion]
+    additional_constraints_box_ground = [
+        *no_ground_motion,
+        no_box_y_motion,
+        eq(pair_box_ground.lam_n, mg),
+    ]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
     pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
 
