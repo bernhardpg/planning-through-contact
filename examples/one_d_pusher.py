@@ -8,7 +8,7 @@ from pydrake.math import le, ge, eq
 from pydrake.geometry.optimization import GraphOfConvexSets
 import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import LinearConstraint, Binding, L1NormCost, L2NormCost, Cost
+from pydrake.solvers import LinearConstraint, Binding, L1NormCost, L2NormCost, Cost, PerspectiveQuadraticCost
 
 import numpy as np
 import numpy.typing as npt
@@ -174,14 +174,26 @@ def plan_for_one_d_pusher():
         for c in constraints:
             e.AddConstraint(c)
 
-    # Create L1 norm cost
+    # Create cost
     diffs = pos_vars[:, 1:] - pos_vars[:, :-1]
     A = sym.DecomposeLinearExpressions(diffs.flatten(), all_variables)
     b = np.zeros((A.shape[0], 1))
-    l1_norm_cost = L2NormCost(A, b)
+    path_length_cost = L2NormCost(A, b)
     for v in gcs.Vertices():
-        cost = Binding[Cost](l1_norm_cost, v.x())
+        cost = Binding[Cost](path_length_cost, v.x())
         v.AddCost(cost)
+
+    # TODO I think I may have found another bug
+    energy_cost = PerspectiveQuadraticCost(A, b)
+    if False:
+        for v in gcs.Vertices():
+            e_cost = Binding[Cost](energy_cost, v.x())
+            v.AddCost(e_cost)
+
+    if False:
+        for e in gcs.Edges():
+            e_cost = Binding[Cost](energy_cost, e.xu())
+            e.AddCost(e_cost)
 
     # Solve the problem
     options = opt.GraphOfConvexSetsOptions()
