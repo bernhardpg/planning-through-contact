@@ -86,9 +86,10 @@ def find_path_to_target(
 # 2. Make an object for handling this
 # 3. Extend to y-axis
 # 4. Automatically create mode constraints
+# 7. Deal with multiple visits to the same node
+
 # 5. Extend with friction rays
 # 6. Jacobians
-# 7. Deal with multiple visits to the same node
 
 
 @dataclass
@@ -153,6 +154,8 @@ class CollisionPair:
         no_contact_constraints = [
             ge(self.sdf, 0),
             eq(self.lam_n, 0),
+            le(self.lam_f, self.friction_coeff * self.lam_n),
+            ge(self.lam_f, -self.friction_coeff * self.lam_n),
             *self.force_balance,
             *self.additional_constraints,
         ]
@@ -254,17 +257,18 @@ def plan_for_one_d_pusher_2():
 
     force_balance = [
         eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
-        eq(pair_box_ground.lam_n, mg),
+        eq(pair_box_ground.lam_n, -pair_finger_box.lam_f + mg),
     ]
     pair_finger_box.add_force_balance(force_balance)
     pair_box_ground.add_force_balance(force_balance)
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
-    no_y_motion = [eq(y_f, h), eq(y_b, h)]
-    no_finger_friction = [eq(pair_finger_box.lam_f, 0)]
-    additional_constraints = [*no_ground_motion, *no_y_motion, *no_finger_friction]
-    pair_finger_box.add_constraint_to_all_modes(additional_constraints)
-    pair_box_ground.add_constraint_to_all_modes(additional_constraints)
+    no_box_y_motion = eq(y_b, h)
+    finger_pos_below_box_height = le(y_f, y_b + h)
+    additional_constraints_finger_box = [*no_ground_motion, finger_pos_below_box_height]
+    additional_constraints_box_ground = [*no_ground_motion, no_box_y_motion]
+    pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
+    pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
 
     all_variables = np.concatenate(
         [
@@ -309,8 +313,10 @@ def plan_for_one_d_pusher_2():
     # Add source node
     x_f_0 = 0
     x_b_0 = 4.0
+    y_f_0 = 0.6
     source_constraints = []
     source_constraints.append(eq(x_f, x_f_0))
+    source_constraints.append(eq(y_f, y_f_0))
     source_constraints.append(eq(x_b, x_b_0))
     source_node = vertices["finger_box_no_contact_W_box_ground_rolling"]
     source_polyhedron = (

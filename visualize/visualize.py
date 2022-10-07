@@ -20,7 +20,7 @@ def animate_2d_box(
     n_frames = finger_pos_x.shape[0]
     # First set up the figure, the axis, and the plot element we want to animate
     fig = plt.figure()
-    ax = plt.axes(xlim=(-4, 20), ylim=(-2, 12))
+    ax = plt.axes(xlim=(-10, 20), ylim=(-10, 12))
     (box,) = ax.plot([], [], "r", lw=5)
     (finger,) = ax.plot([], [], "bo", lw=10)
     (finger_box_normal_force_plot,) = ax.plot([], [], "g>-", lw=2)
