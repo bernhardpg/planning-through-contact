@@ -26,7 +26,7 @@ from geometry.contact import (
 )
 from planning.gcs import GcsPlanner, GcsContactPlanner
 from visualize.visualize import animate_1d_box, plot_1d_box_positions
-from examples.one_d_pusher import plan_for_one_d_pusher
+from examples.one_d_pusher import plan_for_one_d_pusher_2
 
 
 def create_test_polyhedrons() -> List[Polyhedron]:
@@ -291,7 +291,7 @@ def test_planning_through_contact():
 
 
 def main():
-    plan_for_one_d_pusher()
+    plan_for_one_d_pusher_2()
     return 0
 
 

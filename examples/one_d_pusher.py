@@ -8,7 +8,14 @@ from pydrake.math import le, ge, eq
 from pydrake.geometry.optimization import GraphOfConvexSets
 import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import LinearConstraint, Binding, L1NormCost, L2NormCost, Cost, PerspectiveQuadraticCost
+from pydrake.solvers import (
+    LinearConstraint,
+    Binding,
+    L1NormCost,
+    L2NormCost,
+    Cost,
+    PerspectiveQuadraticCost,
+)
 
 import numpy as np
 import numpy.typing as npt
@@ -51,6 +58,232 @@ def find_path_to_target(
         return [u] + [v]
     else:
         return [u] + find_path_to_target(edges, target, v)
+
+
+# TODO Plan:
+# 1. Automatically enumerate contact mode combinations from hand-specified modes
+# 2. Make an object for handling this
+# 3. Extend with friction rays
+# 4. Jacobians
+# 5. Automatically create modes
+# 6. Extend to y-axis
+
+
+def plan_for_one_d_pusher_2():
+    # Bezier curve params
+    dim = 1
+    order = 2
+
+    # Physical params
+    mass = 1  # kg
+    g = 9.81  # m/s^2
+    mg = mass * g
+    l = 2
+    friction_coeff = 0.5
+
+    # Define variables
+    finger = CollisionGeometry(dim=dim, order=order, name="finger")
+    box = CollisionGeometry(dim=dim, order=order, name="box")
+
+    x_f = finger.pos.x
+    v_f = finger.vel.x
+
+    x_b = box.pos.x
+    v_b = box.vel.x
+
+    lam_n = BezierVariable(dim=dim, order=order, name="lam_n").x
+    lam_f = BezierVariable(dim=dim, order=order, name="lam_f").x
+
+    all_variables = np.concatenate([var.flatten() for var in [x_f, x_b, lam_n, lam_f]])
+
+    sdf = x_b - x_f - l
+
+    # Force balance condition
+    force_balance = eq(lam_f, -lam_n)
+
+    # Collision pair 1: Finger and box
+    finger_box_no_contact = []
+    finger_box_no_contact.append(ge(sdf, 0))
+    finger_box_no_contact.append(eq(lam_n, 0))
+    finger_box_no_contact.append(force_balance)
+
+    finger_box_rolling = []
+    finger_box_rolling.append(eq(sdf, 0))
+    finger_box_rolling.append(ge(lam_n, 0))
+    finger_box_rolling.append(force_balance)
+
+    pair_finger_box = [finger_box_no_contact, finger_box_rolling]
+    pair_finger_box_names = ["finger_box_no_contact", "finger_box_rolling"]
+
+    # Collision pair 2: Box and ground
+    box_ground_rolling = []
+    box_ground_rolling.append(eq(v_b, 0))
+    box_ground_rolling.append(force_balance)
+    box_ground_rolling.append(le(lam_f, friction_coeff * mg))
+    box_ground_rolling.append(ge(lam_f, -friction_coeff * mg))
+
+    box_ground_sliding_right = []
+    box_ground_sliding_right.append(ge(v_b, 0))
+    box_ground_sliding_right.append(eq(lam_f, -friction_coeff * mg))
+    box_ground_sliding_right.append(force_balance)
+
+    box_ground_sliding_left = []
+    box_ground_sliding_left.append(le(v_b, 0))
+    box_ground_sliding_left.append(eq(lam_f, friction_coeff * mg))
+    box_ground_sliding_left.append(force_balance)
+
+    pair_box_ground = [
+        box_ground_rolling,
+        box_ground_sliding_right,
+        box_ground_sliding_left,
+    ]
+    pair_box_ground_names = [
+        "box_ground_rolling",
+        "box_ground_sliding_right",
+        "box_ground_sliding_left",
+    ]
+
+    contact_pairs = [pair_finger_box, pair_box_ground]
+    contact_pairs_names = [pair_finger_box_names, pair_box_ground_names]
+
+    # TODO this can be made into an object
+    polyhedrons_for_each_pair = [
+        [
+            PolyhedronFormulator(mode).formulate_polyhedron(
+                variables=all_variables, make_bounded=True
+            )
+            for mode in pair
+        ]
+        for pair in contact_pairs
+    ]
+    possible_contact_permutations_names = itertools.product(*contact_pairs_names)
+    possible_contact_permutations = itertools.product(*polyhedrons_for_each_pair)
+    polyhedrons = {
+        str(name): mode_1.Intersection(mode_2)
+        for name, (mode_1, mode_2) in zip(
+            possible_contact_permutations_names, possible_contact_permutations
+        )
+        if mode_1.IntersectsWith(mode_2)
+    }
+
+    # Add Vertices
+    gcs = GraphOfConvexSets()
+    for name, poly in polyhedrons.items():
+        gcs.AddVertex(poly, name)
+
+    # Add edges between all vertices
+    for u, v in itertools.permutations(gcs.Vertices(), 2):
+        gcs.AddEdge(u, v, name=f"({u.name()},{v.name()})")
+
+    # Add source node
+    x_f_0 = 0
+    x_b_0 = 4.0
+    lam_n_0 = 0.0
+    lam_f_0 = 0.0
+    source = []
+    source.append(eq(x_f, x_f_0))
+    source.append(eq(x_b, x_b_0))
+    source.append(eq(lam_n, lam_n_0))
+    source.append(eq(lam_f, lam_f_0))
+    source_polyhedron = PolyhedronFormulator(source).formulate_polyhedron(
+        variables=all_variables, make_bounded=True
+    )
+    gcs.AddVertex(source_polyhedron, "source")
+
+    # Add target node
+    x_f_T = 8.0 - l
+    x_b_T = 8.0
+    target = []
+    target.append(eq(x_f, x_f_T))
+    target.append(eq(x_b, x_b_T))
+
+    target.append(ge(sdf, 0))
+    target.append(eq(lam_n, 0))
+    target.append(eq(v_b, 0))
+    target.append(eq(lam_f, -lam_n))
+
+    target_polyhedron = PolyhedronFormulator(target).formulate_polyhedron(
+        variables=all_variables, make_bounded=True
+    )
+    gcs.AddVertex(target_polyhedron, "target")
+
+    # Connect source and target node
+    vertices = {v.name(): v for v in gcs.Vertices()}
+    gcs.AddEdge(vertices["source"], vertices["('finger_box_no_contact', 'box_ground_rolling')"])
+    gcs.AddEdge(vertices["('finger_box_rolling', 'box_ground_sliding_right')"], vertices["target"])
+
+    # Create position continuity constraints
+    pos_vars = np.vstack((x_f, x_b))
+    first_pos_vars = pos_vars[:, 0]
+    last_pos_vars = pos_vars[:, -1]
+    A_first = sym.DecomposeLinearExpressions(first_pos_vars, all_variables)
+    A_last = sym.DecomposeLinearExpressions(last_pos_vars, all_variables)
+    for e in gcs.Edges():
+        xu, xv = e.xu(), e.xv()
+        constraints = eq(A_last.dot(xu), A_first.dot(xv))
+        for c in constraints:
+            e.AddConstraint(c)
+
+    # Create cost
+    diffs = pos_vars[:, 1:] - pos_vars[:, :-1]
+    A = sym.DecomposeLinearExpressions(diffs.flatten(), all_variables)
+    b = np.zeros((A.shape[0], 1))
+    path_length_cost = L2NormCost(A, b)
+    for v in gcs.Vertices():
+        cost = Binding[Cost](path_length_cost, v.x())
+        v.AddCost(cost)
+
+    # TODO I think I may have found another bug
+    if False:
+        energy_cost = PerspectiveQuadraticCost(A, b)
+        for v in gcs.Vertices():
+            e_cost = Binding[Cost](energy_cost, v.x())
+            v.AddCost(e_cost)
+
+    if False:
+        energy_cost = PerspectiveQuadraticCost(A, b)
+        for e in gcs.Edges():
+            e_cost = Binding[Cost](energy_cost, e.xu())
+            e.AddCost(e_cost)
+
+    # Solve the problem
+    options = opt.GraphOfConvexSetsOptions()
+    options.convex_relaxation = False
+    source = vertices["source"]
+    target = vertices["target"]
+
+    graphviz = gcs.GetGraphvizString()
+    data = pydot.graph_from_dot_data(graphviz)[0]
+    data.write_svg("graph.svg")
+
+    result = gcs.SolveShortestPath(source, target, options)
+    assert result.is_success()
+    print("Result is success!")
+
+    graphviz = gcs.GetGraphvizString(result, False, precision=1)
+    data = pydot.graph_from_dot_data(graphviz)[0]
+    data.write_svg("graph_solution.svg")
+
+    # Retrieve path from result
+    flow_variables = [e.phi() for e in gcs.Edges()]
+    flow_results = [result.GetSolution(p) for p in flow_variables]
+    active_edges = [
+        edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= 0.99
+    ]
+    path = find_path_to_target(active_edges, target, source)
+    vertex_values = [result.GetSolution(v.x()) for v in path]
+    print("Path:")
+    print([v.name() for v in path])
+
+    # Create Bezier Curve
+    curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=4)
+
+    plt.plot(curve)
+    plt.legend(["x_box", "x_finger", "normal_force", "friction_force"])
+    animate_1d_box(curve[:, 0], curve[:, 1], curve[:, 2], curve[:, 3])
+    breakpoint()
+
+    return
 
 
 def plan_for_one_d_pusher():
@@ -184,13 +417,14 @@ def plan_for_one_d_pusher():
         v.AddCost(cost)
 
     # TODO I think I may have found another bug
-    energy_cost = PerspectiveQuadraticCost(A, b)
     if False:
+        energy_cost = PerspectiveQuadraticCost(A, b)
         for v in gcs.Vertices():
             e_cost = Binding[Cost](energy_cost, v.x())
             v.AddCost(e_cost)
 
     if False:
+        energy_cost = PerspectiveQuadraticCost(A, b)
         for e in gcs.Edges():
             e_cost = Binding[Cost](energy_cost, e.xu())
             e.AddCost(e_cost)
