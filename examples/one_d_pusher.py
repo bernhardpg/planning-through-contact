@@ -122,7 +122,8 @@ class CollisionPair:
     body_a: RigidBody
     body_b: RigidBody
     friction_coeff: float
-    sdf: BezierVariable
+    sdf: sym.Expression
+    rel_tangential_sliding_vel: sym.Expression
     order: int = 2
 
     @property
@@ -136,7 +137,6 @@ class CollisionPair:
         self.lam_f = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_f"
         ).x
-        self.rel_sliding_vel = self.body_a.vel.x - self.body_b.vel.x
         self.additional_constraints = []
 
     def add_constraint_to_all_modes(self, constraints) -> None:
@@ -160,6 +160,7 @@ class CollisionPair:
         rolling_constraints = [
             eq(self.sdf, 0),
             ge(self.lam_n, 0),
+            eq(self.rel_tangential_sliding_vel, 0),
             le(self.lam_f, self.friction_coeff * self.lam_n),
             ge(self.lam_f, -self.friction_coeff * self.lam_n),
             *self.force_balance,
@@ -167,14 +168,18 @@ class CollisionPair:
         ]
 
         sliding_right_constraints = [
-            ge(self.rel_sliding_vel, 0),
+            eq(self.sdf, 0),
+            ge(self.lam_n, 0),
+            ge(self.rel_tangential_sliding_vel, 0),
             eq(self.lam_f, -self.friction_coeff * self.lam_n),
             *self.force_balance,
             *self.additional_constraints,
         ]
 
         sliding_left_constraints = [
-            le(self.rel_sliding_vel, 0),
+            eq(self.sdf, 0),
+            ge(self.lam_n, 0),
+            le(self.rel_tangential_sliding_vel, 0),
             eq(self.lam_f, self.friction_coeff * self.lam_n),
             *self.force_balance,
             *self.additional_constraints,
@@ -213,16 +218,39 @@ def plan_for_one_d_pusher_2():
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
+    vx_f = finger.vel.x[0, :]
+    vy_f = finger.vel.x[1, :]
     x_b = box.pos.x[0, :]
     y_b = box.pos.x[1, :]
+    vx_b = box.vel.x[0, :]
+    vy_b = box.vel.x[1, :]
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
+    vx_g = ground.vel.x[0, :]
+    vy_g = ground.vel.x[1, :]
 
+    # NOTE this is the stuff the jacobians will replace
     sdf_finger_box = x_b - x_f - l
     sdf_box_ground = y_b - y_g - h
 
-    pair_finger_box = CollisionPair(finger, box, friction_coeff, sdf_finger_box)
-    pair_box_ground = CollisionPair(box, ground, friction_coeff, sdf_box_ground)
+    # NOTE this is the stuff the jacobians will replace
+    finger_box_rel_tangential_sliding_vel = vy_f - vy_b
+    box_ground_rel_tangential_sliding_vel = vx_b - vx_g
+
+    pair_finger_box = CollisionPair(
+        finger,
+        box,
+        friction_coeff,
+        sdf_finger_box,
+        finger_box_rel_tangential_sliding_vel,
+    )
+    pair_box_ground = CollisionPair(
+        box,
+        ground,
+        friction_coeff,
+        sdf_box_ground,
+        box_ground_rel_tangential_sliding_vel,
+    )
 
     force_balance = [
         eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
@@ -281,8 +309,6 @@ def plan_for_one_d_pusher_2():
     # Add source node
     x_f_0 = 0
     x_b_0 = 4.0
-    y_f_0 = 0.5
-    y_b_0 = 0.5
     source_constraints = []
     source_constraints.append(eq(x_f, x_f_0))
     source_constraints.append(eq(x_b, x_b_0))
@@ -298,8 +324,6 @@ def plan_for_one_d_pusher_2():
     # Add target node
     x_f_T = 8.0 - l
     x_b_T = 8.0
-    y_f_T = 0.5
-    y_b_T = 0.5
     target_constraints = []
     target_constraints.append(eq(x_f, x_f_T))
     target_constraints.append(eq(x_b, x_b_T))
@@ -354,6 +378,7 @@ def plan_for_one_d_pusher_2():
     data = pydot.graph_from_dot_data(graphviz)[0]
     data.write_svg("graph.svg")
 
+    #target = vertices["finger_box_rolling_W_box_ground_sliding_right"]
     result = gcs.SolveShortestPath(source, target, options)
     assert result.is_success()
     print("Result is success!")
