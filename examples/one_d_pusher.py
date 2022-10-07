@@ -82,14 +82,19 @@ def find_path_to_target(
 
 
 # TODO Plan:
+# DONE:
 # 1. Automatically enumerate contact mode combinations from hand-specified modes
 # 2. Make an object for handling this
 # 3. Extend to y-axis
 # 4. Automatically create mode constraints
-# 7. Deal with multiple visits to the same node
 
-# 5. Extend with friction rays
-# 6. Jacobians
+# Plan going forward:
+# 5. Jacobians, normal_vec, friction_vec
+# 6. Code cleanup
+# 7. Functionality for adding source and target constraints in a nice way 
+# 8. Deal with multiple visits to the same node
+# 9. Two fingers picking up box
+# 10. For 3D: extend with friction rays at some points
 
 
 @dataclass
