@@ -4,6 +4,8 @@ from geometry.polyhedron import PolyhedronFormulator
 from geometry.bezier import BezierCurve
 from visualize.visualize import animate_1d_box
 
+from dataclasses import dataclass
+
 from pydrake.math import le, ge, eq
 from pydrake.geometry.optimization import GraphOfConvexSets
 import pydrake.symbolic as sym
@@ -63,10 +65,23 @@ def find_path_to_target(
 # TODO Plan:
 # 1. Automatically enumerate contact mode combinations from hand-specified modes
 # 2. Make an object for handling this
-# 3. Extend with friction rays
-# 4. Jacobians
-# 5. Automatically create modes
-# 6. Extend to y-axis
+# 3. Extend to y-axis
+# 4. Automatically create mode constraints
+# 5. Extend with friction rays
+# 6. Jacobians
+# 7. Deal with multiple visits to the same node
+
+
+@dataclass
+class ContactMode:
+    name: str
+    constraints: List[npt.NDArray[sym.Formula]]
+    all_vars: npt.NDArray[sym.Variable]
+
+    def __post_init__(self):
+        self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
+            variables=self.all_vars, make_bounded=True
+        )
 
 
 def plan_for_one_d_pusher_2():
@@ -97,78 +112,82 @@ def plan_for_one_d_pusher_2():
     all_variables = np.concatenate([var.flatten() for var in [x_f, x_b, lam_n, lam_f]])
 
     sdf = x_b - x_f - l
-
-    # Force balance condition
     force_balance = eq(lam_f, -lam_n)
 
     # Collision pair 1: Finger and box
-    finger_box_no_contact = []
-    finger_box_no_contact.append(ge(sdf, 0))
-    finger_box_no_contact.append(eq(lam_n, 0))
-    finger_box_no_contact.append(force_balance)
+    finger_box_no_contact = ContactMode(
+        "finger_box_no_contact",
+        [
+            ge(sdf, 0),
+            eq(lam_n, 0),
+            force_balance,
+        ],
+        all_variables,
+    )
 
-    finger_box_rolling = []
-    finger_box_rolling.append(eq(sdf, 0))
-    finger_box_rolling.append(ge(lam_n, 0))
-    finger_box_rolling.append(force_balance)
-
+    finger_box_rolling = ContactMode(
+        "finger_box_rolling",
+        [
+            eq(sdf, 0),
+            ge(lam_n, 0),
+            force_balance,
+        ],
+        all_variables,
+    )
     pair_finger_box = [finger_box_no_contact, finger_box_rolling]
-    pair_finger_box_names = ["finger_box_no_contact", "finger_box_rolling"]
 
     # Collision pair 2: Box and ground
-    box_ground_rolling = []
-    box_ground_rolling.append(eq(v_b, 0))
-    box_ground_rolling.append(force_balance)
-    box_ground_rolling.append(le(lam_f, friction_coeff * mg))
-    box_ground_rolling.append(ge(lam_f, -friction_coeff * mg))
+    box_ground_rolling = ContactMode(
+        "box_ground_rolling",
+        [
+            eq(v_b, 0),
+            force_balance,
+            le(lam_f, friction_coeff * mg),
+            ge(lam_f, -friction_coeff * mg),
+        ],
+        all_variables,
+    )
 
-    box_ground_sliding_right = []
-    box_ground_sliding_right.append(ge(v_b, 0))
-    box_ground_sliding_right.append(eq(lam_f, -friction_coeff * mg))
-    box_ground_sliding_right.append(force_balance)
+    box_ground_sliding_right = ContactMode(
+        "box_ground_sliding_right",
+        [
+            ge(v_b, 0),
+            eq(lam_f, -friction_coeff * mg),
+            force_balance,
+        ],
+        all_variables,
+    )
 
-    box_ground_sliding_left = []
-    box_ground_sliding_left.append(le(v_b, 0))
-    box_ground_sliding_left.append(eq(lam_f, friction_coeff * mg))
-    box_ground_sliding_left.append(force_balance)
+    box_ground_sliding_left = ContactMode(
+        "box_ground_sliding_left",
+        [
+            le(v_b, 0),
+            eq(lam_f, friction_coeff * mg),
+            force_balance,
+        ],
+        all_variables,
+    )
 
     pair_box_ground = [
         box_ground_rolling,
         box_ground_sliding_right,
         box_ground_sliding_left,
     ]
-    pair_box_ground_names = [
-        "box_ground_rolling",
-        "box_ground_sliding_right",
-        "box_ground_sliding_left",
-    ]
 
     contact_pairs = [pair_finger_box, pair_box_ground]
-    contact_pairs_names = [pair_finger_box_names, pair_box_ground_names]
 
-    # TODO this can be made into an object
-    polyhedrons_for_each_pair = [
-        [
-            PolyhedronFormulator(mode).formulate_polyhedron(
-                variables=all_variables, make_bounded=True
-            )
-            for mode in pair
-        ]
-        for pair in contact_pairs
-    ]
-    possible_contact_permutations_names = itertools.product(*contact_pairs_names)
-    possible_contact_permutations = itertools.product(*polyhedrons_for_each_pair)
-    polyhedrons = {
-        str(name): mode_1.Intersection(mode_2)
-        for name, (mode_1, mode_2) in zip(
-            possible_contact_permutations_names, possible_contact_permutations
+    possible_contact_permutations = itertools.product(*contact_pairs)
+    convex_sets = {
+        str((mode_1.name, mode_2.name)): mode_1.polyhedron.Intersection(
+            mode_2.polyhedron
         )
-        if mode_1.IntersectsWith(mode_2)
+        for (mode_1, mode_2) in possible_contact_permutations
+        if mode_1.polyhedron.IntersectsWith(mode_2.polyhedron)
     }
 
     # Add Vertices
     gcs = GraphOfConvexSets()
-    for name, poly in polyhedrons.items():
+    for name, poly in convex_sets.items():
         gcs.AddVertex(poly, name)
 
     # Add edges between all vertices
@@ -209,8 +228,13 @@ def plan_for_one_d_pusher_2():
 
     # Connect source and target node
     vertices = {v.name(): v for v in gcs.Vertices()}
-    gcs.AddEdge(vertices["source"], vertices["('finger_box_no_contact', 'box_ground_rolling')"])
-    gcs.AddEdge(vertices["('finger_box_rolling', 'box_ground_sliding_right')"], vertices["target"])
+    gcs.AddEdge(
+        vertices["source"], vertices["('finger_box_no_contact', 'box_ground_rolling')"]
+    )
+    gcs.AddEdge(
+        vertices["('finger_box_rolling', 'box_ground_sliding_right')"],
+        vertices["target"],
+    )
 
     # Create position continuity constraints
     pos_vars = np.vstack((x_f, x_b))
