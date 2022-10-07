@@ -1,4 +1,3 @@
-from geometry.contact import CollisionGeometry
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.bezier import BezierCurve
@@ -33,6 +32,7 @@ import matplotlib.pyplot as plt
 def evaluate_curve_from_ctrl_points(
     ctrl_points: List[npt.NDArray[np.float64]], curve_dim: int, num_curves: int
 ) -> npt.NDArray[np.float64]:
+    breakpoint()
     bzs = [
         BezierCurve.create_from_ctrl_points(
             dim=curve_dim * num_curves, ctrl_points=points
@@ -73,6 +73,20 @@ def find_path_to_target(
 
 
 @dataclass
+class RigidBody:
+    name: str
+    dim: int
+    order: int = 2
+
+    def __post_init__(self) -> None:
+        self.pos = BezierVariable(self.dim, self.order, name=f"{self.name}_pos")
+
+    @property
+    def vel(self) -> BezierVariable:
+        return self.pos.get_derivative()
+
+
+@dataclass
 class ContactMode:
     name: str
     constraints: List[npt.NDArray[sym.Formula]]
@@ -84,9 +98,85 @@ class ContactMode:
         )
 
 
+@dataclass
+class CollisionPair:
+    body_a: RigidBody
+    body_b: RigidBody
+    friction_coeff: float
+    sdf: BezierVariable
+    order: int = 2
+
+    @property
+    def name(self) -> str:
+        return f"{self.body_a.name}_{self.body_b.name}"
+
+    def __post_init__(self):
+        self.lam_n = BezierVariable(
+            dim=1, order=self.order, name=f"{self.name}_lam_n"
+        ).x
+        self.lam_f = BezierVariable(
+            dim=1, order=self.order, name=f"{self.name}_lam_f"
+        ).x
+        self.rel_sliding_vel = self.body_a.vel.x - self.body_b.vel.x
+        self.additional_constraints = []
+
+    def add_constraint_to_all_modes(self, constraints) -> None:
+        self.additional_constraints = sum(
+            [self.additional_constraints, constraints], []
+        )
+
+    def add_force_balance(self, force_balance):
+        self.force_balance = force_balance
+
+    def create_contact_modes(self, all_variables):
+        assert self.force_balance is not None
+
+        no_contact_constraints = [
+            ge(self.sdf, 0),
+            eq(self.lam_n, 0),
+            *self.force_balance,
+            *self.additional_constraints,
+        ]
+
+        rolling_constraints = [
+            eq(self.sdf, 0),
+            ge(self.lam_n, 0),
+            le(self.lam_f, self.friction_coeff * self.lam_n),
+            ge(self.lam_f, -self.friction_coeff * self.lam_n),
+            *self.force_balance,
+            *self.additional_constraints,
+        ]
+
+        sliding_right_constraints = [
+            ge(self.rel_sliding_vel, 0),
+            eq(self.lam_f, -self.friction_coeff * self.lam_n),
+            *self.force_balance,
+            *self.additional_constraints,
+        ]
+
+        sliding_left_constraints = [
+            le(self.rel_sliding_vel, 0),
+            eq(self.lam_f, self.friction_coeff * self.lam_n),
+            *self.force_balance,
+            *self.additional_constraints,
+        ]
+
+        modes_constraints = [
+            ("no_contact", no_contact_constraints),
+            ("rolling", rolling_constraints),
+            ("sliding_right", sliding_right_constraints),
+            ("sliding_left", sliding_left_constraints),
+        ]
+
+        self.contact_modes = [
+            ContactMode(f"{self.name}_{name}", constraints, all_variables)
+            for name, constraints in modes_constraints
+        ]
+
+
 def plan_for_one_d_pusher_2():
     # Bezier curve params
-    dim = 1
+    dim = 2
     order = 2
 
     # Physical params
@@ -94,91 +184,63 @@ def plan_for_one_d_pusher_2():
     g = 9.81  # m/s^2
     mg = mass * g
     l = 2
+    h = 1
     friction_coeff = 0.5
 
     # Define variables
-    finger = CollisionGeometry(dim=dim, order=order, name="finger")
-    box = CollisionGeometry(dim=dim, order=order, name="box")
+    finger = RigidBody(dim=dim, order=order, name="finger")
+    box = RigidBody(dim=dim, order=order, name="box")
+    ground = RigidBody(dim=dim, order=order, name="ground")
 
-    x_f = finger.pos.x
-    v_f = finger.vel.x
+    x_f = finger.pos.x[0, :]
+    y_f = finger.pos.x[1, :]
+    x_b = box.pos.x[0, :]
+    y_b = box.pos.x[1, :]
+    x_g = ground.pos.x[0, :]
+    y_g = ground.pos.x[1, :]
 
-    x_b = box.pos.x
-    v_b = box.vel.x
+    sdf_finger_box = x_b - x_f - l
+    sdf_box_ground = y_b - y_g - h
 
-    lam_n = BezierVariable(dim=dim, order=order, name="lam_n").x
-    lam_f = BezierVariable(dim=dim, order=order, name="lam_f").x
+    pair_finger_box = CollisionPair(finger, box, friction_coeff, sdf_finger_box)
+    pair_box_ground = CollisionPair(box, ground, friction_coeff, sdf_box_ground)
 
-    all_variables = np.concatenate([var.flatten() for var in [x_f, x_b, lam_n, lam_f]])
-
-    sdf = x_b - x_f - l
-    force_balance = eq(lam_f, -lam_n)
-
-    # Collision pair 1: Finger and box
-    finger_box_no_contact = ContactMode(
-        "finger_box_no_contact",
-        [
-            ge(sdf, 0),
-            eq(lam_n, 0),
-            force_balance,
-        ],
-        all_variables,
-    )
-
-    finger_box_rolling = ContactMode(
-        "finger_box_rolling",
-        [
-            eq(sdf, 0),
-            ge(lam_n, 0),
-            force_balance,
-        ],
-        all_variables,
-    )
-    pair_finger_box = [finger_box_no_contact, finger_box_rolling]
-
-    # Collision pair 2: Box and ground
-    box_ground_rolling = ContactMode(
-        "box_ground_rolling",
-        [
-            eq(v_b, 0),
-            force_balance,
-            le(lam_f, friction_coeff * mg),
-            ge(lam_f, -friction_coeff * mg),
-        ],
-        all_variables,
-    )
-
-    box_ground_sliding_right = ContactMode(
-        "box_ground_sliding_right",
-        [
-            ge(v_b, 0),
-            eq(lam_f, -friction_coeff * mg),
-            force_balance,
-        ],
-        all_variables,
-    )
-
-    box_ground_sliding_left = ContactMode(
-        "box_ground_sliding_left",
-        [
-            le(v_b, 0),
-            eq(lam_f, friction_coeff * mg),
-            force_balance,
-        ],
-        all_variables,
-    )
-
-    pair_box_ground = [
-        box_ground_rolling,
-        box_ground_sliding_right,
-        box_ground_sliding_left,
+    force_balance = [
+        eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
+        eq(pair_box_ground.lam_n, -pair_box_ground.lam_f + mg),
     ]
+    pair_finger_box.add_force_balance(force_balance)
+    pair_box_ground.add_force_balance(force_balance)
 
-    contact_pairs = [pair_finger_box, pair_box_ground]
+    no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
+    no_y_motion = [eq(y_f, h), eq(y_b, h)]
+    additional_constraints = [*no_ground_motion, *no_y_motion]
+    pair_finger_box.add_constraint_to_all_modes(additional_constraints)
+    pair_box_ground.add_constraint_to_all_modes(additional_constraints)
+
+    all_variables = np.concatenate(
+        [
+            x_f.flatten(),
+            y_f.flatten(),
+            x_b.flatten(),
+            y_b.flatten(),
+            x_g.flatten(),
+            y_g.flatten(),
+            pair_finger_box.lam_n.flatten(),
+            pair_finger_box.lam_f.flatten(),
+            pair_box_ground.lam_n.flatten(),
+            pair_box_ground.lam_f.flatten(),
+        ]
+    )
+
+    pair_finger_box.create_contact_modes(all_variables)
+    pair_box_ground.create_contact_modes(all_variables)
+
+    contact_pairs = [pair_finger_box.contact_modes, pair_box_ground.contact_modes]
 
     possible_contact_permutations = itertools.product(*contact_pairs)
     convex_sets = {
-        str((mode_1.name, mode_2.name)): mode_1.polyhedron.Intersection(
+        f"{mode_1.name}_W_{mode_2.name}": mode_1.polyhedron.Intersection(
             mode_2.polyhedron
         )
         for (mode_1, mode_2) in possible_contact_permutations
@@ -189,55 +251,49 @@ def plan_for_one_d_pusher_2():
     gcs = GraphOfConvexSets()
     for name, poly in convex_sets.items():
         gcs.AddVertex(poly, name)
+    vertices = {v.name(): v for v in gcs.Vertices()}
 
     # Add edges between all vertices
     for u, v in itertools.permutations(gcs.Vertices(), 2):
-        gcs.AddEdge(u, v, name=f"({u.name()},{v.name()})")
+        if u.set().IntersectsWith(v.set()):
+            gcs.AddEdge(u, v)  # TODO I think that this makes sense
 
     # Add source node
     x_f_0 = 0
     x_b_0 = 4.0
-    lam_n_0 = 0.0
-    lam_f_0 = 0.0
-    source = []
-    source.append(eq(x_f, x_f_0))
-    source.append(eq(x_b, x_b_0))
-    source.append(eq(lam_n, lam_n_0))
-    source.append(eq(lam_f, lam_f_0))
-    source_polyhedron = PolyhedronFormulator(source).formulate_polyhedron(
-        variables=all_variables, make_bounded=True
+    y_f_0 = 0.5
+    y_b_0 = 0.5
+    source_constraints = []
+    source_constraints.append(eq(x_f, x_f_0))
+    source_constraints.append(eq(x_b, x_b_0))
+    source_node = vertices["finger_box_no_contact_W_box_ground_rolling"]
+    source_polyhedron = (
+        PolyhedronFormulator(source_constraints)
+        .formulate_polyhedron(variables=all_variables, make_bounded=True)
+        .Intersection(source_node.set())
     )
-    gcs.AddVertex(source_polyhedron, "source")
+    source = gcs.AddVertex(source_polyhedron, "source")
+    gcs.AddEdge(source, source_node)
 
     # Add target node
     x_f_T = 8.0 - l
     x_b_T = 8.0
-    target = []
-    target.append(eq(x_f, x_f_T))
-    target.append(eq(x_b, x_b_T))
-
-    target.append(ge(sdf, 0))
-    target.append(eq(lam_n, 0))
-    target.append(eq(v_b, 0))
-    target.append(eq(lam_f, -lam_n))
-
-    target_polyhedron = PolyhedronFormulator(target).formulate_polyhedron(
-        variables=all_variables, make_bounded=True
+    y_f_T = 0.5
+    y_b_T = 0.5
+    target_constraints = []
+    target_constraints.append(eq(x_f, x_f_T))
+    target_constraints.append(eq(x_b, x_b_T))
+    target_node = vertices["finger_box_rolling_W_box_ground_sliding_right"]
+    target_polyhedron = (
+        PolyhedronFormulator(target_constraints)
+        .formulate_polyhedron(variables=all_variables, make_bounded=True)
+        .Intersection(target_node.set())
     )
-    gcs.AddVertex(target_polyhedron, "target")
-
-    # Connect source and target node
-    vertices = {v.name(): v for v in gcs.Vertices()}
-    gcs.AddEdge(
-        vertices["source"], vertices["('finger_box_no_contact', 'box_ground_rolling')"]
-    )
-    gcs.AddEdge(
-        vertices["('finger_box_rolling', 'box_ground_sliding_right')"],
-        vertices["target"],
-    )
+    target = gcs.AddVertex(target_polyhedron, "target")
+    gcs.AddEdge(target_node, target)
 
     # Create position continuity constraints
-    pos_vars = np.vstack((x_f, x_b))
+    pos_vars = np.vstack((x_f, y_f, x_b, y_f, x_g, y_f))
     first_pos_vars = pos_vars[:, 0]
     last_pos_vars = pos_vars[:, -1]
     A_first = sym.DecomposeLinearExpressions(first_pos_vars, all_variables)
@@ -273,8 +329,6 @@ def plan_for_one_d_pusher_2():
     # Solve the problem
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = False
-    source = vertices["source"]
-    target = vertices["target"]
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
@@ -299,12 +353,36 @@ def plan_for_one_d_pusher_2():
     print("Path:")
     print([v.name() for v in path])
 
+    breakpoint()
     # Create Bezier Curve
-    curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=4)
+    curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=7)
 
+    breakpoint()
     plt.plot(curve)
-    plt.legend(["x_box", "x_finger", "normal_force", "friction_force"])
-    animate_1d_box(curve[:, 0], curve[:, 1], curve[:, 2], curve[:, 3])
+    plt.legend(
+        [
+            "x_finger",
+            "y_finger",
+            "x_box",
+            "y_box",
+            "x_ground",
+            "y_ground",
+            "finger_box_normal_force",
+            "finger_box_friction_force",
+            "box_ground_normal_force",
+            "box_ground_friction_force",
+        ]
+    )
+    plt.show()
+    animate_1d_box(
+        curve[:, 0],
+        curve[:, 1],
+        curve[:, 2],
+        curve[:, 3],
+        curve[:, 4],
+        curve[:, 5],
+        curve[:, 6],
+    )
     breakpoint()
 
     return
@@ -481,6 +559,7 @@ def plan_for_one_d_pusher():
     vertex_values = [result.GetSolution(v.x()) for v in path]
     print("Path:")
     print([v.name() for v in path])
+    breakpoint()
 
     # Create Bezier Curve
     curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=4)
