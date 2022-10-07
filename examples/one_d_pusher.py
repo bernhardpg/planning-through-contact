@@ -8,7 +8,7 @@ from pydrake.math import le, ge, eq
 from pydrake.geometry.optimization import GraphOfConvexSets
 import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import LinearConstraint, Binding, L1NormCost, Cost
+from pydrake.solvers import LinearConstraint, Binding, L1NormCost, L2NormCost, Cost
 
 import numpy as np
 import numpy.typing as npt
@@ -137,26 +137,30 @@ def plan_for_one_d_pusher():
     gcs.AddVertex(source_polyhedron, "source")
 
     # Add target node
-    x_f_T = 8.0 - l
+    x_f_T = 0.0
     x_b_T = 8.0
-    lam_n_T = 0.0
-    lam_f_T = 0.0
     target = []
     target.append(eq(x_f, x_f_T))
     target.append(eq(x_b, x_b_T))
-    target.append(eq(lam_n, lam_n_T))
-    target.append(eq(lam_f, lam_f_T))
+
+    target.append(ge(sdf, 0))
+    target.append(eq(lam_n, 0))
+    target.append(eq(v_b, 0))
+    target.append(eq(lam_f, -lam_n))
+
     target_polyhedron = PolyhedronFormulator(target).formulate_polyhedron(
         variables=all_variables, make_bounded=True
     )
     gcs.AddVertex(target_polyhedron, "target")
 
+    # Add no_contact node twice
+    gcs.AddVertex(polyhedrons[0], "no_contact_2")
+
     # Connect source and target node
     vertices = {v.name(): v for v in gcs.Vertices()}
+    gcs.AddEdge(vertices["pushing_right"], vertices["no_contact_2"])
     gcs.AddEdge(vertices["source"], vertices["no_contact"], "(source, no_contact)")
-    gcs.AddEdge(
-        vertices["pushing_right"], vertices["target"], "(pushing_right, target)"
-    )
+    gcs.AddEdge(vertices["no_contact_2"], vertices["target"])
 
     # Create position continuity constraints
     pos_vars = np.vstack((x_f, x_b))
@@ -174,7 +178,7 @@ def plan_for_one_d_pusher():
     diffs = pos_vars[:, 1:] - pos_vars[:, :-1]
     A = sym.DecomposeLinearExpressions(diffs.flatten(), all_variables)
     b = np.zeros((A.shape[0], 1))
-    l1_norm_cost = L1NormCost(A, b)
+    l1_norm_cost = L2NormCost(A, b)
     for v in gcs.Vertices():
         cost = Binding[Cost](l1_norm_cost, v.x())
         v.AddCost(cost)
