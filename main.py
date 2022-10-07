@@ -25,7 +25,7 @@ from geometry.contact import (
     create_possible_mode_combinations,
 )
 from planning.gcs import GcsPlanner, GcsContactPlanner
-from visualize.visualize import animate_1d_box, plot_1d_box_positions
+from visualize.visualize import animate_1d_box
 from examples.one_d_pusher import plan_for_one_d_pusher_2
 
 

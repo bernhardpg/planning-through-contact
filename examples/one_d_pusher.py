@@ -1,7 +1,7 @@
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.bezier import BezierCurve
-from visualize.visualize import animate_1d_box
+from visualize.visualize import animate_1d_box, animate_2d_box
 
 from dataclasses import dataclass
 
@@ -378,7 +378,6 @@ def plan_for_one_d_pusher_2():
     data = pydot.graph_from_dot_data(graphviz)[0]
     data.write_svg("graph.svg")
 
-    #target = vertices["finger_box_rolling_W_box_ground_sliding_right"]
     result = gcs.SolveShortestPath(source, target, options)
     assert result.is_success()
     print("Result is success!")
@@ -427,18 +426,7 @@ def plan_for_one_d_pusher_2():
 
     plt.plot(np.hstack(list(curves.values())))
     plt.legend(list(curves.keys()))
-    plt.show()
-    breakpoint()
-    animate_1d_box(
-        curve[:, 0],
-        curve[:, 1],
-        curve[:, 2],
-        curve[:, 3],
-        curve[:, 4],
-        curve[:, 5],
-        curve[:, 6],
-    )
-    breakpoint()
+    animate_2d_box(**curves, box_width=l, box_height=h)
 
     return
 
