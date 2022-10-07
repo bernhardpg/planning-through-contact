@@ -30,22 +30,41 @@ import matplotlib.pyplot as plt
 
 
 def evaluate_curve_from_ctrl_points(
-    ctrl_points: List[npt.NDArray[np.float64]], curve_dim: int, num_curves: int
+    ctrl_points_for_all_segments: List[npt.NDArray[np.float64]],
+    metadatas: List["VariableMetadata"],
 ) -> npt.NDArray[np.float64]:
-    breakpoint()
-    bzs = [
-        BezierCurve.create_from_ctrl_points(
-            dim=curve_dim * num_curves, ctrl_points=points
+    def construct_bezier_curves(metadatas, ctrl_points):
+        where_to_split = np.cumsum(
+            [md.dim * md.num_ctrl_points for md in metadatas[:-1]]
         )
-        for points in ctrl_points
-    ]
-    values = np.concatenate(
-        [
-            np.concatenate([bz.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1).T
-            for bz in bzs
+        ctrl_points_for_each_curve = np.split(ctrl_points, where_to_split)
+        bzs = [
+            BezierCurve.create_from_ctrl_points(dim=md.dim, ctrl_points=points)
+            for md, points in zip(metadatas, ctrl_points_for_each_curve)
         ]
-    )
-    return values
+        return bzs
+
+    bzs = [
+        construct_bezier_curves(metadatas, ctrl_points)
+        for ctrl_points in ctrl_points_for_all_segments
+    ]
+
+    values = [
+        {
+            md.name: np.concatenate(
+                [bz.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+            ).T
+            for md, bz in zip(metadatas, segment)
+        }
+        for segment in bzs
+    ]
+
+    values_merged = {
+        md.name: np.concatenate([value[md.name] for value in values])
+        for md in metadatas
+    }
+
+    return values_merged
 
 
 def find_path_to_target(
@@ -207,14 +226,15 @@ def plan_for_one_d_pusher_2():
 
     force_balance = [
         eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
-        eq(pair_box_ground.lam_n, -pair_box_ground.lam_f + mg),
+        eq(pair_box_ground.lam_n, mg),
     ]
     pair_finger_box.add_force_balance(force_balance)
     pair_box_ground.add_force_balance(force_balance)
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
     no_y_motion = [eq(y_f, h), eq(y_b, h)]
-    additional_constraints = [*no_ground_motion, *no_y_motion]
+    no_finger_friction = [eq(pair_finger_box.lam_f, 0)]
+    additional_constraints = [*no_ground_motion, *no_y_motion, *no_finger_friction]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints)
     pair_box_ground.add_constraint_to_all_modes(additional_constraints)
 
@@ -353,27 +373,37 @@ def plan_for_one_d_pusher_2():
     print("Path:")
     print([v.name() for v in path])
 
-    breakpoint()
-    # Create Bezier Curve
-    curve = evaluate_curve_from_ctrl_points(vertex_values, curve_dim=dim, num_curves=7)
+    @dataclass
+    class VariableMetadata:
+        dim: int
+        order: int
+        name: str
 
-    breakpoint()
-    plt.plot(curve)
-    plt.legend(
-        [
-            "x_finger",
-            "y_finger",
-            "x_box",
-            "y_box",
-            "x_ground",
-            "y_ground",
-            "finger_box_normal_force",
-            "finger_box_friction_force",
-            "box_ground_normal_force",
-            "box_ground_friction_force",
-        ]
-    )
+        @property
+        def num_ctrl_points(self) -> int:
+            return self.order + 1
+
+    # TODO should be created automatically
+    var_mds = [
+        VariableMetadata(1, 2, "finger_pos_x"),
+        VariableMetadata(1, 2, "finger_pos_y"),
+        VariableMetadata(1, 2, "box_pos_x"),
+        VariableMetadata(1, 2, "box_pos_y"),
+        VariableMetadata(1, 2, "ground_pos_x"),
+        VariableMetadata(1, 2, "ground_pos_y"),
+        VariableMetadata(1, 2, "finger_box_normal_force"),
+        VariableMetadata(1, 2, "finger_box_friction_force"),
+        VariableMetadata(1, 2, "box_ground_normal_force"),
+        VariableMetadata(1, 2, "box_ground_friction_force"),
+    ]
+
+    # Create Bezier Curve
+    curves = evaluate_curve_from_ctrl_points(vertex_values, var_mds)
+
+    plt.plot(np.hstack(list(curves.values())))
+    plt.legend(list(curves.keys()))
     plt.show()
+    breakpoint()
     animate_1d_box(
         curve[:, 0],
         curve[:, 1],
