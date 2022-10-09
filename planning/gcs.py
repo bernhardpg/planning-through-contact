@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import cdd
 
 import pydot
 from dataclasses import dataclass, field
