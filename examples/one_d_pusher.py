@@ -66,6 +66,20 @@ def evaluate_curve_from_ctrl_points(
     return values_merged
 
 
+def create_intersecting_set(
+    constraints: List[sym.Formula],
+    all_vars: List[sym.Variable],
+    vertices: GraphOfConvexSets.Vertices,
+):
+    constraints_as_poly = PolyhedronFormulator(constraints).formulate_polyhedron(
+        variables=all_vars, make_bounded=True
+    )
+
+    vertex = next(v for v in vertices if v.set().IntersectsWith(constraints_as_poly))
+    intersecting_set = constraints_as_poly.Intersection(vertex.set())
+    return intersecting_set, vertex
+
+
 def find_path_to_target(
     edges: List[GraphOfConvexSets.Edge],
     target: GraphOfConvexSets.Vertex,
@@ -216,7 +230,7 @@ def plan_for_one_d_pusher_2():
     g = 9.81  # m/s^2
     mg = mass * g
     box_width = 2
-    h = 1
+    box_height = 1
     friction_coeff = 0.5
 
     # Define variables
@@ -237,7 +251,7 @@ def plan_for_one_d_pusher_2():
 
     # NOTE this is the stuff the jacobians will replace
     sdf_finger_box = x_b - x_f - box_width
-    sdf_box_ground = y_b - y_g - h
+    sdf_box_ground = y_b - y_g - box_height
 
     # NOTE this is the stuff the jacobians will replace
     finger_box_rel_tangential_sliding_vel = vy_f - vy_b
@@ -266,8 +280,8 @@ def plan_for_one_d_pusher_2():
     pair_box_ground.add_force_balance(force_balance)
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
-    no_box_y_motion = eq(y_b, h)
-    finger_pos_below_box_height = le(y_f, y_b + h)
+    no_box_y_motion = eq(y_b, box_height)
+    finger_pos_below_box_height = le(y_f, y_b + box_height)
     additional_constraints_finger_box = [*no_ground_motion, finger_pos_below_box_height]
     additional_constraints_box_ground = [
         *no_ground_motion,
@@ -310,7 +324,6 @@ def plan_for_one_d_pusher_2():
     gcs = GraphOfConvexSets()
     for name, poly in convex_sets.items():
         gcs.AddVertex(poly, name)
-    vertices = {v.name(): v for v in gcs.Vertices()}
 
     # Add edges between all vertices
     for u, v in itertools.permutations(gcs.Vertices(), 2):
@@ -318,36 +331,38 @@ def plan_for_one_d_pusher_2():
             gcs.AddEdge(u, v)  # TODO I think that this makes sense
 
     # Add source node
-    x_f_0 = 0
-    x_b_0 = 4.0
-    y_f_0 = 0.6
-    source_constraints = []
-    source_constraints.append(eq(x_f, x_f_0))
-    source_constraints.append(eq(y_f, y_f_0))
-    source_constraints.append(eq(x_b, x_b_0))
-    source_node = vertices["finger_box_no_contact_W_box_ground_rolling"]
-    source_polyhedron = (
-        PolyhedronFormulator(source_constraints)
-        .formulate_polyhedron(variables=all_variables, make_bounded=True)
-        .Intersection(source_node.set())
+    # TODO refactor into a function
+    source_constraints = [eq(x_f, 0), eq(y_f, 0.6), eq(x_b, 4.0)]
+    source_set, matching_vertex = create_intersecting_set(
+        source_constraints, all_variables, gcs.Vertices()
     )
-    source = gcs.AddVertex(source_polyhedron, "source")
-    gcs.AddEdge(source, source_node)
+    source = gcs.AddVertex(source_set, "source")
+    gcs.AddEdge(source, matching_vertex)
 
     # Add target node
-    x_f_T = 8.0 - box_width
-    x_b_T = 8.0
-    target_constraints = []
-    target_constraints.append(eq(x_f, x_f_T))
-    target_constraints.append(eq(x_b, x_b_T))
-    target_node = vertices["finger_box_rolling_W_box_ground_sliding_right"]
-    target_polyhedron = (
-        PolyhedronFormulator(target_constraints)
-        .formulate_polyhedron(variables=all_variables, make_bounded=True)
-        .Intersection(target_node.set())
+    target_constraints = [eq(x_f, 0.0), eq(x_b, 8.0)]
+    target_set, matching_vertex = create_intersecting_set(
+        target_constraints, all_variables, gcs.Vertices()
     )
-    target = gcs.AddVertex(target_polyhedron, "target")
-    gcs.AddEdge(target_node, target)
+    target = gcs.AddVertex(target_set, "target")
+    gcs.AddEdge(matching_vertex, target)
+
+    # Allow repeated visits to the same node
+    # TODO: This should be sped up, as it will scale poorly
+    NUM_ALLOWED_REVISITS = 1
+    # Runtime: O(v * E), E ~= v^2, O(V^3)
+    new_edges = []
+    for i in range(NUM_ALLOWED_REVISITS):
+        for v in gcs.Vertices():
+            v_new = gcs.AddVertex(v.set(), f"{v.name()}_2")
+            for e in gcs.Edges():
+                if v == e.v():
+                    new_edges.append((e.u(), v_new))
+                elif v == e.u():
+                    new_edges.append((v_new, e.v()))
+
+    for u, v in new_edges:
+        gcs.AddEdge(u, v)
 
     # Create position continuity constraints
     pos_vars = np.vstack((x_f, y_f, x_b, y_f, x_g, y_f))
@@ -386,6 +401,8 @@ def plan_for_one_d_pusher_2():
     # Solve the problem
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = False
+    options.preprocessing = True
+    options.max_rounded_paths = 10
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
@@ -429,6 +446,6 @@ def plan_for_one_d_pusher_2():
 
     plt.plot(np.hstack(list(curves.values())))
     plt.legend(list(curves.keys()))
-    animate_2d_box(**curves, box_width=box_width, box_height=h)
+    animate_2d_box(**curves, box_width=box_width, box_height=box_height)
 
     return
