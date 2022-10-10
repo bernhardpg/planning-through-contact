@@ -143,12 +143,9 @@ class CollisionPair:
     body_b: RigidBody
     friction_coeff: float
     sdf: sym.Expression
-    rel_tangential_sliding_vel: sym.Expression
+    normal_vec: npt.NDArray[np.float64]
+    tangential_vec: npt.NDArray[np.float64]
     order: int = 2
-
-    @property
-    def name(self) -> str:
-        return f"{self.body_a.name}_{self.body_b.name}"
 
     def __post_init__(self):
         self.lam_n = BezierVariable(
@@ -158,6 +155,58 @@ class CollisionPair:
             dim=1, order=self.order, name=f"{self.name}_lam_f"
         ).x
         self.additional_constraints = []
+
+    @property
+    def name(self) -> str:
+        return f"{self.body_a.name}_{self.body_b.name}"
+
+    @property
+    def dim(self) -> int:
+        return self.body_a.dim
+
+    @property
+    def contact_jacobian(self) -> npt.NDArray[np.float64]:
+        # v_rel = v_body_b - v_body_a = J (v_body_a, v_body_b)^T
+        return np.hstack((-np.eye(self.dim), np.eye(self.dim)))
+
+    @property
+    def normal_jacobian(self) -> npt.NDArray[np.float64]:
+        return self.normal_vec.T.dot(self.contact_jacobian)
+
+    @property
+    def tangential_jacobian(self) -> npt.NDArray[np.float64]:
+        return self.tangential_vec.T.dot(self.contact_jacobian)
+
+    @property
+    def rel_tangential_sliding_vel(self) -> npt.NDArray[sym.Expression]:
+        return self.tangential_jacobian.dot(
+            np.vstack((self.body_a.vel.x, self.body_b.vel.x))
+        )
+
+    def get_tangential_jacobian_for_bodies(
+        self, bodies: List[RigidBody]
+    ) -> npt.NDArray[np.float64]:
+        return self._get_jacobian_for_bodies(bodies, self.tangential_jacobian)
+
+    def get_normal_jacobian_for_bodies(
+        self, bodies: List[RigidBody]
+    ) -> npt.NDArray[np.float64]:
+        return self._get_jacobian_for_bodies(bodies, self.normal_jacobian)
+
+    def _get_jacobian_for_bodies(
+        self, bodies: List[RigidBody], jacobian: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        body_a_idx = bodies.index(self.body_a)
+        body_b_idx = bodies.index(self.body_b)
+
+        body_a_cols = np.arange(body_a_idx * self.dim, (body_a_idx + 1) * self.dim)
+        body_b_cols = np.arange(body_b_idx * self.dim, (body_b_idx + 1) * self.dim)
+        jacobian_in_all_bodies = np.zeros((1, len(bodies) * self.dim))
+        jacobian_in_all_bodies[:, body_a_cols] = jacobian[:, 0 : 1 * self.dim]
+        jacobian_in_all_bodies[:, body_b_cols] = jacobian[
+            :, 1 * self.dim : 2 * self.dim
+        ]
+        return jacobian_in_all_bodies
 
     def add_constraint_to_all_modes(self, constraints) -> None:
         self.additional_constraints = sum(
@@ -240,42 +289,62 @@ def plan_for_one_d_pusher_2():
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
-    vy_f = finger.vel.x[1, :]
     x_b = box.pos.x[0, :]
     y_b = box.pos.x[1, :]
-    vx_b = box.vel.x[0, :]
-    vy_b = box.vel.x[1, :]
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
-    vx_g = ground.vel.x[0, :]
 
     # NOTE this is the stuff the jacobians will replace
     sdf_finger_box = x_b - x_f - box_width
     sdf_box_ground = y_b - y_g - box_height
-
-    # NOTE this is the stuff the jacobians will replace
-    finger_box_rel_tangential_sliding_vel = vy_f - vy_b
-    box_ground_rel_tangential_sliding_vel = vx_b - vx_g
 
     pair_finger_box = CollisionPair(
         finger,
         box,
         friction_coeff,
         sdf_finger_box,
-        finger_box_rel_tangential_sliding_vel,
+        normal_vec=np.array([[1], [0]]),
+        tangential_vec=np.array([[0], [1]]),
     )
     pair_box_ground = CollisionPair(
         box,
         ground,
         friction_coeff,
         sdf_box_ground,
-        box_ground_rel_tangential_sliding_vel,
+        normal_vec=np.array([[0], [1]]),
+        tangential_vec=np.array([[-1], [0]]),
     )
 
-    force_balance = [
-        eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
-        eq(pair_box_ground.lam_n, -pair_finger_box.lam_f + mg),
-    ]
+    all_bodies = [finger, box, ground]
+    all_pairs = [pair_finger_box, pair_box_ground]
+
+    normal_jacobians = np.vstack(
+        [p.get_normal_jacobian_for_bodies(all_bodies) for p in all_pairs]
+    )
+    tangential_jacobians = np.vstack(
+        [p.get_tangential_jacobian_for_bodies(all_bodies) for p in all_pairs]
+    )
+
+    normal_forces = np.concatenate([p.lam_n for p in all_pairs])
+    friction_forces = np.concatenate([p.lam_f for p in all_pairs])
+
+    # TODO generalize this
+    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1]]).T
+
+    all_force_balances = eq(
+        normal_jacobians.T.dot(normal_forces)
+        + tangential_jacobians.T.dot(friction_forces),
+        gravitational_jacobian.dot(mg),
+    )
+
+    unactuated_dofs = (2, 3)
+    force_balance = all_force_balances[unactuated_dofs, :]
+
+    #    force_balance = [
+    #        eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
+    #        eq(pair_box_ground.lam_n, -pair_finger_box.lam_f + mg),
+    #    ]
+    breakpoint()
     pair_finger_box.add_force_balance(force_balance)
     pair_box_ground.add_force_balance(force_balance)
 
@@ -286,6 +355,7 @@ def plan_for_one_d_pusher_2():
     additional_constraints_box_ground = [
         *no_ground_motion,
         no_box_y_motion,
+        eq(pair_box_ground.lam_n, mg),
     ]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
     pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
@@ -353,6 +423,8 @@ def plan_for_one_d_pusher_2():
     new_edges = []
     for i in range(NUM_ALLOWED_REVISITS):
         for v in gcs.Vertices():
+            if v.name() in ["source", "target"]:
+                continue
             v_new = gcs.AddVertex(v.set(), f"{v.name()}_2")
             for e in gcs.Edges():
                 if v == e.v():
@@ -398,7 +470,7 @@ def plan_for_one_d_pusher_2():
 
     # Solve the problem
     options = opt.GraphOfConvexSetsOptions()
-    options.convex_relaxation = True
+    options.convex_relaxation = False
     options.preprocessing = True
     options.max_rounded_paths = 10
 
