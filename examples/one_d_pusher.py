@@ -124,6 +124,10 @@ class RigidBody:
     def vel(self) -> BezierVariable:
         return self.pos.get_derivative()
 
+    @property
+    def acc(self) -> BezierVariable:
+        return self.vel.get_derivative()
+
 
 @dataclass
 class ContactMode:
@@ -145,7 +149,7 @@ class CollisionPair:
     sdf: sym.Expression
     normal_vec: npt.NDArray[np.float64]
     tangential_vec: npt.NDArray[np.float64]
-    order: int = 2
+    order: int
 
     def __post_init__(self):
         self.lam_n = BezierVariable(
@@ -272,7 +276,7 @@ class CollisionPair:
 def plan_for_one_d_pusher_2():
     # Bezier curve params
     dim = 2
-    order = 2
+    order = 4
 
     # Physical params
     mass = 1  # kg
@@ -289,10 +293,22 @@ def plan_for_one_d_pusher_2():
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
+    vx_f = finger.vel.x[0, :]
+    vy_f = finger.vel.x[1, :]
+    ax_f = finger.acc.x[0, :]
+    ay_f = finger.acc.x[1, :]
     x_b = box.pos.x[0, :]
     y_b = box.pos.x[1, :]
+    vx_b = box.vel.x[0, :]
+    vy_b = box.vel.x[1, :]
+    ax_b = box.acc.x[0, :]
+    ay_b = box.acc.x[1, :]
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
+    vx_g = ground.vel.x[0, :]
+    vy_g = ground.vel.x[1, :]
+    ax_g = ground.acc.x[0, :]
+    ay_g = ground.acc.x[1, :]
 
     # NOTE this is the stuff the jacobians will replace
     sdf_finger_box = x_b - x_f - box_width
@@ -305,6 +321,7 @@ def plan_for_one_d_pusher_2():
         sdf_finger_box,
         normal_vec=np.array([[1], [0]]),
         tangential_vec=np.array([[0], [1]]),
+        order=order - 2,
     )
     pair_box_ground = CollisionPair(
         box,
@@ -313,6 +330,7 @@ def plan_for_one_d_pusher_2():
         sdf_box_ground,
         normal_vec=np.array([[0], [1]]),
         tangential_vec=np.array([[-1], [0]]),
+        order=order - 2,
     )
 
     all_bodies = [finger, box, ground]
@@ -339,23 +357,36 @@ def plan_for_one_d_pusher_2():
 
     unactuated_dofs = (2, 3)
     force_balance = all_force_balances[unactuated_dofs, :]
+    print(force_balance)
+    # TODO fix
 
     #    force_balance = [
     #        eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
     #        eq(pair_box_ground.lam_n, -pair_finger_box.lam_f + mg),
     #    ]
-    breakpoint()
-    pair_finger_box.add_force_balance(force_balance)
-    pair_box_ground.add_force_balance(force_balance)
+    # pair_finger_box.add_force_balance(force_balance)
+    # pair_box_ground.add_force_balance(force_balance)
+
+    pair_finger_box.add_force_balance([])
+    pair_box_ground.add_force_balance([])
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
     no_box_y_motion = eq(y_b, box_height)
     finger_pos_below_box_height = le(y_f, y_b + box_height)
-    additional_constraints_finger_box = [*no_ground_motion, finger_pos_below_box_height]
+
+    additional_constraints_finger_box = [
+        *no_ground_motion,
+        finger_pos_below_box_height,
+        no_box_y_motion,
+        eq(mass * ax_b, pair_finger_box.lam_n + pair_box_ground.lam_f),
+        eq(mass * ay_b, pair_box_ground.lam_n + pair_finger_box.lam_f - mg),
+    ]
     additional_constraints_box_ground = [
         *no_ground_motion,
         no_box_y_motion,
         eq(pair_box_ground.lam_n, mg),
+        eq(mass * ax_b, pair_finger_box.lam_n + pair_box_ground.lam_f),
+        eq(mass * ay_b, pair_box_ground.lam_n + pair_finger_box.lam_f - mg),
     ]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
     pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
@@ -401,7 +432,7 @@ def plan_for_one_d_pusher_2():
 
     # Add source node
     # TODO refactor into a function
-    source_constraints = [eq(x_f, 0), eq(y_f, 0.6), eq(x_b, 4.0)]
+    source_constraints = [eq(x_f, 0), eq(y_f, 0.6), eq(x_b, 4.0), eq(y_b, box_height)]
     source_set, matching_vertex = create_intersecting_set(
         source_constraints, all_variables, gcs.Vertices()
     )
@@ -436,7 +467,7 @@ def plan_for_one_d_pusher_2():
         gcs.AddEdge(u, v)
 
     # Create position continuity constraints
-    pos_vars = np.vstack((x_f, y_f, x_b, y_f, x_g, y_f))
+    pos_vars = np.vstack((x_f, y_f, x_b, y_b, x_g, y_g))
     first_pos_vars = pos_vars[:, 0]
     last_pos_vars = pos_vars[:, -1]
     A_first = sym.DecomposeLinearExpressions(first_pos_vars, all_variables)
@@ -447,6 +478,32 @@ def plan_for_one_d_pusher_2():
         for c in constraints:
             e.AddConstraint(c)
 
+    if True:
+        # Create vel continuity constraints
+        vel_vars = np.vstack((vx_f, vy_f, vx_b, vy_b, vx_g, vy_g))
+        first_vel_vars = vel_vars[:, 0]
+        last_vel_vars = vel_vars[:, -1]
+        A_first = sym.DecomposeLinearExpressions(first_vel_vars, all_variables)
+        A_last = sym.DecomposeLinearExpressions(last_vel_vars, all_variables)
+        for e in gcs.Edges():
+            xu, xv = e.xu(), e.xv()
+            constraints = eq(A_last.dot(xu), A_first.dot(xv))
+            for c in constraints:
+                e.AddConstraint(c)
+    if False:
+
+        # Create acc continuity constraints
+        acc_vars = np.vstack((ax_f, ay_f, ax_b, ay_b, ax_g, ay_g))
+        first_acc_vars = acc_vars[:, 0]
+        last_acc_vars = acc_vars[:, -1]
+        A_first = sym.DecomposeLinearExpressions(first_acc_vars, all_variables)
+        A_last = sym.DecomposeLinearExpressions(last_acc_vars, all_variables)
+        for e in gcs.Edges():
+            xu, xv = e.xu(), e.xv()
+            constraints = eq(A_last.dot(xu), A_first.dot(xv))
+            for c in constraints:
+                e.AddConstraint(c)
+
     # Create Path length cost
     diffs = pos_vars[:, 1:] - pos_vars[:, :-1]
     A = sym.DecomposeLinearExpressions(diffs.flatten(), all_variables)
@@ -455,6 +512,26 @@ def plan_for_one_d_pusher_2():
     for v in gcs.Vertices():
         cost = Binding[Cost](path_length_cost, v.x())
         v.AddCost(cost)
+
+    # Create force minimization cost
+    forces = np.concatenate(
+        [
+            pair_finger_box.lam_n,
+            pair_finger_box.lam_f,
+            pair_box_ground.lam_n,
+            pair_box_ground.lam_f,
+        ]
+    )
+    A = sym.DecomposeLinearExpressions(forces.flatten(), all_variables)
+    b = np.zeros((A.shape[0], 1))
+    force_minimization_cost = L2NormCost(A, b)
+    for e in gcs.Edges():
+        cost = Binding[Cost](force_minimization_cost, e.xu())
+        e.AddCost(cost)
+
+    # Create num edges cost
+    for e in gcs.Edges():
+        e.AddCost(1000)
 
     # Create path energy cost
     ADD_PATH_ENERGY_COST = False
@@ -499,16 +576,16 @@ def plan_for_one_d_pusher_2():
 
     # TODO should be created automatically
     var_mds = [
-        VariableMetadata(1, 2, "finger_pos_x"),
-        VariableMetadata(1, 2, "finger_pos_y"),
-        VariableMetadata(1, 2, "box_pos_x"),
-        VariableMetadata(1, 2, "box_pos_y"),
-        VariableMetadata(1, 2, "ground_pos_x"),
-        VariableMetadata(1, 2, "ground_pos_y"),
-        VariableMetadata(1, 2, "finger_box_normal_force"),
-        VariableMetadata(1, 2, "finger_box_friction_force"),
-        VariableMetadata(1, 2, "box_ground_normal_force"),
-        VariableMetadata(1, 2, "box_ground_friction_force"),
+        VariableMetadata(1, order, "finger_pos_x"),
+        VariableMetadata(1, order, "finger_pos_y"),
+        VariableMetadata(1, order, "box_pos_x"),
+        VariableMetadata(1, order, "box_pos_y"),
+        VariableMetadata(1, order, "ground_pos_x"),
+        VariableMetadata(1, order, "ground_pos_y"),
+        VariableMetadata(1, order - 2, "finger_box_normal_force"),
+        VariableMetadata(1, order - 2, "finger_box_friction_force"),
+        VariableMetadata(1, order - 2, "box_ground_normal_force"),
+        VariableMetadata(1, order - 2, "box_ground_friction_force"),
     ]
 
     # Create Bezier Curve
