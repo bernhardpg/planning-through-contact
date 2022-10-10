@@ -1,31 +1,16 @@
-import matplotlib.pyplot as plt
+from dataclasses import dataclass
+from itertools import combinations
+from typing import List, Literal, Tuple
 
-import pydot
-from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional, TypedDict, Tuple
-from itertools import combinations
-
-import math
-from pydrake.math import le, ge, eq
-import pydrake.symbolic as sym
+import pydot
 import pydrake.geometry.optimization as opt
-
+import pydrake.symbolic as sym
 from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.solvers import (
-    MathematicalProgram,
-    Solve,
-    MathematicalProgramResult,
-    L1NormCost,
-    Cost,
-    Binding,
-    Constraint,
-    LinearConstraint,
-)
+from pydrake.math import eq
+from pydrake.solvers import Binding, Cost, L1NormCost, MathematicalProgramResult
 
-from geometry.bezier import BezierVariable
-from geometry.polyhedron import PolyhedronFormulator
 from geometry.contact import ContactMode
 
 
@@ -73,27 +58,31 @@ class GcsContactPlanner:
 
         breakpoint()
         # TODO remove
-#        for edge_def in self.edge_definitions:
-#            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
 
-    def _create_position_continuity_constraints(self, edge: GraphOfConvexSets.Edge) -> List[sym.Formula]:
+    #        for edge_def in self.edge_definitions:
+    #            self._add_position_path_length_cost(edge_def["edge"], edge_def["mode_u"])
+
+    def _create_position_continuity_constraints(
+        self, edge: GraphOfConvexSets.Edge
+    ) -> List[sym.Formula]:
         # TODO this can easily be sped up with bindings
-        first_pos_vars = self.position_variables[:,0]
+        first_pos_vars = self.position_variables[:, 0]
         A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_variables)
-        last_pos_vars = self.position_variables[:,-1]
+        last_pos_vars = self.position_variables[:, -1]
         A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_variables)
         constraint = eq(A_last.dot(edge.xu()), A_first.dot(edge.xv()))
         return constraint
 
-
-    def _create_position_path_length_cost( self, edge: GraphOfConvexSets.Edge) -> None:
+    def _create_position_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
         # Minimize euclidean distance between subsequent control points
         # NOTE: we only minimize L1 distance right now
         # TODO
-#        if mode_u.name == "source":  # no cost for source vertex
-#            return
+        #        if mode_u.name == "source":  # no cost for source vertex
+        #            return
 
-        differences = (self.position_variables[:, 1:] - self.position_variables[:, :-1]).flatten()
+        differences = (
+            self.position_variables[:, 1:] - self.position_variables[:, :-1]
+        ).flatten()
         A = sym.DecomposeLinearExpressions(differences, self.all_variables)
         b = np.zeros((A.shape[0], 1))
         l1_norm_cost = L1NormCost(A, b)  # TODO: This is just to have some cost
@@ -149,8 +138,8 @@ class GcsContactPlanner:
         return vertex_values
 
     def calculate_path(self) -> List[npt.NDArray[np.float64]]:
-        assert not self.source == None
-        assert not self.target == None
+        assert self.source is not None
+        assert self.target is not None
         self.solution = self._solve(self.source, self.target)
         vertex_values = self._reconstruct_path(self.solution)
         return vertex_values
@@ -172,7 +161,7 @@ class GcsContactPlanner:
         if use_solution is False:
             graphviz = self.gcs.GetGraphvizString()
         else:
-            assert not self.solution == None
+            assert self.solution is not None
             graphviz = self.gcs.GetGraphvizString(
                 self.solution, show_binary_edge_vars, precision=1
             )

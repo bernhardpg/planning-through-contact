@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "planning-through-contact"
+version = "0.1.0"
+description = ""
+authors = ["Bernhard Paus Græsdal <bernhardpg@gmail.com>"]
+license = "MIT License"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+matplotlib = "^3.6.1"
+numpy = "^1.23.3"
+drake = {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl"}
+pre-commit = "^2.20.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

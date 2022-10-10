@@ -1,43 +1,37 @@
-import matplotlib.pyplot as plt
+from typing import List
 
-from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional
-
-import math
-from pydrake.math import le, ge, eq
-import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
-
-from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
+import pydrake.symbolic as sym
+from pydrake.math import le
 
 # TODO: Replace with VPolytope
-class Polyhedron(opt.HPolyhedron):
-    def get_vertices(self) -> npt.NDArray[np.float64]:  # [N, 2]
-        A = self.A()
-        b = self.b().reshape((-1, 1))
-        dim = A.shape[0]
-        cdd_matrix = cdd.Matrix(np.hstack((b, -A)))
-        cdd_matrix.rep_type = cdd.RepType.INEQUALITY
-        cdd_poly = cdd.Polyhedron(cdd_matrix)
-        generators = np.array(cdd_poly.get_generators())
-        # cdd specific, see https://pycddlib.readthedocs.io/en/latest/polyhedron.html
-        vertices = generators[:, 1 : 1 + dim]
-        return vertices
-
-    @classmethod
-    def from_vertices(cls, vertices: npt.NDArray[np.float64]) -> "Polyhedron":
-        ones = np.ones((vertices.shape[0], 1))
-        cdd_matrix = cdd.Matrix(np.hstack((ones, vertices)))
-        cdd_matrix.rep_type = cdd.RepType.GENERATOR
-        cdd_poly = cdd.Polyhedron(cdd_matrix)
-        inequalities = np.array(cdd_poly.get_inequalities())
-        b = inequalities[:, 0:1]
-        A = -inequalities[:, 1:]
-
-        return cls(A, b)
+# TODO: Commented out, as pycddlib is not building with python3.10, and not really needed for this project. Code kept only for reference and will be deleted.
+# class Polyhedron(opt.HPolyhedron):
+#    def get_vertices(self) -> npt.NDArray[np.float64]:  # [N, 2]
+#        A = self.A()
+#        b = self.b().reshape((-1, 1))
+#        dim = A.shape[0]
+#        cdd_matrix = cdd.Matrix(np.hstack((b, -A)))
+#        cdd_matrix.rep_type = cdd.RepType.INEQUALITY
+#        cdd_poly = cdd.Polyhedron(cdd_matrix)
+#        generators = np.array(cdd_poly.get_generators())
+#        # cdd specific, see https://pycddlib.readthedocs.io/en/latest/polyhedron.html
+#        vertices = generators[:, 1 : 1 + dim]
+#        return vertices
+#
+#    @classmethod
+#    def from_vertices(cls, vertices: npt.NDArray[np.float64]) -> "Polyhedron":
+#        ones = np.ones((vertices.shape[0], 1))
+#        cdd_matrix = cdd.Matrix(np.hstack((ones, vertices)))
+#        cdd_matrix.rep_type = cdd.RepType.GENERATOR
+#        cdd_poly = cdd.Polyhedron(cdd_matrix)
+#        inequalities = np.array(cdd_poly.get_inequalities())
+#        b = inequalities[:, 0:1]
+#        A = -inequalities[:, 1:]
+#
+#        return cls(A, b)
 
 
 class PolyhedronFormulator:
@@ -51,15 +45,17 @@ class PolyhedronFormulator:
     def get_constraints_in_vars(
         self, vars: npt.NDArray[sym.Variable]
     ) -> npt.NDArray[sym.Formula]:
+        def check_all_vars_are_relevant(formula):
+            return all(
+                [var in sym.Variables(vars) for var in formula.GetFreeVariables()]
+            )
 
-        check_all_vars_are_relevant = lambda formula: all(
-            [var in sym.Variables(vars) for var in formula.GetFreeVariables()]
-        )
         # Need to convert this to Variables to check contents for exp_var in exp.GetVariables()
 
-        relevant_constraints = list(filter(check_all_vars_are_relevant, self.constraints))
+        relevant_constraints = list(
+            filter(check_all_vars_are_relevant, self.constraints)
+        )
         return relevant_constraints
-
 
     def formulate_polyhedron(
         self,

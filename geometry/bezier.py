@@ -1,17 +1,13 @@
-import matplotlib.pyplot as plt
-
+import math
 from dataclasses import dataclass
+from typing import Optional, Union
+
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional
-
-import math
-from pydrake.math import le, ge, eq
-import pydrake.symbolic as sym
 import pydrake.geometry.optimization as opt
-
-from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.solvers import MathematicalProgram, Solve, MathematicalProgramResult
+import pydrake.symbolic as sym
+from pydrake.math import eq, ge, le
+from pydrake.solvers import MathematicalProgram, Solve
 
 
 @dataclass
@@ -161,7 +157,9 @@ class BezierCurve:
         assert ctrl_points.size % dim == 0
         order = ctrl_points.size // dim - 1
 
-        ctrl_points_reshaped = ctrl_points.reshape((order + 1), dim, order="F").T  # TODO ugly code
+        ctrl_points_reshaped = ctrl_points.reshape(
+            (order + 1), dim, order="F"
+        ).T  # TODO ugly code
         curve = cls(order, dim)
         curve.set_ctrl_points(ctrl_points_reshaped)
         return curve

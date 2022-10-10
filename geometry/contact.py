@@ -1,29 +1,14 @@
-import matplotlib.pyplot as plt
+from dataclasses import dataclass
+from itertools import combinations, product
+from typing import List, Literal, Optional, Tuple
 
-from dataclasses import dataclass, field
 import numpy as np
 import numpy.typing as npt
-from typing import List, Literal, Union, Optional, Tuple
-from itertools import product, combinations
-
-import math
-from pydrake.math import le, ge, eq
 import pydrake.symbolic as sym
-import pydrake.geometry.optimization as opt
-
-from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.solvers import (
-    MathematicalProgram,
-    Solve,
-    MathematicalProgramResult,
-    L1NormCost,
-    Cost,
-    Binding,
-    Constraint,
-)
+from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierVariable
-from geometry.polyhedron import Polyhedron, PolyhedronFormulator
+from geometry.polyhedron import PolyhedronFormulator
 
 
 def create_possible_mode_combinations(
@@ -194,14 +179,12 @@ class CollisionPair:
 
     @property
     def force_vars(self) -> npt.NDArray[sym.Variable]:
-        return np.vstack(
-            (self.normal_force.x, self.friction_forces.x)
-        )
+        return np.vstack((self.normal_force.x, self.friction_forces.x))
 
     def create_permutations(
         self, other: "CollisionPair"
     ) -> List[Tuple["ContactMode", "ContactMode"]]:
-        def position_constraints_overlap(perm: Tuple["ContactMode","ContactMode"]):
+        def position_constraints_overlap(perm: Tuple["ContactMode", "ContactMode"]):
             m1, m2 = perm
             overlapping = m1.pos_polyhedron.IntersectsWith(m2.pos_polyhedron)
             if not overlapping:
@@ -263,7 +246,7 @@ class ContactMode:
                 )
 
             elif self.mode == "sliding":
-                assert not self.fc_direction_idx == None
+                assert self.fc_direction_idx is not None
                 self.constraints.append(self.create_fc_constraint("outside"))
                 self.constraints.append(self.create_sliding_vel_constraint("positive"))
 
@@ -310,7 +293,7 @@ class ContactMode:
         self, type: Literal["no_contact", "in_contact"]
     ) -> npt.NDArray[sym.Formula]:
         if type == "no_contact":
-            return ge(self.signed_distance_func, 0) #NOTE need continuity in position!
+            return ge(self.signed_distance_func, 0)  # NOTE need continuity in position!
         elif type == "in_contact":
             return eq(self.signed_distance_func, 0)
         else:

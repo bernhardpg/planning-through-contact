@@ -14,6 +14,17 @@ poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
+Now, to run any files in the project, prefix the command with `poetry run ...`. For example:
+```
+poetry run python main.py
+```
+
+### Running pre-commit hooks
+To run all the pre-commit hooks, run the following command:
+```
+poetry run pre-commit run --all-files
+```
+
 
 
 

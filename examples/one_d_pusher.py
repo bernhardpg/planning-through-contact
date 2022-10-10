@@ -1,32 +1,32 @@
-from geometry.bezier import BezierVariable
-from geometry.polyhedron import PolyhedronFormulator
-from geometry.bezier import BezierCurve
-from visualize.visualize import animate_1d_box, animate_2d_box
-
-from dataclasses import dataclass
-
-from pydrake.math import le, ge, eq
-from pydrake.geometry.optimization import GraphOfConvexSets
-import pydrake.symbolic as sym
-import pydrake.geometry.optimization as opt
-from pydrake.solvers import (
-    LinearConstraint,
-    Binding,
-    L1NormCost,
-    L2NormCost,
-    Cost,
-    PerspectiveQuadraticCost,
-)
-
-import numpy as np
-import numpy.typing as npt
-
 import itertools
-
+from dataclasses import dataclass
 from typing import List
-import pydot
 
 import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
+import pydot
+import pydrake.geometry.optimization as opt
+import pydrake.symbolic as sym
+from pydrake.geometry.optimization import GraphOfConvexSets
+from pydrake.math import eq, ge, le
+from pydrake.solvers import Binding, Cost, L2NormCost, PerspectiveQuadraticCost
+
+from geometry.bezier import BezierCurve, BezierVariable
+from geometry.contact import CollisionGeometry
+from geometry.polyhedron import PolyhedronFormulator
+from visualize.visualize import animate_1d_box, animate_2d_box
+
+
+@dataclass
+class VariableMetadata:
+    dim: int
+    order: int
+    name: str
+
+    @property
+    def num_ctrl_points(self) -> int:
+        return self.order + 1
 
 
 def evaluate_curve_from_ctrl_points(
@@ -216,7 +216,7 @@ def plan_for_one_d_pusher_2():
     mass = 1  # kg
     g = 9.81  # m/s^2
     mg = mass * g
-    l = 2
+    box_width = 2
     h = 1
     friction_coeff = 0.5
 
@@ -227,7 +227,6 @@ def plan_for_one_d_pusher_2():
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
-    vx_f = finger.vel.x[0, :]
     vy_f = finger.vel.x[1, :]
     x_b = box.pos.x[0, :]
     y_b = box.pos.x[1, :]
@@ -236,10 +235,9 @@ def plan_for_one_d_pusher_2():
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
     vx_g = ground.vel.x[0, :]
-    vy_g = ground.vel.x[1, :]
 
     # NOTE this is the stuff the jacobians will replace
-    sdf_finger_box = x_b - x_f - l
+    sdf_finger_box = x_b - x_f - box_width
     sdf_box_ground = y_b - y_g - h
 
     # NOTE this is the stuff the jacobians will replace
@@ -338,7 +336,7 @@ def plan_for_one_d_pusher_2():
     gcs.AddEdge(source, source_node)
 
     # Add target node
-    x_f_T = 8.0 - l
+    x_f_T = 8.0 - box_width
     x_b_T = 8.0
     target_constraints = []
     target_constraints.append(eq(x_f, x_f_T))
@@ -413,16 +411,6 @@ def plan_for_one_d_pusher_2():
     print("Path:")
     print([v.name() for v in path])
 
-    @dataclass
-    class VariableMetadata:
-        dim: int
-        order: int
-        name: str
-
-        @property
-        def num_ctrl_points(self) -> int:
-            return self.order + 1
-
     # TODO should be created automatically
     var_mds = [
         VariableMetadata(1, 2, "finger_pos_x"),
@@ -442,7 +430,7 @@ def plan_for_one_d_pusher_2():
 
     plt.plot(np.hstack(list(curves.values())))
     plt.legend(list(curves.keys()))
-    animate_2d_box(**curves, box_width=l, box_height=h)
+    animate_2d_box(**curves, box_width=box_width, box_height=h)
 
     return
 
@@ -456,14 +444,13 @@ def plan_for_one_d_pusher():
     mass = 1  # kg
     g = 9.81  # m/s^2
     mg = mass * g
-    l = 2
+    box_width = 2
     friction_coeff = 0.5
 
     finger = CollisionGeometry(dim=dim, order=order, name="finger")
     box = CollisionGeometry(dim=dim, order=order, name="box")
 
     x_f = finger.pos.x
-    v_f = finger.vel.x
 
     x_b = box.pos.x
     v_b = box.vel.x
@@ -471,7 +458,7 @@ def plan_for_one_d_pusher():
     lam_n = BezierVariable(dim=dim, order=order, name="lam_n").x
     lam_f = BezierVariable(dim=dim, order=order, name="lam_f").x
 
-    sdf = x_b - x_f - l
+    sdf = x_b - x_f - box_width
 
     # "No contact" vertex
     no_contact = []
