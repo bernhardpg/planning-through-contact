@@ -286,7 +286,6 @@ def plan_for_one_d_pusher_2():
     additional_constraints_box_ground = [
         *no_ground_motion,
         no_box_y_motion,
-        eq(pair_box_ground.lam_n, mg),
     ]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
     pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
@@ -376,7 +375,7 @@ def plan_for_one_d_pusher_2():
         for c in constraints:
             e.AddConstraint(c)
 
-    # Create cost
+    # Create Path length cost
     diffs = pos_vars[:, 1:] - pos_vars[:, :-1]
     A = sym.DecomposeLinearExpressions(diffs.flatten(), all_variables)
     b = np.zeros((A.shape[0], 1))
@@ -385,22 +384,21 @@ def plan_for_one_d_pusher_2():
         cost = Binding[Cost](path_length_cost, v.x())
         v.AddCost(cost)
 
-    # TODO I think I may have found another bug
-    if False:
-        energy_cost = PerspectiveQuadraticCost(A, b)
-        for v in gcs.Vertices():
-            e_cost = Binding[Cost](energy_cost, v.x())
-            v.AddCost(e_cost)
-
-    if False:
-        energy_cost = PerspectiveQuadraticCost(A, b)
-        for e in gcs.Edges():
+    # Create path energy cost
+    ADD_PATH_ENERGY_COST = False
+    if ADD_PATH_ENERGY_COST:
+        # PerspectiveQuadraticCost scales the cost by the
+        # first element of z = Ax + b
+        A_mod = np.vstack((np.zeros((1, A.shape[1])), A))
+        b_mod = np.vstack((1, b))
+        energy_cost = PerspectiveQuadraticCost(A_mod, b_mod)
+        for e in gcs.Vertices():
             e_cost = Binding[Cost](energy_cost, e.xu())
             e.AddCost(e_cost)
 
     # Solve the problem
     options = opt.GraphOfConvexSetsOptions()
-    options.convex_relaxation = False
+    options.convex_relaxation = True
     options.preprocessing = True
     options.max_rounded_paths = 10
 
