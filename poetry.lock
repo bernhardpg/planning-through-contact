@@ -128,6 +128,18 @@ python-versions = "*"
 tests = ["rich", "littleutils", "pytest", "asttokens"]
 
 [[package]]
+name = "fancycompleter"
+version = "0.9.1"
+description = "colorful TAB completion for Python prompt"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+pyreadline = {version = "*", markers = "platform_system == \"Windows\""}
+pyrepl = ">=0.8.2"
+
+[[package]]
 name = "filelock"
 version = "3.8.0"
 description = "A platform independent file lock."
@@ -318,6 +330,23 @@ qa = ["flake8 (==3.8.3)", "mypy (==0.782)"]
 testing = ["docopt", "pytest (<6.0.0)"]
 
 [[package]]
+name = "pdbpp"
+version = "0.10.3"
+description = "pdb++, a drop-in replacement for pdb"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+fancycompleter = ">=0.8"
+pygments = "*"
+wmctrl = "*"
+
+[package.extras]
+funcsigs = ["funcsigs"]
+testing = ["funcsigs", "pytest"]
+
+[[package]]
 name = "pexpect"
 version = "4.8.0"
 description = "Pexpect allows easy control of interactive console applications."
@@ -467,6 +496,22 @@ python-versions = ">=3.6.8"
 diagrams = ["railroad-diagrams", "jinja2"]
 
 [[package]]
+name = "pyreadline"
+version = "2.1"
+description = "A python implmementation of GNU readline."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "pyrepl"
+version = "0.9.0"
+description = "A library for building flexible command line interfaces"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "python-dateutil"
 version = "2.8.2"
 description = "Extensions to the standard Python datetime module"
@@ -614,10 +659,18 @@ category = "main"
 optional = false
 python-versions = "*"
 
+[[package]]
+name = "wmctrl"
+version = "0.4"
+description = "A tool to programmatically control windows inside X"
+category = "main"
+optional = false
+python-versions = "*"
+
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "df5372869d74d2f8487a96d57bd4ae5fc2046ef4d705b00e7e8fa604d9b01b4b"
+content-hash = "4f58f540b7ab62bb4a174b1606c5126fe497a74c439b884e830d734c9aa043ec"
 
 [metadata.files]
 appnope = []
@@ -632,6 +685,7 @@ decorator = []
 distlib = []
 drake = []
 executing = []
+fancycompleter = []
 filelock = []
 fonttools = []
 identify = []
@@ -645,6 +699,7 @@ nodeenv = []
 numpy = []
 packaging = []
 parso = []
+pdbpp = []
 pexpect = []
 pickleshare = []
 pillow = []
@@ -659,6 +714,8 @@ pydot = []
 pygments = []
 pyngrok = []
 pyparsing = []
+pyreadline = []
+pyrepl = []
 python-dateutil = []
 pyyaml = []
 pyzmq = []
@@ -673,3 +730,4 @@ typing-extensions = []
 u-msgpack-python = []
 virtualenv = []
 wcwidth = []
+wmctrl = []
