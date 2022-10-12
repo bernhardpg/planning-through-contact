@@ -6,21 +6,17 @@ from geometry.contact import CollisionPair, RigidBody
 from planning.gcs import GcsContactPlanner
 from visualize.visualize import animate_positions
 
-# TODO Plan:
-# DONE:
-# 1. Automatically enumerate contact mode combinations from hand-specified modes
-# 2. Make an object for handling this
-# 3. Extend to y-axis
-# 4. Automatically create mode constraints
-# 5. Jacobians, normal_vec, friction_vec
+# TODO
+# Plan:
+# - Generalize visualization for arbitraty number of forces
 
-# Plan going forward:
-# 6. Code cleanup
-# 7. Functionality for adding source and target constraints in a nice way
-# 8. Deal with multiple visits to the same node
-# 9. Two fingers picking up box
-# 10. Fix energy cost, should be easy!
-# 11. For 3D: extend with friction rays at some points
+# For forces I need:
+# - start position -> ctrl point for positions: of the contact location
+# - unit vector -> Unit vector for that collision pair
+# - force -> ctrl points for forces
+
+
+# - Deal with another rigid body in the scene:
 
 
 def plan_for_one_d_pusher_2():
@@ -37,9 +33,9 @@ def plan_for_one_d_pusher_2():
     friction_coeff = 0.5
 
     # Define variables
-    finger = RigidBody(dim=dim, order=order, name="finger")
+    finger = RigidBody(dim=dim, order=order, name="finger", point_contact=True)
     box = RigidBody(dim=dim, order=order, name="box")
-    ground = RigidBody(dim=dim, order=order, name="ground")
+    ground = RigidBody(dim=dim, order=order, name="ground", point_contact=True)
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
@@ -48,22 +44,26 @@ def plan_for_one_d_pusher_2():
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
 
-    # NOTE this is the stuff the jacobians will replace
-    sdf_finger_box = x_b - x_f - box_width
-    sdf_ground_box = y_b - y_g - box_height
+    left_edge = x_b - box_width
+    bottom_edge = y_b - box_height
+
+    box.register_collision_geometry("left_edge", left_edge)
+    box.register_collision_geometry("bottom_edge", bottom_edge)
 
     pair_finger_box = CollisionPair(
         finger,
+        "com_x",
         box,
+        "left_edge",
         friction_coeff,
-        sdf_finger_box,
         n_hat=np.array([[1], [0]]),
     )
     pair_ground_box = CollisionPair(
         ground,
+        "com_y",
         box,
+        "bottom_edge",
         friction_coeff,
-        sdf_ground_box,
         n_hat=np.array([[0], [1]]),
     )
 

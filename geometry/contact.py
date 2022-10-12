@@ -14,14 +14,25 @@ from geometry.polyhedron import PolyhedronFormulator
 class RigidBody:
     name: str
     dim: int
+    point_contact: bool = False
     order: int = 2
 
     def __post_init__(self) -> None:
         self.pos = BezierVariable(self.dim, self.order, name=f"{self.name}_pos")
+        self.collision_geometries = dict()
+
+        if self.point_contact:
+            self.collision_geometries["com_x"] = self.pos.x[0, :]
+            self.collision_geometries["com_y"] = self.pos.x[1, :]
 
     @property
     def vel(self) -> BezierVariable:
         return self.pos.get_derivative()
+
+    def register_collision_geometry(
+        self, name: str, expr: npt.NDArray[sym.Expression]
+    ) -> None:
+        self.collision_geometries[name] = expr
 
 
 @dataclass
@@ -39,13 +50,18 @@ class ContactMode:
 @dataclass
 class CollisionPair:
     body_a: RigidBody
+    geometry_a: str
     body_b: RigidBody
+    geometry_b: str
     friction_coeff: float
-    sdf: sym.Expression
     n_hat: npt.NDArray[np.float64]  # n_hat should be from body_a to body_b
     order: int = 2
 
     def __post_init__(self):
+        self.sdf = (
+            self.body_b.collision_geometries[self.geometry_b]
+            - self.body_a.collision_geometries[self.geometry_a]
+        )
         self.lam_n = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_n"
         ).x
