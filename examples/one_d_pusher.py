@@ -11,6 +11,8 @@ from geometry.contact import CollisionPair, RigidBody
 from planning.gcs import GcsContactPlanner
 from visualize.visualize import animate_2d_box
 
+# TODO refactor visualization code
+
 
 @dataclass
 class VariableMetadata:
