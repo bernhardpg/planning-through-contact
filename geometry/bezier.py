@@ -152,16 +152,12 @@ class BezierCurve:
 
     @classmethod
     def create_from_ctrl_points(
-        cls, dim: int, ctrl_points: npt.NDArray[np.float64]
+        cls, ctrl_points: npt.NDArray[np.float64]
     ) -> "BezierCurve":
-        assert ctrl_points.size % dim == 0
-        order = ctrl_points.size // dim - 1
-
-        ctrl_points_reshaped = ctrl_points.reshape(
-            (order + 1), dim, order="F"
-        ).T  # TODO ugly code
+        dim = ctrl_points.shape[0]
+        order = ctrl_points.shape[1] - 1
         curve = cls(order, dim)
-        curve.set_ctrl_points(ctrl_points_reshaped)
+        curve.set_ctrl_points(ctrl_points)
         return curve
 
     def set_ctrl_points(self, ctrl_points: npt.NDArray[np.float64]) -> None:
@@ -180,6 +176,12 @@ class BezierCurve:
         evaluated_coeffs = self.eval_coeffs(at_s)
         path_value = self.ctrl_points.dot(evaluated_coeffs)
         return path_value
+
+    def eval_entire_interval(self) -> npt.NDArray[np.float64]:
+        values = np.concatenate(
+            [self.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
+        ).T
+        return values
 
 
 # TODO remove this

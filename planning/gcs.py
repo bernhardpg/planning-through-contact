@@ -270,6 +270,7 @@ class GcsContactPlanner:
             cost = Binding[Cost](path_length_cost, v.x())
             v.AddCost(cost)
 
+        # TODO
         # Create path energy cost
         #    ADD_PATH_ENERGY_COST = False
         #    if ADD_PATH_ENERGY_COST:
@@ -308,6 +309,20 @@ class GcsContactPlanner:
         print("Path:")
         print([v.name() for v in path])
         return vertex_values
+
+    def get_pos_ctrl_points(
+        self, vertex_values: List[npt.NDArray[np.float64]], body_name: str
+    ) -> List[npt.NDArray[np.float64]]:
+        pos_ctrl_points = [v[: len(self.all_pos_vars)] for v in vertex_values]
+        num_pos_vars_per_body = self.dim * (self.pos_order + 1)
+        body_idx = self.all_bodies.index(body_name) * num_pos_vars_per_body
+        body_ctrl_points = [
+            c[body_idx : body_idx + num_pos_vars_per_body] for c in pos_ctrl_points
+        ]
+        body_ctrl_points_reshaped = [
+            c.reshape((self.dim, self.pos_order + 1)) for c in body_ctrl_points
+        ]
+        return body_ctrl_points_reshaped
 
     def save_graph_diagram(
         self, filename: str, result: Optional[MathematicalProgramResult] = None

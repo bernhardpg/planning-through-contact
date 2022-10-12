@@ -1,67 +1,10 @@
-from dataclasses import dataclass
-from typing import List
-
-import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 from pydrake.math import eq, le
 
 from geometry.bezier import BezierCurve
 from geometry.contact import CollisionPair, RigidBody
 from planning.gcs import GcsContactPlanner
-from visualize.visualize import animate_2d_box
-
-# TODO refactor visualization code
-
-
-@dataclass
-class VariableMetadata:
-    dim: int
-    order: int
-    name: str
-
-    @property
-    def num_ctrl_points(self) -> int:
-        return self.order + 1
-
-
-def evaluate_curve_from_ctrl_points(
-    ctrl_points_for_all_segments: List[npt.NDArray[np.float64]],
-    metadatas: List["VariableMetadata"],
-) -> npt.NDArray[np.float64]:
-    def construct_bezier_curves(metadatas, ctrl_points):
-        where_to_split = np.cumsum(
-            [md.dim * md.num_ctrl_points for md in metadatas[:-1]]
-        )
-        ctrl_points_for_each_curve = np.split(ctrl_points, where_to_split)
-        bzs = [
-            BezierCurve.create_from_ctrl_points(dim=md.dim, ctrl_points=points)
-            for md, points in zip(metadatas, ctrl_points_for_each_curve)
-        ]
-        return bzs
-
-    bzs = [
-        construct_bezier_curves(metadatas, ctrl_points)
-        for ctrl_points in ctrl_points_for_all_segments
-    ]
-
-    values = [
-        {
-            md.name: np.concatenate(
-                [bz.eval(s) for s in np.arange(0.0, 1.01, 0.01)], axis=1
-            ).T
-            for md, bz in zip(metadatas, segment)
-        }
-        for segment in bzs
-    ]
-
-    values_merged = {
-        md.name: np.concatenate([value[md.name] for value in values])
-        for md in metadatas
-    }
-
-    return values_merged
-
+from visualize.visualize import animate_positions
 
 # TODO Plan:
 # DONE:
@@ -143,7 +86,7 @@ def plan_for_one_d_pusher_2():
     ]
 
     source_constraints = [eq(x_f, 0), eq(y_f, 0.6), eq(x_b, 4.0)]
-    target_constraints = [eq(x_f, 0.0), eq(x_b, 8.0)]
+    target_constraints = [eq(x_f, 0.0), eq(x_b, 15.0)]
 
     planner = GcsContactPlanner(
         all_pairs,
@@ -164,26 +107,23 @@ def plan_for_one_d_pusher_2():
     planner.save_graph_diagram("graph.svg")
     result = planner.solve()
     vertex_values = planner.get_vertex_values(result)
+    positions = {
+        body: planner.get_pos_ctrl_points(vertex_values, body)
+        for body in planner.all_bodies
+    }
 
-    # TODO should be created automatically
-    var_mds = [
-        VariableMetadata(1, 2, "finger_pos_x"),
-        VariableMetadata(1, 2, "finger_pos_y"),
-        VariableMetadata(1, 2, "box_pos_x"),
-        VariableMetadata(1, 2, "box_pos_y"),
-        VariableMetadata(1, 2, "ground_pos_x"),
-        VariableMetadata(1, 2, "ground_pos_y"),
-        VariableMetadata(1, 2, "finger_box_normal_force"),
-        VariableMetadata(1, 2, "finger_box_friction_force"),
-        VariableMetadata(1, 2, "ground_box_normal_force"),
-        VariableMetadata(1, 2, "ground_box_friction_force"),
-    ]
+    pos_curves = {
+        body: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(c).eval_entire_interval()
+                for c in ctrl_points
+            ]
+        )
+        for body, ctrl_points in positions.items()
+    }
 
-    # Create Bezier Curve
-    curves = evaluate_curve_from_ctrl_points(vertex_values, var_mds)
-
+    animate_positions(pos_curves, box_width=box_width, box_height=box_height)
     # Plot
-    plt.plot(np.hstack(list(curves.values())))
-    plt.legend(list(curves.keys()))
-    animate_2d_box(**curves, box_width=box_width, box_height=box_height)
+    #    plt.plot(np.hstack(list(curves.values())))
+    #    plt.legend(list(curves.keys()))
     return

@@ -3,6 +3,81 @@ import numpy as np
 from matplotlib import animation
 
 
+def animate_positions(
+    positions,
+    box_width,
+    box_height,
+):
+    fig = plt.figure()
+    # TODO make scaleable
+    ax = plt.axes(xlim=(-10, 20), ylim=(-10, 12))
+
+    boxes = {}
+    fingers = {}
+    for body in positions.keys():
+        if "box" in body:
+            (box,) = ax.plot([], [], "r", lw=5)
+            boxes[body] = box
+        elif "finger" in body:
+            (finger,) = ax.plot([], [], "bo", lw=10)
+            fingers[body] = finger
+        elif "ground" in body:
+            (ground,) = ax.plot([], [])
+
+    # TODO clean up
+    n_frames = positions[list(positions.keys())[0]].shape[0]
+
+    box_shape_x = np.array(
+        [
+            -box_width,
+            +box_width,
+            +box_width,
+            -box_width,
+            -box_width,
+        ]
+    )
+    box_shape_y = np.array(
+        [
+            -box_height,
+            -box_height,
+            +box_height,
+            +box_height,
+            -box_height,
+        ]
+    )
+
+    def init():
+        breakpoint()
+        for box in boxes.values():
+            box.set_data([], [])
+        for finger in fingers.values():
+            finger.set_data([], [])
+        ground.set_data([], [])
+        return (*(boxes.values()), *(fingers.values()), ground)
+
+    def animate(i):
+        for body in positions.keys():
+            if "box" in body:
+                boxes[body].set_data(
+                    positions[body][i, 0] + box_shape_x,
+                    positions[body][i, 1] + box_shape_y,
+                )
+            elif "finger" in body:
+                fingers[body].set_data(positions[body][i, 0], positions[body][i, 1])
+            elif "ground" in body:
+                ground.set_data(
+                    [-999, 999], [positions[body][i, 0], positions[body][i, 1]]
+                )
+
+        return (*(boxes.values()), *(fingers.values()), ground)
+
+    animation.FuncAnimation(
+        fig, animate, init_func=init, frames=n_frames, interval=20, blit=True
+    )
+
+    plt.show()
+
+
 def animate_2d_box(
     finger_pos_x,
     finger_pos_y,
