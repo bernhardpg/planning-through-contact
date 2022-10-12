@@ -9,10 +9,11 @@ import pydot
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.geometry.optimization import GraphOfConvexSets
-from pydrake.math import eq, ge, le
+from pydrake.math import eq, le
 from pydrake.solvers import Binding, Cost, L2NormCost, PerspectiveQuadraticCost
 
-from geometry.bezier import BezierCurve, BezierVariable
+from geometry.bezier import BezierCurve
+from geometry.contact import CollisionPair, RigidBody
 from geometry.polyhedron import PolyhedronFormulator
 from visualize.visualize import animate_2d_box
 
@@ -100,180 +101,15 @@ def find_path_to_target(
 # 2. Make an object for handling this
 # 3. Extend to y-axis
 # 4. Automatically create mode constraints
+# 5. Jacobians, normal_vec, friction_vec
 
 # Plan going forward:
-# 5. Jacobians, normal_vec, friction_vec
 # 6. Code cleanup
 # 7. Functionality for adding source and target constraints in a nice way
 # 8. Deal with multiple visits to the same node
 # 9. Two fingers picking up box
 # 10. Fix energy cost, should be easy!
 # 11. For 3D: extend with friction rays at some points
-
-
-@dataclass
-class RigidBody:
-    name: str
-    dim: int
-    order: int = 2
-
-    def __post_init__(self) -> None:
-        self.pos = BezierVariable(self.dim, self.order, name=f"{self.name}_pos")
-
-    @property
-    def vel(self) -> BezierVariable:
-        return self.pos.get_derivative()
-
-
-@dataclass
-class ContactMode:
-    name: str
-    constraints: List[npt.NDArray[sym.Formula]]
-    all_vars: npt.NDArray[sym.Variable]
-
-    def __post_init__(self):
-        self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
-            variables=self.all_vars, make_bounded=True
-        )
-
-
-@dataclass
-class CollisionPair:
-    body_a: RigidBody
-    body_b: RigidBody
-    friction_coeff: float
-    sdf: sym.Expression
-    n_hat: npt.NDArray[np.float64]  # n_hat should be from body_a to body_b
-    order: int = 2
-
-    def __post_init__(self):
-        self.lam_n = BezierVariable(
-            dim=1, order=self.order, name=f"{self.name}_lam_n"
-        ).x
-        self.lam_f = BezierVariable(
-            dim=1, order=self.order, name=f"{self.name}_lam_f"
-        ).x
-        assert self.dim == 2  # TODO for now only works for 2D
-        self.d_hat = np.array([[-self.n_hat[1, 0]], [self.n_hat[0, 0]]])
-        self.additional_constraints = []
-
-    @property
-    def name(self) -> str:
-        return f"{self.body_a.name}_{self.body_b.name}"
-
-    @property
-    def dim(self) -> int:
-        return self.body_a.dim
-
-    @property
-    def contact_jacobian(self) -> npt.NDArray[np.float64]:
-        # v_rel = v_body_b - v_body_a = J (v_body_a, v_body_b)^T
-        return np.hstack((-np.eye(self.dim), np.eye(self.dim)))
-
-    @property
-    def normal_jacobian(self) -> npt.NDArray[np.float64]:
-        return self.n_hat.T.dot(self.contact_jacobian)
-
-    @property
-    def tangential_jacobian(self) -> npt.NDArray[np.float64]:
-        return self.d_hat.T.dot(self.contact_jacobian)
-
-    @property
-    def rel_tangential_sliding_vel(self) -> npt.NDArray[sym.Expression]:
-        return self.tangential_jacobian.dot(
-            np.vstack((self.body_a.vel.x, self.body_b.vel.x))
-        )
-
-    def get_tangential_jacobian_for_bodies(
-        self, bodies: List[RigidBody]
-    ) -> npt.NDArray[np.float64]:
-        return self._get_jacobian_for_bodies(bodies, self.tangential_jacobian)
-
-    def get_normal_jacobian_for_bodies(
-        self, bodies: List[RigidBody]
-    ) -> npt.NDArray[np.float64]:
-        return self._get_jacobian_for_bodies(bodies, self.normal_jacobian)
-
-    def _get_jacobian_for_bodies(
-        self, bodies: List[RigidBody], jacobian: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
-        # (1, num_bodies * num_dims)
-        jacobian_for_all_bodies = np.zeros((1, len(bodies) * self.dim))
-
-        body_a_idx_in_J = bodies.index(self.body_a) * self.dim
-        body_b_idx_in_J = bodies.index(self.body_b) * self.dim
-        body_a_cols_in_J = np.arange(body_a_idx_in_J, body_a_idx_in_J + self.dim)
-        body_b_cols_in_J = np.arange(body_b_idx_in_J, body_b_idx_in_J + self.dim)
-        body_a_cols_in_local_J = np.arange(0, self.dim)
-        body_b_cols_in_local_J = np.arange(self.dim, 2 * self.dim)
-
-        jacobian_for_all_bodies[:, body_a_cols_in_J] = jacobian[
-            :, body_a_cols_in_local_J
-        ]
-        jacobian_for_all_bodies[:, body_b_cols_in_J] = jacobian[
-            :, body_b_cols_in_local_J
-        ]
-        return jacobian_for_all_bodies
-
-    def add_constraint_to_all_modes(self, constraints) -> None:
-        self.additional_constraints = sum(
-            [self.additional_constraints, constraints], []
-        )
-
-    def add_force_balance(self, force_balance):
-        self.force_balance = force_balance
-
-    def create_contact_modes(self, all_variables):
-        assert self.force_balance is not None
-
-        no_contact_constraints = [
-            ge(self.sdf, 0),
-            eq(self.lam_n, 0),
-            le(self.lam_f, self.friction_coeff * self.lam_n),
-            ge(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        rolling_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            eq(self.rel_tangential_sliding_vel, 0),
-            le(self.lam_f, self.friction_coeff * self.lam_n),
-            ge(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        sliding_right_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            ge(self.rel_tangential_sliding_vel, 0),
-            eq(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        sliding_left_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            le(self.rel_tangential_sliding_vel, 0),
-            eq(self.lam_f, self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        modes_constraints = [
-            ("no_contact", no_contact_constraints),
-            ("rolling", rolling_constraints),
-            ("sliding_right", sliding_right_constraints),
-            ("sliding_left", sliding_left_constraints),
-        ]
-
-        self.contact_modes = [
-            ContactMode(f"{self.name}_{name}", constraints, all_variables)
-            for name, constraints in modes_constraints
-        ]
 
 
 def plan_for_one_d_pusher_2():
