@@ -143,8 +143,7 @@ class CollisionPair:
     body_b: RigidBody
     friction_coeff: float
     sdf: sym.Expression
-    normal_vec: npt.NDArray[np.float64]
-    tangential_vec: npt.NDArray[np.float64]
+    n_hat: npt.NDArray[np.float64]  # n_hat should be from body_a to body_b
     order: int = 2
 
     def __post_init__(self):
@@ -154,6 +153,8 @@ class CollisionPair:
         self.lam_f = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_f"
         ).x
+        assert self.dim == 2  # TODO for now only works for 2D
+        self.d_hat = np.array([[-self.n_hat[1, 0]], [self.n_hat[0, 0]]])
         self.additional_constraints = []
 
     @property
@@ -171,11 +172,11 @@ class CollisionPair:
 
     @property
     def normal_jacobian(self) -> npt.NDArray[np.float64]:
-        return self.normal_vec.T.dot(self.contact_jacobian)
+        return self.n_hat.T.dot(self.contact_jacobian)
 
     @property
     def tangential_jacobian(self) -> npt.NDArray[np.float64]:
-        return self.tangential_vec.T.dot(self.contact_jacobian)
+        return self.d_hat.T.dot(self.contact_jacobian)
 
     @property
     def rel_tangential_sliding_vel(self) -> npt.NDArray[sym.Expression]:
@@ -196,17 +197,23 @@ class CollisionPair:
     def _get_jacobian_for_bodies(
         self, bodies: List[RigidBody], jacobian: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
-        body_a_idx = bodies.index(self.body_a)
-        body_b_idx = bodies.index(self.body_b)
+        # (1, num_bodies * num_dims)
+        jacobian_for_all_bodies = np.zeros((1, len(bodies) * self.dim))
 
-        body_a_cols = np.arange(body_a_idx * self.dim, (body_a_idx + 1) * self.dim)
-        body_b_cols = np.arange(body_b_idx * self.dim, (body_b_idx + 1) * self.dim)
-        jacobian_in_all_bodies = np.zeros((1, len(bodies) * self.dim))
-        jacobian_in_all_bodies[:, body_a_cols] = jacobian[:, 0 : 1 * self.dim]
-        jacobian_in_all_bodies[:, body_b_cols] = jacobian[
-            :, 1 * self.dim : 2 * self.dim
+        body_a_idx_in_J = bodies.index(self.body_a) * self.dim
+        body_b_idx_in_J = bodies.index(self.body_b) * self.dim
+        body_a_cols_in_J = np.arange(body_a_idx_in_J, body_a_idx_in_J + self.dim)
+        body_b_cols_in_J = np.arange(body_b_idx_in_J, body_b_idx_in_J + self.dim)
+        body_a_cols_in_local_J = np.arange(0, self.dim)
+        body_b_cols_in_local_J = np.arange(self.dim, 2 * self.dim)
+
+        jacobian_for_all_bodies[:, body_a_cols_in_J] = jacobian[
+            :, body_a_cols_in_local_J
         ]
-        return jacobian_in_all_bodies
+        jacobian_for_all_bodies[:, body_b_cols_in_J] = jacobian[
+            :, body_b_cols_in_local_J
+        ]
+        return jacobian_for_all_bodies
 
     def add_constraint_to_all_modes(self, constraints) -> None:
         self.additional_constraints = sum(
@@ -296,27 +303,25 @@ def plan_for_one_d_pusher_2():
 
     # NOTE this is the stuff the jacobians will replace
     sdf_finger_box = x_b - x_f - box_width
-    sdf_box_ground = y_b - y_g - box_height
+    sdf_ground_box = y_b - y_g - box_height
 
     pair_finger_box = CollisionPair(
         finger,
         box,
         friction_coeff,
         sdf_finger_box,
-        normal_vec=np.array([[1], [0]]),
-        tangential_vec=np.array([[0], [1]]),
+        n_hat=np.array([[1], [0]]),
     )
-    pair_box_ground = CollisionPair(
-        box,
+    pair_ground_box = CollisionPair(
         ground,
+        box,
         friction_coeff,
-        sdf_box_ground,
-        normal_vec=np.array([[0], [1]]),
-        tangential_vec=np.array([[-1], [0]]),
+        sdf_ground_box,
+        n_hat=np.array([[0], [1]]),
     )
 
     all_bodies = [finger, box, ground]
-    all_pairs = [pair_finger_box, pair_box_ground]
+    all_pairs = [pair_finger_box, pair_ground_box]
 
     normal_jacobians = np.vstack(
         [p.get_normal_jacobian_for_bodies(all_bodies) for p in all_pairs]
@@ -328,37 +333,37 @@ def plan_for_one_d_pusher_2():
     normal_forces = np.concatenate([p.lam_n for p in all_pairs])
     friction_forces = np.concatenate([p.lam_f for p in all_pairs])
 
-    # TODO generalize this
-    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1]]).T
+    # Gravity only affects unactuated objects
+    gravitational_jacobian = np.array([[0, 0, 0, -1, 0, 0]]).T
 
     all_force_balances = eq(
         normal_jacobians.T.dot(normal_forces)
-        + tangential_jacobians.T.dot(friction_forces),
-        gravitational_jacobian.dot(mg),
+        + tangential_jacobians.T.dot(friction_forces)
+        + gravitational_jacobian.dot(mg),
+        0,
     )
 
     unactuated_dofs = (2, 3)
     force_balance = all_force_balances[unactuated_dofs, :]
 
     #    force_balance = [
-    #        eq(pair_finger_box.lam_n, -pair_box_ground.lam_f),
-    #        eq(pair_box_ground.lam_n, -pair_finger_box.lam_f + mg),
+    #        eq(pair_finger_box.lam_n, -pair_ground_box.lam_f),
+    #        eq(pair_ground_box.lam_n, -pair_finger_box.lam_f + mg),
     #    ]
-    breakpoint()
-    pair_finger_box.add_force_balance(force_balance)
-    pair_box_ground.add_force_balance(force_balance)
+    for p in all_pairs:
+        p.add_force_balance(force_balance)
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
     no_box_y_motion = eq(y_b, box_height)
     finger_pos_below_box_height = le(y_f, y_b + box_height)
     additional_constraints_finger_box = [*no_ground_motion, finger_pos_below_box_height]
-    additional_constraints_box_ground = [
+    additional_constraints_ground_box = [
         *no_ground_motion,
         no_box_y_motion,
-        eq(pair_box_ground.lam_n, mg),
+        eq(pair_ground_box.lam_n, mg),
     ]
     pair_finger_box.add_constraint_to_all_modes(additional_constraints_finger_box)
-    pair_box_ground.add_constraint_to_all_modes(additional_constraints_box_ground)
+    pair_ground_box.add_constraint_to_all_modes(additional_constraints_ground_box)
 
     all_variables = np.concatenate(
         [
@@ -370,15 +375,15 @@ def plan_for_one_d_pusher_2():
             y_g.flatten(),
             pair_finger_box.lam_n.flatten(),
             pair_finger_box.lam_f.flatten(),
-            pair_box_ground.lam_n.flatten(),
-            pair_box_ground.lam_f.flatten(),
+            pair_ground_box.lam_n.flatten(),
+            pair_ground_box.lam_f.flatten(),
         ]
     )
 
     pair_finger_box.create_contact_modes(all_variables)
-    pair_box_ground.create_contact_modes(all_variables)
+    pair_ground_box.create_contact_modes(all_variables)
 
-    contact_pairs = [pair_finger_box.contact_modes, pair_box_ground.contact_modes]
+    contact_pairs = [pair_finger_box.contact_modes, pair_ground_box.contact_modes]
 
     possible_contact_permutations = itertools.product(*contact_pairs)
     convex_sets = {
@@ -474,6 +479,7 @@ def plan_for_one_d_pusher_2():
     options.preprocessing = True
     options.max_rounded_paths = 10
 
+    # Create diagram
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
     data.write_svg("graph.svg")
@@ -482,6 +488,7 @@ def plan_for_one_d_pusher_2():
     assert result.is_success()
     print("Result is success!")
 
+    # Save solution diagram
     graphviz = gcs.GetGraphvizString(result, False, precision=1)
     data = pydot.graph_from_dot_data(graphviz)[0]
     data.write_svg("graph_solution.svg")
@@ -507,15 +514,15 @@ def plan_for_one_d_pusher_2():
         VariableMetadata(1, 2, "ground_pos_y"),
         VariableMetadata(1, 2, "finger_box_normal_force"),
         VariableMetadata(1, 2, "finger_box_friction_force"),
-        VariableMetadata(1, 2, "box_ground_normal_force"),
-        VariableMetadata(1, 2, "box_ground_friction_force"),
+        VariableMetadata(1, 2, "ground_box_normal_force"),
+        VariableMetadata(1, 2, "ground_box_friction_force"),
     ]
 
     # Create Bezier Curve
     curves = evaluate_curve_from_ctrl_points(vertex_values, var_mds)
 
+    # Plot
     plt.plot(np.hstack(list(curves.values())))
     plt.legend(list(curves.keys()))
     animate_2d_box(**curves, box_width=box_width, box_height=box_height)
-
     return
