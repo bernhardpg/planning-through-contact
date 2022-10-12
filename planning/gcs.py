@@ -307,26 +307,26 @@ class GcsContactPlanner:
 
     def get_vertex_values(
         self, result: MathematicalProgramResult
-    ) -> List[npt.NDArray[np.float64]]:
+    ) -> npt.NDArray[np.float64]:
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [result.GetSolution(p) for p in flow_variables]
         active_edges = [
             edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
         ]
         path = self._find_path_to_target(active_edges, self.target, self.source)
-        vertex_values = [result.GetSolution(v.x()) for v in path]
+        vertex_values = np.vstack([result.GetSolution(v.x()) for v in path])
         print("Path:")
         print([v.name() for v in path])
         return vertex_values
 
     def get_pos_ctrl_points(
-        self, vertex_values: List[npt.NDArray[np.float64]], body_name: str
+        self, vertex_values: npt.NDArray[np.float64], body_name: str
     ) -> List[npt.NDArray[np.float64]]:
-        pos_ctrl_points = [v[: len(self.all_pos_vars)] for v in vertex_values]
+        pos_ctrl_points = vertex_values[:, : len(self.all_pos_vars)]
         num_pos_vars_per_body = self.dim * (self.pos_order + 1)
         body_idx = self.all_bodies.index(body_name) * num_pos_vars_per_body
-        body_ctrl_points = [
-            c[body_idx : body_idx + num_pos_vars_per_body] for c in pos_ctrl_points
+        body_ctrl_points = pos_ctrl_points[
+            :, body_idx : body_idx + num_pos_vars_per_body
         ]
         body_ctrl_points_reshaped = [
             c.reshape((self.dim, self.pos_order + 1)) for c in body_ctrl_points
@@ -334,9 +334,7 @@ class GcsContactPlanner:
         return body_ctrl_points_reshaped
 
     def get_force_ctrl_points(self, vertex_values: List[npt.NDArray[np.float64]]):
-        forces_ctrl_points = np.array(
-            [v[len(self.all_pos_vars) :] for v in vertex_values]
-        )
+        forces_ctrl_points = vertex_values[:, len(self.all_pos_vars) :]
         # friction forces are always one dimensional
         num_force_vars_per_pair = self.force_order + 1
         normal_forces_ctrl_points, friction_forces_ctrl_points = np.split(
@@ -348,7 +346,6 @@ class GcsContactPlanner:
             n_force = normal_forces_ctrl_points[
                 :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair
             ]
-            # TODO implement a data structure for this
             normal_forces[p.name] = n_force
             f_force = friction_forces_ctrl_points[
                 :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair

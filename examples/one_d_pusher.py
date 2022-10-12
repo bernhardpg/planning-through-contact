@@ -103,7 +103,6 @@ def plan_for_one_d_pusher_2():
     result = planner.solve()
     vertex_values = planner.get_vertex_values(result)
 
-    # TODO vertex values should be a np matrix not list[np.array]
     normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
     positions = {
         body: planner.get_pos_ctrl_points(vertex_values, body)
