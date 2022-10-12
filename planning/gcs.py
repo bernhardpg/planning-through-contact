@@ -11,7 +11,7 @@ from pydrake.geometry.optimization import ConvexSet, GraphOfConvexSets
 from pydrake.math import eq
 from pydrake.solvers import Binding, Cost, L2NormCost, MathematicalProgramResult
 
-from geometry.contact import CollisionPair
+from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
 from geometry.polyhedron import PolyhedronFormulator
 
 
@@ -149,16 +149,20 @@ class GcsContactPlanner:
         return force_balance
 
     def _create_all_convex_sets(self, pairs: List[CollisionPair]) -> List[ConvexSet]:
-        assert len(pairs) == 2  # TODO for now this only works for two pairs
         contact_pairs = [p.contact_modes for p in pairs]
         possible_contact_permutations = itertools.product(*contact_pairs)
 
+        intersects, intersections = zip(
+            *[
+                calc_intersection_of_contact_modes(perm)
+                for perm in possible_contact_permutations
+            ]
+        )
+
         convex_sets = {
-            f"{mode_1.name}_W_{mode_2.name}": mode_1.polyhedron.Intersection(
-                mode_2.polyhedron
-            )
-            for (mode_1, mode_2) in possible_contact_permutations
-            if mode_1.polyhedron.IntersectsWith(mode_2.polyhedron)
+            name: intersection
+            for intersects, (name, intersection) in zip(intersects, intersections)
+            if intersects
         }
 
         return convex_sets

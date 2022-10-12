@@ -1,9 +1,12 @@
+import itertools
 from dataclasses import dataclass
-from typing import List
+from functools import reduce
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
+from pydrake.geometry.optimization import ConvexSet
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierVariable
@@ -194,3 +197,23 @@ class CollisionPair:
             ContactMode(f"{self.name}_{name}", constraints, all_variables)
             for name, constraints in modes_constraints
         ]
+
+
+def calc_intersection_of_contact_modes(
+    modes: List[ContactMode],
+) -> Tuple[bool, Optional[ConvexSet]]:
+    pairwise_combinations = itertools.combinations(modes, 2)
+    all_modes_intersect = all(
+        map(
+            lambda pair: pair[0].polyhedron.IntersectsWith(pair[1].polyhedron),
+            pairwise_combinations,
+        )
+    )
+    if all_modes_intersect:
+        polys = [m.polyhedron for m in modes]
+        intersection = reduce(lambda p1, p2: p1.Intersection(p2), polys)
+        names = [m.name for m in modes]
+        name = "_W_".join(names)
+        return (True, (name, intersection))
+    else:
+        return (False, (None, None))

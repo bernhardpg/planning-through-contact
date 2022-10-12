@@ -52,7 +52,7 @@ def plan_for_one_d_pusher_2():
     box_2.register_collision_geometry("left_edge", x_b_2 - box_width)
     box_2.register_collision_geometry("bottom_edge", y_b_2 - box_height)
 
-    pair_finger_box = CollisionPair(
+    pair_finger_box_1 = CollisionPair(
         finger,
         "com_x",
         box_1,
@@ -60,7 +60,7 @@ def plan_for_one_d_pusher_2():
         friction_coeff,
         n_hat=np.array([[1], [0]]),
     )
-    pair_ground_box = CollisionPair(
+    pair_ground_box_1 = CollisionPair(
         ground,
         "com_y",
         box_1,
@@ -68,21 +68,29 @@ def plan_for_one_d_pusher_2():
         friction_coeff,
         n_hat=np.array([[0], [1]]),
     )
+    pair_ground_box_2 = CollisionPair(
+        ground,
+        "com_y",
+        box_2,
+        "bottom_edge",
+        friction_coeff,
+        n_hat=np.array([[0], [1]]),
+    )
 
-    all_pairs = [pair_finger_box, pair_ground_box]
+    all_pairs = [pair_finger_box_1, pair_ground_box_1, pair_ground_box_2]
 
     # TODO this is very hardcoded
-    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1]]).T
+    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    unactuated_bodies = ["box_1"]
+    unactuated_bodies = ["box_1", "box_2"]
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
     finger_pos_below_box_height = le(y_f, y_b_1 + box_height)
     additional_constraints = [
         *no_ground_motion,
         finger_pos_below_box_height,
-        eq(pair_ground_box.lam_n, mg),
+        eq(pair_ground_box_1.lam_n, mg),
     ]
 
     source_constraints = [
@@ -90,6 +98,8 @@ def plan_for_one_d_pusher_2():
         eq(y_f, 0.6),
         eq(x_b_1, 4.0),
         eq(y_b_1, box_height),
+        eq(x_b_2, 14.0),
+        eq(y_b_2, box_height),
     ]
     target_constraints = [eq(x_f, 0.0), eq(x_b_1, 5)]
 
