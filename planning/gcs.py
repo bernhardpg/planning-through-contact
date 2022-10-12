@@ -205,7 +205,7 @@ class GcsContactPlanner:
         else:
             return [u] + self._find_path_to_target(edges, target, v)
 
-    def _create_intersecting_set_with_constraints(
+    def _create_intersecting_set_with_first_matching_vertex(
         self,
         constraints: List[sym.Formula],
         all_vars: List[sym.Variable],
@@ -215,22 +215,31 @@ class GcsContactPlanner:
             variables=all_vars, make_bounded=True
         )
 
-        vertex = next(
+        vertices_matching_constraints = [
             v for v in vertices if v.set().IntersectsWith(constraints_as_poly)
-        )
+        ]
+        if len(vertices_matching_constraints) == 0:
+            raise ValueError("No vertices match given constraints.")
+        vertex = vertices_matching_constraints[0]
         intersecting_set = constraints_as_poly.Intersection(vertex.set())
         return intersecting_set, vertex
 
     # TODO these are almost similar, clean up!
     def add_source(self, constraints: List[sym.Formula]):
-        new_set, matching_vertex = self._create_intersecting_set_with_constraints(
+        (
+            new_set,
+            matching_vertex,
+        ) = self._create_intersecting_set_with_first_matching_vertex(
             constraints, self.all_decision_vars, self.gcs.Vertices()
         )
         self.source = self.gcs.AddVertex(new_set, "source")
         self.gcs.AddEdge(self.source, matching_vertex)
 
     def add_target(self, constraints: List[sym.Formula]):
-        new_set, matching_vertex = self._create_intersecting_set_with_constraints(
+        (
+            new_set,
+            matching_vertex,
+        ) = self._create_intersecting_set_with_first_matching_vertex(
             constraints, self.all_decision_vars, self.gcs.Vertices()
         )
         self.target = self.gcs.AddVertex(new_set, "target")

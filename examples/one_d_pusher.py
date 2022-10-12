@@ -32,23 +32,30 @@ def plan_for_one_d_pusher_2():
     friction_coeff = 0.5
 
     finger = RigidBody(dim=dim, order=order, name="finger", point_contact=True)
-    box = RigidBody(dim=dim, order=order, name="box")
+    box_1 = RigidBody(dim=dim, order=order, name="box_1")
+    box_2 = RigidBody(dim=dim, order=order, name="box_2")
     ground = RigidBody(dim=dim, order=order, name="ground", point_contact=True)
 
     x_f = finger.pos.x[0, :]
     y_f = finger.pos.x[1, :]
-    x_b = box.pos.x[0, :]
-    y_b = box.pos.x[1, :]
+    x_b_1 = box_1.pos.x[0, :]
+    y_b_1 = box_1.pos.x[1, :]
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
+    x_b_2 = box_2.pos.x[0, :]
+    y_b_2 = box_2.pos.x[1, :]
 
-    box.register_collision_geometry("left_edge", x_b - box_width)
-    box.register_collision_geometry("bottom_edge", y_b - box_height)
+    box_1.register_collision_geometry("left_edge", x_b_1 - box_width)
+    box_1.register_collision_geometry("right_edge", x_b_1 + box_width)
+    box_1.register_collision_geometry("bottom_edge", y_b_1 - box_height)
+
+    box_2.register_collision_geometry("left_edge", x_b_2 - box_width)
+    box_2.register_collision_geometry("bottom_edge", y_b_2 - box_height)
 
     pair_finger_box = CollisionPair(
         finger,
         "com_x",
-        box,
+        box_1,
         "left_edge",
         friction_coeff,
         n_hat=np.array([[1], [0]]),
@@ -56,7 +63,7 @@ def plan_for_one_d_pusher_2():
     pair_ground_box = CollisionPair(
         ground,
         "com_y",
-        box,
+        box_1,
         "bottom_edge",
         friction_coeff,
         n_hat=np.array([[0], [1]]),
@@ -68,20 +75,23 @@ def plan_for_one_d_pusher_2():
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    unactuated_bodies = ["box"]
+    unactuated_bodies = ["box_1"]
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
-    no_box_y_motion = eq(y_b, box_height)
-    finger_pos_below_box_height = le(y_f, y_b + box_height)
+    finger_pos_below_box_height = le(y_f, y_b_1 + box_height)
     additional_constraints = [
         *no_ground_motion,
-        no_box_y_motion,
         finger_pos_below_box_height,
         eq(pair_ground_box.lam_n, mg),
     ]
 
-    source_constraints = [eq(x_f, 0), eq(y_f, 0.6), eq(x_b, 4.0)]
-    target_constraints = [eq(x_f, 0.0), eq(x_b, 15.0)]
+    source_constraints = [
+        eq(x_f, 0),
+        eq(y_f, 0.6),
+        eq(x_b_1, 4.0),
+        eq(y_b_1, box_height),
+    ]
+    target_constraints = [eq(x_f, 0.0), eq(x_b_1, 5)]
 
     planner = GcsContactPlanner(
         all_pairs,
