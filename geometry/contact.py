@@ -58,10 +58,7 @@ class CollisionPair:
     order: int = 2
 
     def __post_init__(self):
-        self.sdf = (
-            self.body_b.collision_geometries[self.geometry_b]
-            - self.body_a.collision_geometries[self.geometry_a]
-        )
+        self.sdf = self.contact_position_b - self.contact_position_a
         self.lam_n = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_n"
         ).x
@@ -98,6 +95,14 @@ class CollisionPair:
         return self.tangential_jacobian.dot(
             np.vstack((self.body_a.vel.x, self.body_b.vel.x))
         )
+
+    @property
+    def contact_position_a(self) -> npt.NDArray[sym.Expression]:
+        return self.body_a.collision_geometries[self.geometry_a]
+
+    @property
+    def contact_position_b(self) -> npt.NDArray[sym.Expression]:
+        return self.body_b.collision_geometries[self.geometry_b]
 
     def get_tangential_jacobian_for_bodies(
         self, bodies: List[RigidBody]

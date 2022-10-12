@@ -31,8 +31,17 @@ class GcsContactPlanner:
         return self.collision_pairs[0].body_a.order
 
     @property
+    def force_order(self) -> int:
+        # TODO ambiguous that here we use np array directly and above we use BezierVariable
+        return self.collision_pairs[0].lam_n.shape[1] - 1
+
+    @property
     def num_bodies(self) -> int:
         return len(self.all_bodies)
+
+    @property
+    def num_pairs(self) -> int:
+        return len(self.collision_pairs)
 
     def __post_init__(self):
         self.gcs = GraphOfConvexSets()
@@ -323,6 +332,30 @@ class GcsContactPlanner:
             c.reshape((self.dim, self.pos_order + 1)) for c in body_ctrl_points
         ]
         return body_ctrl_points_reshaped
+
+    def get_force_ctrl_points(self, vertex_values: List[npt.NDArray[np.float64]]):
+        forces_ctrl_points = np.array(
+            [v[len(self.all_pos_vars) :] for v in vertex_values]
+        )
+        # friction forces are always one dimensional
+        num_force_vars_per_pair = self.force_order + 1
+        normal_forces_ctrl_points, friction_forces_ctrl_points = np.split(
+            forces_ctrl_points, [num_force_vars_per_pair * self.num_pairs], axis=1
+        )
+        normal_forces = {}
+        friction_forces = {}
+        for idx, p in enumerate(self.collision_pairs):
+            n_force = normal_forces_ctrl_points[
+                :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair
+            ]
+            # TODO implement a data structure for this
+            normal_forces[p.name] = n_force
+            f_force = friction_forces_ctrl_points[
+                :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair
+            ]
+            friction_forces[p.name] = f_force
+
+        return normal_forces, friction_forces
 
     def save_graph_diagram(
         self, filename: str, result: Optional[MathematicalProgramResult] = None

@@ -4,7 +4,7 @@ from pydrake.math import eq, le
 from geometry.bezier import BezierCurve
 from geometry.contact import CollisionPair, RigidBody
 from planning.gcs import GcsContactPlanner
-from visualize.visualize import animate_positions
+from visualize.visualize import animate_positions, plot_positions_and_forces
 
 # TODO
 # Plan:
@@ -24,7 +24,6 @@ def plan_for_one_d_pusher_2():
     dim = 2
     order = 2
 
-    # Physical params
     mass = 1  # kg
     g = 9.81  # m/s^2
     mg = mass * g
@@ -32,7 +31,6 @@ def plan_for_one_d_pusher_2():
     box_height = 1
     friction_coeff = 0.5
 
-    # Define variables
     finger = RigidBody(dim=dim, order=order, name="finger", point_contact=True)
     box = RigidBody(dim=dim, order=order, name="box")
     ground = RigidBody(dim=dim, order=order, name="ground", point_contact=True)
@@ -44,11 +42,8 @@ def plan_for_one_d_pusher_2():
     x_g = ground.pos.x[0, :]
     y_g = ground.pos.x[1, :]
 
-    left_edge = x_b - box_width
-    bottom_edge = y_b - box_height
-
-    box.register_collision_geometry("left_edge", left_edge)
-    box.register_collision_geometry("bottom_edge", bottom_edge)
+    box.register_collision_geometry("left_edge", x_b - box_width)
+    box.register_collision_geometry("bottom_edge", y_b - box_height)
 
     pair_finger_box = CollisionPair(
         finger,
@@ -107,6 +102,9 @@ def plan_for_one_d_pusher_2():
     planner.save_graph_diagram("graph.svg")
     result = planner.solve()
     vertex_values = planner.get_vertex_values(result)
+
+    # TODO vertex values should be a np matrix not list[np.array]
+    normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
     positions = {
         body: planner.get_pos_ctrl_points(vertex_values, body)
         for body in planner.all_bodies
@@ -122,8 +120,30 @@ def plan_for_one_d_pusher_2():
         for body, ctrl_points in positions.items()
     }
 
+    normal_force_curves = {
+        pair: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(
+                    points.reshape((1, -1))
+                ).eval_entire_interval()
+                for points in control_points
+            ]
+        )
+        for pair, control_points in normal_forces.items()
+    }
+
+    friction_force_curves = {
+        pair: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(
+                    points.reshape((1, -1))
+                ).eval_entire_interval()
+                for points in control_points
+            ]
+        )
+        for pair, control_points in friction_forces.items()
+    }
+
+    plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
     animate_positions(pos_curves, box_width=box_width, box_height=box_height)
-    # Plot
-    #    plt.plot(np.hstack(list(curves.values())))
-    #    plt.legend(list(curves.keys()))
     return

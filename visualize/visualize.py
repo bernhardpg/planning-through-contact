@@ -1,12 +1,69 @@
+from typing import Dict
+
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from matplotlib import animation
 
 
+def plot_positions_and_forces(
+    positions: Dict[str, npt.NDArray[np.float64]],
+    normal_forces: Dict[str, npt.NDArray[np.float64]],
+    friction_forces: Dict[str, npt.NDArray[np.float64]],
+) -> None:
+    fig, (ax_pos_x, ax_pos_y, ax_norm, ax_fric) = plt.subplots(4, 1)
+    fig.set_size_inches(8, 7)
+    fig.tight_layout()
+
+    GRAPH_BUFFER = 1.2
+    max_force = (
+        max(
+            max(np.concatenate([c for c in normal_forces.values()])),
+            max(np.concatenate([c for c in friction_forces.values()])),
+        )
+        * GRAPH_BUFFER
+    )
+    min_force = -1
+    max_pos = (
+        np.max(np.concatenate([c for c in positions.values()]), axis=0) * GRAPH_BUFFER
+    )
+    min_pos = (
+        np.min(np.concatenate([c for c in positions.values()]), axis=0) * GRAPH_BUFFER
+    )
+
+    for name, curve in positions.items():
+        (line_x,) = ax_pos_x.plot(curve[:, 0])
+        line_x.set_label(f"{name}_x")
+    ax_pos_x.set_title("x-positions")
+    ax_pos_x.set_ylim((min_pos[0], max_pos[0]))
+    ax_pos_x.legend()
+
+    for name, curve in positions.items():
+        (line_y,) = ax_pos_y.plot(curve[:, 1])
+        line_y.set_label(f"{name}_y")
+    ax_pos_y.set_title("y-positions")
+    ax_pos_y.set_ylim((min_pos[1], max_pos[1]))
+    ax_pos_y.legend()
+
+    for name, curve in normal_forces.items():
+        (line,) = ax_norm.plot(curve)
+        line.set_label(f"{name}_normal")
+    ax_norm.set_title("Normal forces")
+    ax_norm.set_ylim((min_force, max_force))
+    ax_norm.legend()
+
+    for name, curve in friction_forces.items():
+        (line,) = ax_fric.plot(curve)
+        line.set_label(f"{name}_friction")
+    ax_fric.set_title("Friction forces")
+    ax_fric.set_ylim((min_force, max_force))
+    ax_fric.legend()
+
+
 def animate_positions(
-    positions,
-    box_width,
-    box_height,
+    positions: Dict[str, npt.NDArray[np.float64]],
+    box_width: float,
+    box_height: float,
 ):
     fig = plt.figure()
     # TODO make scaleable
