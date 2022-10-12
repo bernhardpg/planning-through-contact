@@ -99,8 +99,8 @@ class CollisionPair:
         # (1, num_bodies * num_dims)
         jacobian_for_all_bodies = np.zeros((1, len(bodies) * self.dim))
 
-        body_a_idx_in_J = bodies.index(self.body_a) * self.dim
-        body_b_idx_in_J = bodies.index(self.body_b) * self.dim
+        body_a_idx_in_J = bodies.index(self.body_a.name) * self.dim
+        body_b_idx_in_J = bodies.index(self.body_b.name) * self.dim
         body_a_cols_in_J = np.arange(body_a_idx_in_J, body_a_idx_in_J + self.dim)
         body_b_cols_in_J = np.arange(body_b_idx_in_J, body_b_idx_in_J + self.dim)
         body_a_cols_in_local_J = np.arange(0, self.dim)
@@ -122,7 +122,7 @@ class CollisionPair:
     def add_force_balance(self, force_balance):
         self.force_balance = force_balance
 
-    def create_contact_modes(self, all_variables):
+    def formulate_contact_modes(self, all_variables):
         assert self.force_balance is not None
 
         no_contact_constraints = [
