@@ -51,7 +51,7 @@ def plan_for_two_fingers():
         finger_2,
         "com_x",
         friction_coeff,
-        n_hat=np.array([[-1], [0]]),
+        n_hat=np.array([[1], [0]]),
     )
     pair_ground_box = CollisionPair(
         ground,
@@ -77,7 +77,6 @@ def plan_for_two_fingers():
         *no_ground_motion,
         finger_1_pos_below_box_height,
         finger_2_pos_below_box_height,
-        eq(pair_ground_box.lam_n, mg),
     ]
 
     source_constraints = [
@@ -85,10 +84,10 @@ def plan_for_two_fingers():
         eq(y_f_1, 0.6),
         eq(x_f_2, 10.0),
         eq(y_f_2, 0.6),
-        eq(x_b, 4.0),
+        eq(x_b, 6.0),
         eq(y_b, box_height),
     ]
-    target_constraints = [eq(x_f_1, 0.0), eq(x_b, 5), eq(x_f_2, 10.0)]
+    target_constraints = [eq(x_b, 10.0), eq(y_b, 4.0)]
 
     planner = GcsContactPlanner(
         all_pairs,

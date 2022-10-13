@@ -146,7 +146,7 @@ class CollisionPair:
     def add_force_balance(self, force_balance):
         self.force_balance = force_balance
 
-    def formulate_contact_modes(self, all_variables):
+    def formulate_contact_modes(self, all_variables, allow_sliding: bool = False):
         assert self.force_balance is not None
 
         no_contact_constraints = [
@@ -167,31 +167,31 @@ class CollisionPair:
             *self.force_balance,
             *self.additional_constraints,
         ]
-
-        sliding_right_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            ge(self.rel_tangential_sliding_vel, 0),
-            eq(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        sliding_left_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            le(self.rel_tangential_sliding_vel, 0),
-            eq(self.lam_f, self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
         modes_constraints = [
             ("no_contact", no_contact_constraints),
             ("rolling", rolling_constraints),
-            ("sliding_right", sliding_right_constraints),
-            ("sliding_left", sliding_left_constraints),
         ]
+
+        if allow_sliding:
+            sliding_positive_constraints = [
+                eq(self.sdf, 0),
+                ge(self.lam_n, 0),
+                ge(self.rel_tangential_sliding_vel, 0),
+                eq(self.lam_f, -self.friction_coeff * self.lam_n),
+                *self.force_balance,
+                *self.additional_constraints,
+            ]
+
+            sliding_negative_constraints = [
+                eq(self.sdf, 0),
+                ge(self.lam_n, 0),
+                le(self.rel_tangential_sliding_vel, 0),
+                eq(self.lam_f, self.friction_coeff * self.lam_n),
+                *self.force_balance,
+                *self.additional_constraints,
+            ]
+            modes_constraints.append(("sliding_positive", sliding_positive_constraints))
+            modes_constraints.append(("sliding_negative", sliding_negative_constraints))
 
         self.contact_modes = [
             ContactMode(f"{self.name}_{name}", constraints, all_variables)
