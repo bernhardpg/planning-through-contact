@@ -6,7 +6,7 @@ from examples.one_d_pusher import (
 
 
 def main():
-    plan = "two_boxes"
+    plan = "two_fingers"
     if plan == "one_finger_one_box":
         plan_for_one_box_one_finger()
     elif plan == "two_fingers":
