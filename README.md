@@ -19,7 +19,16 @@ Now, to run any files in the project, prefix the command with `poetry run ...`. 
 poetry run python main.py
 ```
 
-### Running pre-commit hooks
+## Running demos
+```
+poetry run python main.py --demo one_finger_one_box 
+```
+
+```
+poetry run python main.py --demo two_fingers
+```
+
+## Running pre-commit hooks
 To run all the pre-commit hooks, run the following command:
 ```
 poetry run pre-commit run --all-files
