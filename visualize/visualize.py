@@ -23,7 +23,13 @@ def plot_positions_and_forces(
         )
         * GRAPH_BUFFER
     )
-    min_force = -1
+    min_force = (
+        min(
+            min(np.concatenate([c for c in normal_forces.values()])),
+            min(np.concatenate([c for c in friction_forces.values()])),
+        )
+        * GRAPH_BUFFER
+    )
     max_pos = (
         np.max(np.concatenate([c for c in positions.values()]), axis=0) * GRAPH_BUFFER
     )

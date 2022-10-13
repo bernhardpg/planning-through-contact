@@ -94,6 +94,7 @@ def plan_for_two_fingers():
         additional_constraints,
         external_forces,
         unactuated_bodies,
+        allow_sliding=False,  # if set to True the problem will blow up!
     )
 
     planner.add_source(source_constraints)
@@ -106,7 +107,9 @@ def plan_for_two_fingers():
     # TODO add weights here
     planner.add_position_continuity_constraints()
     planner.add_position_path_length_cost()
+    planner.add_force_path_length_cost()
     planner.add_num_visited_vertices_cost(100)
+    planner.add_force_strength_cost()
 
     result = planner.solve()
     vertex_values = planner.get_vertex_values(result)
@@ -229,6 +232,7 @@ def plan_for_one_box_one_finger():
         additional_constraints,
         external_forces,
         unactuated_bodies,
+        allow_sliding=True,
     )
 
     planner.add_source(source_constraints)

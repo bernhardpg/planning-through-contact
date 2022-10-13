@@ -9,7 +9,13 @@ import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.geometry.optimization import ConvexSet, GraphOfConvexSets
 from pydrake.math import eq
-from pydrake.solvers import Binding, Cost, L2NormCost, MathematicalProgramResult
+from pydrake.solvers import (
+    Binding,
+    Cost,
+    L1NormCost,
+    L2NormCost,
+    MathematicalProgramResult,
+)
 from tqdm import tqdm
 
 from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
@@ -22,6 +28,7 @@ class GcsContactPlanner:
     additional_constraints: List[sym.Formula]
     external_forces: npt.NDArray[sym.Expression]
     unactuated_bodies: List[str]
+    allow_sliding: bool = True
 
     @property
     def dim(self) -> int:
@@ -67,9 +74,10 @@ class GcsContactPlanner:
         self.all_decision_vars = self._collect_all_decision_vars(self.collision_pairs)
         # TODO this is now done twice
         self.all_pos_vars = self._collect_all_pos_vars(self.collision_pairs)
+        self.all_force_vars = self.all_decision_vars[len(self.all_pos_vars) :]
 
         for p in self.collision_pairs:
-            p.formulate_contact_modes(self.all_decision_vars)
+            p.formulate_contact_modes(self.all_decision_vars, self.allow_sliding)
 
         convex_sets = self._create_all_convex_sets(self.collision_pairs)
         self._formulate_graph(convex_sets)
@@ -262,18 +270,14 @@ class GcsContactPlanner:
         self.target = self.gcs.AddVertex(new_set, "target")
         self.gcs.AddEdge(matching_vertex, self.target)
 
-    def _get_idxs_for_pos_ctrl_point_j(
-        self, flattened_pos_variables: npt.NDArray[sym.Variable], j: int
-    ) -> npt.NDArray[np.int32]:
+    def _get_idxs_for_pos_ctrl_point_j(self, j: int) -> npt.NDArray[np.int32]:
         first_idxs = np.arange(0, self.dim * self.num_bodies) * (self.pos_order + 1)
         idxs = first_idxs + j
         return idxs
 
     def add_position_continuity_constraints(self) -> None:
-        first_idxs = self._get_idxs_for_pos_ctrl_point_j(self.all_pos_vars, 0)
-        last_idxs = self._get_idxs_for_pos_ctrl_point_j(
-            self.all_pos_vars, self.pos_order
-        )
+        first_idxs = self._get_idxs_for_pos_ctrl_point_j(0)
+        last_idxs = self._get_idxs_for_pos_ctrl_point_j(self.pos_order)
         first_pos_vars = self.all_pos_vars[first_idxs]
         last_pos_vars = self.all_pos_vars[last_idxs]
         A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_decision_vars)
@@ -290,10 +294,18 @@ class GcsContactPlanner:
         for e in tqdm(self.gcs.Edges()):
             e.AddCost(weight)
 
+    def add_force_strength_cost(self) -> None:
+        A = sym.DecomposeLinearExpressions(self.all_force_vars, self.all_decision_vars)
+        b = np.zeros((A.shape[0], 1))
+        force_cost = L1NormCost(A, b)
+        print("Adding force strength cost...")
+        for e in tqdm(self.gcs.Edges()):
+            cost = Binding[Cost](force_cost, e.xu())
+            e.AddCost(cost)
+
     def add_position_path_length_cost(self) -> None:
         idxs = [
-            self._get_idxs_for_pos_ctrl_point_j(self.all_pos_vars, j)
-            for j in range(self.pos_order + 1)
+            self._get_idxs_for_pos_ctrl_point_j(j) for j in range(self.pos_order + 1)
         ]
         ctrl_point_diffs = np.diff(
             np.concatenate([[self.all_pos_vars[i]] for i in idxs]), axis=0
@@ -308,6 +320,31 @@ class GcsContactPlanner:
             cost = Binding[Cost](path_length_cost, v.x())
             v.AddCost(cost)
 
+    def _get_idxs_for_force_ctrl_point_j(self, j: int) -> npt.NDArray[np.int32]:
+        first_idxs = np.arange(0, 2 * self.num_pairs) * (self.force_order + 1)
+        idxs = first_idxs + j
+        return idxs
+
+    def add_force_path_length_cost(self) -> None:
+        idxs = [
+            self._get_idxs_for_force_ctrl_point_j(j) for j in range(self.pos_order + 1)
+        ]
+        ctrl_point_diffs = np.diff(
+            np.concatenate([[self.all_force_vars[i]] for i in idxs]), axis=0
+        ).flatten()
+        A = sym.DecomposeLinearExpressions(
+            ctrl_point_diffs.flatten(), self.all_decision_vars
+        )
+        b = np.zeros((A.shape[0], 1))
+        force_length_cost = L2NormCost(A, b)
+        print("Adding force path length cost...")
+        for e in tqdm(self.gcs.Edges()):
+            cost = Binding[Cost](force_length_cost, e.xu())
+            e.AddCost(cost)
+
+    def add_path_energy_cost(self) -> None:
+        raise NotImplementedError
+        ...
         # TODO
         # Create path energy cost
         #    ADD_PATH_ENERGY_COST = False
@@ -320,7 +357,6 @@ class GcsContactPlanner:
         #        for e in gcs.Vertices():
         #            e_cost = Binding[Cost](energy_cost, e.xu())
         #            e.AddCost(e_cost)
-        ...
 
     def solve(self, use_convex_relaxation: bool = False) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
