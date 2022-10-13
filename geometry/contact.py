@@ -25,8 +25,7 @@ class RigidBody:
         self.collision_geometries = dict()
 
         if self.point_contact:
-            self.collision_geometries["com_x"] = self.pos.x[0, :]
-            self.collision_geometries["com_y"] = self.pos.x[1, :]
+            self.collision_geometries["com"] = self.pos.x
 
     @property
     def vel(self) -> BezierVariable:
@@ -36,6 +35,18 @@ class RigidBody:
         self, name: str, expr: npt.NDArray[sym.Expression]
     ) -> None:
         self.collision_geometries[name] = expr
+
+    def get_contact_point(self, name: str) -> npt.NDArray[sym.Expression]:
+        if name == "x":
+            return self.collision_geometries["com"][0, :]
+        elif name == "y":
+            return self.collision_geometries["com"][1, :]
+        elif name in self.collision_geometries.keys():
+            return self.collision_geometries[name]
+        else:
+            raise NotImplementedError(
+                f"Support for getting contact point '{name}' is not implemented."
+            )
 
 
 @dataclass
@@ -53,9 +64,9 @@ class ContactMode:
 @dataclass
 class CollisionPair:
     body_a: RigidBody
-    geometry_a: str
+    contact_position_a: npt.NDArray[sym.Expression]
     body_b: RigidBody
-    geometry_b: str
+    contact_position_b: npt.NDArray[sym.Expression]
     friction_coeff: float
     n_hat: npt.NDArray[np.float64]  # n_hat should be from body_a to body_b
     order: int = 2
@@ -98,14 +109,6 @@ class CollisionPair:
         return self.tangential_jacobian.dot(
             np.vstack((self.body_a.vel.x, self.body_b.vel.x))
         )
-
-    @property
-    def contact_position_a(self) -> npt.NDArray[sym.Expression]:
-        return self.body_a.collision_geometries[self.geometry_a]
-
-    @property
-    def contact_position_b(self) -> npt.NDArray[sym.Expression]:
-        return self.body_b.collision_geometries[self.geometry_b]
 
     def get_tangential_jacobian_for_bodies(
         self, bodies: List[RigidBody]
