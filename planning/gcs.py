@@ -36,7 +36,7 @@ class GcsContactPlanner:
 
     @property
     def pos_order(self) -> int:
-        return self.collision_pairs[0].body_a.order
+        return self.collision_pairs[0].body_a.position_curve_order
 
     @property
     def force_order(self) -> int:

@@ -2,7 +2,6 @@ import argparse
 
 from examples.one_d_pusher import (
     plan_for_one_box_one_finger,
-    plan_for_one_finger_two_boxes,
     plan_for_two_fingers,
     plan_w_graph_builder,
 )
@@ -18,8 +17,6 @@ def main():
         plan_for_one_box_one_finger()
     elif demo_to_run in "two_fingers":
         plan_for_two_fingers()
-    elif demo_to_run in "two_boxes":
-        plan_for_one_finger_two_boxes()
     elif demo_to_run in "graph_builder":
         plan_w_graph_builder()
     return 0

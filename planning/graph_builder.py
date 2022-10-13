@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from itertools import product
 from typing import List, Optional
 
 import numpy as np
@@ -7,6 +8,8 @@ import pydrake.symbolic as sym
 from pydrake.math import eq
 
 from geometry.contact import CollisionPair, RigidBody
+
+# flake8: noqa
 
 
 @dataclass
@@ -18,12 +21,12 @@ class GraphBuilder:
     additional_constraints: Optional[List[sym.Formula]]
 
     def __post_init__(self) -> None:
-        # rigid_bodies = self.rigid_bodies
-        # body_1 = rigid_bodies[0]
-        # body_2 = rigid_bodies[2]
-        # collision_pairs = product(
-        #    body_1.collision_geometries, body_2.collision_geometries
-        # )
+        rigid_bodies = self.rigid_bodies
+        body_1 = rigid_bodies[0]
+        body_2 = rigid_bodies[2]
+        collision_pairs = product(
+            body_1.collision_geometries, body_2.collision_geometries
+        )
 
         breakpoint()
         self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)

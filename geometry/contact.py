@@ -1,7 +1,8 @@
 import itertools
 from dataclasses import dataclass
+from enum import Enum
 from functools import reduce
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -17,36 +18,27 @@ from geometry.polyhedron import PolyhedronFormulator
 class RigidBody:
     name: str
     dim: int
-    point_contact: bool = False
-    order: int = 2
+    geometry: Literal["point", "box", "y_plane"]
+    width: float = 0  # TODO generalize
+    height: float = 0
+    position_curve_order: int = 2
 
     def __post_init__(self) -> None:
-        self.pos = BezierVariable(self.dim, self.order, name=f"{self.name}_pos")
-        self.collision_geometries = dict()
-
-        if self.point_contact:
-            self.collision_geometries["com"] = self.pos.x
+        self.pos = BezierVariable(
+            self.dim, self.position_curve_order, name=f"{self.name}_pos"
+        )
 
     @property
     def vel(self) -> BezierVariable:
         return self.pos.get_derivative()
 
-    def register_collision_geometry(
-        self, name: str, expr: npt.NDArray[sym.Expression]
-    ) -> None:
-        self.collision_geometries[name] = expr
+    @property
+    def pos_x(self) -> npt.NDArray[sym.Expression]:
+        return self.pos.x[0, :]
 
-    def get_contact_point(self, name: str) -> npt.NDArray[sym.Expression]:
-        if name == "x":
-            return self.collision_geometries["com"][0, :]
-        elif name == "y":
-            return self.collision_geometries["com"][1, :]
-        elif name in self.collision_geometries.keys():
-            return self.collision_geometries[name]
-        else:
-            raise NotImplementedError(
-                f"Support for getting contact point '{name}' is not implemented."
-            )
+    @property
+    def pos_y(self) -> npt.NDArray[sym.Expression]:
+        return self.pos.x[1, :]
 
 
 @dataclass
@@ -61,18 +53,84 @@ class ContactMode:
         )
 
 
+class PositionMode(Enum):
+    LEFT = 1
+    TOP_LEFT = 2
+    TOP = 3
+    TOP_RIGHT = 4
+    RIGHT = 5
+    BOTTOM_RIGHT = 6
+    BOTTOM = 7
+    BOTTOM_LEFT = 8
+
+
 @dataclass
 class CollisionPair:
     body_a: RigidBody
-    contact_position_a: npt.NDArray[sym.Expression]
     body_b: RigidBody
-    contact_position_b: npt.NDArray[sym.Expression]
     friction_coeff: float
-    n_hat: npt.NDArray[np.float64]  # n_hat should be from body_a to body_b
-    order: int = 2
+    position_mode: PositionMode  # TODO move somewhere else to generalize?
+    order: int = 2  # TODO remove?
+
+    @staticmethod
+    def _create_signed_distance_func(
+        body_a, body_b, position_mode: PositionMode
+    ) -> sym.Expression:
+        if body_a.geometry == "point" and body_b.geometry == "point":
+            raise ValueError("Point with point contact not allowed")
+        elif body_a.geometry == "box" and body_b.geometry == "box":
+            raise NotImplementedError("Box and box contact not implemented")
+
+        x_offset = body_a.width if body_a.geometry == "box" else body_b.width
+        y_offset = body_a.height if body_a.geometry == "box" else body_b.height
+
+        if position_mode == PositionMode.LEFT:  # body_a is on left side of body_b
+            dx = body_b.pos_x - body_a.pos_x - x_offset
+            dy = 0
+        elif position_mode == PositionMode.RIGHT:
+            dx = body_a.pos_x - body_b.pos_x - x_offset
+            dy = 0
+        elif position_mode == PositionMode.TOP:  # body_a on top of body_b
+            dx = 0
+            dy = body_a.pos_y - body_b.pos_y - y_offset
+        elif position_mode == PositionMode.BOTTOM:
+            dx = 0
+            dy = body_b.pos_y - body_a.pos_y - y_offset
+        else:
+            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
+
+        return dx + dy  # NOTE convex relaxation
+
+    @staticmethod
+    def _create_normal_vec(
+        body_a, body_b, position_mode: PositionMode
+    ) -> npt.NDArray[np.float64]:
+        if body_a.geometry == "point" and body_b.geometry == "point":
+            raise ValueError("Point with point contact not allowed")
+        elif body_a.geometry == "box" and body_b.geometry == "box":
+            raise NotImplementedError("Box and box contact not implemented")
+
+        # Normal vector: from body_a to body_b
+        if position_mode == PositionMode.LEFT:  # body_a left side of body_b
+            n_hat = np.array([[1, 0]]).T
+        elif position_mode == PositionMode.RIGHT:
+            n_hat = np.array([[-1, 0]]).T
+        elif position_mode == PositionMode.TOP:
+            n_hat = np.array([[0, -1]]).T
+        elif position_mode == PositionMode.BOTTOM:
+            n_hat = np.array([[0, 1]]).T
+        else:
+            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
+
+        return n_hat
 
     def __post_init__(self):
-        self.sdf = self.contact_position_b - self.contact_position_a
+        self.sdf = self._create_signed_distance_func(
+            self.body_a, self.body_b, self.position_mode
+        )
+        self.n_hat = self._create_normal_vec(
+            self.body_a, self.body_b, self.position_mode
+        )
         self.lam_n = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_n"
         ).x
