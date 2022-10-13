@@ -10,6 +10,7 @@ import pydrake.symbolic as sym
 from pydrake.geometry.optimization import ConvexSet, GraphOfConvexSets
 from pydrake.math import eq
 from pydrake.solvers import Binding, Cost, L2NormCost, MathematicalProgramResult
+from tqdm import tqdm
 
 from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
 from geometry.polyhedron import PolyhedronFormulator
@@ -149,13 +150,20 @@ class GcsContactPlanner:
         return force_balance
 
     def _create_all_convex_sets(self, pairs: List[CollisionPair]) -> List[ConvexSet]:
+        # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p
         contact_pairs = [p.contact_modes for p in pairs]
-        possible_contact_permutations = itertools.product(*contact_pairs)
+        # Cartesian product:
+        # S = P_1 X P_2 X ... X P_n_p
+        # |S| = |P_1| * |P_2| * ... * |P_n_p|
+        #     = n_m * n_m * ... * n_m
+        #     = n_m^n_p
+        possible_contact_permutations = list(itertools.product(*contact_pairs))
 
+        print("Building convex sets...")
         intersects, intersections = zip(
             *[
                 calc_intersection_of_contact_modes(perm)
-                for perm in possible_contact_permutations
+                for perm in tqdm(possible_contact_permutations)
             ]
         )
 
@@ -164,14 +172,17 @@ class GcsContactPlanner:
             for intersects, (name, intersection) in zip(intersects, intersections)
             if intersects
         }
+        print(f"Number of feasible sets: {len(convex_sets)}")
 
         return convex_sets
 
     def _formulate_graph(self, convex_sets) -> None:
-        for name, poly in convex_sets.items():
+        print("Adding sets as vertices...")
+        for name, poly in tqdm(convex_sets.items()):
             self.gcs.AddVertex(poly, name)
 
-        for u, v in itertools.permutations(self.gcs.Vertices(), 2):
+        print("Adding edges between all overlapping sets...")
+        for u, v in tqdm(list(itertools.permutations(self.gcs.Vertices(), 2))):
             if u.set().IntersectsWith(v.set()):
                 self.gcs.AddEdge(u, v)
 
@@ -220,7 +231,7 @@ class GcsContactPlanner:
         )
 
         vertices_matching_constraints = [
-            v for v in vertices if v.set().IntersectsWith(constraints_as_poly)
+            v for v in tqdm(vertices) if v.set().IntersectsWith(constraints_as_poly)
         ]
         if len(vertices_matching_constraints) == 0:
             raise ValueError("No vertices match given constraints.")
@@ -230,6 +241,7 @@ class GcsContactPlanner:
 
     # TODO these are almost similar, clean up!
     def add_source(self, constraints: List[sym.Formula]):
+        print("Adding source node...")
         (
             new_set,
             matching_vertex,
@@ -240,6 +252,7 @@ class GcsContactPlanner:
         self.gcs.AddEdge(self.source, matching_vertex)
 
     def add_target(self, constraints: List[sym.Formula]):
+        print("Adding target node...")
         (
             new_set,
             matching_vertex,
@@ -265,14 +278,16 @@ class GcsContactPlanner:
         last_pos_vars = self.all_pos_vars[last_idxs]
         A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_decision_vars)
         A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_decision_vars)
-        for e in self.gcs.Edges():
+        print("Adding position continuity constraints...")
+        for e in tqdm(self.gcs.Edges()):
             xu, xv = e.xu(), e.xv()
             constraints = eq(A_last.dot(xu), A_first.dot(xv))
             for c in constraints:
                 e.AddConstraint(c)
 
     def add_num_visited_vertices_cost(self, weight: float) -> None:
-        for e in self.gcs.Edges():
+        print("Adding cost on number of visited vertices")
+        for e in tqdm(self.gcs.Edges()):
             e.AddCost(weight)
 
     def add_position_path_length_cost(self) -> None:
@@ -288,7 +303,8 @@ class GcsContactPlanner:
         )
         b = np.zeros((A.shape[0], 1))
         path_length_cost = L2NormCost(A, b)
-        for v in self.gcs.Vertices():
+        print("Adding position path length cost...")
+        for v in tqdm(self.gcs.Vertices()):
             cost = Binding[Cost](path_length_cost, v.x())
             v.AddCost(cost)
 
@@ -313,6 +329,7 @@ class GcsContactPlanner:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 10
 
+        print("Solving GCS problem...")
         result = self.gcs.SolveShortestPath(self.source, self.target, options)
         assert result.is_success()
         print("Result is success!")

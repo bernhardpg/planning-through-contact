@@ -99,7 +99,7 @@ python-versions = "*"
 
 [[package]]
 name = "drake"
-version = "0.0.20221009"
+version = "0.0.20221012"
 description = "Model-based design and verification for robotics"
 category = "main"
 optional = false
@@ -115,7 +115,6 @@ PyYAML = "*"
 [package.source]
 type = "url"
 url = "https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl"
-
 [[package]]
 name = "executing"
 version = "1.1.1"
@@ -608,6 +607,23 @@ optional = false
 python-versions = ">= 3.7"
 
 [[package]]
+name = "tqdm"
+version = "4.64.1"
+description = "Fast, Extensible Progress Meter"
+category = "main"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["py-make (>=0.1.0)", "twine", "wheel"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["slack-sdk"]
+telegram = ["requests"]
+
+[[package]]
 name = "traitlets"
 version = "5.4.0"
 description = ""
@@ -670,7 +686,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "4f58f540b7ab62bb4a174b1606c5126fe497a74c439b884e830d734c9aa043ec"
+content-hash = "8be9ff8b946d43f4c5e38200049fa80841e582481f4998f81b7fd10f020915b3"
 
 [metadata.files]
 appnope = []
@@ -725,6 +741,7 @@ stack-data = []
 toml = []
 tomli = []
 tornado = []
+tqdm = []
 traitlets = []
 typing-extensions = []
 u-msgpack-python = []
