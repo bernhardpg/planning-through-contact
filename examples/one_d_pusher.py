@@ -104,10 +104,6 @@ def plan_w_graph_builder():
     unactuated_bodies = ["b"]
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
-    finger_1_pos_below_box_height = le(y_f_1, y_b + box_height)
-    finger_1_pos_above_box_bottom = ge(y_f_1, y_b - box_height)
-    finger_2_pos_below_box_height = le(y_f_2, y_b + box_height)
-    finger_2_pos_above_box_bottom = ge(y_f_2, y_b - box_height)
     additional_constraints = [
         *no_ground_motion,
     ]
@@ -137,7 +133,7 @@ def plan_w_graph_builder():
             pair_finger_1_ground.name: ContactModeType.NO_CONTACT,
             pair_finger_2_ground.name: ContactModeType.NO_CONTACT,
         },
-        # additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
+        additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
 
     graph_builder = GraphBuilder(

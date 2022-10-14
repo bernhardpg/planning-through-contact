@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional
 
@@ -90,6 +91,11 @@ class Graph:
     def add_target(self, target: GraphVertex) -> None:
         self.target = target
         self.add_vertex(target)
+
+    def contains_vertex(self, v: GraphVertex) -> bool:
+        # TODO clean up
+        vertices_names = [v.name for v in self.vertices]
+        return v.name in vertices_names
 
 
 class GraphBuilder:
@@ -220,23 +226,22 @@ class GraphBuilder:
 
     # TODO should not take in graph
     # TODO move and clean up
-    def find_adjacent_vertices(
+    def find_adjacent_mode_configs(
         self, curr_vertex: GraphVertex, graph: Graph
-    ) -> List[GraphVertex]:
+    ) -> List[ModeConfig]:
         current_modes = curr_vertex.config.modes
         if curr_vertex.config.additional_constraints is not None:
             # if we have additional constraints, first explore removing these
-            new_modes = [ModeConfig(current_modes)]
+            return [ModeConfig(current_modes)]
         else:
             new_modes = (
                 ModeConfig(self.switch_mode(pair, current_modes))
                 for pair in current_modes.keys()
             )
-
-        new_vertices = [graph.create_new_vertex(m) for m in new_modes]
-        return new_vertices
+            return new_modes
 
     def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> Graph:
+        # TODO change name
         if algorithm == "DFS":
             INDEX_TO_POP = -1
         elif algorithm == "BFS":
@@ -249,24 +254,45 @@ class GraphBuilder:
         graph.add_source(source)
         graph.add_target(target)
 
+        explored_mode_configs = []
+
         u = source
         frontier = []
-        frontier.extend(self.find_adjacent_vertices(u, graph))
+        new_modes = self.find_adjacent_mode_configs(u, graph)
+        new_vertices = [
+            graph.create_new_vertex(m)
+            for m in new_modes
+            if m not in explored_mode_configs
+        ]
+        explored_mode_configs.extend(new_modes)
+        frontier.extend(new_vertices)
         i = 0
         while True:
             print(f"{i}: {(len(frontier))}")
             i += 1
             if len(frontier) == 0:
                 raise RuntimeError("Frontier empty, but target not found")
+            INDEX_TO_POP = random.randint(0, len(frontier) - 1)
             v = frontier.pop(INDEX_TO_POP)
             if u.convex_set.IntersectsWith(v.convex_set):
-                graph.add_vertex(v)
+                # TODO clean up
+                if not graph.contains_vertex(v):
+                    graph.add_vertex(v)
                 graph.add_edge(u, v)
-                frontier.extend(self.find_adjacent_vertices(v, graph))
+
+                new_modes = list(self.find_adjacent_mode_configs(v, graph))
+                # TODO not obvious that we do not want to go back to nodes hmmm
+                new_vertices = [graph.create_new_vertex(m) for m in new_modes]
+                explored_mode_configs.extend(new_modes)
+                frontier.extend(new_vertices)
+
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
                 if found_target:
                     graph.add_edge(v, target)
                     break
                 u = v
+            if i == 100:
+                print("Timed out")
+                break
 
         return graph
