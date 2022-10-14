@@ -1,5 +1,5 @@
-import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from queue import PriorityQueue
 from typing import Dict, List, Literal, Optional
 
 import numpy as np
@@ -22,6 +22,19 @@ from geometry.polyhedron import PolyhedronFormulator
 class ModeConfig:
     modes: Dict[str, ContactModeType]
     additional_constraints: Optional[npt.NDArray[sym.Formula]] = None
+
+    def calculate_match(self, other) -> int:
+        modes_self = list(self.modes.values())
+        modes_other = list(other.modes.values())
+
+        num_not_equal = sum([m1 != m2 for m1, m2 in zip(modes_self, modes_other)])
+        return num_not_equal
+
+
+@dataclass(order=True)
+class PrioritizedModeConfig:
+    priority: int
+    item: ModeConfig = field(compare=False)
 
 
 @dataclass
@@ -229,15 +242,18 @@ class GraphBuilder:
     def find_adjacent_mode_configs(
         self, curr_vertex: GraphVertex, graph: Graph
     ) -> List[ModeConfig]:
+        if curr_vertex is None:
+            breakpoint()
+
         current_modes = curr_vertex.config.modes
         if curr_vertex.config.additional_constraints is not None:
             # if we have additional constraints, first explore removing these
             return [ModeConfig(current_modes)]
         else:
-            new_modes = (
+            new_modes = [
                 ModeConfig(self.switch_mode(pair, current_modes))
                 for pair in current_modes.keys()
-            )
+            ]
             return new_modes
 
     def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> Graph:
@@ -249,42 +265,37 @@ class GraphBuilder:
 
         graph = Graph(self.collision_pairs, self.all_decision_vars)
         source = graph.create_new_vertex(self.source, "source")
+        # TODO make name difference between target and target config!
         target = graph.create_new_vertex(self.target, "target")
 
         graph.add_source(source)
         graph.add_target(target)
 
-        explored_mode_configs = []
-
         u = source
-        frontier = []
+        frontier = PriorityQueue()
         new_modes = self.find_adjacent_mode_configs(u, graph)
-        new_vertices = [
-            graph.create_new_vertex(m)
-            for m in new_modes
-            if m not in explored_mode_configs
-        ]
-        explored_mode_configs.extend(new_modes)
-        frontier.extend(new_vertices)
+        priorities = [m.calculate_match(self.target) for m in new_modes]
+        for (pri, m) in zip(priorities, new_modes):
+            frontier.put(PrioritizedModeConfig(pri, m))
         i = 0
         while True:
-            print(f"{i}: {(len(frontier))}")
             i += 1
-            if len(frontier) == 0:
+            print(i)
+            if frontier.empty():
                 raise RuntimeError("Frontier empty, but target not found")
-            INDEX_TO_POP = random.randint(0, len(frontier) - 1)
-            v = frontier.pop(INDEX_TO_POP)
+            m = frontier.get().item
+            v = graph.create_new_vertex(m)
+
             if u.convex_set.IntersectsWith(v.convex_set):
                 # TODO clean up
                 if not graph.contains_vertex(v):
                     graph.add_vertex(v)
                 graph.add_edge(u, v)
 
-                new_modes = list(self.find_adjacent_mode_configs(v, graph))
-                # TODO not obvious that we do not want to go back to nodes hmmm
-                new_vertices = [graph.create_new_vertex(m) for m in new_modes]
-                explored_mode_configs.extend(new_modes)
-                frontier.extend(new_vertices)
+                new_modes = self.find_adjacent_mode_configs(v, graph)
+                priorities = [m.calculate_match(self.target) for m in new_modes]
+                for (pri, m) in zip(priorities, new_modes):
+                    frontier.put(PrioritizedModeConfig(pri, m))
 
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
                 if found_target:

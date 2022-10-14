@@ -29,6 +29,9 @@ def plan_w_graph_builder():
     finger_2 = RigidBody(
         dim=dim, position_curve_order=order, name="f2", geometry="point"
     )
+    finger_3 = RigidBody(
+        dim=dim, position_curve_order=order, name="f3", geometry="point"
+    )
     box = RigidBody(
         dim=dim,
         position_curve_order=order,
@@ -55,49 +58,57 @@ def plan_w_graph_builder():
     x_g = ground.pos_x
     y_g = ground.pos_y
 
-    pair_finger_1_box = CollisionPair(
+    p1 = CollisionPair(
         finger_1,
         box,
         friction_coeff,
         position_mode=PositionModeType.LEFT,
     )
-    pair_finger_2_box = CollisionPair(
+    p2 = CollisionPair(
         finger_2,
         box,
         friction_coeff,
         position_mode=PositionModeType.RIGHT,
     )
-    pair_box_ground = CollisionPair(
+    p3 = CollisionPair(
         box,
         ground,
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
-    pair_finger_1_ground = CollisionPair(
+    p4 = CollisionPair(
         finger_1,
         ground,
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
-    pair_finger_2_ground = CollisionPair(
+    p5 = CollisionPair(
         finger_2,
         ground,
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
 
-    pairs = [
-        pair_finger_1_box,
-        pair_finger_2_box,
-        pair_box_ground,
-        pair_finger_1_ground,
-        pair_finger_2_ground,
-    ]
+    # EXTRA PAIRS
+    p6 = CollisionPair(
+        finger_3,
+        box,
+        friction_coeff,
+        position_mode=PositionModeType.TOP,
+    )
+    p7 = CollisionPair(
+        finger_3,
+        ground,
+        friction_coeff,
+        position_mode=PositionModeType.TOP,
+    )
 
-    rigid_bodies = [finger_1, finger_2, box, ground]
+    pairs = [p1, p2, p3, p4, p5, p6, p7]
+
+    rigid_bodies = [finger_1, finger_2, finger_3, box, ground]
 
     # TODO this is very hardcoded
-    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
+    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
     # TODO fix so that this is part of rigidbody definition!
@@ -110,11 +121,13 @@ def plan_w_graph_builder():
 
     source = ModeConfig(
         modes={
-            pair_finger_1_box.name: ContactModeType.NO_CONTACT,
-            pair_finger_2_box.name: ContactModeType.NO_CONTACT,
-            pair_box_ground.name: ContactModeType.ROLLING,
-            pair_finger_1_ground.name: ContactModeType.NO_CONTACT,
-            pair_finger_2_ground.name: ContactModeType.NO_CONTACT,
+            p1.name: ContactModeType.NO_CONTACT,
+            p2.name: ContactModeType.NO_CONTACT,
+            p3.name: ContactModeType.ROLLING,
+            p4.name: ContactModeType.NO_CONTACT,
+            p5.name: ContactModeType.NO_CONTACT,
+            p6.name: ContactModeType.NO_CONTACT,
+            p7.name: ContactModeType.NO_CONTACT,
         },
         additional_constraints=[
             eq(x_f_1, 0),
@@ -127,11 +140,13 @@ def plan_w_graph_builder():
     )
     target = ModeConfig(
         modes={
-            pair_finger_1_box.name: ContactModeType.ROLLING,
-            pair_finger_2_box.name: ContactModeType.ROLLING,
-            pair_box_ground.name: ContactModeType.NO_CONTACT,
-            pair_finger_1_ground.name: ContactModeType.NO_CONTACT,
-            pair_finger_2_ground.name: ContactModeType.NO_CONTACT,
+            p1.name: ContactModeType.ROLLING,
+            p2.name: ContactModeType.ROLLING,
+            p3.name: ContactModeType.NO_CONTACT,
+            p4.name: ContactModeType.NO_CONTACT,
+            p5.name: ContactModeType.NO_CONTACT,
+            p6.name: ContactModeType.NO_CONTACT,
+            p7.name: ContactModeType.NO_CONTACT,
         },
         additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
