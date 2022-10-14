@@ -77,7 +77,7 @@ class CollisionPair:
     body_a: RigidBody
     body_b: RigidBody
     friction_coeff: float
-    position_mode: PositionModeType  # TODO move somewhere else to generalize?
+    position_mode: PositionModeType
     order: int = 2  # TODO remove?
 
     # TODO Also use position modes to specify position constraints!
@@ -89,15 +89,46 @@ class CollisionPair:
         self.n_hat = self._create_normal_vec(
             self.body_a, self.body_b, self.position_mode
         )
+        self.d_hat = self._create_tangential_vec(self.n_hat)
+
         self.lam_n = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_n"
         ).x
         self.lam_f = BezierVariable(
             dim=1, order=self.order, name=f"{self.name}_lam_f"
         ).x
-        assert self.dim == 2  # TODO for now only works for 2D
-        self.d_hat = np.array([[-self.n_hat[1, 0]], [self.n_hat[0, 0]]])
         self.additional_constraints = []
+
+    @staticmethod
+    def _create_position_mode_constraints(
+        body_a, body_b, position_mode: PositionModeType
+    ) -> npt.NDArray[sym.Formula]:
+        if body_a.geometry == "point" and body_b.geometry == "point":
+            raise ValueError("Point with point contact not allowed")
+        elif body_a.geometry == "box" and body_b.geometry == "box":
+            raise NotImplementedError("Box and box contact not implemented")
+
+        box = body_a if body_a.geometry == "box" else body_b
+        point = body_a if body_a.geometry == "point" else body_b
+
+        if (
+            position_mode == PositionModeType.LEFT
+            or position_mode == PositionModeType.RIGHT
+        ):
+            y_constraint_top = le(point.pos_y, box.pos_y + box.height)
+            y_constraint_bottom = ge(point.pos_y, box.pos_y - box.height)
+            return np.array([y_constraint_top, y_constraint_bottom])
+        elif (
+            position_mode == PositionModeType.TOP
+            or position_mode == PositionModeType.BOTTOM
+        ):
+            # x_constraint_left = ge(point.pos_x, box.pos_x - box.width)
+            # x_constraint_right = le(point.pos_x, box.pos_x + box.width)
+            # TODO
+            return []
+            # return np.array([x_constraint_left, x_constraint_right])
+        else:
+            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
 
     @staticmethod
     def _create_signed_distance_func(
@@ -150,6 +181,11 @@ class CollisionPair:
             raise NotImplementedError(f"Position mode not implemented: {position_mode}")
 
         return n_hat
+
+    def _create_tangential_vec(self, n_hat: npt.NDArray[np.float64]):
+        assert self.dim == 2  # TODO for now only works for 2D
+        d_hat = np.array([[-n_hat[1, 0]], [n_hat[0, 0]]])
+        return d_hat
 
     @property
     def name(self) -> str:
@@ -217,11 +253,19 @@ class CollisionPair:
     def add_force_balance(self, force_balance):
         self.force_balance = force_balance
 
-    def formulate_contact_modes(self, all_variables, allow_sliding: bool = False):
+    def formulate_contact_modes(
+        self,
+        all_variables: npt.NDArray[sym.Variable],
+        allow_sliding: bool = False,
+    ):
         if self.force_balance is None:
             raise ValueError(
                 "Force balance must be set before formulating contact modes"
             )
+
+        position_mode_constraints = self._create_position_mode_constraints(
+            self.body_a, self.body_b, self.position_mode
+        )
 
         modes_constraints = {
             ContactModeType.NO_CONTACT: [
@@ -229,6 +273,7 @@ class CollisionPair:
                 eq(self.lam_n, 0),
                 le(self.lam_f, self.friction_coeff * self.lam_n),
                 ge(self.lam_f, -self.friction_coeff * self.lam_n),
+                *position_mode_constraints,
                 *self.force_balance,
                 *self.additional_constraints,
             ],
@@ -238,6 +283,7 @@ class CollisionPair:
                 eq(self.rel_tangential_sliding_vel, 0),
                 le(self.lam_f, self.friction_coeff * self.lam_n),
                 ge(self.lam_f, -self.friction_coeff * self.lam_n),
+                *position_mode_constraints,
                 *self.force_balance,
                 *self.additional_constraints,
             ],
@@ -249,6 +295,7 @@ class CollisionPair:
                 ge(self.lam_n, 0),
                 ge(self.rel_tangential_sliding_vel, 0),
                 eq(self.lam_f, -self.friction_coeff * self.lam_n),
+                *position_mode_constraints,
                 *self.force_balance,
                 *self.additional_constraints,
             ]
@@ -257,13 +304,19 @@ class CollisionPair:
                 ge(self.lam_n, 0),
                 le(self.rel_tangential_sliding_vel, 0),
                 eq(self.lam_f, self.friction_coeff * self.lam_n),
+                *position_mode_constraints,
                 *self.force_balance,
                 *self.additional_constraints,
             ]
 
         self.contact_modes = [
-            ContactMode(f"{self.name}_{name}", constraints, all_variables, name)
-            for name, constraints in modes_constraints.items()
+            ContactMode(
+                f"{self.name}_{mode_type}",
+                contact_constraints,
+                all_variables,
+                mode_type,
+            )
+            for mode_type, contact_constraints in modes_constraints.items()
         ]
 
 

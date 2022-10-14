@@ -50,6 +50,45 @@ def plan_w_graph_builder():
     x_g = ground.pos_x
     y_g = ground.pos_y
 
+    pair_finger_1_box = CollisionPair(
+        finger_1,
+        box,
+        friction_coeff,
+        position_mode=PositionModeType.LEFT,
+    )
+    pair_finger_2_box = CollisionPair(
+        finger_2,
+        box,
+        friction_coeff,
+        position_mode=PositionModeType.RIGHT,
+    )
+    pair_box_ground = CollisionPair(
+        box,
+        ground,
+        friction_coeff,
+        position_mode=PositionModeType.TOP,
+    )
+    #    pair_finger_1_ground = CollisionPair(
+    #        finger_1,
+    #        ground,
+    #        friction_coeff,
+    #        allowed_position_modes=[PositionModeType.TOP],
+    #    )
+    #    pair_finger_2_ground = CollisionPair(
+    #        finger_2,
+    #        ground,
+    #        friction_coeff,
+    #        allowed_position_modes=[PositionModeType.TOP],
+    #    )
+
+    pairs = [
+        pair_finger_1_box,
+        pair_finger_2_box,
+        pair_box_ground,
+        # pair_finger_1_ground,
+        # pair_finger_2_ground,
+    ]
+
     rigid_bodies = [finger_1, finger_2, box, ground]
 
     # TODO this is very hardcoded
@@ -85,7 +124,9 @@ def plan_w_graph_builder():
         source_constraints,
         target_constraints,
         rigid_bodies,
+        pairs,
         unactuated_bodies,
+        external_forces,
         additional_constraints,
     )
 
@@ -305,10 +346,8 @@ def plan_for_one_box_one_finger():
     y_g = ground.pos_y
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
-    finger_pos_below_box_height = le(y_f, y_b + box_height)
     additional_constraints = [
         *no_ground_motion,
-        finger_pos_below_box_height,
         eq(pair_box_ground.lam_n, mg),
     ]
 

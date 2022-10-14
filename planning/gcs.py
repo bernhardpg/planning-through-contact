@@ -54,6 +54,7 @@ class GcsContactPlanner:
     def __post_init__(self):
         self.gcs = GraphOfConvexSets()
 
+        # TODO remove
         self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)
         self.unactuated_dofs = self._get_unactuated_dofs(
             self.unactuated_bodies, self.all_bodies, self.dim
@@ -78,10 +79,12 @@ class GcsContactPlanner:
 
         for p in self.collision_pairs:
             p.formulate_contact_modes(self.all_decision_vars, self.allow_sliding)
+        # TODO remove
 
         convex_sets = self._create_all_convex_sets(self.collision_pairs)
         self._formulate_graph(convex_sets)
 
+    # TODO remove
     # TODO make all functions static to adhere to pure functions?
     def _collect_all_rigid_bodies(self, pairs: List[CollisionPair]) -> List[str]:
         all_body_names = sorted(
@@ -111,6 +114,7 @@ class GcsContactPlanner:
         )
         return all_pos_vars
 
+    # TODO remove
     def _collect_all_decision_vars(
         self, pairs: List[CollisionPair]
     ) -> npt.NDArray[sym.Variable]:
@@ -131,6 +135,7 @@ class GcsContactPlanner:
         )
         return unactuated_dofs
 
+    # TODO remove
     def _construct_force_balance(
         self,
         collision_pairs: List[CollisionPair],

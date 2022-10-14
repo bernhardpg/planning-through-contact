@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from itertools import product
 from typing import List, Optional
 
 import numpy as np
@@ -17,16 +16,34 @@ class GraphBuilder:
     source_constraints: List[sym.Formula]
     target_constraints: List[sym.Formula]
     rigid_bodies: List[RigidBody]
+    collision_pairs: List[CollisionPair]  # TODO for now I define this manually
     unactuated_bodies: List[str]  # TODO make part of RigidBody
+    external_forces: List[sym.Expression]
     additional_constraints: Optional[List[sym.Formula]]
+    allow_sliding: bool = False
 
     def __post_init__(self) -> None:
-        rigid_bodies = self.rigid_bodies
-        body_1 = rigid_bodies[0]
-        body_2 = rigid_bodies[2]
-        collision_pairs = product(
-            body_1.collision_geometries, body_2.collision_geometries
+        self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)
+        self.unactuated_dofs = self._get_unactuated_dofs(
+            self.unactuated_bodies, self.all_bodies, self.dim
         )
+        force_balance_constraints = self.construct_force_balance(
+            self.collision_pairs,
+            self.all_bodies,
+            self.external_forces,
+            self.unactuated_dofs,
+        )
+
+        for p in self.collision_pairs:
+            p.add_force_balance(force_balance_constraints)
+
+        for p in self.collision_pairs:
+            p.add_constraint_to_all_modes(self.additional_constraints)
+
+        self.all_decision_vars = self._collect_all_decision_vars(self.collision_pairs)
+
+        for p in self.collision_pairs:
+            p.formulate_contact_modes(self.all_decision_vars, self.allow_sliding)
 
         breakpoint()
         self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)
@@ -44,11 +61,58 @@ class GraphBuilder:
         #
         # How to deal with repeated visits to a node? For now we just make graph repeated after building it
 
-    def _collect_all_rigid_bodies(self, pairs: List[CollisionPair]) -> List[str]:
+    @property
+    def dim(self) -> int:
+        return self.collision_pairs[0].body_a.dim
+
+    @staticmethod
+    def _collect_all_rigid_bodies(pairs: List[CollisionPair]) -> List[str]:
         all_body_names = sorted(
             list(set(sum([[p.body_a.name, p.body_b.name] for p in pairs], [])))
         )
         return all_body_names
+
+    def _collect_all_pos_vars(
+        self, pairs: List[CollisionPair]
+    ) -> npt.NDArray[sym.Variable]:
+        all_pos_vars = np.array(
+            sorted(
+                list(
+                    set(
+                        np.concatenate(
+                            [
+                                np.concatenate(
+                                    (p.body_a.pos.x, p.body_b.pos.x)
+                                ).flatten()
+                                for p in pairs
+                            ]
+                        )
+                    )
+                ),
+                key=lambda x: x.get_name(),
+            )
+        )
+        return all_pos_vars
+
+    def _collect_all_decision_vars(
+        self, pairs: List[CollisionPair]
+    ) -> npt.NDArray[sym.Variable]:
+        all_pos_vars = self._collect_all_pos_vars(pairs)
+        all_normal_force_vars = np.concatenate([p.lam_n for p in pairs]).flatten()
+        all_friction_force_vars = np.concatenate([p.lam_f for p in pairs]).flatten()
+        all_vars = np.concatenate(
+            [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
+        )
+        return all_vars
+
+    def _get_unactuated_dofs(
+        self, unactuated_bodies: List[str], all_bodies: List[str], dim: int
+    ) -> npt.NDArray[np.int32]:
+        unactuated_idxs = [self.all_bodies.index(b) * dim for b in unactuated_bodies]
+        unactuated_dofs = np.concatenate(
+            [np.arange(idx, idx + dim) for idx in unactuated_idxs]
+        )
+        return unactuated_dofs
 
     # TODO move to contact module
     @staticmethod
