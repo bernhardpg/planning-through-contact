@@ -36,7 +36,7 @@ class ContactModeType(Enum):
 class RigidBody:
     name: str
     dim: int
-    geometry: Literal["point", "box", "y_plane"]
+    geometry: Literal["point", "box"]
     width: float = 0  # TODO generalize
     height: float = 0
     position_curve_order: int = 2
@@ -78,7 +78,7 @@ class CollisionPair:
     body_b: RigidBody
     friction_coeff: float
     position_mode: PositionModeType
-    order: int = 2  # TODO remove?
+    force_curve_order: int = 2  # TODO remove?
 
     # TODO Also use position modes to specify position constraints!
 
@@ -92,10 +92,10 @@ class CollisionPair:
         self.d_hat = self._create_tangential_vec(self.n_hat)
 
         self.lam_n = BezierVariable(
-            dim=1, order=self.order, name=f"{self.name}_lam_n"
+            dim=1, order=self.force_curve_order, name=f"{self.name}_lam_n"
         ).x
         self.lam_f = BezierVariable(
-            dim=1, order=self.order, name=f"{self.name}_lam_f"
+            dim=1, order=self.force_curve_order, name=f"{self.name}_lam_f"
         ).x
         self.additional_constraints = []
 
@@ -106,29 +106,44 @@ class CollisionPair:
         if body_a.geometry == "point" and body_b.geometry == "point":
             raise ValueError("Point with point contact not allowed")
         elif body_a.geometry == "box" and body_b.geometry == "box":
-            raise NotImplementedError("Box and box contact not implemented")
-
-        box = body_a if body_a.geometry == "box" else body_b
-        point = body_a if body_a.geometry == "point" else body_b
-
-        if (
-            position_mode == PositionModeType.LEFT
-            or position_mode == PositionModeType.RIGHT
-        ):
-            y_constraint_top = le(point.pos_y, box.pos_y + box.height)
-            y_constraint_bottom = ge(point.pos_y, box.pos_y - box.height)
-            return np.array([y_constraint_top, y_constraint_bottom])
-        elif (
-            position_mode == PositionModeType.TOP
-            or position_mode == PositionModeType.BOTTOM
-        ):
-            # x_constraint_left = ge(point.pos_x, box.pos_x - box.width)
-            # x_constraint_right = le(point.pos_x, box.pos_x + box.width)
-            # TODO
-            return []
-            # return np.array([x_constraint_left, x_constraint_right])
+            if (
+                position_mode == PositionModeType.LEFT
+                or position_mode == PositionModeType.RIGHT
+            ):
+                raise NotImplementedError
+            elif (
+                position_mode == PositionModeType.TOP
+                or position_mode == PositionModeType.BOTTOM
+            ):
+                x_constraint_left = ge(
+                    body_a.pos_x + body_a.width, body_b.pos_x - body_b.width
+                )
+                x_constraint_right = le(
+                    body_a.pos_x - body_a.width, body_b.pos_x + body_b.width
+                )
+                return np.array([x_constraint_left, x_constraint_right])
         else:
-            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
+            box = body_a if body_a.geometry == "box" else body_b
+            point = body_a if body_a.geometry == "point" else body_b
+
+            if (
+                position_mode == PositionModeType.LEFT
+                or position_mode == PositionModeType.RIGHT
+            ):
+                y_constraint_top = le(point.pos_y, box.pos_y + box.height)
+                y_constraint_bottom = ge(point.pos_y, box.pos_y - box.height)
+                return np.array([y_constraint_top, y_constraint_bottom])
+            elif (
+                position_mode == PositionModeType.TOP
+                or position_mode == PositionModeType.BOTTOM
+            ):
+                x_constraint_left = ge(point.pos_x, box.pos_x - box.width)
+                x_constraint_right = le(point.pos_x, box.pos_x + box.width)
+                return np.array([x_constraint_left, x_constraint_right])
+            else:
+                raise NotImplementedError(
+                    f"Position mode not implemented: {position_mode}"
+                )
 
     @staticmethod
     def _create_signed_distance_func(
@@ -137,10 +152,12 @@ class CollisionPair:
         if body_a.geometry == "point" and body_b.geometry == "point":
             raise ValueError("Point with point contact not allowed")
         elif body_a.geometry == "box" and body_b.geometry == "box":
-            raise NotImplementedError("Box and box contact not implemented")
-
-        x_offset = body_a.width if body_a.geometry == "box" else body_b.width
-        y_offset = body_a.height if body_a.geometry == "box" else body_b.height
+            x_offset = body_a.width + body_b.width
+            y_offset = body_a.height + body_b.height
+        else:
+            box = body_a if body_a.geometry == "box" else body_b
+            x_offset = box.width
+            y_offset = box.height
 
         if position_mode == PositionModeType.LEFT:  # body_a is on left side of body_b
             dx = body_b.pos_x - body_a.pos_x - x_offset
@@ -165,8 +182,6 @@ class CollisionPair:
     ) -> npt.NDArray[np.float64]:
         if body_a.geometry == "point" and body_b.geometry == "point":
             raise ValueError("Point with point contact not allowed")
-        elif body_a.geometry == "box" and body_b.geometry == "box":
-            raise NotImplementedError("Box and box contact not implemented")
 
         # Normal vector: from body_a to body_b
         if position_mode == PositionModeType.LEFT:  # body_a left side of body_b

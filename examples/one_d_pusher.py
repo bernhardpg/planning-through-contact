@@ -38,7 +38,12 @@ def plan_w_graph_builder():
         height=box_height,
     )
     ground = RigidBody(
-        dim=dim, position_curve_order=order, name="ground", geometry="y_plane"
+        dim=dim,
+        position_curve_order=order,
+        name="ground",
+        geometry="box",
+        width=20,
+        height=box_height,
     )
 
     x_f_1 = finger_1.pos_x
@@ -97,17 +102,13 @@ def plan_w_graph_builder():
 
     unactuated_bodies = ["box"]
 
-    no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
+    no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     finger_1_pos_below_box_height = le(y_f_1, y_b + box_height)
     finger_1_pos_above_box_bottom = ge(y_f_1, y_b - box_height)
     finger_2_pos_below_box_height = le(y_f_2, y_b + box_height)
     finger_2_pos_above_box_bottom = ge(y_f_2, y_b - box_height)
     additional_constraints = [
         *no_ground_motion,
-        finger_1_pos_below_box_height,
-        finger_2_pos_below_box_height,
-        finger_1_pos_above_box_bottom,
-        finger_2_pos_above_box_bottom,
     ]
 
     source_constraints = [
@@ -161,7 +162,12 @@ def plan_for_two_fingers():
         height=box_height,
     )
     ground = RigidBody(
-        dim=dim, position_curve_order=order, name="ground", geometry="y_plane"
+        dim=dim,
+        position_curve_order=order,
+        name="ground",
+        geometry="box",
+        width=100,
+        height=1,
     )
 
     x_f_1 = finger_1.pos_x
@@ -189,6 +195,7 @@ def plan_for_two_fingers():
         box, ground, friction_coeff, position_mode=PositionModeType.TOP
     )
 
+    bodies = [finger_1, finger_2, box, ground]
     all_pairs = [
         pair_finger_1_box,
         pair_finger_2_box,
@@ -201,7 +208,7 @@ def plan_for_two_fingers():
 
     unactuated_bodies = ["box"]
 
-    no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
+    no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     finger_1_pos_below_box_height = le(y_f_1, y_b + box_height)
     finger_1_pos_above_box_bottom = ge(y_f_1, y_b - box_height)
     finger_2_pos_below_box_height = le(y_f_2, y_b + box_height)
@@ -290,7 +297,7 @@ def plan_for_two_fingers():
     }
 
     plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
-    animate_positions(pos_curves, box_width=box_width, box_height=box_height)
+    animate_positions(pos_curves, bodies)
     return
 
 
@@ -318,9 +325,15 @@ def plan_for_one_box_one_finger():
         height=box_height,
     )
     ground = RigidBody(
-        dim=dim, position_curve_order=order, name="ground", geometry="y_plane"
+        dim=dim,
+        position_curve_order=order,
+        name="ground",
+        geometry="box",
+        width=100,
+        height=1,
     )
 
+    bodies = [finger, box, ground]
     pair_finger_box = CollisionPair(
         finger,
         box,
@@ -345,7 +358,7 @@ def plan_for_one_box_one_finger():
     x_g = ground.pos_x
     y_g = ground.pos_y
 
-    no_ground_motion = [eq(x_g, 0), eq(y_g, 0)]
+    no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     additional_constraints = [
         *no_ground_motion,
         eq(pair_box_ground.lam_n, mg),
@@ -423,5 +436,5 @@ def plan_for_one_box_one_finger():
     }
 
     plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
-    animate_positions(pos_curves, box_width=box_width, box_height=box_height)
+    animate_positions(pos_curves, bodies)
     return
