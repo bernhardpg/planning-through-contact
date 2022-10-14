@@ -1,5 +1,5 @@
 import itertools
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import reduce
 from typing import List, Literal, Optional, Tuple
@@ -59,17 +59,27 @@ class RigidBody:
         return self.pos.x[1, :]
 
 
+# TODO
+CONTACT_TYPE_ABBREVIATIONS = {
+    ContactModeType.NO_CONTACT: "NC",
+    ContactModeType.ROLLING: "RL",
+}
+
+
 @dataclass
 class ContactMode:
-    name: str
+    pair_name: str
     constraints: List[npt.NDArray[sym.Formula]]
     all_vars: npt.NDArray[sym.Variable]
     type: ContactModeType
+    polyhedron: ConvexSet = field(init=False, repr=False)
+    name: str = field(init=False, repr=False)
 
     def __post_init__(self):
         self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
             variables=self.all_vars, make_bounded=True
         )
+        self.name = f"{self.pair_name}({CONTACT_TYPE_ABBREVIATIONS[self.type]})"
 
 
 @dataclass
@@ -205,7 +215,7 @@ class CollisionPair:
 
     @property
     def name(self) -> str:
-        return f"{self.body_a.name}_{self.body_b.name}"
+        return f"{self.body_a.name}+{self.body_b.name}"
 
     @property
     def dim(self) -> int:
@@ -330,7 +340,7 @@ class CollisionPair:
 
         self.contact_modes = {
             mode_type: ContactMode(
-                f"{self.name}_{mode_type}",
+                f"{self.name}",
                 contact_constraints,
                 all_variables,
                 mode_type,
@@ -355,7 +365,7 @@ def calc_intersection_of_contact_modes(
         polys = [m.polyhedron for m in modes]
         intersection = reduce(lambda p1, p2: p1.Intersection(p2), polys)
         names = [m.name for m in modes]
-        name = "_W_".join(names)
+        name = "|".join(names)
         return (True, (name, intersection))
     else:
         return (False, (None, None))

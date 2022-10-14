@@ -117,14 +117,14 @@ def plan_w_graph_builder():
             pair_finger_2_box.name: ContactModeType.NO_CONTACT,
             pair_box_ground.name: ContactModeType.ROLLING,
         },
-        additional_constraints=[
-            eq(x_f_1, 0),
-            eq(y_f_1, 0.6),
-            eq(x_f_2, 10.0),
-            eq(y_f_2, 0.6),
-            eq(x_b, 6.0),
-            eq(y_b, box_height),
-        ],
+        #        additional_constraints=[
+        #            eq(x_f_1, 0),
+        #            eq(y_f_1, 0.6),
+        #            eq(x_f_2, 10.0),
+        #            eq(y_f_2, 0.6),
+        #            eq(x_b, 6.0),
+        #            eq(y_b, box_height),
+        #        ],
     )
     target = ModeConfig(
         modes={
@@ -132,7 +132,7 @@ def plan_w_graph_builder():
             pair_finger_2_box.name: ContactModeType.ROLLING,
             pair_box_ground.name: ContactModeType.NO_CONTACT,
         },
-        additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
+        # additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
 
     graph_builder = GraphBuilder(

@@ -47,7 +47,8 @@ class Graph:
         self.vertices = []
         self.all_decision_vars = all_decision_vars
 
-    def new_vertex(self, config: ModeConfig) -> Optional[GraphVertex]:
+    # TODO not sure if this belongs here
+    def create_new_vertex(self, config: ModeConfig) -> Optional[GraphVertex]:
         contact_modes = [
             self.collision_pairs[pair].contact_modes[mode]
             for pair, mode in config.modes.items()
@@ -71,8 +72,12 @@ class Graph:
         vertex = GraphVertex(name, config, intersection)
         return vertex
 
-    def add_edge(self, edge: GraphEdge) -> None:
-        self.edges.append(edge)
+    def add_edge(self, u: GraphVertex, v: GraphVertex) -> None:
+        e = GraphEdge(u, v)
+        self.edges.append(e)
+
+    def add_vertex(self, u: GraphVertex) -> None:
+        self.vertices.append(u)
 
 
 class GraphBuilder:
@@ -190,11 +195,52 @@ class GraphBuilder:
     def add_target(self, mode: ModeConfig) -> None:
         self.target = mode
 
+    # TODO move and clean up
+    def switch_mode(
+        self, pair_name: str, old_modes: Dict[str, ContactModeType]
+    ) -> Dict[str, ContactModeType]:
+        new_modes = dict(old_modes)
+        if old_modes[pair_name] == ContactModeType.NO_CONTACT:
+            new_modes[pair_name] = ContactModeType.ROLLING
+        elif old_modes[pair_name] == ContactModeType.ROLLING:
+            new_modes[pair_name] = ContactModeType.NO_CONTACT
+        return new_modes
+
+    # TODO should not take in graph
+    # TODO move and clean up
+    def find_adjacent_vertices(
+        self, curr_vertex: GraphVertex, graph: Graph
+    ) -> List[GraphVertex]:
+        current_modes = curr_vertex.config.modes
+        new_modes = (
+            ModeConfig(self.switch_mode(pair, current_modes))
+            for pair in current_modes.keys()
+        )
+        new_vertices = [graph.create_new_vertex(m) for m in new_modes]
+        return new_vertices
+
     def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> None:
         if algorithm == "DFS":
-            raise NotImplementedError
+            INDEX_TO_POP = -1
+        elif algorithm == "BFS":
+            INDEX_TO_POP = 0
 
         graph = Graph(self.collision_pairs, self.all_decision_vars)
-        source = graph.new_vertex(self.source)
-        target = graph.new_vertex(self.target)
+        source = graph.create_new_vertex(self.source)
+        target = graph.create_new_vertex(self.target)
+
+        u = source
+        frontier = []
+        frontier.extend(self.find_adjacent_vertices(u, graph))
+        while True:
+            v = frontier.pop(INDEX_TO_POP)
+            if u.convex_set.IntersectsWith(v.convex_set):
+                graph.add_vertex(v)
+                graph.add_edge(u, v)
+                frontier.extend(self.find_adjacent_vertices(v, graph))
+                found_target = v.convex_set.IntersectsWith(target.convex_set)
+                if found_target:
+                    break
+                u = v
+
         breakpoint()
