@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -62,12 +62,40 @@ class GcsPlanner:
     def force_curve_order(self) -> int:
         return self.collision_pairs[0].force_curve_order
 
+    @staticmethod
+    def _find_source(
+        vertex_map: Dict[str, GraphOfConvexSets.Vertex], source_name: str
+    ) -> GraphOfConvexSets.Vertex:
+        source = next(
+            (vertex for name, vertex in vertex_map.items() if name == source_name),
+            None,
+        )
+        if source is None:
+            raise RuntimeError("No source node found!")
+        return source
+
+    @staticmethod
+    def _find_target(
+        vertex_map: Dict[str, GraphOfConvexSets.Vertex], target_name: str
+    ) -> GraphOfConvexSets.Vertex:
+        target = next(
+            (vertex for name, vertex in vertex_map.items() if name == target_name),
+            None,
+        )
+        if target is None:
+            raise RuntimeError("No target node found!")
+        return target
+
     def _formulate_graph(self, graph: Graph) -> None:
         print("Adding vertices...")
         vertex_map = {
             v.name: self.gcs.AddVertex(v.convex_set, v.name)
             for v in tqdm(graph.vertices)
         }
+
+        # Retrieve source and target
+        self.source = self._find_source(vertex_map, graph.source.name)
+        self.target = self._find_source(vertex_map, graph.target.name)
 
         print("Adding edges...")
         for e in tqdm(graph.edges):

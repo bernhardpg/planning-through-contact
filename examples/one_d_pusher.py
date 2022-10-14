@@ -121,7 +121,7 @@ def plan_w_graph_builder():
         *no_ground_motion,
     ]
 
-    source = ModeConfig(
+    source_config = ModeConfig(
         modes={
             p1.name: ContactModeType.NO_CONTACT,
             p2.name: ContactModeType.NO_CONTACT,
@@ -140,7 +140,8 @@ def plan_w_graph_builder():
             eq(y_b, box_height),
         ],
     )
-    target = ModeConfig(
+    # TODO make it such that all non-specified modes are automatically not in contact
+    target_config = ModeConfig(
         modes={
             p1.name: ContactModeType.ROLLING,
             p2.name: ContactModeType.ROLLING,
@@ -159,8 +160,8 @@ def plan_w_graph_builder():
         external_forces,
         additional_constraints,
     )
-    graph_builder.add_source(source)
-    graph_builder.add_target(target)
+    graph_builder.add_source_config(source_config)
+    graph_builder.add_target_config(target_config)
     graph = graph_builder.build_graph("BFS")
 
     planner = GcsPlanner(graph, rigid_bodies, collision_pairs)
@@ -174,6 +175,8 @@ def plan_w_graph_builder():
     planner.add_force_path_length_cost()
     planner.add_num_visited_vertices_cost(100)
     planner.add_force_strength_cost()
+
+    planner.solve()
 
     return
 

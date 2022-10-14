@@ -228,11 +228,11 @@ class GraphBuilder:
         force_balance = all_force_balances[unactuated_dofs, :]
         return force_balance
 
-    def add_source(self, mode: ModeConfig) -> None:
-        self.source = mode
+    def add_source_config(self, mc: ModeConfig) -> None:
+        self.source_config = mc
 
-    def add_target(self, mode: ModeConfig) -> None:
-        self.target = mode
+    def add_target_config(self, mc: ModeConfig) -> None:
+        self.target_config = mc
 
     # TODO move and clean up
     def switch_mode(
@@ -277,9 +277,8 @@ class GraphBuilder:
             self.all_position_vars,
             self.all_force_vars,
         )
-        source = graph.create_new_vertex(self.source, "source")
-        # TODO make name difference between target and target config!
-        target = graph.create_new_vertex(self.target, "target")
+        source = graph.create_new_vertex(self.source_config, "source")
+        target = graph.create_new_vertex(self.target_config, "target")
 
         graph.add_source(source)
         graph.add_target(target)
@@ -287,7 +286,7 @@ class GraphBuilder:
         u = source
         frontier = PriorityQueue()
         new_modes = self.find_adjacent_mode_configs(u, graph)
-        priorities = [m.calculate_match(self.target) for m in new_modes]
+        priorities = [m.calculate_match(self.target_config) for m in new_modes]
         for (pri, m) in zip(priorities, new_modes):
             frontier.put(PrioritizedModeConfig(pri, m))
         i = 0
@@ -306,7 +305,7 @@ class GraphBuilder:
                 graph.add_edge(u, v)
 
                 new_modes = self.find_adjacent_mode_configs(v, graph)
-                priorities = [m.calculate_match(self.target) for m in new_modes]
+                priorities = [m.calculate_match(self.target_config) for m in new_modes]
                 for (pri, m) in zip(priorities, new_modes):
                     frontier.put(PrioritizedModeConfig(pri, m))
 
