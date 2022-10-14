@@ -20,6 +20,70 @@ from tqdm import tqdm
 
 from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
 from geometry.polyhedron import PolyhedronFormulator
+from planning.graph_builder import Graph
+
+
+class Gcs:
+    def __init__(self, graph: Graph):
+        self.gcs = GraphOfConvexSets()
+        self._formulate_graph(graph)
+
+    def _formulate_graph(self, graph: Graph) -> None:
+        print("Adding vertices...")
+        vertex_map = {
+            v.name: self.gcs.AddVertex(v.convex_set, v.name)
+            for v in tqdm(graph.vertices)
+        }
+
+        print("Adding edges...")
+        for e in tqdm(graph.edges):
+            u = vertex_map[e.u.name]
+            v = vertex_map[e.v.name]
+            self.gcs.AddEdge(u, v)
+
+    def allow_revisits_to_vertices(self, num_allowed_revisits: int) -> None:
+        if num_allowed_revisits > 0:
+            # TODO: This should be sped up, as it will scale poorly
+            # Runtime: O(v * E), E ~= v^2, O(V^3)
+            new_edges = []
+            for _ in range(num_allowed_revisits):
+                for v in self.gcs.Vertices():
+                    # TODO very hardcoded, fix
+                    if v.name() in ["source", "target"]:
+                        continue
+                    v_new = self.gcs.AddVertex(v.set(), f"{v.name()}_2")
+                    for e in self.gcs.Edges():
+                        if v == e.v():
+                            new_edges.append((e.u(), v_new))
+                        elif v == e.u():
+                            new_edges.append((v_new, e.v()))
+
+            for u, v in new_edges:
+                self.gcs.AddEdge(u, v)
+
+    def _find_path_to_target(
+        self,
+        edges: List[GraphOfConvexSets.Edge],
+        target: GraphOfConvexSets.Vertex,
+        u: GraphOfConvexSets.Vertex,
+    ) -> List[GraphOfConvexSets.Vertex]:
+        current_edge = next(e for e in edges if e.u() == u)
+        v = current_edge.v()
+        target_reached = v == target
+        if target_reached:
+            return [u] + [v]
+        else:
+            return [u] + self._find_path_to_target(edges, target, v)
+
+    def save_graph_diagram(
+        self, filename: str, result: Optional[MathematicalProgramResult] = None
+    ) -> None:
+        if result is not None:
+            graphviz = self.gcs.GetGraphvizString(result, False, precision=1)
+        else:
+            graphviz = self.gcs.GetGraphvizString()
+        data = pydot.graph_from_dot_data(graphviz)[0]
+        data.write_svg(filename)
 
 
 @dataclass

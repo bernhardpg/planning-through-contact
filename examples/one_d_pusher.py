@@ -3,7 +3,7 @@ from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
 from geometry.contact import CollisionPair, ContactModeType, PositionModeType, RigidBody
-from planning.gcs import GcsContactPlanner
+from planning.gcs import Gcs, GcsContactPlanner
 from planning.graph_builder import GraphBuilder, ModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
@@ -24,15 +24,15 @@ def plan_w_graph_builder():
     friction_coeff = 0.5
 
     finger_1 = RigidBody(
-        dim=dim, position_curve_order=order, name="finger_1", geometry="point"
+        dim=dim, position_curve_order=order, name="f1", geometry="point"
     )
     finger_2 = RigidBody(
-        dim=dim, position_curve_order=order, name="finger_2", geometry="point"
+        dim=dim, position_curve_order=order, name="f2", geometry="point"
     )
     box = RigidBody(
         dim=dim,
         position_curve_order=order,
-        name="box",
+        name="b",
         geometry="box",
         width=box_width,
         height=box_height,
@@ -40,7 +40,7 @@ def plan_w_graph_builder():
     ground = RigidBody(
         dim=dim,
         position_curve_order=order,
-        name="ground",
+        name="g",
         geometry="box",
         width=20,
         height=box_height,
@@ -73,25 +73,25 @@ def plan_w_graph_builder():
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
-    #    pair_finger_1_ground = CollisionPair(
-    #        finger_1,
-    #        ground,
-    #        friction_coeff,
-    #        allowed_position_modes=[PositionModeType.TOP],
-    #    )
-    #    pair_finger_2_ground = CollisionPair(
-    #        finger_2,
-    #        ground,
-    #        friction_coeff,
-    #        allowed_position_modes=[PositionModeType.TOP],
-    #    )
+    pair_finger_1_ground = CollisionPair(
+        finger_1,
+        ground,
+        friction_coeff,
+        position_mode=PositionModeType.TOP,
+    )
+    pair_finger_2_ground = CollisionPair(
+        finger_2,
+        ground,
+        friction_coeff,
+        position_mode=PositionModeType.TOP,
+    )
 
     pairs = [
         pair_finger_1_box,
         pair_finger_2_box,
         pair_box_ground,
-        # pair_finger_1_ground,
-        # pair_finger_2_ground,
+        pair_finger_1_ground,
+        pair_finger_2_ground,
     ]
 
     rigid_bodies = [finger_1, finger_2, box, ground]
@@ -100,7 +100,8 @@ def plan_w_graph_builder():
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    unactuated_bodies = ["box"]
+    # TODO fix so that this is part of rigidbody definition!
+    unactuated_bodies = ["b"]
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     finger_1_pos_below_box_height = le(y_f_1, y_b + box_height)
@@ -116,21 +117,25 @@ def plan_w_graph_builder():
             pair_finger_1_box.name: ContactModeType.NO_CONTACT,
             pair_finger_2_box.name: ContactModeType.NO_CONTACT,
             pair_box_ground.name: ContactModeType.ROLLING,
+            pair_finger_1_ground.name: ContactModeType.NO_CONTACT,
+            pair_finger_2_ground.name: ContactModeType.NO_CONTACT,
         },
-        #        additional_constraints=[
-        #            eq(x_f_1, 0),
-        #            eq(y_f_1, 0.6),
-        #            eq(x_f_2, 10.0),
-        #            eq(y_f_2, 0.6),
-        #            eq(x_b, 6.0),
-        #            eq(y_b, box_height),
-        #        ],
+        additional_constraints=[
+            eq(x_f_1, 0),
+            eq(y_f_1, 0.6),
+            eq(x_f_2, 10.0),
+            eq(y_f_2, 0.6),
+            eq(x_b, 6.0),
+            eq(y_b, box_height),
+        ],
     )
     target = ModeConfig(
         modes={
             pair_finger_1_box.name: ContactModeType.ROLLING,
             pair_finger_2_box.name: ContactModeType.ROLLING,
             pair_box_ground.name: ContactModeType.NO_CONTACT,
+            pair_finger_1_ground.name: ContactModeType.NO_CONTACT,
+            pair_finger_2_ground.name: ContactModeType.NO_CONTACT,
         },
         # additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
@@ -143,9 +148,11 @@ def plan_w_graph_builder():
     )
     graph_builder.add_source(source)
     graph_builder.add_target(target)
-    graph_builder.build_graph()
+    graph = graph_builder.build_graph("BFS")
 
-    breakpoint()
+    gcs_solver = Gcs(graph)
+    gcs_solver.save_graph_diagram("pruned_graph.svg")
+
     return
 
 

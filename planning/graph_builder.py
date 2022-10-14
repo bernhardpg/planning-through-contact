@@ -48,14 +48,17 @@ class Graph:
         self.all_decision_vars = all_decision_vars
 
     # TODO not sure if this belongs here
-    def create_new_vertex(self, config: ModeConfig) -> Optional[GraphVertex]:
+    def create_new_vertex(
+        self, config: ModeConfig, name: Optional[str] = None
+    ) -> Optional[GraphVertex]:
         contact_modes = [
             self.collision_pairs[pair].contact_modes[mode]
             for pair, mode in config.modes.items()
         ]
-        intersects, (name, intersection) = calc_intersection_of_contact_modes(
-            contact_modes
-        )
+        intersects, (
+            calculated_name,
+            intersection,
+        ) = calc_intersection_of_contact_modes(contact_modes)
         if not intersects:
             return None
 
@@ -69,6 +72,7 @@ class Graph:
 
             intersection = intersection.Intersection(additional_set)
 
+        name = f"{name}: {calculated_name}" if name is not None else calculated_name
         vertex = GraphVertex(name, config, intersection)
         return vertex
 
@@ -78,6 +82,14 @@ class Graph:
 
     def add_vertex(self, u: GraphVertex) -> None:
         self.vertices.append(u)
+
+    def add_source(self, source: GraphVertex) -> None:
+        self.source = source
+        self.add_vertex(source)
+
+    def add_target(self, target: GraphVertex) -> None:
+        self.target = target
+        self.add_vertex(target)
 
 
 class GraphBuilder:
@@ -212,27 +224,40 @@ class GraphBuilder:
         self, curr_vertex: GraphVertex, graph: Graph
     ) -> List[GraphVertex]:
         current_modes = curr_vertex.config.modes
-        new_modes = (
-            ModeConfig(self.switch_mode(pair, current_modes))
-            for pair in current_modes.keys()
-        )
+        if curr_vertex.config.additional_constraints is not None:
+            # if we have additional constraints, first explore removing these
+            new_modes = [ModeConfig(current_modes)]
+        else:
+            new_modes = (
+                ModeConfig(self.switch_mode(pair, current_modes))
+                for pair in current_modes.keys()
+            )
+
         new_vertices = [graph.create_new_vertex(m) for m in new_modes]
         return new_vertices
 
-    def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> None:
+    def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> Graph:
         if algorithm == "DFS":
             INDEX_TO_POP = -1
         elif algorithm == "BFS":
             INDEX_TO_POP = 0
 
         graph = Graph(self.collision_pairs, self.all_decision_vars)
-        source = graph.create_new_vertex(self.source)
-        target = graph.create_new_vertex(self.target)
+        source = graph.create_new_vertex(self.source, "source")
+        target = graph.create_new_vertex(self.target, "target")
+
+        graph.add_source(source)
+        graph.add_target(target)
 
         u = source
         frontier = []
         frontier.extend(self.find_adjacent_vertices(u, graph))
+        i = 0
         while True:
+            print(f"{i}: {(len(frontier))}")
+            i += 1
+            if len(frontier) == 0:
+                raise RuntimeError("Frontier empty, but target not found")
             v = frontier.pop(INDEX_TO_POP)
             if u.convex_set.IntersectsWith(v.convex_set):
                 graph.add_vertex(v)
@@ -240,7 +265,8 @@ class GraphBuilder:
                 frontier.extend(self.find_adjacent_vertices(v, graph))
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
                 if found_target:
+                    graph.add_edge(v, target)
                     break
                 u = v
 
-        breakpoint()
+        return graph

@@ -79,7 +79,7 @@ class ContactMode:
         self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
             variables=self.all_vars, make_bounded=True
         )
-        self.name = f"{self.pair_name}({CONTACT_TYPE_ABBREVIATIONS[self.type]})"
+        self.name = f"{self.pair_name}[{CONTACT_TYPE_ABBREVIATIONS[self.type]}]"
 
 
 @dataclass
@@ -215,7 +215,7 @@ class CollisionPair:
 
     @property
     def name(self) -> str:
-        return f"{self.body_a.name}+{self.body_b.name}"
+        return f"({self.body_a.name},{self.body_b.name})"
 
     @property
     def dim(self) -> int:
@@ -365,7 +365,7 @@ def calc_intersection_of_contact_modes(
         polys = [m.polyhedron for m in modes]
         intersection = reduce(lambda p1, p2: p1.Intersection(p2), polys)
         names = [m.name for m in modes]
-        name = "|".join(names)
+        name = " | ".join(names)
         return (True, (name, intersection))
     else:
         return (False, (None, None))
