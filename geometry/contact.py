@@ -14,6 +14,13 @@ from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
 
 
+class ContactModeType(Enum):
+    NO_CONTACT = 1
+    ROLLING = 2
+    SLIDING_POSITIVE = 3
+    SLIDING_NEGATIVE = 3
+
+
 class PositionModeType(Enum):
     LEFT = 1
     TOP_LEFT = 2
@@ -25,11 +32,10 @@ class PositionModeType(Enum):
     BOTTOM_LEFT = 8
 
 
-class ContactModeType(Enum):
-    NO_CONTACT = 1
-    ROLLING = 2
-    SLIDING_POSITIVE = 3
-    SLIDING_NEGATIVE = 3
+@dataclass
+class ModeConfig:
+    modes: List[ContactModeType]
+    additional_constraints: Optional[npt.NDArray[sym.Formula]] = None
 
 
 @dataclass

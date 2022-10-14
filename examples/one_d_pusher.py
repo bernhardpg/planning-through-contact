@@ -2,7 +2,13 @@ import numpy as np
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
-from geometry.contact import CollisionPair, PositionModeType, RigidBody
+from geometry.contact import (
+    CollisionPair,
+    ContactModeType,
+    ModeConfig,
+    PositionModeType,
+    RigidBody,
+)
 from planning.gcs import GcsContactPlanner
 from planning.graph_builder import GraphBuilder
 from visualize.visualize import animate_positions, plot_positions_and_forces
@@ -111,25 +117,38 @@ def plan_w_graph_builder():
         *no_ground_motion,
     ]
 
-    source_constraints = [
-        eq(x_f_1, 0),
-        eq(y_f_1, 0.6),
-        eq(x_f_2, 10.0),
-        eq(y_f_2, 0.6),
-        eq(x_b, 6.0),
-        eq(y_b, box_height),
-    ]
-    target_constraints = [eq(x_b, 10.0), eq(y_b, 4.0)]
+    source = ModeConfig(
+        modes={
+            pair_finger_1_box.name: ContactModeType.NO_CONTACT,
+            pair_finger_2_box.name: ContactModeType.NO_CONTACT,
+            pair_box_ground.name: ContactModeType.ROLLING,
+        },
+        additional_constraints=[
+            eq(x_f_1, 0),
+            eq(y_f_1, 0.6),
+            eq(x_f_2, 10.0),
+            eq(y_f_2, 0.6),
+            eq(x_b, 6.0),
+            eq(y_b, box_height),
+        ],
+    )
+    target = ModeConfig(
+        modes={
+            pair_finger_1_box.name: ContactModeType.ROLLING,
+            pair_finger_2_box.name: ContactModeType.ROLLING,
+            pair_box_ground.name: ContactModeType.NO_CONTACT,
+        },
+        additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
+    )
 
     graph_builder = GraphBuilder(
-        source_constraints,
-        target_constraints,
-        rigid_bodies,
         pairs,
         unactuated_bodies,
         external_forces,
         additional_constraints,
     )
+    graph_builder.add_source(source)
+    graph_builder.add_target(target)
 
     breakpoint()
     return

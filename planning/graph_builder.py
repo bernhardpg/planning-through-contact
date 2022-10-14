@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
@@ -6,51 +5,36 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq
 
-from geometry.contact import CollisionPair, RigidBody
+from geometry.contact import CollisionPair, ModeConfig
 
 # flake8: noqa
 
 
-@dataclass
 class GraphBuilder:
-    source_constraints: List[sym.Formula]
-    target_constraints: List[sym.Formula]
-    rigid_bodies: List[RigidBody]
-    collision_pairs: List[CollisionPair]  # TODO for now I define this manually
-    unactuated_bodies: List[str]  # TODO make part of RigidBody
-    external_forces: List[sym.Expression]
-    additional_constraints: Optional[List[sym.Formula]]
-    allow_sliding: bool = False
+    def __init__(
+        self,
+        collision_pairs: List[CollisionPair],  # TODO for now I define this manually
+        unactuated_bodies: List[str],  # TODO make part of RigidBody
+        external_forces: List[sym.Expression],
+        additional_constraints: Optional[List[sym.Formula]],
+        allow_sliding: bool = False,
+    ) -> None:
 
-    def __post_init__(self) -> None:
-        self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)
-        self.unactuated_dofs = self._get_unactuated_dofs(
-            self.unactuated_bodies, self.all_bodies, self.dim
+        self.collision_pairs = collision_pairs
+        self.all_bodies = self._collect_all_rigid_bodies(collision_pairs)
+        unactuated_dofs = self._get_unactuated_dofs(
+            unactuated_bodies, self.all_bodies, self.dim
         )
         force_balance_constraints = self.construct_force_balance(
-            self.collision_pairs,
+            collision_pairs,
             self.all_bodies,
-            self.external_forces,
-            self.unactuated_dofs,
+            external_forces,
+            unactuated_dofs,
         )
-
         for p in self.collision_pairs:
             p.add_force_balance(force_balance_constraints)
-
         for p in self.collision_pairs:
-            p.add_constraint_to_all_modes(self.additional_constraints)
-
-        self.all_decision_vars = self._collect_all_decision_vars(self.collision_pairs)
-
-        for p in self.collision_pairs:
-            p.formulate_contact_modes(self.all_decision_vars, self.allow_sliding)
-
-        breakpoint()
-        self.all_bodies = self._collect_all_rigid_bodies(self.collision_pairs)
-        self.unactuated_dofs = self._get_unactuated_dofs(
-            self.unactuated_bodies, self.all_bodies, self.dim
-        )
-        breakpoint()
+            p.add_constraint_to_all_modes(additional_constraints)
 
         # 1. Build source and target nodes (with force balance)
         # 2. Start with source node:
@@ -75,24 +59,15 @@ class GraphBuilder:
     def _collect_all_pos_vars(
         self, pairs: List[CollisionPair]
     ) -> npt.NDArray[sym.Variable]:
-        all_pos_vars = np.array(
-            sorted(
-                list(
-                    set(
-                        np.concatenate(
-                            [
-                                np.concatenate(
-                                    (p.body_a.pos.x, p.body_b.pos.x)
-                                ).flatten()
-                                for p in pairs
-                            ]
-                        )
-                    )
-                ),
-                key=lambda x: x.get_name(),
-            )
+        all_pos_vars = np.concatenate(
+            [np.concatenate((p.body_a.pos.x, p.body_b.pos.x)).flatten() for p in pairs]
         )
-        return all_pos_vars
+        unique_pos_vars = set(all_pos_vars)
+        sorted_unique_pos_vars = np.array(
+            sorted(list(unique_pos_vars)),
+            key=lambda x: x.get_name(),
+        )
+        return sorted_unique_pos_vars
 
     def _collect_all_decision_vars(
         self, pairs: List[CollisionPair]
@@ -108,7 +83,7 @@ class GraphBuilder:
     def _get_unactuated_dofs(
         self, unactuated_bodies: List[str], all_bodies: List[str], dim: int
     ) -> npt.NDArray[np.int32]:
-        unactuated_idxs = [self.all_bodies.index(b) * dim for b in unactuated_bodies]
+        unactuated_idxs = [all_bodies.index(b) * dim for b in unactuated_bodies]
         unactuated_dofs = np.concatenate(
             [np.arange(idx, idx + dim) for idx in unactuated_idxs]
         )
@@ -140,3 +115,9 @@ class GraphBuilder:
         )
         force_balance = all_force_balances[unactuated_dofs, :]
         return force_balance
+
+    def add_source(self, mode: ModeConfig) -> None:
+        self.source = mode
+
+    def add_target(self, mode: ModeConfig) -> None:
+        self.target = mode
