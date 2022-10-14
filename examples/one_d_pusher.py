@@ -31,9 +31,6 @@ def plan_w_graph_builder():
     finger_2 = RigidBody(
         dim=dim, position_curve_order=order, name="f2", geometry="point"
     )
-    finger_3 = RigidBody(
-        dim=dim, position_curve_order=order, name="f3", geometry="point"
-    )
     box = RigidBody(
         dim=dim,
         position_curve_order=order,
@@ -91,26 +88,12 @@ def plan_w_graph_builder():
         position_mode=PositionModeType.TOP,
     )
 
-    # EXTRA PAIRS
-    p6 = CollisionPair(
-        finger_3,
-        box,
-        friction_coeff,
-        position_mode=PositionModeType.TOP,
-    )
-    p7 = CollisionPair(
-        finger_3,
-        ground,
-        friction_coeff,
-        position_mode=PositionModeType.TOP,
-    )
+    collision_pairs = [p1, p2, p3, p4, p5]
 
-    collision_pairs = [p1, p2, p3, p4, p5, p6, p7]
-
-    rigid_bodies = [finger_1, finger_2, finger_3, box, ground]
+    rigid_bodies = [finger_1, finger_2, box, ground]
 
     # TODO this is very hardcoded
-    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1, 0, -1]]).T
+    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
     # TODO fix so that this is part of rigidbody definition!
@@ -128,8 +111,6 @@ def plan_w_graph_builder():
             p3.name: ContactModeType.ROLLING,
             p4.name: ContactModeType.NO_CONTACT,
             p5.name: ContactModeType.NO_CONTACT,
-            p6.name: ContactModeType.NO_CONTACT,
-            p7.name: ContactModeType.NO_CONTACT,
         },
         additional_constraints=[
             eq(x_f_1, 0),
@@ -148,8 +129,6 @@ def plan_w_graph_builder():
             p3.name: ContactModeType.NO_CONTACT,
             p4.name: ContactModeType.NO_CONTACT,
             p5.name: ContactModeType.NO_CONTACT,
-            p6.name: ContactModeType.NO_CONTACT,
-            p7.name: ContactModeType.NO_CONTACT,
         },
         additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
@@ -164,7 +143,7 @@ def plan_w_graph_builder():
     graph_builder.add_target_config(target_config)
     graph = graph_builder.build_graph("BFS")
 
-    planner = GcsPlanner(graph, rigid_bodies, collision_pairs)
+    planner = GcsPlanner(graph, collision_pairs)
     planner.save_graph_diagram("pruned_graph.svg")
     planner.allow_revisits_to_vertices(1)
     planner.save_graph_diagram("pruned_graph_w_revisits.svg")
@@ -176,8 +155,51 @@ def plan_w_graph_builder():
     planner.add_num_visited_vertices_cost(100)
     planner.add_force_strength_cost()
 
-    planner.solve()
+    result = planner.solve()
+    vertex_values = planner.get_vertex_values(result)
 
+    normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
+    positions = {
+        body_name: planner.get_pos_ctrl_points(vertex_values, body_name)
+        for body_name in planner.rigid_bodies_names
+    }
+
+    pos_curves = {
+        body: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(c).eval_entire_interval()
+                for c in ctrl_points
+            ]
+        )
+        for body, ctrl_points in positions.items()
+    }
+
+    normal_force_curves = {
+        pair: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(
+                    points.reshape((1, -1))
+                ).eval_entire_interval()
+                for points in control_points
+            ]
+        )
+        for pair, control_points in normal_forces.items()
+    }
+
+    friction_force_curves = {
+        pair: np.concatenate(
+            [
+                BezierCurve.create_from_ctrl_points(
+                    points.reshape((1, -1))
+                ).eval_entire_interval()
+                for points in control_points
+            ]
+        )
+        for pair, control_points in friction_forces.items()
+    }
+
+    plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
+    animate_positions(pos_curves, rigid_bodies)
     return
 
 

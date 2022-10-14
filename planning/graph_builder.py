@@ -285,17 +285,19 @@ class GraphBuilder:
 
         u = source
         frontier = PriorityQueue()
+        # TODO refactor this into a function
         new_modes = self.find_adjacent_mode_configs(u, graph)
         priorities = [m.calculate_match(self.target_config) for m in new_modes]
         for (pri, m) in zip(priorities, new_modes):
             frontier.put(PrioritizedModeConfig(pri, m))
-        i = 0
+
+        TIMEOUT_LIMIT = 100
+        counter = 0
         while True:
-            i += 1
-            print(i)
             if frontier.empty():
                 raise RuntimeError("Frontier empty, but target not found")
             m = frontier.get().item
+            counter += 1
             v = graph.create_new_vertex(m)
 
             if u.convex_set.IntersectsWith(v.convex_set):
@@ -314,8 +316,8 @@ class GraphBuilder:
                     graph.add_edge(v, target)
                     break
                 u = v
-            if i == 100:
-                print("Timed out")
+            if counter == TIMEOUT_LIMIT:
+                print("Timed out after {TIMEOUT_LIMIT} node expansions")
                 break
 
         return graph

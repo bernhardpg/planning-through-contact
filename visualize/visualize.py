@@ -103,9 +103,9 @@ def animate_positions(
     points = {}
     for b in bodies:
         if b.geometry == "box":
-            if b.name == "ground":
+            if b.name in "ground":
                 (ground,) = ax.plot([], [], "k")
-                boxes["ground"] = ground
+                boxes[b.name] = ground
                 continue
             (box,) = ax.plot([], [], "r", lw=5)
             boxes[b.name] = box

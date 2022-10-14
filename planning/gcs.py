@@ -18,11 +18,7 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
-from geometry.contact import (
-    CollisionPair,
-    RigidBody,
-    calc_intersection_of_contact_modes,
-)
+from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
 from geometry.polyhedron import PolyhedronFormulator
 from planning.graph_builder import Graph
 
@@ -31,20 +27,26 @@ class GcsPlanner:
     def __init__(
         self,
         graph: Graph,
-        rigid_bodies: List[RigidBody],
         collision_pairs: List[CollisionPair],
     ):
         self.gcs = GraphOfConvexSets()
-        self.rigid_bodies = rigid_bodies
+        self.rigid_bodies_names = self._collect_all_rigid_bodies(collision_pairs)
         self.collision_pairs = collision_pairs
         self.all_decision_vars = graph.all_decision_vars
         self.all_position_vars = graph.all_position_vars
         self.all_force_vars = graph.all_force_vars
         self._formulate_graph(graph)
 
+    # TODO clean up, this should be ONE place not multiple like now
+    def _collect_all_rigid_bodies(self, pairs: List[CollisionPair]) -> List[str]:
+        all_body_names = sorted(
+            list(set(sum([[p.body_a.name, p.body_b.name] for p in pairs], [])))
+        )
+        return all_body_names
+
     @property
     def num_bodies(self) -> int:
-        return len(self.rigid_bodies)
+        return len(self.rigid_bodies_names)
 
     @property
     def num_pairs(self) -> int:
@@ -241,6 +243,56 @@ class GcsPlanner:
         assert result.is_success()
         print("Result is success!")
         return result
+
+    def get_vertex_values(
+        self, result: MathematicalProgramResult
+    ) -> npt.NDArray[np.float64]:
+        flow_variables = [e.phi() for e in self.gcs.Edges()]
+        flow_results = [result.GetSolution(p) for p in flow_variables]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+        ]
+        path = self._find_path_to_target(active_edges, self.target, self.source)
+        vertex_values = np.vstack([result.GetSolution(v.x()) for v in path])
+        print("Path:")
+        print([v.name() for v in path])
+        return vertex_values
+
+    def get_pos_ctrl_points(
+        self, vertex_values: npt.NDArray[np.float64], body_name: str
+    ) -> List[npt.NDArray[np.float64]]:
+        pos_ctrl_points = vertex_values[:, : len(self.all_position_vars)]
+        num_pos_vars_per_body = self.position_dim * (self.position_curve_order + 1)
+        body_idx = self.rigid_bodies_names.index(body_name) * num_pos_vars_per_body
+        body_ctrl_points = pos_ctrl_points[
+            :, body_idx : body_idx + num_pos_vars_per_body
+        ]
+        body_ctrl_points_reshaped = [
+            c.reshape((self.position_dim, self.position_curve_order + 1))
+            for c in body_ctrl_points
+        ]
+        return body_ctrl_points_reshaped
+
+    def get_force_ctrl_points(self, vertex_values: List[npt.NDArray[np.float64]]):
+        forces_ctrl_points = vertex_values[:, len(self.all_position_vars) :]
+        # friction forces are always one dimensional
+        num_force_vars_per_pair = self.force_curve_order + 1
+        normal_forces_ctrl_points, friction_forces_ctrl_points = np.split(
+            forces_ctrl_points, [num_force_vars_per_pair * self.num_pairs], axis=1
+        )
+        normal_forces = {}
+        friction_forces = {}
+        for idx, p in enumerate(self.collision_pairs):
+            n_force = normal_forces_ctrl_points[
+                :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair
+            ]
+            normal_forces[p.name] = n_force
+            f_force = friction_forces_ctrl_points[
+                :, idx * num_force_vars_per_pair : (idx + 1) * num_force_vars_per_pair
+            ]
+            friction_forces[p.name] = f_force
+
+        return normal_forces, friction_forces
 
     def save_graph_diagram(
         self, filename: str, result: Optional[MathematicalProgramResult] = None
