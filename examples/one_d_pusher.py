@@ -2,19 +2,16 @@ import numpy as np
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
-from geometry.contact import CollisionPair, PositionMode, RigidBody
+from geometry.contact import CollisionPair, PositionModeType, RigidBody
 from planning.gcs import GcsContactPlanner
 from planning.graph_builder import GraphBuilder
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
+# TODO remove
 # flake8: noqa
 
 
 def plan_w_graph_builder():
-    # TODO:
-    # Plan
-    # - Specify source and target node as
-
     # Bezier curve params
     dim = 2
     order = 2
@@ -139,16 +136,16 @@ def plan_for_two_fingers():
         finger_1,
         box,
         friction_coeff,
-        position_mode=PositionMode.LEFT,
+        position_mode=PositionModeType.LEFT,
     )
     pair_finger_2_box = CollisionPair(
         finger_2,
         box,
         friction_coeff,
-        position_mode=PositionMode.RIGHT,
+        position_mode=PositionModeType.RIGHT,
     )
     pair_box_ground = CollisionPair(
-        box, ground, friction_coeff, position_mode=PositionMode.TOP
+        box, ground, friction_coeff, position_mode=PositionModeType.TOP
     )
 
     all_pairs = [
@@ -287,10 +284,10 @@ def plan_for_one_box_one_finger():
         finger,
         box,
         friction_coeff,
-        position_mode=PositionMode.LEFT,
+        position_mode=PositionModeType.LEFT,
     )
     pair_box_ground = CollisionPair(
-        box, ground, friction_coeff, position_mode=PositionMode.TOP
+        box, ground, friction_coeff, position_mode=PositionModeType.TOP
     )
     all_pairs = [pair_finger_box, pair_box_ground]
 

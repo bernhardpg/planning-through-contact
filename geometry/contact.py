@@ -14,6 +14,24 @@ from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
 
 
+class PositionModeType(Enum):
+    LEFT = 1
+    TOP_LEFT = 2
+    TOP = 3
+    TOP_RIGHT = 4
+    RIGHT = 5
+    BOTTOM_RIGHT = 6
+    BOTTOM = 7
+    BOTTOM_LEFT = 8
+
+
+class ContactModeType(Enum):
+    NO_CONTACT = 1
+    ROLLING = 2
+    SLIDING_POSITIVE = 3
+    SLIDING_NEGATIVE = 3
+
+
 @dataclass
 class RigidBody:
     name: str
@@ -46,6 +64,7 @@ class ContactMode:
     name: str
     constraints: List[npt.NDArray[sym.Formula]]
     all_vars: npt.NDArray[sym.Variable]
+    type: ContactModeType
 
     def __post_init__(self):
         self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
@@ -53,76 +72,15 @@ class ContactMode:
         )
 
 
-class PositionMode(Enum):
-    LEFT = 1
-    TOP_LEFT = 2
-    TOP = 3
-    TOP_RIGHT = 4
-    RIGHT = 5
-    BOTTOM_RIGHT = 6
-    BOTTOM = 7
-    BOTTOM_LEFT = 8
-
-
 @dataclass
 class CollisionPair:
     body_a: RigidBody
     body_b: RigidBody
     friction_coeff: float
-    position_mode: PositionMode  # TODO move somewhere else to generalize?
+    position_mode: PositionModeType  # TODO move somewhere else to generalize?
     order: int = 2  # TODO remove?
 
-    @staticmethod
-    def _create_signed_distance_func(
-        body_a, body_b, position_mode: PositionMode
-    ) -> sym.Expression:
-        if body_a.geometry == "point" and body_b.geometry == "point":
-            raise ValueError("Point with point contact not allowed")
-        elif body_a.geometry == "box" and body_b.geometry == "box":
-            raise NotImplementedError("Box and box contact not implemented")
-
-        x_offset = body_a.width if body_a.geometry == "box" else body_b.width
-        y_offset = body_a.height if body_a.geometry == "box" else body_b.height
-
-        if position_mode == PositionMode.LEFT:  # body_a is on left side of body_b
-            dx = body_b.pos_x - body_a.pos_x - x_offset
-            dy = 0
-        elif position_mode == PositionMode.RIGHT:
-            dx = body_a.pos_x - body_b.pos_x - x_offset
-            dy = 0
-        elif position_mode == PositionMode.TOP:  # body_a on top of body_b
-            dx = 0
-            dy = body_a.pos_y - body_b.pos_y - y_offset
-        elif position_mode == PositionMode.BOTTOM:
-            dx = 0
-            dy = body_b.pos_y - body_a.pos_y - y_offset
-        else:
-            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
-
-        return dx + dy  # NOTE convex relaxation
-
-    @staticmethod
-    def _create_normal_vec(
-        body_a, body_b, position_mode: PositionMode
-    ) -> npt.NDArray[np.float64]:
-        if body_a.geometry == "point" and body_b.geometry == "point":
-            raise ValueError("Point with point contact not allowed")
-        elif body_a.geometry == "box" and body_b.geometry == "box":
-            raise NotImplementedError("Box and box contact not implemented")
-
-        # Normal vector: from body_a to body_b
-        if position_mode == PositionMode.LEFT:  # body_a left side of body_b
-            n_hat = np.array([[1, 0]]).T
-        elif position_mode == PositionMode.RIGHT:
-            n_hat = np.array([[-1, 0]]).T
-        elif position_mode == PositionMode.TOP:
-            n_hat = np.array([[0, -1]]).T
-        elif position_mode == PositionMode.BOTTOM:
-            n_hat = np.array([[0, 1]]).T
-        else:
-            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
-
-        return n_hat
+    # TODO Also use position modes to specify position constraints!
 
     def __post_init__(self):
         self.sdf = self._create_signed_distance_func(
@@ -140,6 +98,58 @@ class CollisionPair:
         assert self.dim == 2  # TODO for now only works for 2D
         self.d_hat = np.array([[-self.n_hat[1, 0]], [self.n_hat[0, 0]]])
         self.additional_constraints = []
+
+    @staticmethod
+    def _create_signed_distance_func(
+        body_a, body_b, position_mode: PositionModeType
+    ) -> sym.Expression:
+        if body_a.geometry == "point" and body_b.geometry == "point":
+            raise ValueError("Point with point contact not allowed")
+        elif body_a.geometry == "box" and body_b.geometry == "box":
+            raise NotImplementedError("Box and box contact not implemented")
+
+        x_offset = body_a.width if body_a.geometry == "box" else body_b.width
+        y_offset = body_a.height if body_a.geometry == "box" else body_b.height
+
+        if position_mode == PositionModeType.LEFT:  # body_a is on left side of body_b
+            dx = body_b.pos_x - body_a.pos_x - x_offset
+            dy = 0
+        elif position_mode == PositionModeType.RIGHT:
+            dx = body_a.pos_x - body_b.pos_x - x_offset
+            dy = 0
+        elif position_mode == PositionModeType.TOP:  # body_a on top of body_b
+            dx = 0
+            dy = body_a.pos_y - body_b.pos_y - y_offset
+        elif position_mode == PositionModeType.BOTTOM:
+            dx = 0
+            dy = body_b.pos_y - body_a.pos_y - y_offset
+        else:
+            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
+
+        return dx + dy  # NOTE convex relaxation
+
+    @staticmethod
+    def _create_normal_vec(
+        body_a, body_b, position_mode: PositionModeType
+    ) -> npt.NDArray[np.float64]:
+        if body_a.geometry == "point" and body_b.geometry == "point":
+            raise ValueError("Point with point contact not allowed")
+        elif body_a.geometry == "box" and body_b.geometry == "box":
+            raise NotImplementedError("Box and box contact not implemented")
+
+        # Normal vector: from body_a to body_b
+        if position_mode == PositionModeType.LEFT:  # body_a left side of body_b
+            n_hat = np.array([[1, 0]]).T
+        elif position_mode == PositionModeType.RIGHT:
+            n_hat = np.array([[-1, 0]]).T
+        elif position_mode == PositionModeType.TOP:
+            n_hat = np.array([[0, -1]]).T
+        elif position_mode == PositionModeType.BOTTOM:
+            n_hat = np.array([[0, 1]]).T
+        else:
+            raise NotImplementedError(f"Position mode not implemented: {position_mode}")
+
+        return n_hat
 
     @property
     def name(self) -> str:
@@ -168,16 +178,6 @@ class CollisionPair:
             np.vstack((self.body_a.vel.x, self.body_b.vel.x))
         )
 
-    def get_tangential_jacobian_for_bodies(
-        self, bodies: List[RigidBody]
-    ) -> npt.NDArray[np.float64]:
-        return self._get_jacobian_for_bodies(bodies, self.tangential_jacobian)
-
-    def get_normal_jacobian_for_bodies(
-        self, bodies: List[RigidBody]
-    ) -> npt.NDArray[np.float64]:
-        return self._get_jacobian_for_bodies(bodies, self.normal_jacobian)
-
     def _get_jacobian_for_bodies(
         self, bodies: List[RigidBody], jacobian: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
@@ -199,6 +199,16 @@ class CollisionPair:
         ]
         return jacobian_for_all_bodies
 
+    def get_tangential_jacobian_for_bodies(
+        self, bodies: List[RigidBody]
+    ) -> npt.NDArray[np.float64]:
+        return self._get_jacobian_for_bodies(bodies, self.tangential_jacobian)
+
+    def get_normal_jacobian_for_bodies(
+        self, bodies: List[RigidBody]
+    ) -> npt.NDArray[np.float64]:
+        return self._get_jacobian_for_bodies(bodies, self.normal_jacobian)
+
     def add_constraint_to_all_modes(self, constraints) -> None:
         self.additional_constraints = sum(
             [self.additional_constraints, constraints], []
@@ -208,33 +218,33 @@ class CollisionPair:
         self.force_balance = force_balance
 
     def formulate_contact_modes(self, all_variables, allow_sliding: bool = False):
-        assert self.force_balance is not None
+        if self.force_balance is None:
+            raise ValueError(
+                "Force balance must be set before formulating contact modes"
+            )
 
-        no_contact_constraints = [
-            ge(self.sdf, 0),
-            eq(self.lam_n, 0),
-            le(self.lam_f, self.friction_coeff * self.lam_n),
-            ge(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-
-        rolling_constraints = [
-            eq(self.sdf, 0),
-            ge(self.lam_n, 0),
-            eq(self.rel_tangential_sliding_vel, 0),
-            le(self.lam_f, self.friction_coeff * self.lam_n),
-            ge(self.lam_f, -self.friction_coeff * self.lam_n),
-            *self.force_balance,
-            *self.additional_constraints,
-        ]
-        modes_constraints = [
-            ("no_contact", no_contact_constraints),
-            ("rolling", rolling_constraints),
-        ]
+        modes_constraints = {
+            ContactModeType.NO_CONTACT: [
+                ge(self.sdf, 0),
+                eq(self.lam_n, 0),
+                le(self.lam_f, self.friction_coeff * self.lam_n),
+                ge(self.lam_f, -self.friction_coeff * self.lam_n),
+                *self.force_balance,
+                *self.additional_constraints,
+            ],
+            ContactModeType.ROLLING: [
+                eq(self.sdf, 0),
+                ge(self.lam_n, 0),
+                eq(self.rel_tangential_sliding_vel, 0),
+                le(self.lam_f, self.friction_coeff * self.lam_n),
+                ge(self.lam_f, -self.friction_coeff * self.lam_n),
+                *self.force_balance,
+                *self.additional_constraints,
+            ],
+        }
 
         if allow_sliding:
-            sliding_positive_constraints = [
+            modes_constraints[ContactModeType.SLIDING_POSITIVE] = [
                 eq(self.sdf, 0),
                 ge(self.lam_n, 0),
                 ge(self.rel_tangential_sliding_vel, 0),
@@ -242,8 +252,7 @@ class CollisionPair:
                 *self.force_balance,
                 *self.additional_constraints,
             ]
-
-            sliding_negative_constraints = [
+            modes_constraints[ContactModeType.SLIDING_NEGATIVE] = [
                 eq(self.sdf, 0),
                 ge(self.lam_n, 0),
                 le(self.rel_tangential_sliding_vel, 0),
@@ -251,12 +260,10 @@ class CollisionPair:
                 *self.force_balance,
                 *self.additional_constraints,
             ]
-            modes_constraints.append(("sliding_positive", sliding_positive_constraints))
-            modes_constraints.append(("sliding_negative", sliding_negative_constraints))
 
         self.contact_modes = [
-            ContactMode(f"{self.name}_{name}", constraints, all_variables)
-            for name, constraints in modes_constraints
+            ContactMode(f"{self.name}_{name}", constraints, all_variables, name)
+            for name, constraints in modes_constraints.items()
         ]
 
 
