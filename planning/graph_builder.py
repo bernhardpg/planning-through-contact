@@ -11,6 +11,7 @@ from pydrake.math import eq
 from geometry.contact import (
     CollisionPair,
     ContactModeType,
+    RigidBody,
     calc_intersection_of_contact_modes,
 )
 from geometry.polyhedron import PolyhedronFormulator
@@ -50,16 +51,21 @@ class GraphEdge:
     v: GraphVertex
 
 
+# TODO Find a better way to pass all these objects
 class Graph:
     def __init__(
         self,
         collision_pairs: List[CollisionPair],
         all_decision_vars: npt.NDArray[sym.Variable],
+        all_position_vars: npt.NDArray[sym.Variable],
+        all_force_vars: npt.NDArray[sym.Variable],
     ):
         self.collision_pairs = {p.name: p for p in collision_pairs}
         self.edges = []
         self.vertices = []
         self.all_decision_vars = all_decision_vars
+        self.all_position_vars = all_position_vars
+        self.all_force_vars = all_force_vars
 
     # TODO not sure if this belongs here
     def create_new_vertex(
@@ -122,13 +128,13 @@ class GraphBuilder:
     ) -> None:
 
         self.collision_pairs = collision_pairs
-        self.all_bodies = self._collect_all_rigid_bodies(collision_pairs)
+        self.rigid_bodies = self._collect_all_rigid_bodies(collision_pairs)
         unactuated_dofs = self._get_unactuated_dofs(
-            unactuated_bodies, self.all_bodies, self.dim
+            unactuated_bodies, self.rigid_bodies, self.position_dim
         )
         force_balance_constraints = self.construct_force_balance(
             collision_pairs,
-            self.all_bodies,
+            self.rigid_bodies,
             external_forces,
             unactuated_dofs,
         )
@@ -138,6 +144,8 @@ class GraphBuilder:
             p.add_constraint_to_all_modes(additional_constraints)
 
         self.all_decision_vars = self._collect_all_decision_vars(self.collision_pairs)
+        self.all_position_vars = self._collect_all_pos_vars(self.collision_pairs)
+        self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
         for p in self.collision_pairs:
             p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
 
@@ -151,7 +159,7 @@ class GraphBuilder:
         # How to deal with repeated visits to a node? For now we just make graph repeated after building it
 
     @property
-    def dim(self) -> int:
+    def position_dim(self) -> int:
         return self.collision_pairs[0].body_a.dim
 
     @staticmethod
@@ -185,9 +193,9 @@ class GraphBuilder:
         return all_vars
 
     def _get_unactuated_dofs(
-        self, unactuated_bodies: List[str], all_bodies: List[str], dim: int
+        self, unactuated_bodies: List[str], rigid_bodies: List[str], dim: int
     ) -> npt.NDArray[np.int32]:
-        unactuated_idxs = [all_bodies.index(b) * dim for b in unactuated_bodies]
+        unactuated_idxs = [rigid_bodies.index(b) * dim for b in unactuated_bodies]
         unactuated_dofs = np.concatenate(
             [np.arange(idx, idx + dim) for idx in unactuated_idxs]
         )
@@ -263,7 +271,12 @@ class GraphBuilder:
         elif algorithm == "BFS":
             INDEX_TO_POP = 0
 
-        graph = Graph(self.collision_pairs, self.all_decision_vars)
+        graph = Graph(
+            self.collision_pairs,
+            self.all_decision_vars,
+            self.all_position_vars,
+            self.all_force_vars,
+        )
         source = graph.create_new_vertex(self.source, "source")
         # TODO make name difference between target and target config!
         target = graph.create_new_vertex(self.target, "target")

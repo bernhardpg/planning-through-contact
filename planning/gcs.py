@@ -18,15 +18,49 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
-from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
+from geometry.contact import (
+    CollisionPair,
+    RigidBody,
+    calc_intersection_of_contact_modes,
+)
 from geometry.polyhedron import PolyhedronFormulator
 from planning.graph_builder import Graph
 
 
-class Gcs:
-    def __init__(self, graph: Graph):
+class GcsPlanner:
+    def __init__(
+        self,
+        graph: Graph,
+        rigid_bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],
+    ):
         self.gcs = GraphOfConvexSets()
+        self.rigid_bodies = rigid_bodies
+        self.collision_pairs = collision_pairs
+        self.all_decision_vars = graph.all_decision_vars
+        self.all_position_vars = graph.all_position_vars
+        self.all_force_vars = graph.all_force_vars
         self._formulate_graph(graph)
+
+    @property
+    def num_bodies(self) -> int:
+        return len(self.rigid_bodies)
+
+    @property
+    def num_pairs(self) -> int:
+        return len(self.collision_pairs)
+
+    @property
+    def position_dim(self) -> int:
+        return self.collision_pairs[0].body_a.dim
+
+    @property
+    def position_curve_order(self) -> int:
+        return self.collision_pairs[0].body_a.position_curve_order
+
+    @property
+    def force_curve_order(self) -> int:
+        return self.collision_pairs[0].force_curve_order
 
     def _formulate_graph(self, graph: Graph) -> None:
         print("Adding vertices...")
@@ -40,6 +74,20 @@ class Gcs:
             u = vertex_map[e.u.name]
             v = vertex_map[e.v.name]
             self.gcs.AddEdge(u, v)
+
+    def _find_path_to_target(
+        self,
+        edges: List[GraphOfConvexSets.Edge],
+        target: GraphOfConvexSets.Vertex,
+        u: GraphOfConvexSets.Vertex,
+    ) -> List[GraphOfConvexSets.Vertex]:
+        current_edge = next(e for e in edges if e.u() == u)
+        v = current_edge.v()
+        target_reached = v == target
+        if target_reached:
+            return [u] + [v]
+        else:
+            return [u] + self._find_path_to_target(edges, target, v)
 
     def allow_revisits_to_vertices(self, num_allowed_revisits: int) -> None:
         if num_allowed_revisits > 0:
@@ -61,19 +109,110 @@ class Gcs:
             for u, v in new_edges:
                 self.gcs.AddEdge(u, v)
 
-    def _find_path_to_target(
-        self,
-        edges: List[GraphOfConvexSets.Edge],
-        target: GraphOfConvexSets.Vertex,
-        u: GraphOfConvexSets.Vertex,
-    ) -> List[GraphOfConvexSets.Vertex]:
-        current_edge = next(e for e in edges if e.u() == u)
-        v = current_edge.v()
-        target_reached = v == target
-        if target_reached:
-            return [u] + [v]
-        else:
-            return [u] + self._find_path_to_target(edges, target, v)
+    def _get_idxs_for_pos_ctrl_point_j(self, j: int) -> npt.NDArray[np.int32]:
+        first_idxs = np.arange(0, self.position_dim * self.num_bodies) * (
+            self.position_curve_order + 1
+        )
+        idxs = first_idxs + j
+        return idxs
+
+    def _get_idxs_for_force_ctrl_point_j(self, j: int) -> npt.NDArray[np.int32]:
+        first_idxs = np.arange(0, 2 * self.num_pairs) * (self.force_curve_order + 1)
+        idxs = first_idxs + j
+        return idxs
+
+    def add_position_continuity_constraints(self) -> None:
+        first_idxs = self._get_idxs_for_pos_ctrl_point_j(0)
+        last_idxs = self._get_idxs_for_pos_ctrl_point_j(self.position_curve_order)
+        first_pos_vars = self.all_position_vars[first_idxs]
+        last_pos_vars = self.all_position_vars[last_idxs]
+        A_first = sym.DecomposeLinearExpressions(first_pos_vars, self.all_decision_vars)
+        A_last = sym.DecomposeLinearExpressions(last_pos_vars, self.all_decision_vars)
+        print("Adding position continuity constraints...")
+        for e in tqdm(self.gcs.Edges()):
+            xu, xv = e.xu(), e.xv()
+            constraints = eq(A_last.dot(xu), A_first.dot(xv))
+            for c in constraints:
+                e.AddConstraint(c)
+
+    def add_num_visited_vertices_cost(self, weight: float) -> None:
+        print("Adding cost on number of visited vertices")
+        for e in tqdm(self.gcs.Edges()):
+            e.AddCost(weight)
+
+    def add_force_strength_cost(self) -> None:
+        A = sym.DecomposeLinearExpressions(self.all_force_vars, self.all_decision_vars)
+        b = np.zeros((A.shape[0], 1))
+        force_cost = L1NormCost(A, b)
+        print("Adding force strength cost...")
+        for e in tqdm(self.gcs.Edges()):
+            cost = Binding[Cost](force_cost, e.xu())
+            e.AddCost(cost)
+
+    def add_position_path_length_cost(self) -> None:
+        idxs = [
+            self._get_idxs_for_pos_ctrl_point_j(j)
+            for j in range(self.position_curve_order + 1)
+        ]
+        ctrl_point_diffs = np.diff(
+            np.concatenate([[self.all_position_vars[i]] for i in idxs]), axis=0
+        ).flatten()
+        A = sym.DecomposeLinearExpressions(
+            ctrl_point_diffs.flatten(), self.all_decision_vars
+        )
+        b = np.zeros((A.shape[0], 1))
+        path_length_cost = L2NormCost(A, b)
+        print("Adding position path length cost...")
+        for v in tqdm(self.gcs.Vertices()):
+            cost = Binding[Cost](path_length_cost, v.x())
+            v.AddCost(cost)
+
+    def add_force_path_length_cost(self) -> None:
+        idxs = [
+            self._get_idxs_for_force_ctrl_point_j(j)
+            for j in range(self.position_curve_order + 1)
+        ]
+        ctrl_point_diffs = np.diff(
+            np.concatenate([[self.all_force_vars[i]] for i in idxs]), axis=0
+        ).flatten()
+        A = sym.DecomposeLinearExpressions(
+            ctrl_point_diffs.flatten(), self.all_decision_vars
+        )
+        b = np.zeros((A.shape[0], 1))
+        force_length_cost = L2NormCost(A, b)
+        print("Adding force path length cost...")
+        for e in tqdm(self.gcs.Edges()):
+            cost = Binding[Cost](force_length_cost, e.xu())
+            e.AddCost(cost)
+
+    def add_path_energy_cost(self) -> None:
+        raise NotImplementedError
+        ...
+        # TODO
+        # Create path energy cost
+        #    ADD_PATH_ENERGY_COST = False
+        #    if ADD_PATH_ENERGY_COST:
+        #        # PerspectiveQuadraticCost scales the cost by the
+        #        # first element of z = Ax + b
+        #        A_mod = np.vstack((np.zeros((1, A.shape[1])), A))
+        #        b_mod = np.vstack((1, b))
+        #        energy_cost = PerspectiveQuadraticCost(A_mod, b_mod)
+        #        for e in gcs.Vertices():
+        #            e_cost = Binding[Cost](energy_cost, e.xu())
+        #            e.AddCost(e_cost)
+
+    def solve(self, use_convex_relaxation: bool = False) -> MathematicalProgramResult:
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = use_convex_relaxation
+        if use_convex_relaxation is True:
+            options.preprocessing = True  # TODO Do I need to deal with this?
+            options.max_rounded_paths = 10
+
+        print("Solving GCS problem...")
+        result = self.gcs.SolveShortestPath(self.source, self.target, options)
+        assert result.is_success()
+        print("Result is success!")
+        return result
 
     def save_graph_diagram(
         self, filename: str, result: Optional[MathematicalProgramResult] = None
@@ -86,6 +225,7 @@ class Gcs:
         data.write_svg(filename)
 
 
+# TODO remove this once the new one is ready
 @dataclass
 class GcsContactPlanner:
     collision_pairs: List[CollisionPair]

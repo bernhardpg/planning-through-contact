@@ -3,12 +3,14 @@ from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
 from geometry.contact import CollisionPair, ContactModeType, PositionModeType, RigidBody
-from planning.gcs import Gcs, GcsContactPlanner
+from planning.gcs import GcsContactPlanner, GcsPlanner
 from planning.graph_builder import GraphBuilder, ModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
 # TODO remove
 # flake8: noqa
+
+# TODO add a guard that makes sure all bodies in all pairs have same dimension?
 
 
 def plan_w_graph_builder():
@@ -103,7 +105,7 @@ def plan_w_graph_builder():
         position_mode=PositionModeType.TOP,
     )
 
-    pairs = [p1, p2, p3, p4, p5, p6, p7]
+    collision_pairs = [p1, p2, p3, p4, p5, p6, p7]
 
     rigid_bodies = [finger_1, finger_2, finger_3, box, ground]
 
@@ -152,7 +154,7 @@ def plan_w_graph_builder():
     )
 
     graph_builder = GraphBuilder(
-        pairs,
+        collision_pairs,
         unactuated_bodies,
         external_forces,
         additional_constraints,
@@ -161,8 +163,17 @@ def plan_w_graph_builder():
     graph_builder.add_target(target)
     graph = graph_builder.build_graph("BFS")
 
-    gcs_solver = Gcs(graph)
-    gcs_solver.save_graph_diagram("pruned_graph.svg")
+    planner = GcsPlanner(graph, rigid_bodies, collision_pairs)
+    planner.save_graph_diagram("pruned_graph.svg")
+    planner.allow_revisits_to_vertices(1)
+    planner.save_graph_diagram("pruned_graph_w_revisits.svg")
+
+    # TODO add weights here
+    planner.add_position_continuity_constraints()
+    planner.add_position_path_length_cost()
+    planner.add_force_path_length_cost()
+    planner.add_num_visited_vertices_cost(100)
+    planner.add_force_strength_cost()
 
     return
 
