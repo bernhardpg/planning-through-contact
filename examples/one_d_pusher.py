@@ -2,15 +2,9 @@ import numpy as np
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
-from geometry.contact import (
-    CollisionPair,
-    ContactModeType,
-    ModeConfig,
-    PositionModeType,
-    RigidBody,
-)
+from geometry.contact import CollisionPair, ContactModeType, PositionModeType, RigidBody
 from planning.gcs import GcsContactPlanner
-from planning.graph_builder import GraphBuilder
+from planning.graph_builder import GraphBuilder, ModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
 # TODO remove
@@ -149,6 +143,7 @@ def plan_w_graph_builder():
     )
     graph_builder.add_source(source)
     graph_builder.add_target(target)
+    graph_builder.build_graph()
 
     breakpoint()
     return

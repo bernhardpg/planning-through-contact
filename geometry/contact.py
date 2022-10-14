@@ -33,12 +33,6 @@ class PositionModeType(Enum):
 
 
 @dataclass
-class ModeConfig:
-    modes: List[ContactModeType]
-    additional_constraints: Optional[npt.NDArray[sym.Formula]] = None
-
-
-@dataclass
 class RigidBody:
     name: str
     dim: int
@@ -104,6 +98,7 @@ class CollisionPair:
             dim=1, order=self.force_curve_order, name=f"{self.name}_lam_f"
         ).x
         self.additional_constraints = []
+        self.contact_modes_formulated = False
 
     @staticmethod
     def _create_position_mode_constraints(
@@ -279,6 +274,9 @@ class CollisionPair:
         all_variables: npt.NDArray[sym.Variable],
         allow_sliding: bool = False,
     ):
+        if self.contact_modes_formulated:
+            raise ValueError(f"Contact modes already formulated for {self.name}")
+
         if self.force_balance is None:
             raise ValueError(
                 "Force balance must be set before formulating contact modes"
@@ -330,15 +328,17 @@ class CollisionPair:
                 *self.additional_constraints,
             ]
 
-        self.contact_modes = [
-            ContactMode(
+        self.contact_modes = {
+            mode_type: ContactMode(
                 f"{self.name}_{mode_type}",
                 contact_constraints,
                 all_variables,
                 mode_type,
             )
             for mode_type, contact_constraints in modes_constraints.items()
-        ]
+        }
+        # TODO I HATE this, very against functional programming principles. Find an alternative?
+        self.contact_modes_formulated = True
 
 
 def calc_intersection_of_contact_modes(

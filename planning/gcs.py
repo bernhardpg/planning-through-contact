@@ -164,7 +164,8 @@ class GcsContactPlanner:
 
     def _create_all_convex_sets(self, pairs: List[CollisionPair]) -> List[ConvexSet]:
         # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p
-        contact_pairs = [p.contact_modes for p in pairs]
+        # TODO: This is outdated: We now use dicts, but this assumes list of contact modes.
+        contact_pairs = [list(p.contact_modes.values()) for p in pairs]
         # Cartesian product:
         # S = P_1 X P_2 X ... X P_n_p
         # |S| = |P_1| * |P_2| * ... * |P_n_p|
