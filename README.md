@@ -1,20 +1,20 @@
 # Planning Through Contact
 
-## Installation
-This repo uses Poetry for dependency management. To setup this project, make sure to have both [Poetry](https://python-poetry.org/docs/#installation) and Python3.10 installed on your system.
+## Installation (Linux and MacOS)
+This repo uses Poetry for dependency management. To setup this project, first install [Poetry](https://python-poetry.org/docs/#installation) and, make sure to have Python3.10 installed on your system.
 
-Then, configure poetry to use Python3.10:
+Then, configure poetry to setup a virtual environment that uses Python 3.10:
 ```
 poetry env use python3.10
 ```
 
-Next, install all the required dependencies with:
+Next, install all the required dependencies to the virtual environment with the following command:
 ```
 poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
-Now, to run any files in the project, prefix the command with `poetry run ...`. For example:
+Now everything needed to run the project should be installed. To run any files in the project, prefix the command with `poetry run ...`. For example:
 ```
 poetry run python main.py
 ```
@@ -29,7 +29,7 @@ poetry run python main.py --demo two_fingers
 ```
 
 ## Running pre-commit hooks
-To run all the pre-commit hooks, run the following command:
+The repo is setup to do automatic linting and code checking on every commit through the use of pre-commits. To run all the pre-commit hooks (which will clean up all files in the repo), run the following command:
 ```
 poetry run pre-commit run --all-files
 ```

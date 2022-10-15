@@ -9,7 +9,10 @@ license = "MIT License"
 python = "^3.10"
 matplotlib = "^3.6.1"
 numpy = "^1.23.3"
-drake = {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl"}
+drake = [
+    {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl", markers="sys_platform == 'darwin'"},
+    {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-manylinux_2_31_x86_64.whl", markers="sys_platform == 'linux'"}
+]
 pre-commit = "^2.20.0"
 pdbpp = "^0.10.3"
 tqdm = "^4.64.1"
