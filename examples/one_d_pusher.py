@@ -161,7 +161,7 @@ def plan_w_graph_builder():
     )
     planner.add_source_config(source_config)
     planner.add_target_config(target_config)
-    planner.build_graph("BFS")
+    planner.build_graph(prune=True)
     planner.save_graph_diagram("pruned_graph.svg")
     planner.allow_revisits_to_vertices(1)
     planner.save_graph_diagram("pruned_graph_w_revisits.svg")

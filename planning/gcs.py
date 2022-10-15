@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -139,8 +139,8 @@ class GcsPlanner:
     def add_target_config(self, mc: ModeConfig) -> None:
         self.graph_builder.add_target_config(mc)
 
-    def build_graph(self, algorithm: Literal["BFS", "DFS"]) -> None:
-        graph = self.graph_builder.build_graph(algorithm)
+    def build_graph(self, prune: bool = False) -> None:
+        graph = self.graph_builder.build_graph(prune)
         self._formulate_graph(graph)
 
     def _find_path_to_target(

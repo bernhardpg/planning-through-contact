@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from queue import PriorityQueue
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -31,6 +31,38 @@ class ModeConfig:
         num_not_equal = sum([m1 != m2 for m1, m2 in zip(modes_self, modes_other)])
         return num_not_equal
 
+    @staticmethod
+    def create_vertex_from_mode_config(
+        config: "ModeConfig",
+        collision_pairs: List[CollisionPair],
+        all_decision_vars: List[sym.Variable],
+        name: Optional[str] = None,
+    ) -> Optional["GraphVertex"]:
+        contact_modes = [
+            collision_pairs[pair].contact_modes[mode]
+            for pair, mode in config.modes.items()
+        ]
+        intersects, (
+            calculated_name,
+            intersection,
+        ) = calc_intersection_of_contact_modes(contact_modes)
+        if not intersects:
+            return None
+
+        if config.additional_constraints is not None:
+            additional_set = PolyhedronFormulator(
+                config.additional_constraints
+            ).formulate_polyhedron(all_decision_vars)
+            intersects = intersects and intersection.IntersectsWith(additional_set)
+            if not intersects:
+                return None
+
+            intersection = intersection.Intersection(additional_set)
+
+        name = f"{name}: {calculated_name}" if name is not None else calculated_name
+        vertex = GraphVertex(name, config, intersection)
+        return vertex
+
 
 @dataclass(order=True)
 class PrioritizedModeConfig:
@@ -51,46 +83,12 @@ class GraphEdge:
     v: GraphVertex
 
 
-# TODO Find a better way to pass all these objects
 class Graph:
     def __init__(
         self,
-        collision_pairs: List[CollisionPair],
-        all_decision_vars: npt.NDArray[sym.Variable],
     ):
-        self.collision_pairs = {p.name: p for p in collision_pairs}
         self.edges = []
         self.vertices = []
-        self.all_decision_vars = all_decision_vars
-
-    # TODO not sure if this belongs here
-    def create_new_vertex(
-        self, config: ModeConfig, name: Optional[str] = None
-    ) -> Optional[GraphVertex]:
-        contact_modes = [
-            self.collision_pairs[pair].contact_modes[mode]
-            for pair, mode in config.modes.items()
-        ]
-        intersects, (
-            calculated_name,
-            intersection,
-        ) = calc_intersection_of_contact_modes(contact_modes)
-        if not intersects:
-            return None
-
-        if config.additional_constraints is not None:
-            additional_set = PolyhedronFormulator(
-                config.additional_constraints
-            ).formulate_polyhedron(self.all_decision_vars)
-            intersects = intersects and intersection.IntersectsWith(additional_set)
-            if not intersects:
-                return None
-
-            intersection = intersection.Intersection(additional_set)
-
-        name = f"{name}: {calculated_name}" if name is not None else calculated_name
-        vertex = GraphVertex(name, config, intersection)
-        return vertex
 
     def add_edge(self, u: GraphVertex, v: GraphVertex) -> None:
         e = GraphEdge(u, v)
@@ -127,6 +125,7 @@ class GraphBuilder:
         self.all_decision_vars = all_decision_vars
         self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
+        self.collision_pairs_by_name = {p.name: p for p in collision_pairs}
         unactuated_dofs = self._get_unactuated_dofs(
             self.rigid_bodies, self.position_dim
         )
@@ -215,7 +214,7 @@ class GraphBuilder:
 
     # TODO should not take in graph
     # TODO move and clean up
-    def find_adjacent_mode_configs(
+    def find_adjacent_contact_modes(
         self, curr_vertex: GraphVertex, graph: Graph
     ) -> List[ModeConfig]:
         if curr_vertex is None:
@@ -232,28 +231,29 @@ class GraphBuilder:
             ]
             return new_modes
 
-    def build_graph(self, algorithm: Literal["BFS, DFS"] = "BFS") -> Graph:
-        # TODO change name
-        if algorithm == "DFS":
-            INDEX_TO_POP = -1
-        elif algorithm == "BFS":
-            INDEX_TO_POP = 0
+    def prioritized_search_from_source(
+        self,
+        collision_pairs_by_name: Dict[str, CollisionPair],
+        all_decision_vars: List[sym.Variable],
+        source_config: ModeConfig,
+        target_config: ModeConfig,
+    ):
+        graph = Graph()
 
-        graph = Graph(
-            self.collision_pairs,
-            self.all_decision_vars,
+        source = ModeConfig.create_vertex_from_mode_config(
+            source_config, collision_pairs_by_name, all_decision_vars, "source"
         )
-        source = graph.create_new_vertex(self.source_config, "source")
-        target = graph.create_new_vertex(self.target_config, "target")
+        target = ModeConfig.create_vertex_from_mode_config(
+            target_config, collision_pairs_by_name, all_decision_vars, "target"
+        )
 
         graph.add_source(source)
         graph.add_target(target)
 
         u = source
         frontier = PriorityQueue()
-        # TODO refactor this into a function
-        new_modes = self.find_adjacent_mode_configs(u, graph)
-        priorities = [m.calculate_match(self.target_config) for m in new_modes]
+        new_modes = self.find_adjacent_contact_modes(u, graph)
+        priorities = [m.calculate_match(target_config) for m in new_modes]
         for (pri, m) in zip(priorities, new_modes):
             frontier.put(PrioritizedModeConfig(pri, m))
 
@@ -264,7 +264,9 @@ class GraphBuilder:
                 raise RuntimeError("Frontier empty, but target not found")
             m = frontier.get().item
             counter += 1
-            v = graph.create_new_vertex(m)
+            v = ModeConfig.create_vertex_from_mode_config(
+                m, collision_pairs_by_name, all_decision_vars
+            )
 
             if u.convex_set.IntersectsWith(v.convex_set):
                 # TODO clean up
@@ -272,8 +274,8 @@ class GraphBuilder:
                     graph.add_vertex(v)
                 graph.add_edge(u, v)
 
-                new_modes = self.find_adjacent_mode_configs(v, graph)
-                priorities = [m.calculate_match(self.target_config) for m in new_modes]
+                new_modes = self.find_adjacent_contact_modes(v, graph)
+                priorities = [m.calculate_match(target_config) for m in new_modes]
                 for (pri, m) in zip(priorities, new_modes):
                     frontier.put(PrioritizedModeConfig(pri, m))
 
@@ -284,6 +286,33 @@ class GraphBuilder:
                 u = v
             if counter == TIMEOUT_LIMIT:
                 print("Timed out after {TIMEOUT_LIMIT} node expansions")
-                break
+
+        return graph
+
+    def all_possible_permutations(
+        self,
+        collision_pairs: List[CollisionPair],
+        all_decision_vars: List[sym.Variable],
+        source_config: ModeConfig,
+        target_config: ModeConfig,
+    ):
+
+        breakpoint()
+
+    def build_graph(self, prune: bool = False) -> Graph:
+        if prune:  # NOTE: Will be expanded with more advanced graph search algorithms
+            graph = self.prioritized_search_from_source(
+                self.collision_pairs_by_name,
+                self.all_decision_vars,
+                self.source_config,
+                self.target_config,
+            )
+        else:  # naive graph building
+            graph = self.all_possible_permutations(
+                self.collision_pairs,
+                self.all_decision_vars,
+                self.source_config,
+                self.target_config,
+            )
 
         return graph
