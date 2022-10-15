@@ -57,15 +57,11 @@ class Graph:
         self,
         collision_pairs: List[CollisionPair],
         all_decision_vars: npt.NDArray[sym.Variable],
-        all_position_vars: npt.NDArray[sym.Variable],
-        all_force_vars: npt.NDArray[sym.Variable],
     ):
         self.collision_pairs = {p.name: p for p in collision_pairs}
         self.edges = []
         self.vertices = []
         self.all_decision_vars = all_decision_vars
-        self.all_position_vars = all_position_vars
-        self.all_force_vars = all_force_vars
 
     # TODO not sure if this belongs here
     def create_new_vertex(
@@ -120,20 +116,22 @@ class Graph:
 class GraphBuilder:
     def __init__(
         self,
-        rigid_bodies: List[
-            RigidBody
-        ],  # TODO: Empty now, but this is what it will actually take as argument!
+        all_decision_vars: List[sym.Variable],  # TODO this should not be here
+        rigid_bodies: List[RigidBody],
         collision_pairs: List[CollisionPair],  # TODO Will be removed
         external_forces: List[sym.Expression],
         additional_constraints: Optional[List[sym.Formula]],
         allow_sliding: bool = False,
     ) -> None:
 
+        self.all_decision_vars = all_decision_vars
         self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
         unactuated_dofs = self._get_unactuated_dofs(
             self.rigid_bodies, self.position_dim
         )
+
+        # TODO maybe I should have a module that deals with CollisionPairs? CollisionPairHandler?
         force_balance_constraints = self.construct_force_balance(
             collision_pairs,
             self.rigid_bodies,
@@ -145,13 +143,6 @@ class GraphBuilder:
         for p in self.collision_pairs:
             p.add_constraint_to_all_modes(additional_constraints)
 
-        self.all_decision_vars = self._collect_all_decision_vars(
-            self.rigid_bodies, self.collision_pairs
-        )
-        self.all_position_vars = self.all_decision_vars[
-            : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
-        ]
-        self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
         for p in self.collision_pairs:
             p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
 
@@ -164,41 +155,17 @@ class GraphBuilder:
         #
         # How to deal with repeated visits to a node? For now we just make graph repeated after building it
 
+    # TODO feels like I should be able to remove this too
     @property
     def position_dim(self) -> int:
         return self.rigid_bodies[0].dim
-
-    @property
-    def position_curve_order(self) -> int:
-        return self.rigid_bodies[0].position_curve_order
-
-    @property
-    def num_bodies(self) -> int:
-        return len(self.rigid_bodies)
-
-    def _collect_all_decision_vars(
-        self,
-        bodies: List[RigidBody],
-        collision_pairs: List[CollisionPair],
-    ) -> npt.NDArray[sym.Variable]:
-        all_pos_vars = np.concatenate([b.pos.x.flatten() for b in bodies])
-        all_normal_force_vars = np.concatenate(
-            [p.lam_n.flatten() for p in collision_pairs]
-        )
-        all_friction_force_vars = np.concatenate(
-            [p.lam_f.flatten() for p in collision_pairs]
-        )
-        all_vars = np.concatenate(
-            [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
-        )
-        return all_vars
 
     def _get_unactuated_dofs(
         self, rigid_bodies: List[RigidBody], dim: int
     ) -> npt.NDArray[np.int32]:
         unactuated_idxs = [i for i, b in enumerate(rigid_bodies) if not b.actuated]
         unactuated_dofs = np.concatenate(
-            [np.arange(idx * dim, (idx + 1 ) * dim) for idx in unactuated_idxs]
+            [np.arange(idx * dim, (idx + 1) * dim) for idx in unactuated_idxs]
         )
         return unactuated_dofs
 
@@ -275,8 +242,6 @@ class GraphBuilder:
         graph = Graph(
             self.collision_pairs,
             self.all_decision_vars,
-            self.all_position_vars,
-            self.all_force_vars,
         )
         source = graph.create_new_vertex(self.source_config, "source")
         target = graph.create_new_vertex(self.target_config, "target")

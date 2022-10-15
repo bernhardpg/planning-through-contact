@@ -4,7 +4,7 @@ from pydrake.math import eq, ge, le
 from geometry.bezier import BezierCurve
 from geometry.contact import CollisionPair, ContactModeType, PositionModeType, RigidBody
 from planning.gcs import GcsContactPlanner, GcsPlanner
-from planning.graph_builder import GraphBuilder, ModeConfig
+from planning.graph_builder import ModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
 # TODO remove
@@ -142,7 +142,7 @@ def plan_w_graph_builder():
     # - [X] Unactuated bodies
     # - [ ] GCSContactPlanner should be removed and replaced
     # - [X] Rigid bodies collection
-    # - [ ] Position variables, decision variables, force variables
+    # - [X] Position variables, decision variables, force variables
 
     # - [ ] Position modes
     # - [ ] Specifying some mode constraints for source and target config (wait with this until I have fixed position modes too)
@@ -152,17 +152,16 @@ def plan_w_graph_builder():
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    graph_builder = GraphBuilder(
+    planner = GcsPlanner(
         rigid_bodies,
         collision_pairs,
         external_forces,
         additional_constraints,
+        allow_sliding=False,
     )
-    graph_builder.add_source_config(source_config)
-    graph_builder.add_target_config(target_config)
-    graph = graph_builder.build_graph("BFS")
-
-    planner = GcsPlanner(graph, collision_pairs)
+    planner.add_source_config(source_config)
+    planner.add_target_config(target_config)
+    planner.build_graph("BFS")
     planner.save_graph_diagram("pruned_graph.svg")
     planner.allow_revisits_to_vertices(1)
     planner.save_graph_diagram("pruned_graph_w_revisits.svg")
@@ -179,8 +178,8 @@ def plan_w_graph_builder():
 
     normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
     positions = {
-        body_name: planner.get_pos_ctrl_points(vertex_values, body_name)
-        for body_name in planner.rigid_bodies_names
+        b.name: planner.get_pos_ctrl_points(vertex_values, b)
+        for b in planner.rigid_bodies
     }
 
     pos_curves = {

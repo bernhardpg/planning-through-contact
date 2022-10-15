@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -18,35 +18,63 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
-from geometry.contact import CollisionPair, calc_intersection_of_contact_modes
+from geometry.contact import (
+    CollisionPair,
+    RigidBody,
+    calc_intersection_of_contact_modes,
+)
 from geometry.polyhedron import PolyhedronFormulator
-from planning.graph_builder import Graph
+from planning.graph_builder import Graph, GraphBuilder, ModeConfig
 
 
 class GcsPlanner:
     def __init__(
         self,
-        graph: Graph,
-        collision_pairs: List[CollisionPair],
+        rigid_bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],  # TODO Will be removed
+        external_forces: List[sym.Expression],
+        additional_constraints: Optional[List[sym.Formula]],
+        allow_sliding: bool = False,
     ):
-        self.gcs = GraphOfConvexSets()
-        self.rigid_bodies_names = self._collect_all_rigid_bodies(collision_pairs)
+        self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
-        self.all_decision_vars = graph.all_decision_vars
-        self.all_position_vars = graph.all_position_vars
-        self.all_force_vars = graph.all_force_vars
-        self._formulate_graph(graph)
 
-    # TODO clean up, this should be ONE place not multiple like now
-    def _collect_all_rigid_bodies(self, pairs: List[CollisionPair]) -> List[str]:
-        all_body_names = sorted(
-            list(set(sum([[p.body_a.name, p.body_b.name] for p in pairs], [])))
+        self.all_decision_vars = self._collect_all_decision_vars(
+            self.rigid_bodies, self.collision_pairs
         )
-        return all_body_names
+        self.all_position_vars = self.all_decision_vars[
+            : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
+        ]
+        self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
+        self.graph_builder = GraphBuilder(
+            self.all_decision_vars,  # TODO only needs this to build vertices
+            rigid_bodies,
+            collision_pairs,  # TODO move into a CollisionPairHandler?
+            external_forces,
+            additional_constraints,
+        )
+        self.gcs = GraphOfConvexSets()
+
+    def _collect_all_decision_vars(
+        self,
+        bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],
+    ) -> npt.NDArray[sym.Variable]:
+        all_pos_vars = np.concatenate([b.pos.x.flatten() for b in bodies])
+        all_normal_force_vars = np.concatenate(
+            [p.lam_n.flatten() for p in collision_pairs]
+        )
+        all_friction_force_vars = np.concatenate(
+            [p.lam_f.flatten() for p in collision_pairs]
+        )
+        all_vars = np.concatenate(
+            [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
+        )
+        return all_vars
 
     @property
     def num_bodies(self) -> int:
-        return len(self.rigid_bodies_names)
+        return len(self.rigid_bodies)
 
     @property
     def num_pairs(self) -> int:
@@ -104,6 +132,16 @@ class GcsPlanner:
             u = vertex_map[e.u.name]
             v = vertex_map[e.v.name]
             self.gcs.AddEdge(u, v)
+
+    def add_source_config(self, mc: ModeConfig) -> None:
+        self.graph_builder.add_source_config(mc)
+
+    def add_target_config(self, mc: ModeConfig) -> None:
+        self.graph_builder.add_target_config(mc)
+
+    def build_graph(self, algorithm: Literal["BFS", "DFS"]) -> None:
+        graph = self.graph_builder.build_graph(algorithm)
+        self._formulate_graph(graph)
 
     def _find_path_to_target(
         self,
@@ -259,11 +297,11 @@ class GcsPlanner:
         return vertex_values
 
     def get_pos_ctrl_points(
-        self, vertex_values: npt.NDArray[np.float64], body_name: str
+        self, vertex_values: npt.NDArray[np.float64], body: RigidBody
     ) -> List[npt.NDArray[np.float64]]:
         pos_ctrl_points = vertex_values[:, : len(self.all_position_vars)]
         num_pos_vars_per_body = self.position_dim * (self.position_curve_order + 1)
-        body_idx = self.rigid_bodies_names.index(body_name) * num_pos_vars_per_body
+        body_idx = self.rigid_bodies.index(body) * num_pos_vars_per_body
         body_ctrl_points = pos_ctrl_points[
             :, body_idx : body_idx + num_pos_vars_per_body
         ]
@@ -475,6 +513,7 @@ class GcsContactPlanner:
         return convex_sets
 
     def _formulate_graph(self, convex_sets) -> None:
+
         print("Adding sets as vertices...")
         for name, poly in tqdm(convex_sets.items()):
             self.gcs.AddVertex(poly, name)
