@@ -120,17 +120,19 @@ class Graph:
 class GraphBuilder:
     def __init__(
         self,
-        collision_pairs: List[CollisionPair],  # TODO for now I define this manually
-        unactuated_bodies: List[str],  # TODO make part of RigidBody
+        rigid_bodies: List[
+            RigidBody
+        ],  # TODO: Empty now, but this is what it will actually take as argument!
+        collision_pairs: List[CollisionPair],  # TODO Will be removed
         external_forces: List[sym.Expression],
         additional_constraints: Optional[List[sym.Formula]],
         allow_sliding: bool = False,
     ) -> None:
 
+        self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
-        self.rigid_bodies = self._collect_all_rigid_bodies(collision_pairs)
         unactuated_dofs = self._get_unactuated_dofs(
-            unactuated_bodies, self.rigid_bodies, self.position_dim
+            self.rigid_bodies, self.position_dim
         )
         force_balance_constraints = self.construct_force_balance(
             collision_pairs,
@@ -143,8 +145,12 @@ class GraphBuilder:
         for p in self.collision_pairs:
             p.add_constraint_to_all_modes(additional_constraints)
 
-        self.all_decision_vars = self._collect_all_decision_vars(self.collision_pairs)
-        self.all_position_vars = self._collect_all_pos_vars(self.collision_pairs)
+        self.all_decision_vars = self._collect_all_decision_vars(
+            self.rigid_bodies, self.collision_pairs
+        )
+        self.all_position_vars = self.all_decision_vars[
+            : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
+        ]
         self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
         for p in self.collision_pairs:
             p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
@@ -160,54 +166,49 @@ class GraphBuilder:
 
     @property
     def position_dim(self) -> int:
-        return self.collision_pairs[0].body_a.dim
+        return self.rigid_bodies[0].dim
 
-    @staticmethod
-    def _collect_all_rigid_bodies(pairs: List[CollisionPair]) -> List[str]:
-        all_body_names = sorted(
-            list(set(sum([[p.body_a.name, p.body_b.name] for p in pairs], [])))
-        )
-        return all_body_names
+    @property
+    def position_curve_order(self) -> int:
+        return self.rigid_bodies[0].position_curve_order
 
-    def _collect_all_pos_vars(
-        self, pairs: List[CollisionPair]
-    ) -> npt.NDArray[sym.Variable]:
-        all_pos_vars = np.concatenate(
-            [np.concatenate((p.body_a.pos.x, p.body_b.pos.x)).flatten() for p in pairs]
-        )
-        unique_pos_vars = set(all_pos_vars)
-        sorted_unique_pos_vars = np.array(
-            sorted(list(unique_pos_vars), key=lambda x: x.get_name())
-        )
-        return sorted_unique_pos_vars
+    @property
+    def num_bodies(self) -> int:
+        return len(self.rigid_bodies)
 
     def _collect_all_decision_vars(
-        self, pairs: List[CollisionPair]
+        self,
+        bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],
     ) -> npt.NDArray[sym.Variable]:
-        all_pos_vars = self._collect_all_pos_vars(pairs)
-        all_normal_force_vars = np.concatenate([p.lam_n for p in pairs]).flatten()
-        all_friction_force_vars = np.concatenate([p.lam_f for p in pairs]).flatten()
+        all_pos_vars = np.concatenate([b.pos.x.flatten() for b in bodies])
+        all_normal_force_vars = np.concatenate(
+            [p.lam_n.flatten() for p in collision_pairs]
+        )
+        all_friction_force_vars = np.concatenate(
+            [p.lam_f.flatten() for p in collision_pairs]
+        )
         all_vars = np.concatenate(
             [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
         )
         return all_vars
 
     def _get_unactuated_dofs(
-        self, unactuated_bodies: List[str], rigid_bodies: List[str], dim: int
+        self, rigid_bodies: List[RigidBody], dim: int
     ) -> npt.NDArray[np.int32]:
-        unactuated_idxs = [rigid_bodies.index(b) * dim for b in unactuated_bodies]
+        unactuated_idxs = [i for i, b in enumerate(rigid_bodies) if not b.actuated]
         unactuated_dofs = np.concatenate(
-            [np.arange(idx, idx + dim) for idx in unactuated_idxs]
+            [np.arange(idx * dim, (idx + 1 ) * dim) for idx in unactuated_idxs]
         )
         return unactuated_dofs
 
-    # TODO move to contact module
+    # TODO move to contact or dynamics module
     @staticmethod
     def construct_force_balance(
         collision_pairs: List[CollisionPair],
-        bodies: List[str],
+        bodies: List[RigidBody],
         external_forces: npt.NDArray[sym.Expression],
-        unactuated_dofs: npt.NDArray[np.int32],
+        unactuated_dofs: npt.NDArray[np.int64],
     ) -> List[sym.Formula]:
         normal_jacobians = np.vstack(
             [p.get_normal_jacobian_for_bodies(bodies) for p in collision_pairs]

@@ -15,8 +15,8 @@ from visualize.visualize import animate_positions, plot_positions_and_forces
 
 def plan_w_graph_builder():
     # Bezier curve params
-    dim = 2
-    order = 2
+    problem_dim = 2
+    bezier_curve_order = 2
 
     mass = 1  # kg
     g = 9.81  # m/s^2
@@ -26,27 +26,38 @@ def plan_w_graph_builder():
     friction_coeff = 0.5
 
     finger_1 = RigidBody(
-        dim=dim, position_curve_order=order, name="f1", geometry="point"
+        dim=problem_dim,
+        position_curve_order=bezier_curve_order,
+        name="f1",
+        geometry="point",
+        actuated=True,
     )
     finger_2 = RigidBody(
-        dim=dim, position_curve_order=order, name="f2", geometry="point"
+        dim=problem_dim,
+        position_curve_order=bezier_curve_order,
+        name="f2",
+        geometry="point",
+        actuated=True,
     )
     box = RigidBody(
-        dim=dim,
-        position_curve_order=order,
+        dim=problem_dim,
+        position_curve_order=bezier_curve_order,
         name="b",
         geometry="box",
         width=box_width,
         height=box_height,
+        actuated=False,
     )
     ground = RigidBody(
-        dim=dim,
-        position_curve_order=order,
+        dim=problem_dim,
+        position_curve_order=bezier_curve_order,
         name="g",
         geometry="box",
         width=20,
         height=box_height,
+        actuated=True,
     )
+    rigid_bodies = [finger_1, finger_2, box, ground]
 
     x_f_1 = finger_1.pos_x
     y_f_1 = finger_1.pos_y
@@ -57,6 +68,7 @@ def plan_w_graph_builder():
     x_g = ground.pos_x
     y_g = ground.pos_y
 
+    # TODO these collision pairs will soon be generated automatically
     p1 = CollisionPair(
         finger_1,
         box,
@@ -87,36 +99,13 @@ def plan_w_graph_builder():
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
-
     collision_pairs = [p1, p2, p3, p4, p5]
 
-    rigid_bodies = [finger_1, finger_2, box, ground]
-
-    # TODO:
-    # Things to clean up:
-    # - External forces
-    # - Weights for costs
-    # - Unactuated bodies
-    # - GCSContactPlanner should be removed and replaced
-    # - Rigid bodies collection
-    # - Position variables, decision variables, force variables
-
-    # - Position modes
-    # - Specifying some mode constraints for source and target config (wait with this until I have fixed position modes too)
-    # - Automatic collision_pair generation (wait with this until I have fixed position modes)
-
-    # TODO this is very hardcoded
-    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
-    external_forces = gravitational_jacobian.dot(mg)
-
-    # TODO fix so that this is part of rigidbody definition!
-    unactuated_bodies = ["b"]
-
+    # Specify problem
     no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     additional_constraints = [
         *no_ground_motion,
     ]
-
     source_config = ModeConfig(
         modes={
             p1.name: ContactModeType.NO_CONTACT,
@@ -146,9 +135,26 @@ def plan_w_graph_builder():
         additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )
 
+    # TODO:
+    # Things to clean up:
+    # - [ ] External forces
+    # - [ ] Weights for costs
+    # - [X] Unactuated bodies
+    # - [ ] GCSContactPlanner should be removed and replaced
+    # - [X] Rigid bodies collection
+    # - [ ] Position variables, decision variables, force variables
+
+    # - [ ] Position modes
+    # - [ ] Specifying some mode constraints for source and target config (wait with this until I have fixed position modes too)
+    # - [ ] Automatic collision_pair generation (wait with this until I have fixed position modes)
+
+    # TODO this is very hardcoded
+    gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
+    external_forces = gravitational_jacobian.dot(mg)
+
     graph_builder = GraphBuilder(
+        rigid_bodies,
         collision_pairs,
-        unactuated_bodies,
         external_forces,
         additional_constraints,
     )
@@ -286,8 +292,6 @@ def plan_for_two_fingers():
     # TODO this is very hardcoded
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
-
-    unactuated_bodies = ["box"]
 
     no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
     finger_1_pos_below_box_height = le(y_f_1, y_b + box_height)

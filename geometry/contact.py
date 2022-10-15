@@ -32,6 +32,7 @@ class PositionModeType(Enum):
     BOTTOM_LEFT = 8
 
 
+# TODO Refactor to own file
 @dataclass
 class RigidBody:
     name: str
@@ -40,6 +41,7 @@ class RigidBody:
     width: float = 0  # TODO generalize
     height: float = 0
     position_curve_order: int = 2
+    actuated: bool = False
 
     def __post_init__(self) -> None:
         self.pos = BezierVariable(
@@ -241,22 +243,22 @@ class CollisionPair:
         )
 
     def _get_jacobian_for_bodies(
-        self, bodies: List[RigidBody], jacobian: npt.NDArray[np.float64]
+        self, bodies: List[RigidBody], local_jacobian: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
         # (1, num_bodies * num_dims)
         jacobian_for_all_bodies = np.zeros((1, len(bodies) * self.dim))
 
-        body_a_idx_in_J = bodies.index(self.body_a.name) * self.dim
-        body_b_idx_in_J = bodies.index(self.body_b.name) * self.dim
+        body_a_idx_in_J = bodies.index(self.body_a) * self.dim
+        body_b_idx_in_J = bodies.index(self.body_b) * self.dim
         body_a_cols_in_J = np.arange(body_a_idx_in_J, body_a_idx_in_J + self.dim)
         body_b_cols_in_J = np.arange(body_b_idx_in_J, body_b_idx_in_J + self.dim)
         body_a_cols_in_local_J = np.arange(0, self.dim)
         body_b_cols_in_local_J = np.arange(self.dim, 2 * self.dim)
 
-        jacobian_for_all_bodies[:, body_a_cols_in_J] = jacobian[
+        jacobian_for_all_bodies[:, body_a_cols_in_J] = local_jacobian[
             :, body_a_cols_in_local_J
         ]
-        jacobian_for_all_bodies[:, body_b_cols_in_J] = jacobian[
+        jacobian_for_all_bodies[:, body_b_cols_in_J] = local_jacobian[
             :, body_b_cols_in_local_J
         ]
         return jacobian_for_all_bodies
