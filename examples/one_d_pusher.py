@@ -92,6 +92,19 @@ def plan_w_graph_builder():
 
     rigid_bodies = [finger_1, finger_2, box, ground]
 
+    # TODO:
+    # Things to clean up:
+    # - External forces
+    # - Weights for costs
+    # - Unactuated bodies
+    # - GCSContactPlanner should be removed and replaced
+    # - Rigid bodies collection
+    # - Position variables, decision variables, force variables
+
+    # - Position modes
+    # - Specifying some mode constraints for source and target config (wait with this until I have fixed position modes too)
+    # - Automatic collision_pair generation (wait with this until I have fixed position modes)
+
     # TODO this is very hardcoded
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
