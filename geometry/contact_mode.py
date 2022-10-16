@@ -41,6 +41,38 @@ class ContactModeConfig:
         num_not_equal = sum([m1 != m2 for m1, m2 in zip(modes_self, modes_other)])
         return num_not_equal
 
+    @staticmethod
+    def switch_mode_for_pair(
+        pair_name: str, old_modes: [str, ContactModeType]
+    ) -> Dict[str, ContactModeType]:
+        new_modes = dict(old_modes)
+        if old_modes[pair_name] == ContactModeType.NO_CONTACT:
+            new_modes[pair_name] = ContactModeType.ROLLING
+        elif old_modes[pair_name] == ContactModeType.ROLLING:
+            new_modes[pair_name] = ContactModeType.NO_CONTACT
+        return new_modes
+
+    @classmethod
+    def create_adjacent_mode(
+        cls, pair_to_switch: str, mode_cfg: "ContactModeConfig"
+    ) -> "ContactModeConfig":
+        new_modes = cls.switch_mode_for_pair(pair_to_switch, mode_cfg.modes)
+        return cls(new_modes)
+
+    @classmethod
+    def create_all_adjacent_modes(
+        cls, mode_cfg: "ContactModeConfig"
+    ) -> List["ContactModeConfig"]:
+        # Adjacent mode to mode with additional constraints is to first remove these
+        if mode_cfg.additional_constraints is not None:
+            return [cls(mode_cfg.modes)]
+        else:
+            new_modes = [
+                ContactModeConfig.create_adjacent_mode(pair, mode_cfg)
+                for pair in mode_cfg.modes.keys()
+            ]
+            return new_modes
+
 
 @dataclass(order=True)
 class PrioritizedContactModeConfig:

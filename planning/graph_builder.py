@@ -1,15 +1,11 @@
 from dataclasses import dataclass
 from queue import PriorityQueue
-from typing import Dict, List, Optional
+from typing import Optional
 
 from pydrake.geometry.optimization import ConvexSet
 
 from geometry.collision_pair import CollisionPairHandler
-from geometry.contact_mode import (
-    ContactModeConfig,
-    ContactModeType,
-    PrioritizedContactModeConfig,
-)
+from geometry.contact_mode import ContactModeConfig, PrioritizedContactModeConfig
 
 
 @dataclass
@@ -75,36 +71,6 @@ class GraphBuilder:
     def add_target_config(self, mc: ContactModeConfig) -> None:
         self.target_config = mc
 
-    # TODO move and clean up
-    def switch_mode(
-        self, pair_name: str, old_modes: Dict[str, ContactModeType]
-    ) -> Dict[str, ContactModeType]:
-        new_modes = dict(old_modes)
-        if old_modes[pair_name] == ContactModeType.NO_CONTACT:
-            new_modes[pair_name] = ContactModeType.ROLLING
-        elif old_modes[pair_name] == ContactModeType.ROLLING:
-            new_modes[pair_name] = ContactModeType.NO_CONTACT
-        return new_modes
-
-    # TODO should not take in graph
-    # TODO move and clean up
-    def find_adjacent_contact_modes(
-        self, curr_vertex: GraphVertex, graph: Graph
-    ) -> List[ContactModeConfig]:
-        if curr_vertex is None:
-            breakpoint()
-
-        current_modes = curr_vertex.config.modes
-        if curr_vertex.config.additional_constraints is not None:
-            # if we have additional constraints, first explore removing these
-            return [ContactModeConfig(current_modes)]
-        else:
-            new_modes = [
-                ContactModeConfig(self.switch_mode(pair, current_modes))
-                for pair in current_modes.keys()
-            ]
-            return new_modes
-
     def build_graph(self, prune: bool = False) -> Graph:
         if prune:  # NOTE: Will be expanded with more advanced graph search algorithms
             graph = self.prioritized_search_from_source(
@@ -141,9 +107,9 @@ class GraphBuilder:
 
         u = source
         frontier = PriorityQueue()
-        new_modes = self.find_adjacent_contact_modes(u, graph)
-        priorities = [m.calculate_match(target_config) for m in new_modes]
-        for (pri, m) in zip(priorities, new_modes):
+        new_mode_cfgs = ContactModeConfig.create_all_adjacent_modes(u.config)
+        priorities = [m.calculate_match(target_config) for m in new_mode_cfgs]
+        for (pri, m) in zip(priorities, new_mode_cfgs):
             frontier.put(PrioritizedContactModeConfig(pri, m))
 
         TIMEOUT_LIMIT = 100
@@ -161,9 +127,9 @@ class GraphBuilder:
                     graph.add_vertex(v)
                 graph.add_edge(u, v)
 
-                new_modes = self.find_adjacent_contact_modes(v, graph)
-                priorities = [m.calculate_match(target_config) for m in new_modes]
-                for (pri, m) in zip(priorities, new_modes):
+                new_mode_cfgs = ContactModeConfig.create_all_adjacent_modes(v.config)
+                priorities = [m.calculate_match(target_config) for m in new_mode_cfgs]
+                for (pri, m) in zip(priorities, new_mode_cfgs):
                     frontier.put(PrioritizedContactModeConfig(pri, m))
 
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
