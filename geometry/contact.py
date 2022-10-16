@@ -2,7 +2,7 @@ import itertools
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import reduce
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -353,6 +353,81 @@ class CollisionPair:
         self.contact_modes_formulated = True
 
 
+class CollisionPairHandler:
+    def __init__(
+        self,
+        all_decision_vars: List[sym.Variable],  # TODO this should not be here
+        rigid_bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],  # TODO Will be removed
+        external_forces: List[sym.Expression],
+        additional_constraints: Optional[List[sym.Formula]],
+        allow_sliding: bool = False,
+    ) -> None:
+        self.all_decision_vars = all_decision_vars
+        self.rigid_bodies = rigid_bodies
+        self.collision_pairs = collision_pairs
+        unactuated_dofs = self._get_unactuated_dofs(
+            self.rigid_bodies, self.position_dim
+        )
+        force_balance_constraints = self.construct_force_balance(
+            collision_pairs,
+            self.rigid_bodies,
+            external_forces,
+            unactuated_dofs,
+        )
+        for p in self.collision_pairs:
+            p.add_force_balance(force_balance_constraints)
+        for p in self.collision_pairs:
+            p.add_constraint_to_all_modes(additional_constraints)
+
+        for p in self.collision_pairs:
+            p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
+
+    @property
+    def position_dim(self) -> int:
+        return self.rigid_bodies[0].dim
+
+    @property
+    def collision_pairs_by_name(self) -> Dict[str, CollisionPair]:
+        return {p.name: p for p in self.collision_pairs}
+
+    def _get_unactuated_dofs(
+        self, rigid_bodies: List[RigidBody], dim: int
+    ) -> npt.NDArray[np.int32]:
+        unactuated_idxs = [i for i, b in enumerate(rigid_bodies) if not b.actuated]
+        unactuated_dofs = np.concatenate(
+            [np.arange(idx * dim, (idx + 1) * dim) for idx in unactuated_idxs]
+        )
+        return unactuated_dofs
+
+    @staticmethod
+    def construct_force_balance(
+        collision_pairs: List[CollisionPair],
+        bodies: List[RigidBody],
+        external_forces: npt.NDArray[sym.Expression],
+        unactuated_dofs: npt.NDArray[np.int64],
+    ) -> List[sym.Formula]:
+        normal_jacobians = np.vstack(
+            [p.get_normal_jacobian_for_bodies(bodies) for p in collision_pairs]
+        )
+        tangential_jacobians = np.vstack(
+            [p.get_tangential_jacobian_for_bodies(bodies) for p in collision_pairs]
+        )
+
+        normal_forces = np.concatenate([p.lam_n for p in collision_pairs])
+        friction_forces = np.concatenate([p.lam_f for p in collision_pairs])
+
+        all_force_balances = eq(
+            normal_jacobians.T.dot(normal_forces)
+            + tangential_jacobians.T.dot(friction_forces)
+            + external_forces,
+            0,
+        )
+        force_balance = all_force_balances[unactuated_dofs, :]
+        return force_balance
+
+
+# TODO make this part of collisionPairHandler?
 def calc_intersection_of_contact_modes(
     modes: List[ContactMode],
 ) -> Tuple[bool, Optional[ConvexSet]]:

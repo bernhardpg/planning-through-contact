@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 from geometry.contact import (
     CollisionPair,
+    CollisionPairHandler,
     RigidBody,
     calc_intersection_of_contact_modes,
 )
@@ -46,13 +47,17 @@ class GcsPlanner:
             : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
         ]
         self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
-        self.graph_builder = GraphBuilder(
-            self.all_decision_vars,  # TODO only needs this to build vertices
+
+        self.collision_pair_handler = CollisionPairHandler(
+            self.all_decision_vars,
             rigid_bodies,
-            collision_pairs,  # TODO move into a CollisionPairHandler?
+            collision_pairs,
             external_forces,
             additional_constraints,
+            allow_sliding,
         )
+
+        self.graph_builder = GraphBuilder(self.collision_pair_handler)
         self.gcs = GraphOfConvexSets()
 
     def _collect_all_decision_vars(

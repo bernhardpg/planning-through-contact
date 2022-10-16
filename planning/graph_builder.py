@@ -2,16 +2,15 @@ from dataclasses import dataclass, field
 from queue import PriorityQueue
 from typing import Dict, List, Optional
 
-import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.geometry.optimization import ConvexSet
-from pydrake.math import eq
 
 from geometry.contact import (
     CollisionPair,
     ContactModeType,
     RigidBody,
+    CollisionPairHandler,
     calc_intersection_of_contact_modes,
 )
 from geometry.polyhedron import PolyhedronFormulator
@@ -112,88 +111,8 @@ class Graph:
 
 
 class GraphBuilder:
-    def __init__(
-        self,
-        all_decision_vars: List[sym.Variable],  # TODO this should not be here
-        rigid_bodies: List[RigidBody],
-        collision_pairs: List[CollisionPair],  # TODO Will be removed
-        external_forces: List[sym.Expression],
-        additional_constraints: Optional[List[sym.Formula]],
-        allow_sliding: bool = False,
-    ) -> None:
-
-        self.all_decision_vars = all_decision_vars
-        self.rigid_bodies = rigid_bodies
-        self.collision_pairs = collision_pairs
-        self.collision_pairs_by_name = {p.name: p for p in collision_pairs}
-        unactuated_dofs = self._get_unactuated_dofs(
-            self.rigid_bodies, self.position_dim
-        )
-
-        # TODO maybe I should have a module that deals with CollisionPairs? CollisionPairHandler?
-        force_balance_constraints = self.construct_force_balance(
-            collision_pairs,
-            self.rigid_bodies,
-            external_forces,
-            unactuated_dofs,
-        )
-        for p in self.collision_pairs:
-            p.add_force_balance(force_balance_constraints)
-        for p in self.collision_pairs:
-            p.add_constraint_to_all_modes(additional_constraints)
-
-        for p in self.collision_pairs:
-            p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
-
-        # 1. Build source and target nodes (with force balance)
-        # 2. Start with source node:
-        #   - change one contact mode at a time to obtain the frontier.
-        # 3. Add node edge if it is reachable
-        # 4. Repeat until we 'hit' target node:
-        #   - Repeat until we can actually make an edge to the target node
-        #
-        # How to deal with repeated visits to a node? For now we just make graph repeated after building it
-
-    # TODO feels like I should be able to remove this too
-    @property
-    def position_dim(self) -> int:
-        return self.rigid_bodies[0].dim
-
-    def _get_unactuated_dofs(
-        self, rigid_bodies: List[RigidBody], dim: int
-    ) -> npt.NDArray[np.int32]:
-        unactuated_idxs = [i for i, b in enumerate(rigid_bodies) if not b.actuated]
-        unactuated_dofs = np.concatenate(
-            [np.arange(idx * dim, (idx + 1) * dim) for idx in unactuated_idxs]
-        )
-        return unactuated_dofs
-
-    # TODO move to contact or dynamics module
-    @staticmethod
-    def construct_force_balance(
-        collision_pairs: List[CollisionPair],
-        bodies: List[RigidBody],
-        external_forces: npt.NDArray[sym.Expression],
-        unactuated_dofs: npt.NDArray[np.int64],
-    ) -> List[sym.Formula]:
-        normal_jacobians = np.vstack(
-            [p.get_normal_jacobian_for_bodies(bodies) for p in collision_pairs]
-        )
-        tangential_jacobians = np.vstack(
-            [p.get_tangential_jacobian_for_bodies(bodies) for p in collision_pairs]
-        )
-
-        normal_forces = np.concatenate([p.lam_n for p in collision_pairs])
-        friction_forces = np.concatenate([p.lam_f for p in collision_pairs])
-
-        all_force_balances = eq(
-            normal_jacobians.T.dot(normal_forces)
-            + tangential_jacobians.T.dot(friction_forces)
-            + external_forces,
-            0,
-        )
-        force_balance = all_force_balances[unactuated_dofs, :]
-        return force_balance
+    def __init__(self, collision_pair_handler: CollisionPairHandler) -> None:
+        self.collision_pair_handler = collision_pair_handler
 
     def add_source_config(self, mc: ModeConfig) -> None:
         self.source_config = mc
@@ -230,6 +149,24 @@ class GraphBuilder:
                 for pair in current_modes.keys()
             ]
             return new_modes
+
+    def build_graph(self, prune: bool = False) -> Graph:
+        if prune:  # NOTE: Will be expanded with more advanced graph search algorithms
+            graph = self.prioritized_search_from_source(
+                self.collision_pair_handler.collision_pairs_by_name,
+                self.collision_pair_handler.all_decision_vars,
+                self.source_config,
+                self.target_config,
+            )
+        else:  # naive graph building
+            graph = self.all_possible_permutations(
+                self.collision_pair_handler.collision_pairs,
+                self.collision_pair_handler.all_decision_vars,
+                self.source_config,
+                self.target_config,
+            )
+
+        return graph
 
     def prioritized_search_from_source(
         self,
@@ -297,22 +234,30 @@ class GraphBuilder:
         target_config: ModeConfig,
     ):
 
+        # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p
+        # TODO: This is outdated: We now use dicts, but this assumes list of contact modes.
         breakpoint()
-
-    def build_graph(self, prune: bool = False) -> Graph:
-        if prune:  # NOTE: Will be expanded with more advanced graph search algorithms
-            graph = self.prioritized_search_from_source(
-                self.collision_pairs_by_name,
-                self.all_decision_vars,
-                self.source_config,
-                self.target_config,
-            )
-        else:  # naive graph building
-            graph = self.all_possible_permutations(
-                self.collision_pairs,
-                self.all_decision_vars,
-                self.source_config,
-                self.target_config,
-            )
-
-        return graph
+#        contact_pairs = [list(p.contact_modes.values()) for p in pairs]
+#        # Cartesian product:
+#        # S = P_1 X P_2 X ... X P_n_p
+#        # |S| = |P_1| * |P_2| * ... * |P_n_p|
+#        #     = n_m * n_m * ... * n_m
+#        #     = n_m^n_p
+#        possible_contact_permutations = list(itertools.product(*contact_pairs))
+#
+#        print("Building convex sets...")
+#        intersects, intersections = zip(
+#            *[
+#                calc_intersection_of_contact_modes(perm)
+#                for perm in tqdm(possible_contact_permutations)
+#            ]
+#        )
+#
+#        convex_sets = {
+#            name: intersection
+#            for intersects, (name, intersection) in zip(intersects, intersections)
+#            if intersects
+#        }
+#        print(f"Number of feasible sets: {len(convex_sets)}")
+#
+#        return convex_sets
