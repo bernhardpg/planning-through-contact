@@ -5,7 +5,7 @@ from geometry.bezier import BezierCurve
 from geometry.collision_pair import CollisionPair
 from geometry.contact_mode import ContactModeType, PositionModeType
 from geometry.rigid_body import RigidBody
-from planning.gcs import GcsPlanner
+from planning.gcs import GcsContactPlanner
 from planning.graph_builder import ContactModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
@@ -117,7 +117,7 @@ def plan_for_box_pushing():
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    planner = GcsPlanner(
+    planner = GcsContactPlanner(
         rigid_bodies,
         collision_pairs,
         external_forces,
@@ -312,7 +312,7 @@ def plan_for_box_pickup():
     gravitational_jacobian = np.array([[0, -1, 0, -1, 0, -1, 0, -1]]).T
     external_forces = gravitational_jacobian.dot(mg)
 
-    planner = GcsPlanner(
+    planner = GcsContactPlanner(
         rigid_bodies,
         collision_pairs,
         external_forces,
