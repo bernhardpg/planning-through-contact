@@ -1,7 +1,6 @@
 import numpy as np
 from pydrake.math import eq
 
-from geometry.bezier import BezierCurve
 from geometry.collision_pair import CollisionPair
 from geometry.contact_mode import ContactModeType, PositionModeType
 from geometry.rigid_body import RigidBody
@@ -19,7 +18,7 @@ from visualize.visualize import animate_positions, plot_positions_and_forces
 # - [ ] External forces
 # - [ ] Weights for costs
 # - [X] Unactuated bodies
-# - [ ] GCSContactPlanner should be removed and replaced
+# - [X] GCSContactPlanner should be removed and replaced
 # - [X] Rigid bodies collection
 # - [X] Position variables, decision variables, force variables
 

@@ -34,42 +34,19 @@ class GcsContactPlanner:
         self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
 
-        self.all_decision_vars = self._collect_all_decision_vars(
-            self.rigid_bodies, self.collision_pairs
-        )
-        self.all_position_vars = self.all_decision_vars[
-            : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
-        ]
-        self.all_force_vars = self.all_decision_vars[len(self.all_position_vars) :]
-
         self.collision_pair_handler = CollisionPairHandler(
-            self.all_decision_vars,
             rigid_bodies,
             collision_pairs,
             external_forces,
             additional_constraints,
             allow_sliding,
         )
+        self.all_decision_vars = self.collision_pair_handler.all_decision_vars
+        self.all_position_vars = self.collision_pair_handler.all_position_vars
+        self.all_force_vars = self.collision_pair_handler.all_force_vars
 
         self.graph_builder = GraphBuilder(self.collision_pair_handler)
         self.gcs = GraphOfConvexSets()
-
-    def _collect_all_decision_vars(
-        self,
-        bodies: List[RigidBody],
-        collision_pairs: List[CollisionPair],
-    ) -> npt.NDArray[sym.Variable]:
-        all_pos_vars = np.concatenate([b.pos.x.flatten() for b in bodies])
-        all_normal_force_vars = np.concatenate(
-            [p.lam_n.flatten() for p in collision_pairs]
-        )
-        all_friction_force_vars = np.concatenate(
-            [p.lam_f.flatten() for p in collision_pairs]
-        )
-        all_vars = np.concatenate(
-            [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
-        )
-        return all_vars
 
     @property
     def num_bodies(self) -> int:

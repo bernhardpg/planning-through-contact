@@ -26,9 +26,7 @@ class CollisionPair:
     body_b: RigidBody
     friction_coeff: float
     position_mode: PositionModeType
-    force_curve_order: int = 2  # TODO remove?
-
-    # TODO Also use position modes to specify position constraints!
+    force_curve_order: int = 2
 
     def __post_init__(self):
         self.sdf = self._create_signed_distance_func(
@@ -302,16 +300,17 @@ class CollisionPair:
 class CollisionPairHandler:
     def __init__(
         self,
-        all_decision_vars: List[sym.Variable],  # TODO this should not be here
         rigid_bodies: List[RigidBody],
         collision_pairs: List[CollisionPair],  # TODO Will be removed
         external_forces: List[sym.Expression],
         additional_constraints: Optional[List[sym.Formula]],
         allow_sliding: bool = False,
     ) -> None:
-        self.all_decision_vars = all_decision_vars
         self.rigid_bodies = rigid_bodies
         self.collision_pairs = collision_pairs
+        self.all_decision_vars = CollisionPairHandler.collect_all_decision_vars(
+            self.rigid_bodies, self.collision_pairs
+        )
         unactuated_dofs = self._get_unactuated_dofs(
             self.rigid_bodies, self.position_dim
         )
@@ -328,6 +327,41 @@ class CollisionPairHandler:
 
         for p in self.collision_pairs:
             p.formulate_contact_modes(self.all_decision_vars, allow_sliding)
+
+    @staticmethod
+    def collect_all_decision_vars(
+        bodies: List[RigidBody],
+        collision_pairs: List[CollisionPair],
+    ) -> npt.NDArray[sym.Variable]:
+        all_pos_vars = np.concatenate([b.pos.x.flatten() for b in bodies])
+        all_normal_force_vars = np.concatenate(
+            [p.lam_n.flatten() for p in collision_pairs]
+        )
+        all_friction_force_vars = np.concatenate(
+            [p.lam_f.flatten() for p in collision_pairs]
+        )
+        all_vars = np.concatenate(
+            [all_pos_vars, all_normal_force_vars, all_friction_force_vars]
+        )
+        return all_vars
+
+    @property
+    def num_bodies(self) -> int:
+        return len(self.rigid_bodies)
+
+    @property
+    def position_curve_order(self) -> int:
+        return self.collision_pairs[0].body_a.position_curve_order
+
+    @property
+    def all_position_vars(self) -> npt.NDArray[sym.Variable]:
+        return self.all_decision_vars[
+            : self.num_bodies * (self.position_curve_order + 1) * self.position_dim
+        ]
+
+    @property
+    def all_force_vars(self) -> npt.NDArray[sym.Variable]:
+        return self.all_decision_vars[len(self.all_position_vars) :]
 
     @property
     def position_dim(self) -> int:
