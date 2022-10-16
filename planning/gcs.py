@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -16,6 +16,7 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
+from geometry.bezier import BezierCurve
 from geometry.collision_pair import CollisionPair, CollisionPairHandler
 from geometry.rigid_body import RigidBody
 from planning.graph_builder import ContactModeConfig, Graph, GraphBuilder
@@ -280,7 +281,7 @@ class GcsContactPlanner:
         print("Result is success!")
         return result
 
-    def get_vertex_values(
+    def get_ctrl_points(
         self, result: MathematicalProgramResult
     ) -> npt.NDArray[np.float64]:
         flow_variables = [e.phi() for e in self.gcs.Edges()]
@@ -339,3 +340,50 @@ class GcsContactPlanner:
             graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]
         data.write_svg(filename)
+
+    def get_curves_from_ctrl_points(
+        self, vertex_values: npt.NDArray[np.float64]
+    ) -> Tuple[
+        Dict[str, npt.NDArray[np.float64]],
+        Dict[str, npt.NDArray[np.float64]],
+        Dict[str, npt.NDArray[np.float64]],
+    ]:
+        positions = {
+            b.name: self.get_pos_ctrl_points(vertex_values, b)
+            for b in self.rigid_bodies
+        }
+        pos_curves = {
+            body: np.concatenate(
+                [
+                    BezierCurve.create_from_ctrl_points(c).eval_entire_interval()
+                    for c in ctrl_points
+                ]
+            )
+            for body, ctrl_points in positions.items()
+        }
+
+        normal_forces, friction_forces = self.get_force_ctrl_points(vertex_values)
+        normal_force_curves = {
+            pair: np.concatenate(
+                [
+                    BezierCurve.create_from_ctrl_points(
+                        points.reshape((1, -1))
+                    ).eval_entire_interval()
+                    for points in control_points
+                ]
+            )
+            for pair, control_points in normal_forces.items()
+        }
+        friction_force_curves = {
+            pair: np.concatenate(
+                [
+                    BezierCurve.create_from_ctrl_points(
+                        points.reshape((1, -1))
+                    ).eval_entire_interval()
+                    for points in control_points
+                ]
+            )
+            for pair, control_points in friction_forces.items()
+        }
+
+        return pos_curves, normal_force_curves, friction_force_curves

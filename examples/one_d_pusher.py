@@ -139,47 +139,12 @@ def plan_for_box_pushing():
     planner.add_force_strength_cost()
 
     result = planner.solve()
-    vertex_values = planner.get_vertex_values(result)
-
-    normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
-    positions = {
-        b.name: planner.get_pos_ctrl_points(vertex_values, b)
-        for b in planner.rigid_bodies
-    }
-
-    pos_curves = {
-        body: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(c).eval_entire_interval()
-                for c in ctrl_points
-            ]
-        )
-        for body, ctrl_points in positions.items()
-    }
-
-    normal_force_curves = {
-        pair: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(
-                    points.reshape((1, -1))
-                ).eval_entire_interval()
-                for points in control_points
-            ]
-        )
-        for pair, control_points in normal_forces.items()
-    }
-
-    friction_force_curves = {
-        pair: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(
-                    points.reshape((1, -1))
-                ).eval_entire_interval()
-                for points in control_points
-            ]
-        )
-        for pair, control_points in friction_forces.items()
-    }
+    ctrl_points = planner.get_ctrl_points(result)
+    (
+        pos_curves,
+        normal_force_curves,
+        friction_force_curves,
+    ) = planner.get_curves_from_ctrl_points(ctrl_points)
 
     plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
     animate_positions(pos_curves, rigid_bodies)
@@ -334,47 +299,12 @@ def plan_for_box_pickup():
     planner.add_force_strength_cost()
 
     result = planner.solve()
-    vertex_values = planner.get_vertex_values(result)
-
-    normal_forces, friction_forces = planner.get_force_ctrl_points(vertex_values)
-    positions = {
-        b.name: planner.get_pos_ctrl_points(vertex_values, b)
-        for b in planner.rigid_bodies
-    }
-
-    pos_curves = {
-        body: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(c).eval_entire_interval()
-                for c in ctrl_points
-            ]
-        )
-        for body, ctrl_points in positions.items()
-    }
-
-    normal_force_curves = {
-        pair: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(
-                    points.reshape((1, -1))
-                ).eval_entire_interval()
-                for points in control_points
-            ]
-        )
-        for pair, control_points in normal_forces.items()
-    }
-
-    friction_force_curves = {
-        pair: np.concatenate(
-            [
-                BezierCurve.create_from_ctrl_points(
-                    points.reshape((1, -1))
-                ).eval_entire_interval()
-                for points in control_points
-            ]
-        )
-        for pair, control_points in friction_forces.items()
-    }
+    ctrl_points = planner.get_ctrl_points(result)
+    (
+        pos_curves,
+        normal_force_curves,
+        friction_force_curves,
+    ) = planner.get_curves_from_ctrl_points(ctrl_points)
 
     plot_positions_and_forces(pos_curves, normal_force_curves, friction_force_curves)
     animate_positions(pos_curves, rigid_bodies)
