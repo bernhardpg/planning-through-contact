@@ -21,11 +21,11 @@ poetry run python main.py
 
 ## Running demos
 ```
-poetry run python main.py --demo one_finger_one_box 
+poetry run python main.py --demo box_push
 ```
 
 ```
-poetry run python main.py --demo two_fingers
+poetry run python main.py --demo box_pickup
 ```
 
 ## Running pre-commit hooks

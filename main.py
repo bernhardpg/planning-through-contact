@@ -1,24 +1,18 @@
 import argparse
 
-from examples.one_d_pusher import (
-    plan_for_one_box_one_finger,
-    plan_for_two_fingers,
-    plan_w_graph_builder,
-)
+from examples.one_d_pusher import plan_for_box_pickup, plan_for_box_pushing
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--demo", help="Demo to run", type=str, default="graph_builder")
+    parser.add_argument("--demo", help="Demo to run", type=str, default="box_pickup")
     args = parser.parse_args()
     demo_to_run = args.demo
 
-    if demo_to_run in "one_finger_one_box":
-        plan_for_one_box_one_finger()
-    elif demo_to_run in "two_fingers":
-        plan_for_two_fingers()
-    elif demo_to_run in "graph_builder":
-        plan_w_graph_builder()
+    if demo_to_run in "box_push":
+        plan_for_box_pushing()
+    elif demo_to_run in "box_pickup":
+        plan_for_box_pickup()
     return 0
 
 

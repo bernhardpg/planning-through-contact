@@ -92,6 +92,8 @@ class ContactMode:
         default_factory=lambda: {
             ContactModeType.NO_CONTACT: "NC",
             ContactModeType.ROLLING: "RL",
+            ContactModeType.SLIDING_POSITIVE: "SP",
+            ContactModeType.SLIDING_NEGATIVE: "SN",
         }
     )
 

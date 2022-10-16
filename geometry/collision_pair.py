@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -177,6 +178,11 @@ class CollisionPair:
             np.vstack((self.body_a.vel.x, self.body_b.vel.x))
         )
 
+    @property
+    def allowed_contact_modes(self) -> List[ContactModeType]:
+        assert self.contact_modes is not None
+        return list(self.contact_modes.keys())
+
     def _get_jacobian_for_bodies(
         self, bodies: List[RigidBody], local_jacobian: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
@@ -215,6 +221,11 @@ class CollisionPair:
 
     def add_force_balance(self, force_balance):
         self.force_balance = force_balance
+
+    def get_contact_mode(self, contact_mode: ContactModeType) -> ContactMode:
+        if not self.contact_modes_formulated:
+            raise RuntimeError("Contact modes not formulated for {self.name}")
+        return self.contact_modes[contact_mode]
 
     def formulate_contact_modes(
         self,
@@ -361,13 +372,30 @@ class CollisionPairHandler:
         force_balance = all_force_balances[unactuated_dofs, :]
         return force_balance
 
+    def all_possible_contact_cfg_perms(self) -> List[ContactModeConfig]:
+        # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p
+        all_allowed_contact_modes = [
+            [(pair.name, mode) for mode in pair.allowed_contact_modes]
+            for pair in self.collision_pairs
+        ]
+        # Cartesian product:
+        # S = P_1 X P_2 X ... X P_n_p
+        # |S| = |P_1| * |P_2| * ... * |P_n_p|
+        #     = n_m * n_m * ... * n_m
+        #     = n_m^n_p
+        all_possible_permutations = [
+            ContactModeConfig({name: mode for name, mode in perm})
+            for perm in itertools.product(*all_allowed_contact_modes)
+        ]
+        return all_possible_permutations
+
     def create_convex_set_from_mode_config(
         self,
         config: "ContactModeConfig",
         name: Optional[str] = None,
     ) -> Optional[Tuple[ConvexSet, str]]:
         contact_modes = [
-            self.collision_pairs_by_name[pair].contact_modes[mode]
+            self.collision_pairs_by_name[pair].get_contact_mode(mode)
             for pair, mode in config.modes.items()
         ]
         intersects, (
