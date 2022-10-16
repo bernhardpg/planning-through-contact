@@ -1,79 +1,34 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from queue import PriorityQueue
 from typing import Dict, List, Optional
 
-import numpy.typing as npt
-import pydrake.symbolic as sym
 from pydrake.geometry.optimization import ConvexSet
 
-from geometry.contact import (
-    CollisionPair,
-    CollisionPairHandler,
+from geometry.collision_pair import CollisionPairHandler
+from geometry.contact_mode import (
+    ContactModeConfig,
     ContactModeType,
-    RigidBody,
-    calc_intersection_of_contact_modes,
+    PrioritizedContactModeConfig,
 )
-from geometry.polyhedron import PolyhedronFormulator
-
-# flake8: noqa
-
-
-@dataclass
-class ModeConfig:
-    modes: Dict[str, ContactModeType]
-    additional_constraints: Optional[npt.NDArray[sym.Formula]] = None
-
-    def calculate_match(self, other) -> int:
-        modes_self = list(self.modes.values())
-        modes_other = list(other.modes.values())
-
-        num_not_equal = sum([m1 != m2 for m1, m2 in zip(modes_self, modes_other)])
-        return num_not_equal
-
-    @staticmethod
-    def create_vertex_from_mode_config(
-        config: "ModeConfig",
-        collision_pairs: List[CollisionPair],
-        all_decision_vars: List[sym.Variable],
-        name: Optional[str] = None,
-    ) -> Optional["GraphVertex"]:
-        contact_modes = [
-            collision_pairs[pair].contact_modes[mode]
-            for pair, mode in config.modes.items()
-        ]
-        intersects, (
-            calculated_name,
-            intersection,
-        ) = calc_intersection_of_contact_modes(contact_modes)
-        if not intersects:
-            return None
-
-        if config.additional_constraints is not None:
-            additional_set = PolyhedronFormulator(
-                config.additional_constraints
-            ).formulate_polyhedron(all_decision_vars)
-            intersects = intersects and intersection.IntersectsWith(additional_set)
-            if not intersects:
-                return None
-
-            intersection = intersection.Intersection(additional_set)
-
-        name = f"{name}: {calculated_name}" if name is not None else calculated_name
-        vertex = GraphVertex(name, config, intersection)
-        return vertex
-
-
-@dataclass(order=True)
-class PrioritizedModeConfig:
-    priority: int
-    item: ModeConfig = field(compare=False)
 
 
 @dataclass
 class GraphVertex:
     name: str
-    config: ModeConfig
+    config: ContactModeConfig
     convex_set: ConvexSet
+
+    @classmethod
+    def create_from_mode_config(
+        cls,
+        config: ContactModeConfig,
+        collision_pair_handler: CollisionPairHandler,
+        name: Optional[str] = None,
+    ) -> "GraphVertex":
+        convex_set, name = collision_pair_handler.create_convex_set_from_mode_config(
+            config, name
+        )
+        return cls(name, config, convex_set)
 
 
 @dataclass
@@ -114,10 +69,10 @@ class GraphBuilder:
     def __init__(self, collision_pair_handler: CollisionPairHandler) -> None:
         self.collision_pair_handler = collision_pair_handler
 
-    def add_source_config(self, mc: ModeConfig) -> None:
+    def add_source_config(self, mc: ContactModeConfig) -> None:
         self.source_config = mc
 
-    def add_target_config(self, mc: ModeConfig) -> None:
+    def add_target_config(self, mc: ContactModeConfig) -> None:
         self.target_config = mc
 
     # TODO move and clean up
@@ -135,17 +90,17 @@ class GraphBuilder:
     # TODO move and clean up
     def find_adjacent_contact_modes(
         self, curr_vertex: GraphVertex, graph: Graph
-    ) -> List[ModeConfig]:
+    ) -> List[ContactModeConfig]:
         if curr_vertex is None:
             breakpoint()
 
         current_modes = curr_vertex.config.modes
         if curr_vertex.config.additional_constraints is not None:
             # if we have additional constraints, first explore removing these
-            return [ModeConfig(current_modes)]
+            return [ContactModeConfig(current_modes)]
         else:
             new_modes = [
-                ModeConfig(self.switch_mode(pair, current_modes))
+                ContactModeConfig(self.switch_mode(pair, current_modes))
                 for pair in current_modes.keys()
             ]
             return new_modes
@@ -153,15 +108,13 @@ class GraphBuilder:
     def build_graph(self, prune: bool = False) -> Graph:
         if prune:  # NOTE: Will be expanded with more advanced graph search algorithms
             graph = self.prioritized_search_from_source(
-                self.collision_pair_handler.collision_pairs_by_name,
-                self.collision_pair_handler.all_decision_vars,
+                self.collision_pair_handler,
                 self.source_config,
                 self.target_config,
             )
         else:  # naive graph building
             graph = self.all_possible_permutations(
-                self.collision_pair_handler.collision_pairs,
-                self.collision_pair_handler.all_decision_vars,
+                self.collision_pair_handler,
                 self.source_config,
                 self.target_config,
             )
@@ -170,18 +123,17 @@ class GraphBuilder:
 
     def prioritized_search_from_source(
         self,
-        collision_pairs_by_name: Dict[str, CollisionPair],
-        all_decision_vars: List[sym.Variable],
-        source_config: ModeConfig,
-        target_config: ModeConfig,
+        collision_pair_handler: CollisionPairHandler,
+        source_config: ContactModeConfig,
+        target_config: ContactModeConfig,
     ):
         graph = Graph()
 
-        source = ModeConfig.create_vertex_from_mode_config(
-            source_config, collision_pairs_by_name, all_decision_vars, "source"
+        source = GraphVertex.create_from_mode_config(
+            source_config, collision_pair_handler, "source"
         )
-        target = ModeConfig.create_vertex_from_mode_config(
-            target_config, collision_pairs_by_name, all_decision_vars, "target"
+        target = GraphVertex.create_from_mode_config(
+            target_config, collision_pair_handler, "target"
         )
 
         graph.add_source(source)
@@ -192,7 +144,7 @@ class GraphBuilder:
         new_modes = self.find_adjacent_contact_modes(u, graph)
         priorities = [m.calculate_match(target_config) for m in new_modes]
         for (pri, m) in zip(priorities, new_modes):
-            frontier.put(PrioritizedModeConfig(pri, m))
+            frontier.put(PrioritizedContactModeConfig(pri, m))
 
         TIMEOUT_LIMIT = 100
         counter = 0
@@ -201,9 +153,7 @@ class GraphBuilder:
                 raise RuntimeError("Frontier empty, but target not found")
             m = frontier.get().item
             counter += 1
-            v = ModeConfig.create_vertex_from_mode_config(
-                m, collision_pairs_by_name, all_decision_vars
-            )
+            v = GraphVertex.create_from_mode_config(m, collision_pair_handler)
 
             if u.convex_set.IntersectsWith(v.convex_set):
                 # TODO clean up
@@ -214,7 +164,7 @@ class GraphBuilder:
                 new_modes = self.find_adjacent_contact_modes(v, graph)
                 priorities = [m.calculate_match(target_config) for m in new_modes]
                 for (pri, m) in zip(priorities, new_modes):
-                    frontier.put(PrioritizedModeConfig(pri, m))
+                    frontier.put(PrioritizedContactModeConfig(pri, m))
 
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
                 if found_target:
@@ -228,10 +178,9 @@ class GraphBuilder:
 
     def all_possible_permutations(
         self,
-        collision_pairs: List[CollisionPair],
-        all_decision_vars: List[sym.Variable],
-        source_config: ModeConfig,
-        target_config: ModeConfig,
+        collision_pair_handler: CollisionPairHandler,
+        source_config: ContactModeConfig,
+        target_config: ContactModeConfig,
     ):
 
         # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p

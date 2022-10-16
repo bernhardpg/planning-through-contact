@@ -18,14 +18,11 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
-from geometry.contact import (
-    CollisionPair,
-    CollisionPairHandler,
-    calc_intersection_of_contact_modes,
-)
+from geometry.collision_pair import CollisionPair, CollisionPairHandler
+from geometry.contact_mode import calc_intersection_of_contact_modes
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.rigid_body import RigidBody
-from planning.graph_builder import Graph, GraphBuilder, ModeConfig
+from planning.graph_builder import ContactModeConfig, Graph, GraphBuilder
 
 
 class GcsPlanner:
@@ -138,10 +135,10 @@ class GcsPlanner:
             v = vertex_map[e.v.name]
             self.gcs.AddEdge(u, v)
 
-    def add_source_config(self, mc: ModeConfig) -> None:
+    def add_source_config(self, mc: ContactModeConfig) -> None:
         self.graph_builder.add_source_config(mc)
 
-    def add_target_config(self, mc: ModeConfig) -> None:
+    def add_target_config(self, mc: ContactModeConfig) -> None:
         self.graph_builder.add_target_config(mc)
 
     def build_graph(self, prune: bool = False) -> None:

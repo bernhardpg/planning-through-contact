@@ -2,9 +2,11 @@ import numpy as np
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierCurve
-from geometry.contact import CollisionPair, ContactModeType, PositionModeType, RigidBody
+from geometry.collision_pair import CollisionPair
+from geometry.contact_mode import ContactModeType, PositionModeType
+from geometry.rigid_body import RigidBody
 from planning.gcs import GcsContactPlanner, GcsPlanner
-from planning.graph_builder import ModeConfig
+from planning.graph_builder import ContactModeConfig
 from visualize.visualize import animate_positions, plot_positions_and_forces
 
 # TODO remove
@@ -106,7 +108,7 @@ def plan_w_graph_builder():
     additional_constraints = [
         *no_ground_motion,
     ]
-    source_config = ModeConfig(
+    source_config = ContactModeConfig(
         modes={
             p1.name: ContactModeType.NO_CONTACT,
             p2.name: ContactModeType.NO_CONTACT,
@@ -124,7 +126,7 @@ def plan_w_graph_builder():
         ],
     )
     # TODO make it such that all non-specified modes are automatically not in contact
-    target_config = ModeConfig(
+    target_config = ContactModeConfig(
         modes={
             p1.name: ContactModeType.ROLLING,
             p2.name: ContactModeType.ROLLING,

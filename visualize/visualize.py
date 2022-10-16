@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 from matplotlib import animation
 
-from geometry.contact import RigidBody
+from geometry.rigid_body import RigidBody
 
 
 def plot_positions_and_forces(

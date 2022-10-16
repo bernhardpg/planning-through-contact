@@ -1,7 +1,4 @@
-import itertools
-from dataclasses import dataclass, field
-from enum import Enum
-from functools import reduce
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -11,49 +8,15 @@ from pydrake.geometry.optimization import ConvexSet
 from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierVariable
+from geometry.contact_mode import (
+    ContactMode,
+    ContactModeConfig,
+    ContactModeType,
+    PositionModeType,
+    calc_intersection_of_contact_modes,
+)
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.rigid_body import RigidBody
-
-
-class ContactModeType(Enum):
-    NO_CONTACT = 1
-    ROLLING = 2
-    SLIDING_POSITIVE = 3
-    SLIDING_NEGATIVE = 3
-
-
-class PositionModeType(Enum):
-    LEFT = 1
-    TOP_LEFT = 2
-    TOP = 3
-    TOP_RIGHT = 4
-    RIGHT = 5
-    BOTTOM_RIGHT = 6
-    BOTTOM = 7
-    BOTTOM_LEFT = 8
-
-
-# TODO
-CONTACT_TYPE_ABBREVIATIONS = {
-    ContactModeType.NO_CONTACT: "NC",
-    ContactModeType.ROLLING: "RL",
-}
-
-
-@dataclass
-class ContactMode:
-    pair_name: str
-    constraints: List[npt.NDArray[sym.Formula]]
-    all_vars: npt.NDArray[sym.Variable]
-    type: ContactModeType
-    polyhedron: ConvexSet = field(init=False, repr=False)
-    name: str = field(init=False, repr=False)
-
-    def __post_init__(self):
-        self.polyhedron = PolyhedronFormulator(self.constraints).formulate_polyhedron(
-            variables=self.all_vars, make_bounded=True
-        )
-        self.name = f"{self.pair_name}[{CONTACT_TYPE_ABBREVIATIONS[self.type]}]"
 
 
 @dataclass
@@ -398,23 +361,31 @@ class CollisionPairHandler:
         force_balance = all_force_balances[unactuated_dofs, :]
         return force_balance
 
+    def create_convex_set_from_mode_config(
+        self,
+        config: "ContactModeConfig",
+        name: Optional[str] = None,
+    ) -> Optional[Tuple[ConvexSet, str]]:
+        contact_modes = [
+            self.collision_pairs_by_name[pair].contact_modes[mode]
+            for pair, mode in config.modes.items()
+        ]
+        intersects, (
+            calculated_name,
+            intersection,
+        ) = calc_intersection_of_contact_modes(contact_modes)
+        if not intersects:
+            return None
 
-# TODO make this part of collisionPairHandler?
-def calc_intersection_of_contact_modes(
-    modes: List[ContactMode],
-) -> Tuple[bool, Optional[ConvexSet]]:
-    pairwise_combinations = itertools.combinations(modes, 2)
-    all_modes_intersect = all(
-        map(
-            lambda pair: pair[0].polyhedron.IntersectsWith(pair[1].polyhedron),
-            pairwise_combinations,
-        )
-    )
-    if all_modes_intersect:
-        polys = [m.polyhedron for m in modes]
-        intersection = reduce(lambda p1, p2: p1.Intersection(p2), polys)
-        names = [m.name for m in modes]
-        name = " | ".join(names)
-        return (True, (name, intersection))
-    else:
-        return (False, (None, None))
+        if config.additional_constraints is not None:
+            additional_set = PolyhedronFormulator(
+                config.additional_constraints
+            ).formulate_polyhedron(self.all_decision_vars)
+            intersects = intersects and intersection.IntersectsWith(additional_set)
+            if not intersects:
+                return None
+
+            intersection = intersection.Intersection(additional_set)
+
+        name = f"{name}: {calculated_name}" if name is not None else calculated_name
+        return intersection, name
