@@ -224,19 +224,7 @@ def plan_for_box_pickup():
         friction_coeff,
         position_mode=PositionModeType.TOP,
     )
-    p4 = CollisionPair(
-        finger_1,
-        ground,
-        friction_coeff,
-        position_mode=PositionModeType.TOP,
-    )
-    p5 = CollisionPair(
-        finger_2,
-        ground,
-        friction_coeff,
-        position_mode=PositionModeType.TOP,
-    )
-    collision_pairs = [p1, p2, p3, p4, p5]
+    collision_pairs = [p1, p2, p3]
 
     # Specify problem
     no_ground_motion = [eq(x_g, 0), eq(y_g, -1)]
@@ -245,11 +233,9 @@ def plan_for_box_pickup():
     ]
     source_config = ContactModeConfig(
         modes={
-            p1.name: ContactModeType.NO_CONTACT,
-            p2.name: ContactModeType.NO_CONTACT,
-            p3.name: ContactModeType.ROLLING,
-            p4.name: ContactModeType.NO_CONTACT,
-            p5.name: ContactModeType.NO_CONTACT,
+            p1.name: (ContactModeType.NO_CONTACT, PositionModeType.LEFT),
+            p2.name: (ContactModeType.NO_CONTACT, PositionModeType.RIGHT),
+            p3.name: (ContactModeType.ROLLING, PositionModeType.TOP),
         },
         additional_constraints=[
             eq(x_f_1, 0),
@@ -263,11 +249,9 @@ def plan_for_box_pickup():
     # TODO make it such that all non-specified modes are automatically not in contact
     target_config = ContactModeConfig(
         modes={
-            p1.name: ContactModeType.ROLLING,
-            p2.name: ContactModeType.ROLLING,
-            p3.name: ContactModeType.NO_CONTACT,
-            p4.name: ContactModeType.NO_CONTACT,
-            p5.name: ContactModeType.NO_CONTACT,
+            p1.name: (ContactModeType.ROLLINg, PositionModeType.LEFT),
+            p2.name: (ContactModeType.ROLLING, PositionModeType.RIGHT),
+            p3.name: (ContactModeType.NO_CONTACT, PositionModeType.TOP),
         },
         additional_constraints=[eq(x_b, 10.0), eq(y_b, 4.0)],
     )

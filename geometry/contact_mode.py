@@ -31,7 +31,7 @@ class PositionModeType(Enum):
 
 @dataclass(eq=True)
 class ContactModeConfig:
-    modes: Dict[str, ContactModeType]
+    modes: Dict[str, Tuple[ContactModeType, PositionModeType]]
     additional_constraints: Optional[npt.NDArray[sym.Formula]] = None
 
     def calculate_match(self, other) -> int:

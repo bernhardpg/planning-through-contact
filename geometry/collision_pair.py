@@ -29,6 +29,7 @@ class CollisionPair:
     force_curve_order: int = 2
 
     def __post_init__(self):
+        # TODO remove
         self.sdf = self._create_signed_distance_func(
             self.body_a, self.body_b, self.position_mode
         )
@@ -91,6 +92,45 @@ class CollisionPair:
                 raise NotImplementedError(
                     f"Position mode not implemented: {position_mode}"
                 )
+
+    @staticmethod
+    def _create_contact_mode_constraints(
+        contact_mode: ContactModeType,
+        sdf: npt.NDArray[sym.Expression],
+        lam_n: npt.NDArray[sym.Expression],
+        lam_f: npt.NDArray[sym.Expression],
+        rel_tangential_sliding_vel: npt.NDArray[sym.Expression],
+        friction_coeff: float,
+    ) -> npt.NDArray[sym.Formula]:
+        if contact_mode == ContactModeType.NO_CONTACT:
+            return [
+                ge(sdf, 0),
+                eq(lam_n, 0),
+                le(lam_f, friction_coeff * lam_n),
+                ge(lam_f, -friction_coeff * lam_n),
+            ]
+        elif contact_mode == ContactModeType.ROLLING:
+            return [
+                eq(sdf, 0),
+                ge(lam_n, 0),
+                eq(rel_tangential_sliding_vel, 0),
+                le(lam_f, friction_coeff * lam_n),
+                ge(lam_f, -friction_coeff * lam_n),
+            ]
+        elif contact_mode == ContactModeType.SLIDING_POSITIVE:
+            return [
+                eq(sdf, 0),
+                ge(lam_n, 0),
+                ge(rel_tangential_sliding_vel, 0),
+                eq(lam_f, -friction_coeff * lam_n),
+            ]
+        elif contact_mode == ContactModeType.SLIDING_NEGATIVE:
+            return [
+                eq(sdf, 0),
+                ge(lam_n, 0),
+                le(rel_tangential_sliding_vel, 0),
+                eq(lam_f, friction_coeff * lam_n),
+            ]
 
     @staticmethod
     def _create_signed_distance_func(
@@ -220,10 +260,29 @@ class CollisionPair:
     def add_force_balance(self, force_balance):
         self.force_balance = force_balance
 
-    def get_contact_mode(self, contact_mode: ContactModeType) -> ContactMode:
+    def get_contact_mode(
+        self, contact_mode: ContactModeType, position_mode: PositionModeType
+    ) -> ContactMode:
         if not self.contact_modes_formulated:
             raise RuntimeError("Contact modes not formulated for {self.name}")
-        return self.contact_modes[contact_mode]
+        return self.contact_modes[(contact_mode, position_mode)]
+
+    def _formulate_contact_mode(
+        self,
+        all_variables,
+        contact_mode: ContactModeType,
+        position_mode: PositionModeType,
+    ) -> ContactMode:
+        sdf = self._create_signed_distance_func(self.body_a, self.body_b, position_mode)
+        n_hat = self._create_normal_vec(self.body_a, self.body_b, position_mode)
+        d_hat = self._create_tangential_vec(self.n_hat)
+
+        position_mode_constraints = self._create_position_mode_constraints(
+            self.body_a, self.body_b, position_mode
+        )
+        contact_constraints = self._create_contact_mode_constraints(
+            sdf, lam_n, lam_f, rel_tangential_sliding_vel, friction_coeff
+        )
 
     def formulate_contact_modes(
         self,
@@ -241,57 +300,33 @@ class CollisionPair:
         position_mode_constraints = self._create_position_mode_constraints(
             self.body_a, self.body_b, self.position_mode
         )
+        contact_modes = [ContactModeType.NO_CONTACT, ContactModeType.ROLLING]
+        if allow_sliding:
+            contact_modes.extend(
+                [ContactModeType.SLIDING_POSITIVE, ContactModeType.SLIDING_NEGATIVE]
+            )
 
-        modes_constraints = {
-            ContactModeType.NO_CONTACT: [
-                ge(self.sdf, 0),
-                eq(self.lam_n, 0),
-                le(self.lam_f, self.friction_coeff * self.lam_n),
-                ge(self.lam_f, -self.friction_coeff * self.lam_n),
-                *position_mode_constraints,
-                *self.force_balance,
-                *self.additional_constraints,
-            ],
-            ContactModeType.ROLLING: [
-                eq(self.sdf, 0),
-                ge(self.lam_n, 0),
-                eq(self.rel_tangential_sliding_vel, 0),
-                le(self.lam_f, self.friction_coeff * self.lam_n),
-                ge(self.lam_f, -self.friction_coeff * self.lam_n),
-                *position_mode_constraints,
-                *self.force_balance,
-                *self.additional_constraints,
-            ],
+        contact_constraints = {
+            mode: self._create_contact_mode_constraints(
+                self.sdf,
+                self.lam_n,
+                self.lam_f,
+                self.rel_tangential_sliding_vel,
+                self.friction_coeff,
+            )
+            for mode in contact_modes
         }
 
-        if allow_sliding:
-            modes_constraints[ContactModeType.SLIDING_POSITIVE] = [
-                eq(self.sdf, 0),
-                ge(self.lam_n, 0),
-                ge(self.rel_tangential_sliding_vel, 0),
-                eq(self.lam_f, -self.friction_coeff * self.lam_n),
-                *position_mode_constraints,
-                *self.force_balance,
-                *self.additional_constraints,
-            ]
-            modes_constraints[ContactModeType.SLIDING_NEGATIVE] = [
-                eq(self.sdf, 0),
-                ge(self.lam_n, 0),
-                le(self.rel_tangential_sliding_vel, 0),
-                eq(self.lam_f, self.friction_coeff * self.lam_n),
-                *position_mode_constraints,
-                *self.force_balance,
-                *self.additional_constraints,
-            ]
+        breakpoint()
 
         self.contact_modes = {
             mode_type: ContactMode(
                 f"{self.name}",
-                contact_constraints,
+                constaints,
                 all_variables,
                 mode_type,
             )
-            for mode_type, contact_constraints in modes_constraints.items()
+            for mode_type, constraints in modes_constraints.items()
         }
         # TODO I HATE this, very against functional programming principles. Find an alternative?
         self.contact_modes_formulated = True
@@ -428,6 +463,7 @@ class CollisionPairHandler:
         config: "ContactModeConfig",
         name: Optional[str] = None,
     ) -> Optional[Tuple[ConvexSet, str]]:
+        breakpoint()
         contact_modes = [
             self.collision_pairs_by_name[pair].get_contact_mode(mode)
             for pair, mode in config.modes.items()
