@@ -8,9 +8,9 @@ from pydrake.geometry.optimization import ConvexSet
 
 from geometry.contact import (
     CollisionPair,
+    CollisionPairHandler,
     ContactModeType,
     RigidBody,
-    CollisionPairHandler,
     calc_intersection_of_contact_modes,
 )
 from geometry.polyhedron import PolyhedronFormulator
@@ -237,6 +237,8 @@ class GraphBuilder:
         # [(n_m), (n_m), ... (n_m)] n_p times --> n_m * n_p
         # TODO: This is outdated: We now use dicts, but this assumes list of contact modes.
         breakpoint()
+
+
 #        contact_pairs = [list(p.contact_modes.values()) for p in pairs]
 #        # Cartesian product:
 #        # S = P_1 X P_2 X ... X P_n_p

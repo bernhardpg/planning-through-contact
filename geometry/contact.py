@@ -2,7 +2,7 @@ import itertools
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import reduce
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -12,6 +12,7 @@ from pydrake.math import eq, ge, le
 
 from geometry.bezier import BezierVariable
 from geometry.polyhedron import PolyhedronFormulator
+from geometry.rigid_body import RigidBody
 
 
 class ContactModeType(Enum):
@@ -30,35 +31,6 @@ class PositionModeType(Enum):
     BOTTOM_RIGHT = 6
     BOTTOM = 7
     BOTTOM_LEFT = 8
-
-
-# TODO Refactor to own file
-@dataclass
-class RigidBody:
-    name: str
-    dim: int
-    geometry: Literal["point", "box"]
-    width: float = 0  # TODO generalize
-    height: float = 0
-    position_curve_order: int = 2
-    actuated: bool = False
-
-    def __post_init__(self) -> None:
-        self.pos = BezierVariable(
-            self.dim, self.position_curve_order, name=f"{self.name}_pos"
-        )
-
-    @property
-    def vel(self) -> BezierVariable:
-        return self.pos.get_derivative()
-
-    @property
-    def pos_x(self) -> npt.NDArray[sym.Expression]:
-        return self.pos.x[0, :]
-
-    @property
-    def pos_y(self) -> npt.NDArray[sym.Expression]:
-        return self.pos.x[1, :]
 
 
 # TODO

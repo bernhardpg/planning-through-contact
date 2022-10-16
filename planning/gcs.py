@@ -21,10 +21,10 @@ from tqdm import tqdm
 from geometry.contact import (
     CollisionPair,
     CollisionPairHandler,
-    RigidBody,
     calc_intersection_of_contact_modes,
 )
 from geometry.polyhedron import PolyhedronFormulator
+from geometry.rigid_body import RigidBody
 from planning.graph_builder import Graph, GraphBuilder, ModeConfig
 
 
