@@ -29,7 +29,7 @@ class PositionModeType(Enum):
     BOTTOM_LEFT = 8
 
 
-@dataclass
+@dataclass(eq=True)
 class ContactModeConfig:
     modes: Dict[str, ContactModeType]
     additional_constraints: Optional[npt.NDArray[sym.Formula]] = None

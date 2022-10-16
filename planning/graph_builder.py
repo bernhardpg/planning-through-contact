@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from queue import PriorityQueue
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydrake.geometry.optimization import ConvexSet
 
@@ -55,10 +55,14 @@ class Graph:
         self.target = target
         self.add_vertex(target)
 
-    def contains_vertex(self, v: GraphVertex) -> bool:
-        # TODO clean up
-        vertices_names = [v.name for v in self.vertices]
-        return v.name in vertices_names
+    def contains_mode_cfg(
+        self, mc: ContactModeConfig
+    ) -> Tuple[bool, Optional[GraphVertex]]:
+        found_vertex = next((v for v in self.vertices if v.config == mc), None)
+        if found_vertex is not None:
+            return True, found_vertex
+        else:
+            return False, None
 
 
 class GraphBuilder:
@@ -117,14 +121,19 @@ class GraphBuilder:
         while True:
             if frontier.empty():
                 raise RuntimeError("Frontier empty, but target not found")
-            m = frontier.get().item
             counter += 1
-            v = GraphVertex.create_from_mode_config(m, collision_pair_handler)
+
+            mode_cfg = frontier.get().item
+            mode_cfg_already_in_graph, found_vertex = graph.contains_mode_cfg(mode_cfg)
+            if mode_cfg_already_in_graph:
+                v = found_vertex
+            else:
+                v = GraphVertex.create_from_mode_config(
+                    mode_cfg, collision_pair_handler
+                )
+                graph.add_vertex(v)
 
             if u.convex_set.IntersectsWith(v.convex_set):
-                # TODO clean up
-                if not graph.contains_vertex(v):
-                    graph.add_vertex(v)
                 graph.add_edge(u, v)
 
                 new_mode_cfgs = ContactModeConfig.create_all_adjacent_modes(v.config)
