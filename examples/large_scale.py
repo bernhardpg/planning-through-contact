@@ -1,4 +1,6 @@
-from typing import Dict, List, Optional, Tuple, TypeVar
+from dataclasses import dataclass, field
+from queue import PriorityQueue
+from typing import List, Optional, Tuple, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,11 +12,28 @@ from pydrake.geometry.optimization import (
     CartesianProduct,
     ConvexSet,
     GraphOfConvexSets,
-    HPolyhedron,
     VPolytope,
 )
 from pydrake.math import eq
 from pydrake.solvers import Binding, Cost, L2NormCost, MathematicalProgramResult
+
+
+def create_test_polytopes() -> List[VPolytope]:
+    vertices = [
+        np.array([[-1, 0], [0, 0], [0, 3], [-1, 3]]),
+        np.array([[0, 0], [1, 0], [1, 1], [0, 1]]),
+        np.array([[0, 1], [1, 1], [1, 2], [0, 2]]),
+        np.array([[0, 2], [1, 2], [1, 3], [0, 3]]),
+        np.array([[1, 0], [2, 0], [2, 1], [1, 1]]),
+        np.array([[1, 1], [2, 1], [2, 2], [1, 2]]),
+        np.array([[1, 2], [2, 2], [2, 3], [1, 3]]),
+        np.array([[2, 0], [3, 0], [3, 1], [2, 1]]),
+        np.array([[2, 1], [3, 1], [3, 2], [2, 2]]),
+        np.array([[2, 2], [3, 2], [3, 3], [2, 3]]),
+        np.array([[3, 1.3], [4, 1.3], [4, 1.7], [3, 1.7]]),
+    ]
+    polytopes = [VPolytope(vs.T) for vs in vertices]
+    return polytopes
 
 
 # TODO move to visualization library
@@ -27,9 +46,6 @@ def visualize_polytopes(polytopes: List[VPolytope], show=False) -> None:
         plt.show()
 
 
-# TODO remove
-# flake8: noqa
-
 NodeId = TypeVar("NodeId")
 Edge = Tuple[NodeId, NodeId]
 
@@ -37,27 +53,25 @@ Edge = Tuple[NodeId, NodeId]
 class ConvexSetNode:
     def __init__(self, convex_set: ConvexSet, id: NodeId) -> None:
         self.convex_set = convex_set
-        self.cost = np.inf
         self.id = id
 
     def connected_to(self, other: "ConvexSetNode") -> bool:
         return self.convex_set.IntersectsWith(other.convex_set)
 
-    def update_cost(self, new_cost: float) -> None:
-        self.cost = new_cost
-
 
 Node = TypeVar("Node")
 
 
-# TODO this whole class is not really needed
+@dataclass(order=True)
+class PrioritizedNode:
+    priority: float
+    item: Node = field(compare=False)
+
+
 class Graph:
-    def __init__(
-        self, nodes: List[Node], costs: Dict[NodeId, float], edges: List[Edge]
-    ):
+    def __init__(self, nodes: List[Node], edges: List[Edge]):
         self.nodes = nodes
         self.edges = edges
-        self.costs = costs
 
     def add_node(self, n: Node) -> None:
         self.nodes.append(n)
@@ -65,11 +79,15 @@ class Graph:
     def add_edge(self, e: Edge) -> None:
         self.edges.append(e)
 
-    # TODO remove?
-    def add_cost(self, id: NodeId, cost: float) -> None:
-        self.costs[id] = cost
+    def get_neighbours(self, node: Node) -> List[Node]:
+        connected_nodes = [
+            n for n in self.nodes if n.connected_to(node) and not n.id == node.id
+        ]
+        return connected_nodes
 
 
+# TODO Refactor to own class
+# TODO Should be used by other parts of the project too!
 class Gcs:
     def __init__(self, graph: Graph, num_ctrl_points: int = 3) -> None:
         self.NUM_DIMS = 2  # TODO should not be hardcoded
@@ -90,10 +108,9 @@ class Gcs:
             for u_id, v_id in graph.edges
         ]
 
-        for v in self.vertices.values():
-            self.add_path_length_cost(v)
         for e in self.edges:
             self.add_continuity_constraints(e)
+            self.add_path_length_cost(e)
 
     @staticmethod
     def cartesian_power(convex_set: ConvexSet, power: int) -> CartesianProduct:
@@ -146,9 +163,11 @@ class Gcs:
         self.edges.append(edge)
         return edge
 
-    def add_path_length_cost(self, vertex: GraphOfConvexSets.Vertex) -> None:
-        cost = Binding[Cost](self.path_length_cost, vertex.x())
-        vertex.AddCost(cost)
+    def add_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
+        # cost = Binding[Cost](self.path_length_cost, edge.xu())
+        # TODO I need to correctly penalize all edges!
+        cost = Binding[Cost](self.path_length_cost, edge.xv())
+        edge.AddCost(cost)
 
     def add_continuity_constraints(self, edge: GraphOfConvexSets.Edge) -> None:
         A_first, A_last = self.continuity_constraint_matrices
@@ -165,12 +184,10 @@ class Gcs:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 10
 
-        print("Solving GCS problem...")
         result = self.gcs.SolveShortestPath(
             self.vertices[self.source_id], self.vertices[self.target_id], options
         )
         assert result.is_success()
-        print("Result is success!")
         return result
 
     def save_graph_diagram(
@@ -232,36 +249,48 @@ class Gcs:
 
 
 class GraphBuilder:
-    def __init__(self, all_nodes: List[Node]):
-        self.all_nodes = {n.id: n for n in all_nodes}
+    def __init__(self, nodes: List[Node]):
+        self.all_nodes = {n.id: n for n in nodes}
 
     def get_node(self, id: NodeId) -> Node:
         return self.all_nodes[id]
 
     def build_graph(self, source_id: NodeId, target_id: NodeId):
-        base_graph = Graph(
-            [self.get_node(source_id), self.get_node(target_id)], {source_id: 0}, []
-        )
-        neighbours = self.get_neighbours(source_id)
-        for idx, n in enumerate(neighbours):
-            gcs = Gcs(base_graph)
-            new_vertex = gcs.add_vertex(n)
-            gcs.add_path_length_cost(new_vertex)
-            new_edge = gcs.add_edge(source_id, n.id)
-            gcs.add_continuity_constraints(new_edge)
-            target_edge = gcs.add_edge(n.id, target_id)
-            gcs.set_source(source_id)
-            gcs.set_target(target_id)
-            result = gcs.solve()
-            ctrl_points = gcs.get_ctrl_points(result)
-            gcs.save_graph_diagram(f"output/graph_{idx}.svg", result)
+        graph = Graph([self.get_node(source_id), self.get_node(target_id)], [])
+        frontier = PriorityQueue()
+        current_node = self.get_node(source_id)
 
-            # TODO check for existing edges
-            plt.plot(ctrl_points[0, :], ctrl_points[1, :], marker="o")
-            plt.show()
-            breakpoint()
+        target_reached = False
+        while not target_reached:
+            new_nodes = [
+                node
+                for node in self.get_neighbours(current_node.id)
+                if node not in graph.nodes
+            ]
+            prioritized_neighbours = [
+                PrioritizedNode(
+                    self.calculate_relaxed_problem_cost(
+                        graph, current_node, new_node, source_id, target_id
+                    ),
+                    new_node,
+                )
+                for new_node in new_nodes
+            ]
+            for node in prioritized_neighbours:
+                frontier.put(node)
 
-        breakpoint()
+            current_node = frontier.get().item
+            while current_node in graph.nodes:
+                current_node = frontier.get().item
+
+            neighbours_in_graph = graph.get_neighbours(current_node)
+            edges = [(current_node.id, v.id) for v in neighbours_in_graph] + [
+                (u.id, current_node.id) for u in neighbours_in_graph
+            ]
+            graph.add_node(current_node)
+            print(f"Adding node {current_node.id}")
+            for edge in edges:
+                graph.add_edge(edge)
 
     def get_neighbours(self, node_id: NodeId) -> List[Node]:
         # NOTE: This is where new nodes should be generated "on-the-go"
@@ -272,23 +301,41 @@ class GraphBuilder:
         ]
         return connected_nodes
 
+    @staticmethod
+    def calculate_relaxed_problem_cost(
+        base_graph: Graph,
+        current_node: Node,
+        new_node: Node,
+        source_id: NodeId,
+        target_id: NodeId,
+    ) -> float:
+        gcs = Gcs(base_graph)
 
-def create_test_polytopes() -> List[VPolytope]:
-    vertices = [
-        np.array([[-1, 0], [0, 0], [0, 3], [-1, 3]]),
-        np.array([[0, 0], [1, 0], [1, 1], [0, 1]]),
-        np.array([[0, 1], [1, 1], [1, 2], [0, 2]]),
-        np.array([[0, 2], [1, 2], [1, 3], [0, 3]]),
-        np.array([[1, 0], [2, 0], [2, 1], [1, 1]]),
-        np.array([[1, 1], [2, 1], [2, 2], [1, 2]]),
-        np.array([[1, 2], [2, 2], [2, 3], [1, 3]]),
-        np.array([[2, 0], [3, 0], [3, 1], [2, 1]]),
-        np.array([[2, 1], [3, 1], [3, 2], [2, 2]]),
-        np.array([[2, 2], [3, 2], [3, 3], [2, 3]]),
-        np.array([[3, 1], [4, 1], [4, 2], [3, 2]]),
-    ]
-    polytopes = [VPolytope(vs.T) for vs in vertices]
-    return polytopes
+        gcs.add_vertex(new_node)
+
+        # We do not enforce continuity on the relaxed edge
+        relaxed_edge = gcs.add_edge(new_node.id, target_id)
+        gcs.add_path_length_cost(relaxed_edge)
+
+        new_edge = gcs.add_edge(current_node.id, new_node.id)
+        gcs.add_continuity_constraints(new_edge)
+        gcs.add_path_length_cost(new_edge)
+
+        gcs.set_source(source_id)
+        gcs.set_target(target_id)
+        gcs.save_graph_diagram("output/latest_graph_unsolved.svg")
+        result = gcs.solve()
+
+        ctrl_points = gcs.get_ctrl_points(result)
+        gcs.save_graph_diagram("output/latest_graph_solved.svg", result)
+        print(f"Cost for node {new_node.id}: {result.get_optimal_cost()}")
+
+        # TODO remove
+        visualize_polytopes(create_test_polytopes())
+        plt.plot(ctrl_points[0, :], ctrl_points[1, :], marker="o")
+        plt.show()
+
+        return result.get_optimal_cost()
 
 
 def gcs_a_star():
@@ -299,7 +346,3 @@ def gcs_a_star():
     all_nodes = [ConvexSetNode(poly, str(idx)) for idx, poly in enumerate(polytopes)]
     builder = GraphBuilder(all_nodes)
     builder.build_graph(all_nodes[0].id, all_nodes[-1].id)
-
-    # Define source and target
-    # Build graph
-    # Run hierarchical GCS
