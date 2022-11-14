@@ -164,9 +164,18 @@ class Gcs:
         return edge
 
     def add_path_length_cost(self, edge: GraphOfConvexSets.Edge) -> None:
-        # cost = Binding[Cost](self.path_length_cost, edge.xu())
-        # TODO I need to correctly penalize all edges!
-        cost = Binding[Cost](self.path_length_cost, edge.xv())
+        cost = Binding[Cost](self.path_length_cost, edge.xu())
+        edge.AddCost(cost)
+
+    # TODO better name
+    def add_edge_discontinuity_cost(self, edge: GraphOfConvexSets.Edge) -> None:
+        A_first, A_last = self.continuity_constraint_matrices
+        xu, xv = edge.xu(), edge.xv()
+        cost = A_last.dot(xu) - A_first.dot(xv)
+        A = sym.DecomposeLinearExpressions(cost, np.concatenate((xu, xv)))
+        b = np.zeros((A.shape[0], 1))
+        disc_binding = L2NormCost(A, b)
+        cost = Binding[Cost](disc_binding, np.concatenate((xu, xv)))
         edge.AddCost(cost)
 
     def add_continuity_constraints(self, edge: GraphOfConvexSets.Edge) -> None:
@@ -256,7 +265,7 @@ class GraphBuilder:
         return self.all_nodes[id]
 
     def build_graph(self, source_id: NodeId, target_id: NodeId):
-        graph = Graph([self.get_node(source_id), self.get_node(target_id)], [])
+        graph = Graph([self.get_node(source_id)], [])
         frontier = PriorityQueue()
         current_node = self.get_node(source_id)
 
@@ -270,7 +279,12 @@ class GraphBuilder:
             prioritized_neighbours = [
                 PrioritizedNode(
                     self.calculate_relaxed_problem_cost(
-                        graph, current_node, new_node, source_id, target_id
+                        graph,
+                        current_node,
+                        new_node,
+                        source_id,
+                        target_id,
+                        self.get_node(target_id),
                     ),
                     new_node,
                 )
@@ -292,6 +306,23 @@ class GraphBuilder:
             for edge in edges:
                 graph.add_edge(edge)
 
+            target_reached = current_node.id == target_id
+
+        print("Finished!")
+        gcs = Gcs(graph)
+        gcs.set_source(source_id)
+        gcs.set_target(target_id)
+        result = gcs.solve()
+
+        ctrl_points = gcs.get_ctrl_points(result)
+        gcs.save_graph_diagram("output/final_path.svg", result)
+
+        # TODO remove
+        visualize_polytopes(create_test_polytopes())
+        plt.plot(ctrl_points[0, :], ctrl_points[1, :], marker="o")
+        plt.show()
+        breakpoint()
+
     def get_neighbours(self, node_id: NodeId) -> List[Node]:
         # NOTE: This is where new nodes should be generated "on-the-go"
         connected_nodes = [
@@ -308,14 +339,17 @@ class GraphBuilder:
         new_node: Node,
         source_id: NodeId,
         target_id: NodeId,
+        target_node: Node,  # TODO clean up
     ) -> float:
         gcs = Gcs(base_graph)
 
         gcs.add_vertex(new_node)
+        gcs.add_vertex(target_node)
 
         # We do not enforce continuity on the relaxed edge
         relaxed_edge = gcs.add_edge(new_node.id, target_id)
         gcs.add_path_length_cost(relaxed_edge)
+        gcs.add_edge_discontinuity_cost(relaxed_edge)
 
         new_edge = gcs.add_edge(current_node.id, new_node.id)
         gcs.add_continuity_constraints(new_edge)
@@ -326,14 +360,8 @@ class GraphBuilder:
         gcs.save_graph_diagram("output/latest_graph_unsolved.svg")
         result = gcs.solve()
 
-        ctrl_points = gcs.get_ctrl_points(result)
         gcs.save_graph_diagram("output/latest_graph_solved.svg", result)
         print(f"Cost for node {new_node.id}: {result.get_optimal_cost()}")
-
-        # TODO remove
-        visualize_polytopes(create_test_polytopes())
-        plt.plot(ctrl_points[0, :], ctrl_points[1, :], marker="o")
-        plt.show()
 
         return result.get_optimal_cost()
 
