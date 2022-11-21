@@ -60,7 +60,7 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
         aux_vars = prog.NewContinuousVariables(3, NUM_CTRL_POINTS, "X")
         Xs = [np.array([[z[0], z[1]], [z[1], z[2]]]) for z in aux_vars.T]
         xs = [np.vstack([c, s]) for c, s in zip(cos_th.T, sin_th.T)]
-        Ms = [np.block([[X, x], [x.T, 1]]) for X, x in zip(Xs, xs)]
+        Ms = [np.block([[1, x.T], [x, X]]) for X, x in zip(Xs, xs)]
         for X, M in zip(Xs, Ms):
             prog.AddLinearConstraint(X[0, 0] + X[1, 1] - 1 == 0)
             prog.AddPositiveSemidefiniteConstraint(M)
@@ -84,10 +84,26 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
     result = Solve(prog)
     assert result.is_success()
 
+    # Rounding and projection onto SO(2)
+    to_float = np.vectorize(lambda x: x.Evaluate())
+    Ms_result = [to_float(result.GetSolution(M)) for M in Ms]
+    ws, vs = zip(*[np.linalg.eig(M) for M in Ms_result])
+    idx_highest_eigval = [np.argmax(w) for w in ws]
+    vks = [v[:, idx] / v[0, idx] for idx, v in zip(idx_highest_eigval, vs)]
+
+    vk_ps = [vk[[1, 2]] for vk in vks]
+    xvs = [np.array([[vk_p[0], -vk_p[1]], [vk_p[1], vk_p[0]]]) for vk_p in vk_ps]
+
+    Us, Ss, Vs = zip(*[np.linalg.svd(xv) for xv in xvs])
+    R_hats = [
+        U.dot(np.diag([1, np.linalg.det(U) * np.linalg.det(V)])).dot(V.T)
+        for U, V in zip(Us, Vs)
+    ]
+
     results_finger = result.GetSolution(f_finger)
     results_contact = result.GetSolution(f_contact)
-    results_cos_th = result.GetSolution(cos_th)
-    results_sin_th = result.GetSolution(sin_th)
+    results_cos_th = np.array([R[0, 0] for R in R_hats])
+    results_sin_th = np.array([R[1, 0] for R in R_hats])
 
     # Plot
     fig, axs = plt.subplots(6, 1)
@@ -103,8 +119,8 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
 
     axs[4].set_title("cos(th)")
     axs[5].set_title("sin(th)")
-    axs[4].plot(results_cos_th[0])
-    axs[5].plot(results_sin_th[0])
+    axs[4].plot(results_cos_th)
+    axs[5].plot(results_sin_th)
 
     plt.tight_layout()
     plt.show()
