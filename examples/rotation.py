@@ -55,6 +55,11 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
         f_contact.flatten(),
     )
 
+    # Path length minimization cost
+    cos_cost = np.sum(np.diff(cos_th) ** 2)
+    sin_cost = np.sum(np.diff(sin_th) ** 2)
+    prog.AddQuadraticCost(cos_cost + sin_cost)
+
     # SO(2) constraint
     if use_sdp_relaxation:
         aux_vars = prog.NewContinuousVariables(3, NUM_CTRL_POINTS, "X")
@@ -104,9 +109,15 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
     results_contact = result.GetSolution(f_contact)
     results_cos_th = np.array([R[0, 0] for R in R_hats])
     results_sin_th = np.array([R[1, 0] for R in R_hats])
+    results_th = np.array(
+        [
+            [np.arccos(cos_th) for cos_th in results_cos_th],
+            [np.arcsin(sin_th) for sin_th in results_sin_th],
+        ]
+    )
 
     # Plot
-    fig, axs = plt.subplots(6, 1)
+    fig, axs = plt.subplots(7, 1)
     axs[0].set_title("Finger force x")
     axs[1].set_title("Finger force y")
     axs[0].plot(results_finger[0, :])
@@ -122,7 +133,8 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
     axs[4].plot(results_cos_th)
     axs[5].plot(results_sin_th)
 
+    axs[6].plot(results_th.T)
+    axs[6].set_title("theta")
+
     plt.tight_layout()
     plt.show()
-
-    breakpoint()
