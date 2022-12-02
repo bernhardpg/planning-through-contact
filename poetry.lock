@@ -99,7 +99,7 @@ python-versions = "*"
 
 [[package]]
 name = "drake"
-version = "0.0.20221015"
+version = "0.0.20221108"
 description = "Model-based design and verification for robotics"
 category = "main"
 optional = false
@@ -115,10 +115,9 @@ PyYAML = "*"
 [package.source]
 type = "url"
 url = "https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl"
-
 [[package]]
 name = "drake"
-version = "0.0.20221015"
+version = "0.0.20221202"
 description = "Model-based design and verification for robotics"
 category = "main"
 optional = false
@@ -721,7 +720,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "e89e504401b0031f2b6ee7ad1e6d09d90f5e4e9d1188a20abbf4c39382d9c585"
+content-hash = "0fcd6fc83b038fbee4e4ca3b74a50a5c1d9ce23d1d9d17056838020906d23e5b"
 
 [metadata.files]
 appnope = [

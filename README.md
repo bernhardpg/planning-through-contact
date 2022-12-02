@@ -14,6 +14,11 @@ poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
+Finally, make sure to have graphviz installed on your computer. On MacOS, run the following command:
+```
+brew install graphviz
+```
+
 Now everything needed to run the project should be installed. To run any files in the project, prefix the command with `poetry run ...`. For example:
 ```
 poetry run python main.py
