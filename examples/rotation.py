@@ -1,11 +1,98 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
+import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 
 def cross(v1, v2):
     return v1[0] * v2[1] - v1[1] * v2[0]
+
+
+def mccormick():
+    x = sym.Variable("x")
+    y = sym.Variable("y")
+    variables = np.array([x, y])
+
+    n = variables.shape[0] + 1
+    DEGREE = 2
+    basis = np.flip(sym.MonomialBasis(variables, DEGREE))  # TODO generalize degree
+
+    def get_monomial_coeffs(poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial]):
+        coeff_map = poly.monomial_to_coefficient_map()
+        coeffs = np.array(
+            [coeff_map.get(m, sym.Expression(0)).Evaluate() for m in basis]
+        )
+        return coeffs
+
+    def construct_quadratic_constraint(
+        poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial], n: int
+    ):
+        coeffs = get_monomial_coeffs(poly, basis)
+        Q = np.zeros((n, n))
+        Q[np.triu_indices(n)] = coeffs
+
+        return Q
+
+    test_polynomial = sym.Polynomial(x**2 + y**2 - 1)
+    Q = construct_quadratic_constraint(test_polynomial, basis, n)
+
+    prog = MathematicalProgram()
+    X = prog.NewSymmetricContinuousVariables(n, "X")  # TODO generalize 3
+    prog.AddConstraint(X[0, 0] == 1)
+    prog.AddConstraint(X[0, 1] >= 0.5)  # TODO just for testing
+    prog.AddConstraint(X[0, 2] >= 0.5)
+    prog.AddPositiveSemidefiniteConstraint(X)
+    prog.AddConstraint(np.trace(Q @ X) == 0)
+    result = Solve(prog)
+    assert result.is_success()
+
+    X_result = result.GetSolution(X)
+    breakpoint()
+
+    # Plan:
+    # 1. Implement above relaxation scheme as a general class
+    # 2. Add all of my constraints in to this
+    # 3. Check if it is tight!
+
+    return
+
+
+def test():
+    c_th = sym.Variable("c_th")
+    s_th = sym.Variable("s_th")
+    p_WB = sym.Variable("p_WB")
+
+    R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
+
+    x = np.array([c_th, s_th, p_WB]).reshape((-1, 1))
+    basis = sym.MonomialBasis(x, 2)
+
+    def decompose_polynomial_in_monomials(
+        p: sym.Polynomial, basis: npt.NDArray[sym.Monomial]
+    ):
+
+        coeff_map = p.monomial_to_coefficient_map()
+        coeffs = np.array(
+            [coeff_map.get(m, sym.Expression(0)).Evaluate() for m in basis]
+        ).reshape((-1, 1))
+        breakpoint()
+        return coeffs
+
+    so_2_constraint = sym.Polynomial(
+        c_th**2 + s_th**2 - 1
+    )  # == 0 TODO must use Unapply
+    a, b = decompose_polynomial_in_monomials(so_2_constraint, basis)
+    breakpoint()
+
+    # Plan:
+    # 1. Make a symbolic expression
+    # 2. Decompose symbolic expression into monomials
+    # 3. Add symmetric decision variables to prog
+    # 4. Add McCormick constraints to prog
+
+    return
 
 
 def simple_rotations_test(use_sdp_relaxation: bool = True):
