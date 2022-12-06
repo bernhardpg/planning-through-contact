@@ -1,7 +1,7 @@
 import argparse
 
 from examples.one_d_pusher import plan_for_box_pickup, plan_for_box_pushing
-from examples.rotation import simple_rotations_test, mccormick
+from examples.rotation import simple_rotations_test, sdp_relaxation 
 
 
 def main():
@@ -16,7 +16,7 @@ def main():
         plan_for_box_pickup()
     elif demo_to_run in "rotations":
         # simple_rotations_test()
-        mccormick()
+        sdp_relaxation()
     return 0
 
 

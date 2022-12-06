@@ -52,6 +52,21 @@ class SdpRelaxation:
                 f"Support for formula type {kind} not implemented"
             )
 
+    def get_solution(self) -> npt.NDArray[np.float64]:
+        result = Solve(self.prog)
+        assert result.is_success()
+        X_result = result.GetSolution(self.X)
+        svd_solution = self._get_sol_from_svd(X_result)
+        variable_values = svd_solution[1:] # first value is 1
+        return variable_values
+
+    def _get_sol_from_svd(self, X: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        eigenvals, eigenvecs = np.linalg.eig(X)
+        idx_highest_eigval = np.argmax(eigenvals)
+        solution_nonnormalized = eigenvecs[:, idx_highest_eigval]
+        solution = solution_nonnormalized / solution_nonnormalized[0]
+        return solution
+
     def _get_monomial_coeffs(
         self, poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial]
     ):
@@ -77,7 +92,7 @@ class SdpRelaxation:
         return Q * 0.5
 
 
-def mccormick():
+def test():
     x = sym.Variable("x")
     y = sym.Variable("y")
     variables = np.array([x, y])
@@ -91,42 +106,26 @@ def mccormick():
     assert result.is_success()
 
     X_result = result.GetSolution(prog.X)
-    breakpoint()
     return
 
 
-def test():
+def sdp_relaxation():
     c_th = sym.Variable("c_th")
     s_th = sym.Variable("s_th")
     p_WB = sym.Variable("p_WB")
+    variables = np.array([c_th, s_th, p_WB])
 
     R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
 
-    x = np.array([c_th, s_th, p_WB]).reshape((-1, 1))
-    basis = sym.MonomialBasis(x, 2)
+    prog = SdpRelaxation(variables)
 
-    def decompose_polynomial_in_monomials(
-        p: sym.Polynomial, basis: npt.NDArray[sym.Monomial]
-    ):
+    so_2_constraint = c_th**2 + s_th**2 == 1
+    prog.add_constraint(so_2_constraint)
+    # prog.add_constraint(c_th >= 0.5)
+    # prog.add_constraint(s_th >= 0.5)
 
-        coeff_map = p.monomial_to_coefficient_map()
-        coeffs = np.array(
-            [coeff_map.get(m, sym.Expression(0)).Evaluate() for m in basis]
-        ).reshape((-1, 1))
-        breakpoint()
-        return coeffs
-
-    so_2_constraint = sym.Polynomial(
-        c_th**2 + s_th**2 - 1
-    )  # == 0 TODO must use Unapply
-    a, b = decompose_polynomial_in_monomials(so_2_constraint, basis)
+    solution = prog.get_solution()
     breakpoint()
-
-    # Plan:
-    # 1. Make a symbolic expression
-    # 2. Decompose symbolic expression into monomials
-    # 3. Add symmetric decision variables to prog
-    # 4. Add McCormick constraints to prog
 
     return
 
