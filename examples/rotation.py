@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -57,7 +60,7 @@ class SdpRelaxation:
         assert result.is_success()
         X_result = result.GetSolution(self.X)
         svd_solution = self._get_sol_from_svd(X_result)
-        variable_values = svd_solution[1:] # first value is 1
+        variable_values = svd_solution[1:]  # first value is 1
         return variable_values
 
     def _get_sol_from_svd(self, X: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -109,21 +112,71 @@ def test():
     return
 
 
+@dataclass
+class Box2d:
+    width: float = 3
+    height: float = 2
+    mass: float = 1
+
+    # p1 -- p2
+    # |     |
+    # p4 -- p3
+    @property
+    def p1(self) -> npt.NDArray[np.float64]:
+        return np.array([[-self.width / 2], [self.height / 2]])
+
+    @property
+    def p2(self) -> npt.NDArray[np.float64]:
+        return np.array([[self.width / 2], [self.height / 2]])
+
+    @property
+    def p3(self) -> npt.NDArray[np.float64]:
+        return np.array([[self.width / 2], [-self.height / 2]])
+
+    @property
+    def p4(self) -> npt.NDArray[np.float64]:
+        return np.array([[-self.width / 2], [-self.height / 2]])
+
+    @property
+    def corners(self) -> List[npt.NDArray[np.float64]]:
+        return [self.p1, self.p2, self.p3, self.p4]
+
+
 def sdp_relaxation():
+    BOX_WIDTH = 3
+    BOX_HEIGHT = 2
+    BOX_MASS = 1
+    GRAV_ACC = 9.81
+
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
+
     c_th = sym.Variable("c_th")
     s_th = sym.Variable("s_th")
-    p_WB = sym.Variable("p_WB")
-    variables = np.array([c_th, s_th, p_WB])
-
-    R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
+    p_WB_x = sym.Variable("p_WB_x")
+    p_WB_y = sym.Variable("p_WB_y")
+    variables = np.array([c_th, s_th, p_WB_x, p_WB_y])
 
     prog = SdpRelaxation(variables)
 
+    # SO(2) constraints
     so_2_constraint = c_th**2 + s_th**2 == 1
     prog.add_constraint(so_2_constraint)
-    # prog.add_constraint(c_th >= 0.5)
-    # prog.add_constraint(s_th >= 0.5)
 
+    # Add Non-penetration
+    p_WB = np.array([p_WB_x, p_WB_y]).reshape((-1, 1))
+    R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
+
+    # Table hyperplane
+    a = np.array([0, 1]).reshape((-1, 1))
+    b = -2
+
+    for p_Bmi in box.corners:
+        p_Wmi = p_WB + R_WB.dot(p_Bmi)
+        non_pen_constraint = (a.T.dot(p_Wmi))[0, 0] >= b
+        prog.add_constraint(non_pen_constraint)
+
+    for c in eq(p_WB, 0):
+        prog.add_constraint(c[0])
     solution = prog.get_solution()
     breakpoint()
 
