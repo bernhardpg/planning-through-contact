@@ -10,52 +10,88 @@ def cross(v1, v2):
     return v1[0] * v2[1] - v1[1] * v2[0]
 
 
-def mccormick():
-    x = sym.Variable("x")
-    y = sym.Variable("y")
-    variables = np.array([x, y])
+class SdpRelaxation:
+    def __init__(self, vars: npt.NDArray[sym.Variable]):
+        self.n = vars.shape[0] + 1  # 1 is also a monomial
+        self.order = 1  # For now, we just do the first order of the hierarchy
 
-    n = variables.shape[0] + 1
-    DEGREE = 2
-    basis = np.flip(sym.MonomialBasis(variables, DEGREE))  # TODO generalize degree
+        # [1, x, x ** 2, ... ]
+        self.mon_basis = np.flip(sym.MonomialBasis(vars, self.degree))
 
-    def get_monomial_coeffs(poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial]):
+        self.prog = MathematicalProgram()
+        self.X = self.prog.NewSymmetricContinuousVariables(self.n, "X")
+        self.prog.AddConstraint(
+            self.X[0, 0] == 1
+        )  # First variable is not really a variable
+        self.prog.AddPositiveSemidefiniteConstraint(self.X)
+
+    @property
+    def degree(self) -> int:
+        return self.order + 1
+
+    def add_constraint(self, formula: sym.Formula) -> None:
+        kind = formula.get_kind()
+        lhs, rhs = formula.Unapply()[1]  # type: ignore
+        poly = sym.Polynomial(lhs - rhs)
+
+        if poly.TotalDegree() > self.degree:
+            raise ValueError(
+                f"Constraint degree is {poly.TotalDegree()}, program degree is {self.degree}"
+            )
+
+        Q = self._construct_quadratic_constraint(poly, self.mon_basis, self.n)
+        constraint_lhs = np.trace(self.X @ Q)
+        if kind == sym.FormulaKind.Eq:
+            self.prog.AddConstraint(constraint_lhs == 0)
+        elif kind == sym.FormulaKind.Geq:
+            self.prog.AddConstraint(constraint_lhs >= 0)
+        elif kind == sym.FormulaKind.Leq:
+            self.prog.AddConstraint(constraint_lhs <= 0)
+        else:
+            raise NotImplementedError(
+                f"Support for formula type {kind} not implemented"
+            )
+
+    def _get_monomial_coeffs(
+        self, poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial]
+    ):
         coeff_map = poly.monomial_to_coefficient_map()
         coeffs = np.array(
             [coeff_map.get(m, sym.Expression(0)).Evaluate() for m in basis]
         )
         return coeffs
 
-    def construct_quadratic_constraint(
-        poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial], n: int
-    ):
-        coeffs = get_monomial_coeffs(poly, basis)
-        Q = np.zeros((n, n))
-        Q[np.triu_indices(n)] = coeffs
+    def _construct_symmetric_matrix_from_triang(
+        self,
+        triang_matrix: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        return triang_matrix + triang_matrix.T
 
-        return Q
+    def _construct_quadratic_constraint(
+        self, poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial], n: int
+    ) -> npt.NDArray[np.float64]:
+        coeffs = self._get_monomial_coeffs(poly, basis)
+        upper_triangular = np.zeros((n, n))
+        upper_triangular[np.triu_indices(n)] = coeffs
+        Q = self._construct_symmetric_matrix_from_triang(upper_triangular)
+        return Q * 0.5
 
-    test_polynomial = sym.Polynomial(x**2 + y**2 - 1)
-    Q = construct_quadratic_constraint(test_polynomial, basis, n)
 
-    prog = MathematicalProgram()
-    X = prog.NewSymmetricContinuousVariables(n, "X")  # TODO generalize 3
-    prog.AddConstraint(X[0, 0] == 1)
-    prog.AddConstraint(X[0, 1] >= 0.5)  # TODO just for testing
-    prog.AddConstraint(X[0, 2] >= 0.5)
-    prog.AddPositiveSemidefiniteConstraint(X)
-    prog.AddConstraint(np.trace(Q @ X) == 0)
-    result = Solve(prog)
+def mccormick():
+    x = sym.Variable("x")
+    y = sym.Variable("y")
+    variables = np.array([x, y])
+
+    prog = SdpRelaxation(variables)
+    prog.add_constraint(x**2 + y**2 == 1)
+    prog.add_constraint(x >= 0.5)
+    prog.add_constraint(y >= 0.5)
+
+    result = Solve(prog.prog)
     assert result.is_success()
 
-    X_result = result.GetSolution(X)
+    X_result = result.GetSolution(prog.X)
     breakpoint()
-
-    # Plan:
-    # 1. Implement above relaxation scheme as a general class
-    # 2. Add all of my constraints in to this
-    # 3. Check if it is tight!
-
     return
 
 
