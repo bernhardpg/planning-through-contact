@@ -32,7 +32,7 @@ class SdpRelaxation:
     def degree(self) -> int:
         return self.order + 1
 
-    def add_constraint(self, formula: sym.Formula) -> None:
+    def add_constraint(self, formula: sym.Formula, bp: bool = False) -> None:
         kind = formula.get_kind()
         lhs, rhs = formula.Unapply()[1]  # type: ignore
         poly = sym.Polynomial(lhs - rhs)
@@ -44,6 +44,8 @@ class SdpRelaxation:
 
         Q = self._construct_quadratic_constraint(poly, self.mon_basis, self.n)
         constraint_lhs = np.trace(self.X @ Q)
+        if bp:
+            breakpoint()
         if kind == sym.FormulaKind.Eq:
             self.prog.AddConstraint(constraint_lhs == 0)
         elif kind == sym.FormulaKind.Geq:
@@ -55,13 +57,13 @@ class SdpRelaxation:
                 f"Support for formula type {kind} not implemented"
             )
 
-    def get_solution(self) -> npt.NDArray[np.float64]:
+    def get_solution(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         result = Solve(self.prog)
         assert result.is_success()
         X_result = result.GetSolution(self.X)
         svd_solution = self._get_sol_from_svd(X_result)
         variable_values = svd_solution[1:]  # first value is 1
-        return variable_values
+        return variable_values, X_result
 
     def _get_sol_from_svd(self, X: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         eigenvals, eigenvecs = np.linalg.eig(X)
@@ -172,6 +174,84 @@ class Box2d:
     @property
     def a4(self) -> npt.NDArray[np.float64]:
         return self._construct_plane_from_points(self.p4, self.p1)
+
+
+def test_cuts():
+    BOX_WIDTH = 3
+    BOX_HEIGHT = 2
+    BOX_MASS = 1
+    GRAV_ACC = 9.81
+
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
+    box_table = Box2d(10, BOX_HEIGHT, BOX_MASS)
+
+    u_11 = sym.Variable("u_11")
+    u_12 = sym.Variable("u_12")
+    u_21 = sym.Variable("u_21")
+    u_22 = sym.Variable("u_22")
+
+    p_WB_x = sym.Variable("p_WB_x")
+    p_WB_y = sym.Variable("p_WB_y")
+
+    # Create SDP relaxation
+    variables = np.array([u_11, u_12, u_21, u_22, p_WB_x, p_WB_y])
+    prog = SdpRelaxation(variables)
+
+    # Useful variables
+    p_WB = np.array([p_WB_x, p_WB_y]).reshape((-1, 1))
+    u1 = np.array([u_11, u_12]).reshape((-1, 1))
+    u2 = np.array([u_21, u_22]).reshape((-1, 1))
+    R_WB = np.hstack([u1, u2])
+
+    # Constrain position
+    prog.add_constraint(p_WB_x == 1.0)
+    prog.add_constraint(p_WB_y == 3.0)
+
+    # SO(2) constraints
+    prog.add_constraint(u1.T.dot(u1)[0, 0] == 1)
+    prog.add_constraint(u2.T.dot(u2)[0, 0] == 1)
+    prog.add_constraint(u1.T.dot(u2)[0, 0] == 0)
+
+    # Add Non-penetration
+    p_Wm1 = R_WB.dot(box.p1) + p_WB
+    p_Wm2 = R_WB.dot(box.p2) + p_WB
+    p_Wm3 = R_WB.dot(box.p3) + p_WB
+    p_Wm4 = R_WB.dot(box.p4) + p_WB
+
+    a, b = box_table.a1
+    nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
+    nonpen_constr_2 = (a.T.dot(p_Wm2) - b)[0, 0]
+    nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
+    nonpen_constr_4 = (a.T.dot(p_Wm4) - b)[0, 0]
+
+    prog.add_constraint(nonpen_constr_1 >= 0)
+    prog.add_constraint(nonpen_constr_2 >= 0)
+    prog.add_constraint(nonpen_constr_3 >= 0)
+    prog.add_constraint(nonpen_constr_4 >= 0)
+
+    # Add cuts
+    prog.add_constraint(nonpen_constr_1 * nonpen_constr_1 >= 0)
+    prog.add_constraint(nonpen_constr_1 * nonpen_constr_2 >= 0)
+    prog.add_constraint(nonpen_constr_1 * nonpen_constr_3 >= 0)
+    prog.add_constraint(nonpen_constr_1 * nonpen_constr_4 >= 0)
+
+    prog.add_constraint(nonpen_constr_2 * nonpen_constr_1 >= 0)
+    prog.add_constraint(nonpen_constr_2 * nonpen_constr_2 >= 0)
+    prog.add_constraint(nonpen_constr_2 * nonpen_constr_3 >= 0)
+    prog.add_constraint(nonpen_constr_2 * nonpen_constr_4 >= 0)
+
+    prog.add_constraint(nonpen_constr_3 * nonpen_constr_1 >= 0)
+    prog.add_constraint(nonpen_constr_3 * nonpen_constr_2 >= 0)
+    prog.add_constraint(nonpen_constr_3 * nonpen_constr_3 >= 0)
+    prog.add_constraint(nonpen_constr_3 * nonpen_constr_4 >= 0)
+
+    prog.add_constraint(nonpen_constr_4 * nonpen_constr_1 >= 0)
+    prog.add_constraint(nonpen_constr_4 * nonpen_constr_2 >= 0)
+    prog.add_constraint(nonpen_constr_4 * nonpen_constr_3 >= 0)
+    prog.add_constraint(nonpen_constr_4 * nonpen_constr_4 >= 0)
+
+    rounded_solution, X_solution = prog.get_solution()
+    breakpoint()
 
 
 def sdp_relaxation():
