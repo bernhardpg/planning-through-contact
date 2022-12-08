@@ -97,23 +97,6 @@ class SdpRelaxation:
         return Q * 0.5
 
 
-def test():
-    x = sym.Variable("x")
-    y = sym.Variable("y")
-    variables = np.array([x, y])
-
-    prog = SdpRelaxation(variables)
-    prog.add_constraint(x**2 + y**2 == 1)
-    prog.add_constraint(x >= 0.5)
-    prog.add_constraint(y >= 0.5)
-
-    result = Solve(prog.prog)
-    assert result.is_success()
-
-    X_result = result.GetSolution(prog.X)
-    return
-
-
 @dataclass
 class Box2d:
     width: float = 3
@@ -176,6 +159,89 @@ class Box2d:
         return self._construct_plane_from_points(self.p4, self.p1)
 
 
+def test():
+    x = sym.Variable("x")
+    y = sym.Variable("y")
+    variables = np.array([x, y])
+
+    prog = SdpRelaxation(variables)
+    prog.add_constraint(x**2 + y**2 == 1)
+    prog.add_constraint(x >= 0.5)
+    prog.add_constraint(y >= 0.5)
+
+    result = Solve(prog.prog)
+    assert result.is_success()
+
+    X_result = result.GetSolution(prog.X)
+    return
+
+
+def plot_cuts(use_relaxation: bool = False):
+
+    use_relaxation = True
+    from sympy import And, Eq, plot_implicit, symbols
+
+    BOX_WIDTH = 3
+    BOX_HEIGHT = 2
+    BOX_MASS = 1
+
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
+    table = Box2d(10, 0, BOX_MASS)
+
+    cos_th, sin_th = symbols("c s")
+
+    # Useful variables
+    p_WB = np.array([0, 1.2]).reshape((-1, 1))
+    u1 = np.array([cos_th, sin_th]).reshape((-1, 1))
+    u2 = np.array([-sin_th, cos_th]).reshape((-1, 1))
+    R_WB = np.hstack([u1, u2])
+
+    so_2_constraint = 1 - cos_th**2 - sin_th**2
+
+    # Add Non-penetration
+    p_Wm1 = R_WB.dot(box.p1) + p_WB
+    p_Wm2 = R_WB.dot(box.p2) + p_WB
+    p_Wm3 = R_WB.dot(box.p3) + p_WB
+    p_Wm4 = R_WB.dot(box.p4) + p_WB
+
+    a, b = table.a1
+    nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
+    nonpen_constr_2 = (a.T.dot(p_Wm2) - b)[0, 0]
+    nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
+    nonpen_constr_4 = (a.T.dot(p_Wm4) - b)[0, 0]
+
+    if use_relaxation:
+        plot_implicit(
+            And(
+                nonpen_constr_1 > 0,
+                nonpen_constr_2 > 0,
+                nonpen_constr_3 > 0,
+                nonpen_constr_4 > 0,
+                so_2_constraint > 0,
+            ),
+        )
+    else:
+        plot_implicit(
+            And(
+                nonpen_constr_1 > 0,
+                nonpen_constr_2 > 0,
+                nonpen_constr_3 > 0,
+                nonpen_constr_4 > 0,
+                Eq(so_2_constraint, 0),
+            ),
+        )
+
+    # Plot box
+    corners_box = np.hstack([box.p1, box.p2, box.p3, box.p4, box.p1]) + p_WB
+    corners_table = np.hstack([table.p1, table.p2, table.p3, table.p4, table.p1])
+    plt.plot(corners_box[0, :], corners_box[1, :])
+    plt.plot(corners_table[0, :], corners_table[1, :])
+    plt.ylim(-5, 5)
+    ax = plt.gca()
+    ax.set_aspect("equal", adjustable="box")
+    plt.show()
+
+
 def test_cuts():
     BOX_WIDTH = 3
     BOX_HEIGHT = 2
@@ -183,7 +249,7 @@ def test_cuts():
     GRAV_ACC = 9.81
 
     box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
-    box_table = Box2d(10, BOX_HEIGHT, BOX_MASS)
+    box_table = Box2d(10, 0, BOX_MASS)
 
     u_11 = sym.Variable("u_11")
     u_12 = sym.Variable("u_12")
@@ -204,8 +270,8 @@ def test_cuts():
     R_WB = np.hstack([u1, u2])
 
     # Constrain position
-    prog.add_constraint(p_WB_x == 1.0)
-    prog.add_constraint(p_WB_y == 3.0)
+    prog.add_constraint(p_WB_x == 0.0)
+    prog.add_constraint(p_WB_y == 1.5)
 
     # SO(2) constraints
     prog.add_constraint(u1.T.dot(u1)[0, 0] == 1)

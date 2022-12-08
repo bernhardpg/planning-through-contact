@@ -1,7 +1,7 @@
 import argparse
 
 from examples.one_d_pusher import plan_for_box_pickup, plan_for_box_pushing
-from examples.rotation import simple_rotations_test, sdp_relaxation , test_cuts
+from examples.rotation import simple_rotations_test, sdp_relaxation , test_cuts, plot_cuts
 
 
 def main():
@@ -17,7 +17,8 @@ def main():
     elif demo_to_run in "rotations":
         # simple_rotations_test()
         # sdp_relaxation()
-        test_cuts()
+        # test_cuts()
+        plot_cuts()
     return 0
 
 
