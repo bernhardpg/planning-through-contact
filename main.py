@@ -1,7 +1,7 @@
 import argparse
 
 from examples.one_d_pusher import plan_for_box_pickup, plan_for_box_pushing
-from examples.rotation import simple_rotations_test, sdp_relaxation , test_cuts, plot_cuts
+from examples.rotation import simple_rotations_test, sdp_relaxation , test_cuts, plot_cuts_corners_fixed, plot_cuts_with_fixed_position
 
 
 def main():
@@ -18,7 +18,8 @@ def main():
         # simple_rotations_test()
         # sdp_relaxation()
         # test_cuts()
-        plot_cuts()
+        plot_cuts_corners_fixed()
+        # plot_cuts_with_fixed_position()
     return 0
 
 

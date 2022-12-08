@@ -176,9 +176,8 @@ def test():
     return
 
 
-def plot_cuts(use_relaxation: bool = False):
-
-    use_relaxation = True
+def plot_cuts_corners_fixed(use_relaxation: bool = False):
+    use_relaxation = False 
     from sympy import And, Eq, plot_implicit, symbols
 
     BOX_WIDTH = 3
@@ -191,7 +190,67 @@ def plot_cuts(use_relaxation: bool = False):
     cos_th, sin_th = symbols("c s")
 
     # Useful variables
-    p_WB = np.array([0, 1.2]).reshape((-1, 1))
+    u1 = np.array([cos_th, sin_th]).reshape((-1, 1))
+    u2 = np.array([-sin_th, cos_th]).reshape((-1, 1))
+    R_WB = np.hstack([u1, u2])
+
+    so_2_constraint = 1 - cos_th**2 - sin_th**2
+
+    # Fix a box corner
+    p_Bm4 = box.p4
+    p_Wm4 = np.array([0, 0]).reshape((-1, 1))
+
+    # Position of COG is a function of rotation when a corner is fixed
+    p_WB = p_Wm4 - R_WB.dot(p_Bm4)
+
+    # Add Non-penetration
+    p_Wm1 = R_WB.dot(box.p1) + p_WB
+    p_Wm2 = R_WB.dot(box.p2) + p_WB
+    p_Wm3 = R_WB.dot(box.p3) + p_WB
+
+    a, b = table.a1
+    nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
+    # Point2 is the corner that is the furthest away, so it won't tighten the relaxation
+    # nonpen_constr_2 = (a.T.dot(p_Wm2) - b)[0, 0]
+    nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
+    # nonpen_constr_4 = (a.T.dot(p_Wm4) - b)[0, 0] # We are fixing point 4
+
+    if use_relaxation:
+        plot_implicit(
+            And(
+                nonpen_constr_1 > 0,
+                nonpen_constr_3 > 0,
+                so_2_constraint > 0,
+            ),
+            x_var=cos_th,
+            y_var=sin_th,
+        )
+    else:
+        plot_implicit(
+            And(
+                nonpen_constr_1 > 0,
+                nonpen_constr_3 > 0,
+                Eq(so_2_constraint, 0)
+            ),
+            x_var=cos_th,
+            y_var=sin_th,
+        )
+
+
+def plot_cuts_with_fixed_position(use_relaxation: bool = False):
+    from sympy import And, Eq, plot_implicit, symbols
+
+    BOX_WIDTH = 3
+    BOX_HEIGHT = 2
+    BOX_MASS = 1
+
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
+    table = Box2d(10, 0, BOX_MASS)
+
+    cos_th, sin_th = symbols("c s")
+
+    # Useful variables
+    p_WB = np.array([0, 1.5]).reshape((-1, 1))
     u1 = np.array([cos_th, sin_th]).reshape((-1, 1))
     u2 = np.array([-sin_th, cos_th]).reshape((-1, 1))
     R_WB = np.hstack([u1, u2])
@@ -219,6 +278,8 @@ def plot_cuts(use_relaxation: bool = False):
                 nonpen_constr_4 > 0,
                 so_2_constraint > 0,
             ),
+            x_var=cos_th,
+            y_var=sin_th,
         )
     else:
         plot_implicit(
@@ -229,6 +290,8 @@ def plot_cuts(use_relaxation: bool = False):
                 nonpen_constr_4 > 0,
                 Eq(so_2_constraint, 0),
             ),
+            x_var=cos_th,
+            y_var=sin_th,
         )
 
     # Plot box
