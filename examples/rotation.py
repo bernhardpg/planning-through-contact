@@ -97,6 +97,16 @@ class SdpRelaxation:
         return Q * 0.5
 
 
+def construct_2d_plane_from_points(
+    p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    diff = p2 - p1
+    normal_vec = np.array([-diff[1], diff[0]]).reshape((-1, 1))
+    a = normal_vec / np.linalg.norm(normal_vec)
+    b = a.T.dot(p1)
+    return (a, b)
+
+
 @dataclass
 class Box2d:
     width: float = 3
@@ -127,15 +137,6 @@ class Box2d:
     def corners(self) -> List[npt.NDArray[np.float64]]:
         return [self.p1, self.p2, self.p3, self.p4]
 
-    def _construct_plane_from_points(
-        self, p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
-    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        diff = p2 - p1
-        normal_vec = np.array([-diff[1], diff[0]]).reshape((-1, 1))
-        a = normal_vec / np.linalg.norm(normal_vec)
-        b = a.T.dot(p1)
-        return (a, b)
-
     # p1 - a1 - p2
     # |          |
     # a4         a2
@@ -144,19 +145,19 @@ class Box2d:
 
     @property
     def a1(self) -> npt.NDArray[np.float64]:
-        return self._construct_plane_from_points(self.p1, self.p2)
+        return construct_2d_plane_from_points(self.p1, self.p2)
 
     @property
     def a2(self) -> npt.NDArray[np.float64]:
-        return self._construct_plane_from_points(self.p2, self.p3)
+        return construct_2d_plane_from_points(self.p2, self.p3)
 
     @property
     def a3(self) -> npt.NDArray[np.float64]:
-        return self._construct_plane_from_points(self.p3, self.p4)
+        return construct_2d_plane_from_points(self.p3, self.p4)
 
     @property
     def a4(self) -> npt.NDArray[np.float64]:
-        return self._construct_plane_from_points(self.p4, self.p1)
+        return construct_2d_plane_from_points(self.p4, self.p1)
 
 
 def test():
@@ -176,8 +177,27 @@ def test():
     return
 
 
+def decompose_plane_through_origin(expr, vars):
+    normal_vec = np.array([float(expr.coeff(var)) for var in vars])
+    return normal_vec
+
+
+def compute_so_2_intersection(plane_normal_vec):
+    x_coeff, y_coeff = plane_normal_vec
+    if y_coeff == 0:
+        y_val = (1 / (1 + (y_coeff / x_coeff) ** 2)) ** 0.5
+        x_val = -(y_coeff / x_coeff) * y_val
+    else:
+        x_val = (1 / (1 + (x_coeff / y_coeff) ** 2)) ** 0.5
+        y_val = -(x_coeff / y_coeff) * x_val
+
+    int1 = np.array([x_val, y_val]).reshape((-1, 1))
+    int2 = -int1
+    return int1, int2
+
+
 def plot_cuts_corners_fixed(use_relaxation: bool = False):
-    use_relaxation = False 
+    use_relaxation = True
     from sympy import And, Eq, plot_implicit, symbols
 
     BOX_WIDTH = 3
@@ -210,10 +230,29 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
 
     a, b = table.a1
     nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
+    nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
+
+    # Clean up this
+    a1 = decompose_plane_through_origin(nonpen_constr_1, [cos_th, sin_th])
+    p1, p2 = compute_so_2_intersection(a1)
+    a3 = decompose_plane_through_origin(nonpen_constr_3, [cos_th, sin_th])
+    p3, p4 = compute_so_2_intersection(a3)
+
+    planes = [a1, a3]
+    points = [p1, p2, p3, p4]
+
+    feasible_points = [p for p in points if all([a.T.dot(p) >= 0 for a in planes])]
+    assert len(feasible_points) == 2
+
+    a, b = construct_2d_plane_from_points(feasible_points[0], feasible_points[1])
+    x = np.array([cos_th, sin_th]).reshape((-1, 1))
+    cut = (a.T.dot(x) - b)[0,0]
+
+    # Unused constraints:
+    # We are fixing point 4
+    # nonpen_constr_4 = (a.T.dot(p_Wm4) - b)[0, 0]
     # Point2 is the corner that is the furthest away, so it won't tighten the relaxation
     # nonpen_constr_2 = (a.T.dot(p_Wm2) - b)[0, 0]
-    nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
-    # nonpen_constr_4 = (a.T.dot(p_Wm4) - b)[0, 0] # We are fixing point 4
 
     if use_relaxation:
         plot_implicit(
@@ -221,6 +260,7 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
                 nonpen_constr_1 > 0,
                 nonpen_constr_3 > 0,
                 so_2_constraint > 0,
+                cut > 0,
             ),
             x_var=cos_th,
             y_var=sin_th,
@@ -230,7 +270,8 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
             And(
                 nonpen_constr_1 > 0,
                 nonpen_constr_3 > 0,
-                Eq(so_2_constraint, 0)
+                Eq(so_2_constraint, 0),
+                cut > 0,
             ),
             x_var=cos_th,
             y_var=sin_th,
