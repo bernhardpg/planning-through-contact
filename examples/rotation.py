@@ -555,6 +555,10 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     assert result.is_success()
 
     R_WB_val = result.GetSolution(R_WB)
+    FORCE_SCALE = 0.2
+    f_Bc1_val = result.GetSolution(f_Bc1) * FORCE_SCALE
+    f_Bc2_val = result.GetSolution(f_Bc2) * FORCE_SCALE
+    f_Wg_val = f_Wg * FORCE_SCALE
 
     p_WB = p_Wm4 - R_WB_val.dot(p_Bm4)
 
@@ -588,6 +592,16 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
 
     canvas.create_polygon(points_box, fill="#88f")
     canvas.create_polygon(points_table, fill="#2f2f2f")
+
+    force_1_points = make_plotable(np.hstack([p_Wm4, p_Wm4 + R_WB_val.dot(f_Bc1_val)]))
+    canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
+    force_2_points = make_plotable(
+        np.hstack([p_WB + R_WB_val.dot(p_Bc), p_WB + R_WB_val.dot(p_Bc + f_Bc2_val)])
+    )
+    canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
+
+    grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val]))
+    canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#0ff")
 
     # a = np.array([10,10,10,100,200,100,200,10])
     # canvas.create_polygon(list(a), fill="#f32")
