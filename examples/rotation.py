@@ -1,5 +1,8 @@
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
@@ -302,7 +305,7 @@ def sdp_relaxation():
     a = np.array([0, 1]).reshape((-1, 1))
     b = -2
 
-    for p_Bmi in box.corners:
+    for p_Bmi in [box.p1, box.p2, box.p3, box.p4]:
         p_Wmi = p_WB + R_WB.dot(p_Bmi)
         non_pen_constraint = (a.T.dot(p_Wmi))[0, 0] >= b
         prog.add_constraint(non_pen_constraint)
@@ -455,6 +458,10 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     BOX_HEIGHT = 2
     box = Box2d(BOX_WIDTH, BOX_HEIGHT)
 
+    TABLE_HEIGHT = 2
+    TABLE_WIDTH = 10
+    table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
+
     BOX_MASS = 1
     GRAV_ACC = 9.81
 
@@ -465,7 +472,7 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     p_Bc = (
         0.5 * box.p2 + 0.5 * box.p3
     )  # Contact point is on the middle on the right side
-    p_Wm4 = np.array([0, 0]).reshape((-1, 1))
+    p_Wm4 = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
     p_Bm4 = box.p4
     mu = 0.7
 
@@ -500,7 +507,6 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     prog.AddLorentzConeConstraint(1, c_th_sq + s_th_sq)
 
     # Add nonpenetration constraint
-    table = Box2d(10, 0)
     table_a = table.a1[0]
     p_Bm1 = box.p1
     p_Bm3 = box.p3
@@ -515,7 +521,7 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     cut_p2 = np.array([1, 0]).reshape((-1, 1))
     a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
     temp = R_WB[:, 0:1]
-    cut = (a_cut.T.dot(temp) - b_cut)[0,0] >= 0
+    cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
     prog.AddLinearConstraint(cut)
 
     # # Force minimization cost
@@ -549,9 +555,52 @@ def plan_box_flip_up(use_sdp_relaxation: bool = True):
     assert result.is_success()
 
     R_WB_val = result.GetSolution(R_WB)
-        
 
-    breakpoint()
+    p_WB = p_Wm4 - R_WB_val.dot(p_Bm4)
+
+    import tkinter as tk
+    from tkinter import Canvas
+
+    app = tk.Tk()
+    app.title("Box")
+
+    canvas = Canvas(app, width=500, height=500)
+    canvas.pack()
+
+    PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
+    PLOT_SCALE = 50
+
+    def flatten_points(points):
+        return list(points.flatten(order="F"))
+
+    def make_plotable(
+        points: npt.NDArray[np.float64],
+        scale: float = PLOT_SCALE,
+        center: float = PLOT_CENTER,
+    ) -> List[float]:
+        points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
+        points_transformed = points_flipped_y_axis * scale + center
+        plotable_points = flatten_points(points_transformed)
+        return plotable_points
+
+    points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
+    points_table = make_plotable(table.corners)
+
+    canvas.create_polygon(points_box, fill="#88f")
+    canvas.create_polygon(points_table, fill="#2f2f2f")
+
+    # a = np.array([10,10,10,100,200,100,200,10])
+    # canvas.create_polygon(list(a), fill="#f32")
+    #
+    # b = np.array([10,10,10,100,200,100,200,10]) + 100
+    # canvas.create_polygon(list(b), fill="#34f")
+    #
+    # c = np.array([10,10,10,100,200,100,200,10]) + 150
+    # canvas.create_polygon(list(c), fill="#3f5")
+
+    # canvas.create_line([10, 10, 10, 100, 50, 100])
+
+    app.mainloop()
 
 
 if __name__ == "__main__":

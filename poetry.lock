@@ -115,9 +115,10 @@ PyYAML = "*"
 [package.source]
 type = "url"
 url = "https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_11_0_x86_64.whl"
+
 [[package]]
 name = "drake"
-version = "0.0.20221202"
+version = "0.0.20221209"
 description = "Model-based design and verification for robotics"
 category = "main"
 optional = false
@@ -617,6 +618,14 @@ pure-eval = "*"
 tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
+name = "tk"
+version = "0.1.0"
+description = "TensorKit is a deep learning helper between Python and C++."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -720,7 +729,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "0fcd6fc83b038fbee4e4ca3b74a50a5c1d9ce23d1d9d17056838020906d23e5b"
+content-hash = "a8ff6395720839380c73b476873315a88662e51a42379ebfc61583a7ec91c772"
 
 [metadata.files]
 appnope = [
@@ -1342,6 +1351,10 @@ six = [
 stack-data = [
     {file = "stack_data-0.5.1-py3-none-any.whl", hash = "sha256:5120731a18ba4c82cefcf84a945f6f3e62319ef413bfc210e32aca3a69310ba2"},
     {file = "stack_data-0.5.1.tar.gz", hash = "sha256:95eb784942e861a3d80efd549ff9af6cf847d88343a12eb681d7157cfcb6e32b"},
+]
+tk = [
+    {file = "tk-0.1.0-py3-none-any.whl", hash = "sha256:703a69ff0d5ba2bd2f7440582ad10160e4a6561595d33457dc6caa79b9bf4930"},
+    {file = "tk-0.1.0.tar.gz", hash = "sha256:60bc8923d5d35f67f5c6bd93d4f0c49d2048114ec077768f959aef36d4ed97f8"},
 ]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},

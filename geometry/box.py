@@ -45,8 +45,8 @@ class Box2d:
         return np.array([[-self.width / 2], [-self.height / 2]])
 
     @property
-    def corners(self) -> List[npt.NDArray[np.float64]]:
-        return [self.p1, self.p2, self.p3, self.p4]
+    def corners(self) -> npt.NDArray[np.float64]:
+        return np.hstack([self.p1, self.p2, self.p3, self.p4])
 
     # p1 - a1 - p2
     # |          |

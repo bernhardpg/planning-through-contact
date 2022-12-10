@@ -17,6 +17,7 @@ pre-commit = "^2.20.0"
 pdbpp = "^0.10.3"
 tqdm = "^4.64.1"
 pydot = "^1.4.2"
+tk = "^0.1.0"
 
 [tool.poetry.dev-dependencies]
 
