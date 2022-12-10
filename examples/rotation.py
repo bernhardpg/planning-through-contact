@@ -9,7 +9,7 @@ from geometry.box import Box2d, construct_2d_plane_from_points
 
 
 def cross(v1, v2):
-    return v1[0] * v2[1] - v1[1] * v2[0]
+    return (v1[0] * v2[1] - v1[1] * v2[0])[0]
 
 
 def test():
@@ -56,8 +56,8 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
     BOX_HEIGHT = 2
     BOX_MASS = 1
 
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
-    table = Box2d(10, 0, BOX_MASS)
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+    table = Box2d(10, 0)
 
     cos_th, sin_th = symbols("c s")
 
@@ -137,8 +137,8 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = False):
     BOX_HEIGHT = 2
     BOX_MASS = 1
 
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
-    table = Box2d(10, 0, BOX_MASS)
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+    table = Box2d(10, 0)
 
     cos_th, sin_th = symbols("c s")
 
@@ -202,8 +202,8 @@ def test_cuts():
     BOX_MASS = 1
     GRAV_ACC = 9.81
 
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
-    box_table = Box2d(10, 0, BOX_MASS)
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+    box_table = Box2d(10, 0)
 
     u_11 = sym.Variable("u_11")
     u_12 = sym.Variable("u_12")
@@ -280,7 +280,7 @@ def sdp_relaxation():
     BOX_MASS = 1
     GRAV_ACC = 9.81
 
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT, BOX_MASS)
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
 
     c_th = sym.Variable("c_th")
     s_th = sym.Variable("s_th")
@@ -445,3 +445,114 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
 
     plt.tight_layout()
     plt.show()
+
+
+def plan_box_flip_up(use_sdp_relaxation: bool = True):
+    N_DIMS = 2
+    NUM_CTRL_POINTS = 3
+
+    BOX_WIDTH = 3
+    BOX_HEIGHT = 2
+    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+
+    BOX_MASS = 1
+    GRAV_ACC = 9.81
+
+    prog = MathematicalProgram()
+
+    # Constant variables
+    f_Wg = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
+    p_Bc = (
+        0.5 * box.p2 + 0.5 * box.p3
+    )  # Contact point is on the middle on the right side
+    p_Wm4 = np.array([0, 0]).reshape((-1, 1))
+    p_Bm4 = box.p4
+    mu = 0.7
+
+    # Decision Va0riables
+    c_th = prog.NewContinuousVariables(1, 1, "c_th")[0, 0]
+    s_th = prog.NewContinuousVariables(1, 1, "s_th")[0, 0]
+    c_n_1 = prog.NewContinuousVariables(1, 1, "c_n_1")[0, 0]
+    c_f_1 = prog.NewContinuousVariables(1, 1, "c_f_1")[0, 0]
+    c_n_2 = prog.NewContinuousVariables(1, 1, "c_n_2")[0, 0]
+    c_f_2 = prog.NewContinuousVariables(1, 1, "c_f_2")[0, 0]
+
+    # Convenvience variables
+    R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
+    f_Bc1 = c_n_1 * box.nc4 + c_f_1 * box.tc4
+    f_Bc2 = c_n_2 * box.n2 + c_f_2 * box.t2
+
+    # Friction cone
+    prog.AddLinearConstraint(c_f_1 <= mu * c_n_1)
+    prog.AddLinearConstraint(-mu * c_n_1 <= c_f_1)
+    prog.AddLinearConstraint(c_f_2 <= mu * c_n_2)
+    prog.AddLinearConstraint(-mu * c_n_2 <= c_f_2)
+
+    # Force and moment balance
+    force_balance = eq(f_Bc1 + f_Bc2 + R_WB.T.dot(f_Wg), 0)
+    moment_balance = cross(p_Bm4, f_Bc1) + cross(p_Bc, f_Bc2) == 0
+    prog.AddLinearConstraint(force_balance)
+    prog.AddLinearConstraint(moment_balance)
+
+    # Relaxed SO(2) constraint
+    c_th_sq = c_th**2
+    s_th_sq = s_th**2
+    prog.AddLorentzConeConstraint(1, c_th_sq + s_th_sq)
+
+    # Add nonpenetration constraint
+    table = Box2d(10, 0)
+    table_a = table.a1[0]
+    p_Bm1 = box.p1
+    p_Bm3 = box.p3
+
+    nonpen_1 = table_a.T.dot(R_WB).dot(p_Bm1 - p_Bm4)[0, 0] >= 0
+    nonpen_2 = table_a.T.dot(R_WB).dot(p_Bm3 - p_Bm4)[0, 0] >= 0
+    prog.AddLinearConstraint(nonpen_1)
+    prog.AddLinearConstraint(nonpen_2)
+
+    # Add SO(2) tightening
+    cut_p1 = np.array([0, 1]).reshape((-1, 1))
+    cut_p2 = np.array([1, 0]).reshape((-1, 1))
+    a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
+    temp = R_WB[:, 0:1]
+    cut = (a_cut.T.dot(temp) - b_cut)[0,0] >= 0
+    prog.AddLinearConstraint(cut)
+
+    # # Force minimization cost
+    # prog.AddQuadraticCost(
+    #     np.eye(N_DIMS * NUM_CTRL_POINTS),
+    #     np.zeros((N_DIMS * NUM_CTRL_POINTS, 1)),
+    #     f_Bc1.flatten(),
+    # )
+    # prog.AddQuadraticCost(
+    #     np.eye(N_DIMS * NUM_CTRL_POINTS),
+    #     np.zeros((N_DIMS * NUM_CTRL_POINTS, 1)),
+    #     f_Bc2.flatten(),
+    # )
+
+    # # Path length minimization cost
+    # c_cost = np.sum(np.diff(c_th) ** 2)
+    # s_cost = np.sum(np.diff(s_th) ** 2)
+    # prog.AddQuadraticCost(c_cost + s_cost)
+    #
+    # # Initial and final condition
+    # th_initial = 0
+    # prog.AddLinearConstraint(cos_th[0, 0] == np.cos(th_initial))
+    # prog.AddLinearConstraint(sin_th[0, 0] == np.sin(th_initial))
+    #
+    # th_final = 0.5
+    # prog.AddLinearConstraint(cos_th[0, -1] == np.cos(th_final))
+    # prog.AddLinearConstraint(sin_th[0, -1] == np.sin(th_final))
+
+    # Solve
+    result = Solve(prog)
+    assert result.is_success()
+
+    R_WB_val = result.GetSolution(R_WB)
+        
+
+    breakpoint()
+
+
+if __name__ == "__main__":
+    plan_box_flip_up()
