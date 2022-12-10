@@ -40,7 +40,8 @@ class SdpRelaxation:
 
         if poly.TotalDegree() > self.degree:
             raise ValueError(
-                f"Constraint degree is {poly.TotalDegree()}, program degree is {self.degree}"
+                f"Constraint degree is {poly.TotalDegree()},"
+                "program degree is {self.degree}"
             )
 
         Q = self._construct_quadratic_constraint(poly, self.mon_basis, self.n)
