@@ -25,4 +25,8 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pyright]
+# PyRight wrongly reports that several Drake modules are missing (could also be an issue with Drake)
 reportMissingImports = false
+
+[tool.isort]
+profile = "black" # Make isort and Black agree on sorting
