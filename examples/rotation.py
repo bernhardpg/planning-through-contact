@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,6 +6,8 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
+
+from geometry.box import Box2d
 
 
 def cross(v1, v2):
@@ -97,69 +98,6 @@ class SdpRelaxation:
         return Q * 0.5
 
 
-def construct_2d_plane_from_points(
-    p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
-) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    diff = p2 - p1
-    normal_vec = np.array([-diff[1], diff[0]]).reshape((-1, 1))
-    a = normal_vec / np.linalg.norm(normal_vec)
-    b = a.T.dot(p1)
-    return (a, b)
-
-
-@dataclass
-class Box2d:
-    width: float = 3
-    height: float = 2
-    mass: float = 1
-
-    # p1 -- p2
-    # |     |
-    # p4 -- p3
-
-    @property
-    def p1(self) -> npt.NDArray[np.float64]:
-        return np.array([[-self.width / 2], [self.height / 2]])
-
-    @property
-    def p2(self) -> npt.NDArray[np.float64]:
-        return np.array([[self.width / 2], [self.height / 2]])
-
-    @property
-    def p3(self) -> npt.NDArray[np.float64]:
-        return np.array([[self.width / 2], [-self.height / 2]])
-
-    @property
-    def p4(self) -> npt.NDArray[np.float64]:
-        return np.array([[-self.width / 2], [-self.height / 2]])
-
-    @property
-    def corners(self) -> List[npt.NDArray[np.float64]]:
-        return [self.p1, self.p2, self.p3, self.p4]
-
-    # p1 - a1 - p2
-    # |          |
-    # a4         a2
-    # |          |
-    # p4 --a3--- p3
-
-    @property
-    def a1(self) -> npt.NDArray[np.float64]:
-        return construct_2d_plane_from_points(self.p1, self.p2)
-
-    @property
-    def a2(self) -> npt.NDArray[np.float64]:
-        return construct_2d_plane_from_points(self.p2, self.p3)
-
-    @property
-    def a3(self) -> npt.NDArray[np.float64]:
-        return construct_2d_plane_from_points(self.p3, self.p4)
-
-    @property
-    def a4(self) -> npt.NDArray[np.float64]:
-        return construct_2d_plane_from_points(self.p4, self.p1)
-
-
 def test():
     x = sym.Variable("x")
     y = sym.Variable("y")
@@ -246,7 +184,7 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
 
     a, b = construct_2d_plane_from_points(feasible_points[0], feasible_points[1])
     x = np.array([cos_th, sin_th]).reshape((-1, 1))
-    cut = (a.T.dot(x) - b)[0,0]
+    cut = (a.T.dot(x) - b)[0, 0]
 
     # Unused constraints:
     # We are fixing point 4
