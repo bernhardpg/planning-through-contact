@@ -1,16 +1,57 @@
-from typing import List
+import time
+from dataclasses import dataclass
+from typing import List, TypeVar
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
+from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
 
+T = TypeVar("T")
+
+
+def create_rot_matrix(
+    cos_ths: npt.NDArray[T],  # type: ignore
+    sin_ths: npt.NDArray[T],  # type: ignore
+    ctrl_point_idx: int,
+) -> npt.NDArray[T]:  # type: ignore
+    cos_th, sin_th = cos_ths[0, ctrl_point_idx], sin_ths[0, ctrl_point_idx]
+    rot_matrix = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
+    return rot_matrix
+
+
+@dataclass
+class ContactPoint:
+    normal_vec: npt.NDArray[np.float64]
+    tangent_vec: npt.NDArray[np.float64]
+    friction_coeff: float
+
+    def force_vec_from_symbols(
+        self, normal_force: sym.Variable, friction_force: sym.Variable
+    ) -> npt.NDArray[sym.Expression]:
+        return normal_force * self.normal_vec + friction_force * self.tangent_vec
+
+    def force_vec_from_values(
+        self, normal_force: float, friction_force: float
+    ) -> npt.NDArray[np.float64]:
+        force_vec = normal_force * self.normal_vec + friction_force * self.tangent_vec
+        return force_vec
+
+    def create_friction_cone_constraints(
+        self, normal_force: sym.Variable, friction_force: sym.Variable
+    ) -> npt.NDArray[sym.Formula]:
+        upper_bound = friction_force <= self.friction_coeff * normal_force
+        lower_bound = -self.friction_coeff * normal_force <= friction_force
+        normal_force_positive = normal_force >= 0
+        return np.vstack([upper_bound, lower_bound, normal_force_positive])
+
 
 def plan_box_flip_up():
-
     N_DIMS = 2
     NUM_CTRL_POINTS = 3
 
@@ -37,52 +78,60 @@ def plan_box_flip_up():
     mu = 0.7
 
     # Decision Va0riables
-    c_th = prog.NewContinuousVariables(1, 1, "c_th")[0, 0]
-    s_th = prog.NewContinuousVariables(1, 1, "s_th")[0, 0]
-    c_n_1 = prog.NewContinuousVariables(1, 1, "c_n_1")[0, 0]
-    c_f_1 = prog.NewContinuousVariables(1, 1, "c_f_1")[0, 0]
-    c_n_2 = prog.NewContinuousVariables(1, 1, "c_n_2")[0, 0]
-    c_f_2 = prog.NewContinuousVariables(1, 1, "c_f_2")[0, 0]
+    cos_ths = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "cos_th")
+    sin_ths = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "sin_th")
+    c_n_1s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_n_1")
+    c_f_1s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_f_1")
+    c_n_2s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_n_2")
+    c_f_2s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_f_2")
+
+    fixed_corner = ContactPoint(box.nc4, box.tc4, mu)
+    finger_pos = ContactPoint(box.n2, box.t2, mu)
 
     # Convenvience variables
-    R_WB = np.array([[c_th, -s_th], [s_th, c_th]])
-    f_Bc1 = c_n_1 * box.nc4 + c_f_1 * box.tc4
-    f_Bc2 = c_n_2 * box.n2 + c_f_2 * box.t2
+    for ctrl_point_idx in range(0, NUM_CTRL_POINTS):
+        c_n_1 = c_n_1s[0, ctrl_point_idx]
+        c_f_1 = c_f_1s[0, ctrl_point_idx]
+        c_n_2 = c_n_2s[0, ctrl_point_idx]
+        c_f_2 = c_f_2s[0, ctrl_point_idx]
+        R_WB = create_rot_matrix(cos_ths, sin_ths, ctrl_point_idx)
 
-    # Friction cone
-    prog.AddLinearConstraint(c_f_1 <= mu * c_n_1)
-    prog.AddLinearConstraint(-mu * c_n_1 <= c_f_1)
-    prog.AddLinearConstraint(c_f_2 <= mu * c_n_2)
-    prog.AddLinearConstraint(-mu * c_n_2 <= c_f_2)
+        f_Bc1 = fixed_corner.force_vec_from_symbols(c_n_1, c_f_1)
+        f_Bc2 = finger_pos.force_vec_from_symbols(c_n_2, c_f_2)
 
-    # Force and moment balance
-    force_balance = eq(f_Bc1 + f_Bc2 + R_WB.T.dot(f_Wg), 0)
-    moment_balance = cross_2d(p_Bm4, f_Bc1) + cross_2d(p_Bc, f_Bc2) == 0
-    prog.AddLinearConstraint(force_balance)
-    prog.AddLinearConstraint(moment_balance)
+        prog.AddLinearConstraint(
+            fixed_corner.create_friction_cone_constraints(c_n_1, c_f_1)
+        )
+        prog.AddLinearConstraint(
+            finger_pos.create_friction_cone_constraints(c_n_2, c_f_2)
+        )
 
-    # Relaxed SO(2) constraint
-    c_th_sq = c_th**2
-    s_th_sq = s_th**2
-    prog.AddLorentzConeConstraint(1, c_th_sq + s_th_sq)
+        # Force and moment balance
+        force_balance = eq(f_Bc1 + f_Bc2 + R_WB.T.dot(f_Wg), 0)
+        moment_balance = cross_2d(p_Bm4, f_Bc1) + cross_2d(p_Bc, f_Bc2) == 0
+        prog.AddLinearConstraint(force_balance)
+        prog.AddLinearConstraint(moment_balance)
 
-    # Add nonpenetration constraint
-    table_a = table.a1[0]
-    p_Bm1 = box.p1
-    p_Bm3 = box.p3
+        # Relaxed SO(2) constraint
+        prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
 
-    nonpen_1 = table_a.T.dot(R_WB).dot(p_Bm1 - p_Bm4)[0, 0] >= 0
-    nonpen_2 = table_a.T.dot(R_WB).dot(p_Bm3 - p_Bm4)[0, 0] >= 0
-    prog.AddLinearConstraint(nonpen_1)
-    prog.AddLinearConstraint(nonpen_2)
+        # Add nonpenetration constraint
+        table_a = table.a1[0]
+        p_Bm1 = box.p1
+        p_Bm3 = box.p3
 
-    # Add SO(2) tightening
-    cut_p1 = np.array([0, 1]).reshape((-1, 1))
-    cut_p2 = np.array([1, 0]).reshape((-1, 1))
-    a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
-    temp = R_WB[:, 0:1]
-    cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
-    prog.AddLinearConstraint(cut)
+        nonpen_1 = table_a.T.dot(R_WB).dot(p_Bm1 - p_Bm4)[0, 0] >= 0
+        nonpen_2 = table_a.T.dot(R_WB).dot(p_Bm3 - p_Bm4)[0, 0] >= 0
+        prog.AddLinearConstraint(nonpen_1)
+        prog.AddLinearConstraint(nonpen_2)
+
+        # Add SO(2) tightening
+        cut_p1 = np.array([0, 1]).reshape((-1, 1))
+        cut_p2 = np.array([1, 0]).reshape((-1, 1))
+        a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
+        temp = R_WB[:, 0:1]
+        cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
+        prog.AddLinearConstraint(cut)
 
     # # Force minimization cost
     # prog.AddQuadraticCost(
@@ -101,26 +150,54 @@ def plan_box_flip_up():
     # s_cost = np.sum(np.diff(s_th) ** 2)
     # prog.AddQuadraticCost(c_cost + s_cost)
     #
-    # # Initial and final condition
-    # th_initial = 0
-    # prog.AddLinearConstraint(cos_th[0, 0] == np.cos(th_initial))
-    # prog.AddLinearConstraint(sin_th[0, 0] == np.sin(th_initial))
-    #
-    # th_final = 0.5
-    # prog.AddLinearConstraint(cos_th[0, -1] == np.cos(th_final))
-    # prog.AddLinearConstraint(sin_th[0, -1] == np.sin(th_final))
+    # Initial and final condition
+    th_initial = 0
+    prog.AddLinearConstraint(cos_ths[0, 0] == np.cos(th_initial))
+    prog.AddLinearConstraint(sin_ths[0, 0] == np.sin(th_initial))
+
+    th_final = 0.5
+    prog.AddLinearConstraint(cos_ths[0, -1] == np.cos(th_final))
+    prog.AddLinearConstraint(sin_ths[0, -1] == np.sin(th_final))
 
     # Solve
     result = Solve(prog)
     assert result.is_success()
 
-    R_WB_val = result.GetSolution(R_WB)
-    FORCE_SCALE = 0.2
-    f_Bc1_val = result.GetSolution(f_Bc1) * FORCE_SCALE
-    f_Bc2_val = result.GetSolution(f_Bc2) * FORCE_SCALE
-    f_Wg_val = f_Wg * FORCE_SCALE
+    # Reconstruct ctrl_points
+    cos_th_vals = result.GetSolution(cos_ths)
+    sin_th_vals = result.GetSolution(sin_ths)
 
-    p_WB = p_Wm4 - R_WB_val.dot(p_Bm4)
+    c_n_1_vals = result.GetSolution(c_n_1s)
+    c_n_2_vals = result.GetSolution(c_n_2s)
+    c_f_1_vals = result.GetSolution(c_f_1s)
+    c_f_2_vals = result.GetSolution(c_f_2s)
+
+    corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
+    finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
+
+    # FORCE_SCALE = 0.2
+    # f_Bc1_val = result.GetSolution(f_Bc1) * FORCE_SCALE
+    # f_Bc2_val = result.GetSolution(f_Bc2) * FORCE_SCALE
+    #
+    # p_WB = p_Wm4 - R_WB_val.dot(p_Bm4)
+
+    sin_curve = BezierCurve.create_from_ctrl_points(sin_th_vals).eval_entire_interval()
+    cos_curve = BezierCurve.create_from_ctrl_points(cos_th_vals).eval_entire_interval()
+
+    R_curve = [
+        np.array([[c[0], -s[0]], [s[0], c[0]]]) for c, s in zip(cos_curve, sin_curve)
+    ]
+
+    corner_curve = BezierCurve.create_from_ctrl_points(
+        corner_forces
+    ).eval_entire_interval()
+    finger_curve = BezierCurve.create_from_ctrl_points(
+        finger_forces
+    ).eval_entire_interval()
+
+    p_WB_curve = [p_Wm4 - R.dot(p_Bm4) for R in R_curve]
+
+    ## Plotting
 
     import tkinter as tk
     from tkinter import Canvas
@@ -133,6 +210,7 @@ def plan_box_flip_up():
 
     PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
     PLOT_SCALE = 50
+    FORCE_SCALE = 0.2
 
     def flatten_points(points):
         return list(points.flatten(order="F"))
@@ -147,32 +225,49 @@ def plan_box_flip_up():
         plotable_points = flatten_points(points_transformed)
         return plotable_points
 
-    points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
-    points_table = make_plotable(table.corners)
+    # TODO clean up this code!
+    f_Wg_val = f_Wg * FORCE_SCALE
+    for idx in range(len(cos_curve)):
+        time.sleep(0.02)
+        canvas.delete("all")
+        R_WB_val = R_curve[idx]
+        p_WB = p_WB_curve[idx]
 
-    canvas.create_polygon(points_box, fill="#88f")
-    canvas.create_polygon(points_table, fill="#2f2f2f")
+        f_Bc1_val = corner_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        f_Bc2_val = finger_curve[idx].reshape((-1, 1)) * FORCE_SCALE
 
-    force_1_points = make_plotable(np.hstack([p_Wm4, p_Wm4 + R_WB_val.dot(f_Bc1_val)]))
-    canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
-    force_2_points = make_plotable(
-        np.hstack([p_WB + R_WB_val.dot(p_Bc), p_WB + R_WB_val.dot(p_Bc + f_Bc2_val)])
-    )
-    canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
+        points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
+        points_table = make_plotable(table.corners)
 
-    grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val]))
-    canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#0ff")
+        canvas.create_polygon(points_box, fill="#88f")
+        canvas.create_polygon(points_table, fill="#2f2f2f")
 
-    # a = np.array([10,10,10,100,200,100,200,10])
-    # canvas.create_polygon(list(a), fill="#f32")
-    #
-    # b = np.array([10,10,10,100,200,100,200,10]) + 100
-    # canvas.create_polygon(list(b), fill="#34f")
-    #
-    # c = np.array([10,10,10,100,200,100,200,10]) + 150
-    # canvas.create_polygon(list(c), fill="#3f5")
+        force_1_points = make_plotable(
+            np.hstack([p_Wm4, p_Wm4 + R_WB_val.dot(f_Bc1_val)])
+        )
+        canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
+        force_2_points = make_plotable(
+            np.hstack(
+                [p_WB + R_WB_val.dot(p_Bc), p_WB + R_WB_val.dot(p_Bc + f_Bc2_val)]
+            )
+        )
+        canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
 
-    # canvas.create_line([10, 10, 10, 100, 50, 100])
+        grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val]))
+        canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#0ff")
+
+        canvas.update()
+
+        # a = np.array([10,10,10,100,200,100,200,10])
+        # canvas.create_polygon(list(a), fill="#f32")
+        #
+        # b = np.array([10,10,10,100,200,100,200,10]) + 100
+        # canvas.create_polygon(list(b), fill="#34f")
+        #
+        # c = np.array([10,10,10,100,200,100,200,10]) + 150
+        # canvas.create_polygon(list(c), fill="#3f5")
+
+        # canvas.create_line([10, 10, 10, 100, 50, 100])
 
     app.mainloop()
 
