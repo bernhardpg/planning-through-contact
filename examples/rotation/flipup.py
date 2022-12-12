@@ -133,29 +133,21 @@ def plan_box_flip_up():
         cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
         prog.AddLinearConstraint(cut)
 
-    # # Force minimization cost
-    # prog.AddQuadraticCost(
-    #     np.eye(N_DIMS * NUM_CTRL_POINTS),
-    #     np.zeros((N_DIMS * NUM_CTRL_POINTS, 1)),
-    #     f_Bc1.flatten(),
-    # )
-    # prog.AddQuadraticCost(
-    #     np.eye(N_DIMS * NUM_CTRL_POINTS),
-    #     np.zeros((N_DIMS * NUM_CTRL_POINTS, 1)),
-    #     f_Bc2.flatten(),
-    # )
+        # Quadratic cost on force
+        forces_squared = f_Bc1.T.dot(f_Bc1)[0, 0] + f_Bc2.T.dot(f_Bc2)[0, 0]
+        prog.AddQuadraticCost(forces_squared)
 
-    # # Path length minimization cost
-    # c_cost = np.sum(np.diff(c_th) ** 2)
-    # s_cost = np.sum(np.diff(s_th) ** 2)
-    # prog.AddQuadraticCost(c_cost + s_cost)
-    #
+    # Path length minimization cost
+    # cos_cost = np.sum(np.diff(cos_ths) ** 2)
+    # sin_cost = np.sum(np.diff(sin_ths) ** 2)
+    # prog.AddQuadraticCost(cos_cost + sin_cost)
+
     # Initial and final condition
     th_initial = 0
     prog.AddLinearConstraint(cos_ths[0, 0] == np.cos(th_initial))
     prog.AddLinearConstraint(sin_ths[0, 0] == np.sin(th_initial))
 
-    th_final = 0.5
+    th_final = 0.9
     prog.AddLinearConstraint(cos_ths[0, -1] == np.cos(th_final))
     prog.AddLinearConstraint(sin_ths[0, -1] == np.sin(th_final))
 
@@ -174,12 +166,6 @@ def plan_box_flip_up():
 
     corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
     finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
-
-    # FORCE_SCALE = 0.2
-    # f_Bc1_val = result.GetSolution(f_Bc1) * FORCE_SCALE
-    # f_Bc2_val = result.GetSolution(f_Bc2) * FORCE_SCALE
-    #
-    # p_WB = p_Wm4 - R_WB_val.dot(p_Bm4)
 
     sin_curve = BezierCurve.create_from_ctrl_points(sin_th_vals).eval_entire_interval()
     cos_curve = BezierCurve.create_from_ctrl_points(cos_th_vals).eval_entire_interval()
@@ -228,13 +214,18 @@ def plan_box_flip_up():
     # TODO clean up this code!
     f_Wg_val = f_Wg * FORCE_SCALE
     for idx in range(len(cos_curve)):
-        time.sleep(0.02)
+
         canvas.delete("all")
         R_WB_val = R_curve[idx]
+        det_R = np.linalg.det(R_WB_val)
         p_WB = p_WB_curve[idx]
 
         f_Bc1_val = corner_curve[idx].reshape((-1, 1)) * FORCE_SCALE
         f_Bc2_val = finger_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+
+        force_balance = f_Bc1_val + f_Bc2_val + R_WB_val.T.dot(f_Wg_val)
+        if any(np.abs(force_balance) > 1e-8):
+            breakpoint()
 
         points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
         points_table = make_plotable(table.corners)
@@ -253,10 +244,13 @@ def plan_box_flip_up():
         )
         canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
 
-        grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val]))
-        canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#0ff")
+        grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
+        canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#f00")
 
         canvas.update()
+        time.sleep(0.05)
+        if idx == 0:
+            time.sleep(2)
 
         # a = np.array([10,10,10,100,200,100,200,10])
         # canvas.create_polygon(list(a), fill="#f32")
