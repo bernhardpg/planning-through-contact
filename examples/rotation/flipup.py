@@ -51,8 +51,8 @@ class ContactPoint:
         return np.vstack([upper_bound, lower_bound, normal_force_positive])
 
 
+# TODO: This is code for a quick experiment that should be removed long term
 def plan_box_flip_up():
-    N_DIMS = 2
     NUM_CTRL_POINTS = 3
 
     BOX_WIDTH = 3
@@ -69,12 +69,12 @@ def plan_box_flip_up():
     prog = MathematicalProgram()
 
     # Constant variables
-    f_Wg = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
-    p_Bc = (
+    fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
+    pc_B = (
         0.5 * box.p2 + 0.5 * box.p3
     )  # Contact point is on the middle on the right side
-    p_Wm4 = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
-    p_Bm4 = box.p4
+    pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
+    pm4_B = box.p4
     mu = 0.7
 
     # Decision Va0riables
@@ -88,16 +88,17 @@ def plan_box_flip_up():
     fixed_corner = ContactPoint(box.nc4, box.tc4, mu)
     finger_pos = ContactPoint(box.n2, box.t2, mu)
 
-    # Convenvience variables
+    # Add constraints to each knot point
     for ctrl_point_idx in range(0, NUM_CTRL_POINTS):
+        # Convenvience variables
         c_n_1 = c_n_1s[0, ctrl_point_idx]
         c_f_1 = c_f_1s[0, ctrl_point_idx]
         c_n_2 = c_n_2s[0, ctrl_point_idx]
         c_f_2 = c_f_2s[0, ctrl_point_idx]
         R_WB = create_rot_matrix(cos_ths, sin_ths, ctrl_point_idx)
 
-        f_Bc1 = fixed_corner.force_vec_from_symbols(c_n_1, c_f_1)
-        f_Bc2 = finger_pos.force_vec_from_symbols(c_n_2, c_f_2)
+        fc1_B = fixed_corner.force_vec_from_symbols(c_n_1, c_f_1)
+        fc2_B = finger_pos.force_vec_from_symbols(c_n_2, c_f_2)
 
         prog.AddLinearConstraint(
             fixed_corner.create_friction_cone_constraints(c_n_1, c_f_1)
@@ -107,8 +108,8 @@ def plan_box_flip_up():
         )
 
         # Force and moment balance
-        force_balance = eq(f_Bc1 + f_Bc2 + R_WB.T.dot(f_Wg), 0)
-        moment_balance = cross_2d(p_Bm4, f_Bc1) + cross_2d(p_Bc, f_Bc2) == 0
+        force_balance = eq(fc1_B + fc2_B + R_WB.T.dot(fg_W), 0)
+        moment_balance = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B) == 0
         prog.AddLinearConstraint(force_balance)
         prog.AddLinearConstraint(moment_balance)
 
@@ -117,11 +118,11 @@ def plan_box_flip_up():
 
         # Add nonpenetration constraint
         table_a = table.a1[0]
-        p_Bm1 = box.p1
-        p_Bm3 = box.p3
+        pm1_B = box.p1
+        pm3_B = box.p3
 
-        nonpen_1 = table_a.T.dot(R_WB).dot(p_Bm1 - p_Bm4)[0, 0] >= 0
-        nonpen_2 = table_a.T.dot(R_WB).dot(p_Bm3 - p_Bm4)[0, 0] >= 0
+        nonpen_1 = table_a.T.dot(R_WB).dot(pm1_B - pm4_B)[0, 0] >= 0
+        nonpen_2 = table_a.T.dot(R_WB).dot(pm3_B - pm4_B)[0, 0] >= 0
         prog.AddLinearConstraint(nonpen_1)
         prog.AddLinearConstraint(nonpen_2)
 
@@ -134,7 +135,7 @@ def plan_box_flip_up():
         prog.AddLinearConstraint(cut)
 
         # Quadratic cost on force
-        forces_squared = f_Bc1.T.dot(f_Bc1)[0, 0] + f_Bc2.T.dot(f_Bc2)[0, 0]
+        forces_squared = fc1_B.T.dot(fc1_B)[0, 0] + fc2_B.T.dot(fc2_B)[0, 0]
         prog.AddQuadraticCost(forces_squared)
 
     # Path length minimization cost
@@ -181,7 +182,7 @@ def plan_box_flip_up():
         finger_forces
     ).eval_entire_interval()
 
-    p_WB_curve = [p_Wm4 - R.dot(p_Bm4) for R in R_curve]
+    p_WB_curve = [pm4_W - R.dot(pm4_B) for R in R_curve]
 
     ## Plotting
 
@@ -212,7 +213,7 @@ def plan_box_flip_up():
         return plotable_points
 
     # TODO clean up this code!
-    f_Wg_val = f_Wg * FORCE_SCALE
+    f_Wg_val = fg_W * FORCE_SCALE
     for idx in range(len(cos_curve)):
 
         canvas.delete("all")
@@ -234,12 +235,12 @@ def plan_box_flip_up():
         canvas.create_polygon(points_table, fill="#2f2f2f")
 
         force_1_points = make_plotable(
-            np.hstack([p_Wm4, p_Wm4 + R_WB_val.dot(f_Bc1_val)])
+            np.hstack([pm4_W, pm4_W + R_WB_val.dot(f_Bc1_val)])
         )
         canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
         force_2_points = make_plotable(
             np.hstack(
-                [p_WB + R_WB_val.dot(p_Bc), p_WB + R_WB_val.dot(p_Bc + f_Bc2_val)]
+                [p_WB + R_WB_val.dot(pc_B), p_WB + R_WB_val.dot(pc_B + f_Bc2_val)]
             )
         )
         canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
