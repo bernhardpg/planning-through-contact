@@ -9,7 +9,7 @@ from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
 
 
-def test():
+def test_sdp_relaxation():
     x = sym.Variable("x")
     y = sym.Variable("y")
     variables = np.array([x, y])
@@ -442,3 +442,7 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
 
     plt.tight_layout()
     plt.show()
+
+
+if __name__ == "__main__":
+    test_sdp_relaxation()
