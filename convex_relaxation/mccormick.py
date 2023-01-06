@@ -6,7 +6,7 @@ import pydrake.symbolic as sym
 from pydrake.solvers import MathematicalProgram, Solve
 
 
-class SdpRelaxation:
+class McCormickRelaxation:
     def __init__(self, vars: npt.NDArray[sym.Variable]):
         self.n = vars.shape[0] + 1  # 1 is also a monomial
         self.order = 1  # For now, we just do the first order of the hierarchy
