@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass
-from typing import List, Tuple, TypeVar
+from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -272,16 +272,44 @@ def create_aux_variable(m: sym.Monomial) -> sym.Variable:
     return sym.Variable(name)
 
 
+def create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
+    BIG_NUM = 999
+    u_L, u_U = variable_bounds.get(u.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
+    v_L, v_U = variable_bounds.get(v.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
+    w_L = u_L * v_L
+    w_U = u_U * v_U
+
+    var_bounds = [
+        w_L <= w,
+        w <= w_U,
+        u_L <= u,
+        u <= u_U,
+        v_L <= v,
+        v <= v_U,
+    ]
+    mccormick_envelopes = [
+        w >= u_L * v + u * v_L - u_L * v_L,
+        w >= u_U * v + u * v_U - u_U * v_U,
+        w <= u_U * v + u * v_L - u_U * v_L,
+        w <= u_L * v + u * v_U - u_L * v_U,
+    ]
+    return sum([var_bounds, mccormick_envelopes], [])
+
+
 def relax_bilinear_formula(
-    formula: sym.Formula,
-) -> Tuple[sym.Formula, List[sym.Variable]]:
+    formula: sym.Formula, variable_bounds: Dict[str, Tuple[float, float]]
+) -> Tuple[sym.Formula, List[sym.Variable], List[sym.Formula]]:
     # TODO consider creating a helper function for this, it is used several places!
     lhs, rhs = formula.Unapply()[1]
     poly = sym.Polynomial(lhs - rhs)  # move everything to the left hand side
     coeff_map = poly.monomial_to_coefficient_map()
     monomials, coeffs = zip(*list(coeff_map.items()))
 
-    if not all([m.total_degree() <= 2 for m in monomials]):
+    max_deg_is_2 = all([m.total_degree() <= 2 for m in monomials])
+    num_vars_is_2 = all(
+        [m.GetVariables().size() == 2 for m in monomials if m.total_degree() == 2]
+    )
+    if not max_deg_is_2 or not num_vars_is_2:
         raise ValueError(
             "Monomials of degree higher than 2 was found in formula. All terms must be at most bilinear!"
         )
@@ -299,7 +327,16 @@ def relax_bilinear_formula(
     new_aux_variables = [
         bilinear_terms_replaced_with_aux_vars[i] for i in indices_of_new_vars
     ]
-    return formula, new_aux_variables
+    replaced_monomials = [monomials[i] for i in indices_of_new_vars]
+
+    mccormick_envelope_constraints = []
+    for w, monomial in zip(new_aux_variables, replaced_monomials):
+        u, v = list(monomial.GetVariables())
+        mccormick_envelope_constraints.extend(
+            create_mccormick_envelopes(u, v, w, variable_bounds)
+        )
+
+    return formula, new_aux_variables, mccormick_envelope_constraints
 
 
 # TODO: This is code for a quick experiment that should be removed long term
@@ -321,10 +358,15 @@ def plan_box_flip_up():
 
     # Constant variables
     fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
-    pc_B = np.array([sym.Variable("pc_B_x"), sym.Variable("pc_B_y")]).reshape((-1, 1))
     pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
     pm4_B = box.p4
     mu = 0.7
+
+    lam = prog.NewContinuousVariables(1, 1, "lam")[
+        0, 0
+    ]  # convex hull variable for contact point
+    pc_B = lam * box.p2 + (1 - lam) * box.p3
+
 
     # TODO: plan for McCormick envelopes
     # 1. Make contact location a decision variable
@@ -340,9 +382,13 @@ def plan_box_flip_up():
     c_n_2s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_n_2")
     c_f_2s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_f_2")
 
+    # TODO clean up
+    variable_bounds = {"lam": (0.0, 1.0), "c_n_2": (0, 4)}
+
     fixed_corner = ContactPoint(box.nc4, box.tc4, mu)
     finger_pos = ContactPoint(box.n2, box.t2, mu)
 
+    aux_vars = []  # TODO clean up
     # Add constraints to each knot point
     for ctrl_point_idx in range(0, NUM_CTRL_POINTS):
         # Convenvience variables
@@ -368,9 +414,17 @@ def plan_box_flip_up():
 
         # Add moment balance using a linear relaxation
         moment_balance = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B) == 0
-        relaxed_moment_balance, new_vars = relax_bilinear_formula(moment_balance)
+        (
+            relaxed_moment_balance,
+            new_vars,
+            mccormick_envelope_constraints,
+        ) = relax_bilinear_formula(moment_balance, variable_bounds)
         prog.AddDecisionVariables(new_vars)
         prog.AddLinearConstraint(relaxed_moment_balance)
+        for c in mccormick_envelope_constraints:
+            prog.AddLinearConstraint(c)
+
+        aux_vars.extend(new_vars)
 
         # Relaxed SO(2) constraint
         prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
@@ -424,8 +478,12 @@ def plan_box_flip_up():
     c_f_1_vals = result.GetSolution(c_f_1s)
     c_f_2_vals = result.GetSolution(c_f_2s)
 
-    new_var_vals = [result.GetSolution(var) for var in new_vars]
-    breakpoint()
+    aux_var_vals = result.GetSolution(aux_vars)
+    lam_val = result.GetSolution(lam)
+
+    relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
+    print("Solved with relaxation errors:")
+    print(relaxation_errors)
 
     corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
     finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
@@ -500,9 +558,13 @@ def plan_box_flip_up():
             np.hstack([pm4_W, pm4_W + R_WB_val.dot(f_Bc1_val)])
         )
         canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
+        pc_B_val = box.p2 * lam_val + box.p3 * (1 - lam_val)
         force_2_points = make_plotable(
             np.hstack(
-                [p_WB + R_WB_val.dot(pc_B), p_WB + R_WB_val.dot(pc_B + f_Bc2_val)]
+                [
+                    p_WB + R_WB_val.dot(pc_B_val),
+                    p_WB + R_WB_val.dot(pc_B_val + f_Bc2_val),
+                ]
             )
         )
         canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
