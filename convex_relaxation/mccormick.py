@@ -1,92 +1,86 @@
-from typing import Tuple
+import time
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
-import pydrake.symbolic as sym
+import pydrake.symbolic as sym  # type: ignore
+from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
+from geometry.bezier import BezierCurve
+from geometry.box import Box2d, construct_2d_plane_from_points
+from geometry.utilities import cross_2d
 
-class McCormickRelaxation:
-    def __init__(self, vars: npt.NDArray[sym.Variable]):
-        self.n = vars.shape[0] + 1  # 1 is also a monomial
-        self.order = 1  # For now, we just do the first order of the hierarchy
 
-        # [1, x, x ** 2, ... ]
-        self.mon_basis = np.flip(sym.MonomialBasis(vars, self.degree))
+def _create_aux_variable(m: sym.Monomial) -> sym.Variable:
+    name = "".join(str(m).split(" "))
+    return sym.Variable(name)
 
-        self.prog = MathematicalProgram()
-        self.X = self.prog.NewSymmetricContinuousVariables(self.n, "X")
-        self.prog.AddConstraint(
-            self.X[0, 0] == 1
-        )  # First variable is not really a variable
-        self.prog.AddPositiveSemidefiniteConstraint(self.X)
 
-    @property
-    def degree(self) -> int:
-        return self.order + 1
+def _create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
+    BIG_NUM = 999
+    u_L, u_U = variable_bounds.get(u.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
+    v_L, v_U = variable_bounds.get(v.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
+    w_L = u_L * v_L
+    w_U = u_U * v_U
 
-    def add_constraint(self, formula: sym.Formula, bp: bool = False) -> None:
-        kind = formula.get_kind()
-        lhs, rhs = formula.Unapply()[1]  # type: ignore
-        poly = sym.Polynomial(lhs - rhs)
+    var_bounds = [
+        w_L <= w,
+        w <= w_U,
+        u_L <= u,
+        u <= u_U,
+        v_L <= v,
+        v <= v_U,
+    ]
+    mccormick_envelopes = [
+        w >= u_L * v + u * v_L - u_L * v_L,
+        w >= u_U * v + u * v_U - u_U * v_U,
+        w <= u_U * v + u * v_L - u_U * v_L,
+        w <= u_L * v + u * v_U - u_L * v_U,
+    ]
+    return sum([var_bounds, mccormick_envelopes], [])
 
-        if poly.TotalDegree() > self.degree:
-            raise ValueError(
-                f"Constraint degree is {poly.TotalDegree()},"
-                "program degree is {self.degree}"
-            )
 
-        Q = self._construct_quadratic_constraint(poly, self.mon_basis, self.n)
-        constraint_lhs = np.trace(self.X @ Q)
-        if bp:
-            breakpoint()
-        if kind == sym.FormulaKind.Eq:
-            self.prog.AddConstraint(constraint_lhs == 0)
-        elif kind == sym.FormulaKind.Geq:
-            self.prog.AddConstraint(constraint_lhs >= 0)
-        elif kind == sym.FormulaKind.Leq:
-            self.prog.AddConstraint(constraint_lhs <= 0)
-        else:
-            raise NotImplementedError(
-                f"Support for formula type {kind} not implemented"
-            )
+def relax_bilinear_expression(
+    expr: sym.Expression, variable_bounds: Dict[str, Tuple[float, float]]
+) -> Tuple[sym.Expression, List[sym.Variable], List[sym.Formula]]:
+    poly = sym.Polynomial(expr)
+    coeff_map = poly.monomial_to_coefficient_map()
+    monomials, coeffs = zip(*list(coeff_map.items()))
 
-    def get_solution(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        result = Solve(self.prog)
-        assert result.is_success()
-        X_result = result.GetSolution(self.X)
-        svd_solution = self._get_sol_from_svd(X_result)
-        variable_values = svd_solution[1:]  # first value is 1
-        return variable_values, X_result
-
-    def _get_sol_from_svd(self, X: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        eigenvals, eigenvecs = np.linalg.eig(X)
-        idx_highest_eigval = np.argmax(eigenvals)
-        solution_nonnormalized = eigenvecs[:, idx_highest_eigval]
-        solution = solution_nonnormalized / solution_nonnormalized[0]
-        return solution
-
-    def _get_monomial_coeffs(
-        self, poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial]
-    ):
-        coeff_map = poly.monomial_to_coefficient_map()
-        breakpoint()
-        coeffs = np.array(
-            [coeff_map.get(m, sym.Expression(0)).Evaluate() for m in basis]
+    max_deg_is_2 = all([m.total_degree() <= 2 for m in monomials])
+    num_vars_is_2 = all(
+        [m.GetVariables().size() == 2 for m in monomials if m.total_degree() == 2]
+    )
+    if not max_deg_is_2 or not num_vars_is_2:
+        raise ValueError(
+            "Monomials of degree higher than 2 was found in formula. All terms must be at most bilinear!"
         )
-        return coeffs
 
-    def _construct_symmetric_matrix_from_triang(
-        self,
-        triang_matrix: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
-        return triang_matrix + triang_matrix.T
+    bilinear_terms_replaced_with_aux_vars = [
+        _create_aux_variable(m) if m.total_degree() == 2 else m.ToExpression()
+        for m in monomials
+    ]
+    expr_with_bilinear_terms_replaced = sum(
+        [c * m for c, m in zip(coeffs, bilinear_terms_replaced_with_aux_vars)]
+    )
 
-    def _construct_quadratic_constraint(
-        self, poly: sym.Polynomial, basis: npt.NDArray[sym.Monomial], n: int
-    ) -> npt.NDArray[np.float64]:
-        coeffs = self._get_monomial_coeffs(poly, basis)
-        upper_triangular = np.zeros((n, n))
-        upper_triangular[np.triu_indices(n)] = coeffs
-        Q = self._construct_symmetric_matrix_from_triang(upper_triangular)
-        return Q * 0.5
+    indices_of_new_vars = [i for i, m in enumerate(monomials) if m.total_degree() == 2]
+    new_aux_variables = [
+        bilinear_terms_replaced_with_aux_vars[i] for i in indices_of_new_vars
+    ]
+    replaced_monomials = [monomials[i] for i in indices_of_new_vars]
+
+    mccormick_envelope_constraints = []
+    for w, monomial in zip(new_aux_variables, replaced_monomials):
+        u, v = list(monomial.GetVariables())
+        mccormick_envelope_constraints.extend(
+            _create_mccormick_envelopes(u, v, w, variable_bounds)
+        )
+
+    return (
+        expr_with_bilinear_terms_replaced,
+        new_aux_variables,
+        mccormick_envelope_constraints,
+    )

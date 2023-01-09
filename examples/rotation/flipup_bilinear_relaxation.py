@@ -4,10 +4,11 @@ from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
-import pydrake.symbolic as sym # type: ignore
+import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
+from convex_relaxation.mccormick import relax_bilinear_expression
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
@@ -49,78 +50,6 @@ class ContactPoint:
         lower_bound = -self.friction_coeff * normal_force <= friction_force
         normal_force_positive = normal_force >= 0
         return np.vstack([upper_bound, lower_bound, normal_force_positive])
-
-
-def create_aux_variable(m: sym.Monomial) -> sym.Variable:
-    name = "".join(str(m).split(" "))
-    return sym.Variable(name)
-
-
-def create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
-    BIG_NUM = 999
-    u_L, u_U = variable_bounds.get(u.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
-    v_L, v_U = variable_bounds.get(v.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
-    w_L = u_L * v_L
-    w_U = u_U * v_U
-
-    var_bounds = [
-        w_L <= w,
-        w <= w_U,
-        u_L <= u,
-        u <= u_U,
-        v_L <= v,
-        v <= v_U,
-    ]
-    mccormick_envelopes = [
-        w >= u_L * v + u * v_L - u_L * v_L,
-        w >= u_U * v + u * v_U - u_U * v_U,
-        w <= u_U * v + u * v_L - u_U * v_L,
-        w <= u_L * v + u * v_U - u_L * v_U,
-    ]
-    return sum([var_bounds, mccormick_envelopes], [])
-
-
-def relax_bilinear_formula(
-    formula: sym.Formula, variable_bounds: Dict[str, Tuple[float, float]]
-) -> Tuple[sym.Formula, List[sym.Variable], List[sym.Formula]]:
-    # TODO consider creating a helper function for this, it is used several places!
-    lhs, rhs = formula.Unapply()[1] # type: ignore
-    poly = sym.Polynomial(lhs - rhs)  # move everything to the left hand side
-    coeff_map = poly.monomial_to_coefficient_map()
-    monomials, coeffs = zip(*list(coeff_map.items()))
-
-    max_deg_is_2 = all([m.total_degree() <= 2 for m in monomials])
-    num_vars_is_2 = all(
-        [m.GetVariables().size() == 2 for m in monomials if m.total_degree() == 2]
-    )
-    if not max_deg_is_2 or not num_vars_is_2:
-        raise ValueError(
-            "Monomials of degree higher than 2 was found in formula. All terms must be at most bilinear!"
-        )
-
-    bilinear_terms_replaced_with_aux_vars = [
-        create_aux_variable(m) if m.total_degree() == 2 else m.ToExpression()
-        for m in monomials
-    ]
-    expr_with_bilinear_terms_replaced = sum(
-        [c * m for c, m in zip(coeffs, bilinear_terms_replaced_with_aux_vars)]
-    )
-    formula = expr_with_bilinear_terms_replaced == 0
-
-    indices_of_new_vars = [i for i, m in enumerate(monomials) if m.total_degree() == 2]
-    new_aux_variables = [
-        bilinear_terms_replaced_with_aux_vars[i] for i in indices_of_new_vars
-    ]
-    replaced_monomials = [monomials[i] for i in indices_of_new_vars]
-
-    mccormick_envelope_constraints = []
-    for w, monomial in zip(new_aux_variables, replaced_monomials):
-        u, v = list(monomial.GetVariables())
-        mccormick_envelope_constraints.extend(
-            create_mccormick_envelopes(u, v, w, variable_bounds)
-        )
-
-    return formula, new_aux_variables, mccormick_envelope_constraints
 
 
 # TODO: This is code for a quick experiment that should be removed long term
@@ -192,24 +121,24 @@ def plan_box_flip_up():
             )
 
         # Force balance
-        force_balance = fc1_B + fc2_B + R_WB.T.dot(fg_W)
-        prog.AddLinearConstraint(eq(force_balance, 0))
+        sum_of_forces = fc1_B + fc2_B + R_WB.T.dot(fg_W)
+        prog.AddLinearConstraint(eq(sum_of_forces, 0))
 
         if USE_MOMENT_BALANCE:
             # Add moment balance using a linear relaxation
-            moment_balance = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B)
+            sum_of_moments = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B)
             (
-                relaxed_moment_balance,
+                relaxed_sum_of_moments,
                 new_vars,
                 mccormick_envelope_constraints,
-            ) = relax_bilinear_formula(moment_balance == 0, variable_bounds)
+            ) = relax_bilinear_expression(sum_of_moments, variable_bounds)
             prog.AddDecisionVariables(new_vars)
-            prog.AddLinearConstraint(relaxed_moment_balance)
+            prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
             for c in mccormick_envelope_constraints:
                 prog.AddLinearConstraint(c)
 
             aux_vars.extend(new_vars)
-            moment_balances.append(moment_balance)
+            moment_balances.append(sum_of_moments)
 
         # Relaxed SO(2) constraint
         prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
@@ -350,8 +279,8 @@ def plan_box_flip_up():
         f_Bc1_val = corner_curve[idx].reshape((-1, 1)) * FORCE_SCALE
         f_Bc2_val = finger_curve[idx].reshape((-1, 1)) * FORCE_SCALE
 
-        force_balance = f_Bc1_val + f_Bc2_val + R_WB_val.T.dot(f_Wg_val)
-        if any(np.abs(force_balance) > 1e-8):
+        sum_of_forces = f_Bc1_val + f_Bc2_val + R_WB_val.T.dot(f_Wg_val)
+        if any(np.abs(sum_of_forces) > 1e-8):
             breakpoint()
 
         points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
