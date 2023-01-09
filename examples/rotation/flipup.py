@@ -341,6 +341,10 @@ def relax_bilinear_formula(
 
 # TODO: This is code for a quick experiment that should be removed long term
 def plan_box_flip_up():
+    USE_QUADRATIC_COST = True
+    USE_MOMENT_BALANCE = True
+    USE_FRICTION_CONE_CONSTRAINT = False
+
     NUM_CTRL_POINTS = 3
 
     BOX_WIDTH = 3
@@ -367,7 +371,6 @@ def plan_box_flip_up():
     ]  # convex hull variable for contact point
     pc_B = lam * box.p2 + (1 - lam) * box.p3
 
-
     # TODO: plan for McCormick envelopes
     # 1. Make contact location a decision variable
     # 2. Implement moment balance using McCormick envelopes as relaxation
@@ -383,7 +386,7 @@ def plan_box_flip_up():
     c_f_2s = prog.NewContinuousVariables(1, NUM_CTRL_POINTS, "c_f_2")
 
     # TODO clean up
-    variable_bounds = {"lam": (0.0, 1.0), "c_n_2": (0, 4)}
+    variable_bounds = {"lam": (0.0, 1.0), "c_n_2": (0, 10)}
 
     fixed_corner = ContactPoint(box.nc4, box.tc4, mu)
     finger_pos = ContactPoint(box.n2, box.t2, mu)
@@ -401,30 +404,32 @@ def plan_box_flip_up():
         fc1_B = fixed_corner.force_vec_from_symbols(c_n_1, c_f_1)
         fc2_B = finger_pos.force_vec_from_symbols(c_n_2, c_f_2)
 
-        prog.AddLinearConstraint(
-            fixed_corner.create_friction_cone_constraints(c_n_1, c_f_1)
-        )
-        prog.AddLinearConstraint(
-            finger_pos.create_friction_cone_constraints(c_n_2, c_f_2)
-        )
+        if USE_FRICTION_CONE_CONSTRAINT:
+            prog.AddLinearConstraint(
+                fixed_corner.create_friction_cone_constraints(c_n_1, c_f_1)
+            )
+            prog.AddLinearConstraint(
+                finger_pos.create_friction_cone_constraints(c_n_2, c_f_2)
+            )
 
         # Force balance
         force_balance = eq(fc1_B + fc2_B + R_WB.T.dot(fg_W), 0)
         prog.AddLinearConstraint(force_balance)
 
-        # Add moment balance using a linear relaxation
-        moment_balance = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B) == 0
-        (
-            relaxed_moment_balance,
-            new_vars,
-            mccormick_envelope_constraints,
-        ) = relax_bilinear_formula(moment_balance, variable_bounds)
-        prog.AddDecisionVariables(new_vars)
-        prog.AddLinearConstraint(relaxed_moment_balance)
-        for c in mccormick_envelope_constraints:
-            prog.AddLinearConstraint(c)
+        if USE_MOMENT_BALANCE:
+            # Add moment balance using a linear relaxation
+            moment_balance = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B) == 0
+            (
+                relaxed_moment_balance,
+                new_vars,
+                mccormick_envelope_constraints,
+            ) = relax_bilinear_formula(moment_balance, variable_bounds)
+            prog.AddDecisionVariables(new_vars)
+            prog.AddLinearConstraint(relaxed_moment_balance)
+            for c in mccormick_envelope_constraints:
+                prog.AddLinearConstraint(c)
 
-        aux_vars.extend(new_vars)
+            aux_vars.extend(new_vars)
 
         # Relaxed SO(2) constraint
         prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
@@ -447,9 +452,23 @@ def plan_box_flip_up():
         cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
         prog.AddLinearConstraint(cut)
 
-        # Quadratic cost on force
-        forces_squared = fc1_B.T.dot(fc1_B)[0, 0] + fc2_B.T.dot(fc2_B)[0, 0]
-        prog.AddQuadraticCost(forces_squared)
+        if USE_QUADRATIC_COST:
+            # Quadratic cost on force
+            forces_squared = fc1_B.T.dot(fc1_B)[0, 0] + fc2_B.T.dot(fc2_B)[0, 0]
+            prog.AddQuadraticCost(forces_squared)
+
+        else:
+            z = sym.Variable("z")
+            prog.AddDecisionVariables(np.array([z]))
+            prog.AddLinearCost(1 * z)
+
+            for f in fc1_B.flatten():
+                prog.AddLinearConstraint(z >= f)
+                prog.AddLinearConstraint(z >= -f)
+
+            for f in fc2_B.flatten():
+                prog.AddLinearConstraint(z >= f)
+                prog.AddLinearConstraint(z >= -f)
 
     # Path length minimization cost
     # cos_cost = np.sum(np.diff(cos_ths) ** 2)
@@ -469,6 +488,8 @@ def plan_box_flip_up():
     result = Solve(prog)
     assert result.is_success()
 
+    print(f"Cost: {result.get_optimal_cost()}")
+
     # Reconstruct ctrl_points
     cos_th_vals = result.GetSolution(cos_ths)
     sin_th_vals = result.GetSolution(sin_ths)
@@ -481,9 +502,10 @@ def plan_box_flip_up():
     aux_var_vals = result.GetSolution(aux_vars)
     lam_val = result.GetSolution(lam)
 
-    relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
-    print("Solved with relaxation errors:")
-    print(relaxation_errors)
+    if USE_MOMENT_BALANCE:
+        relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
+        print("Solved with relaxation errors:")
+        print(relaxation_errors)
 
     corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
     finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
