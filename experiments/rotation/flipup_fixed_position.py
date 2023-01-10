@@ -11,6 +11,7 @@ from pydrake.solvers import MathematicalProgram, Solve
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
+from geometry.contact_point import ContactPoint
 
 T = TypeVar("T")
 
@@ -23,32 +24,6 @@ def create_rot_matrix(
     cos_th, sin_th = cos_ths[0, ctrl_point_idx], sin_ths[0, ctrl_point_idx]
     rot_matrix = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
     return rot_matrix
-
-
-@dataclass
-class ContactPoint:
-    normal_vec: npt.NDArray[np.float64]
-    tangent_vec: npt.NDArray[np.float64]
-    friction_coeff: float
-
-    def force_vec_from_symbols(
-        self, normal_force: sym.Variable, friction_force: sym.Variable
-    ) -> npt.NDArray[sym.Expression]:
-        return normal_force * self.normal_vec + friction_force * self.tangent_vec
-
-    def force_vec_from_values(
-        self, normal_force: float, friction_force: float
-    ) -> npt.NDArray[np.float64]:
-        force_vec = normal_force * self.normal_vec + friction_force * self.tangent_vec
-        return force_vec
-
-    def create_friction_cone_constraints(
-        self, normal_force: sym.Variable, friction_force: sym.Variable
-    ) -> npt.NDArray[sym.Formula]:
-        upper_bound = friction_force <= self.friction_coeff * normal_force
-        lower_bound = -self.friction_coeff * normal_force <= friction_force
-        normal_force_positive = normal_force >= 0
-        return np.vstack([upper_bound, lower_bound, normal_force_positive])
 
 
 # TODO: This is code for a quick experiment that should be removed long term

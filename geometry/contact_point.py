@@ -4,7 +4,6 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 
-
 @dataclass
 class ContactPoint:
     normal_vec: npt.NDArray[np.float64]
@@ -29,3 +28,4 @@ class ContactPoint:
         lower_bound = -self.friction_coeff * normal_force <= friction_force
         normal_force_positive = normal_force >= 0
         return np.vstack([upper_bound, lower_bound, normal_force_positive])
+
