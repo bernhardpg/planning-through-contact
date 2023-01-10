@@ -1,12 +1,12 @@
 import time
 from dataclasses import dataclass
-from typing import List, TypeVar
+from typing import List, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
 from geometry.bezier import BezierCurve
@@ -84,19 +84,6 @@ class ContactPoint2D:
         normal_force_positive = self.normal_force >= 0
         return np.vstack([upper_bound, lower_bound, normal_force_positive])
 
-    # TODO remove
-    def force_vec_from_symbols(
-        self, normal_force: sym.Variable, friction_force: sym.Variable
-    ) -> npt.NDArray[sym.Expression]:  # type: ignore
-        return normal_force * self.normal_vec + friction_force * self.tangent_vec
-
-    # TODO remove
-    def force_vec_from_values(
-        self, normal_force: float, friction_force: float
-    ) -> npt.NDArray[np.float64]:
-        force_vec = normal_force * self.normal_vec + friction_force * self.tangent_vec
-        return force_vec
-
 
 @dataclass
 class ContactPair:
@@ -148,8 +135,8 @@ def plan_box_flip_up_newtons_third_law():
     TABLE_HEIGHT = 2
     TABLE_WIDTH = 10
 
-    TABLE_HEIGHT = 1
-    TABLE_WIDTH = 1
+    FINGER_HEIGHT = 1
+    FINGER_WIDTH = 1
 
     BOX_MASS = 1
     GRAV_ACC = 9.81
@@ -159,122 +146,157 @@ def plan_box_flip_up_newtons_third_law():
 
     # FIRST STEP: Only one ctrl point
     # TODO: I can just run all of this code for each ctrl point
+    cos_ths = []
+    sin_ths = []
 
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
-    table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
-    finger = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
+    fc1_Bs = []
+    fc1_Ts = []
+    pc1_Bs = []
+    pc1_Ts = []
 
-    cp_box_table = ContactPair(
-        "contact_1", box, "corner_4", "box", table, "face_1", "table", FRICTION_COEFF
-    )
-    cp_box_finger = ContactPair(
-        "contact_2", box, "face_2", "box", finger, "corner_1", "finger", FRICTION_COEFF
-    )
+    fc2_Bs = []
+    fc2_Fs = []
+    pc2_Bs = []
+    pc2_Fs = []
 
-    # Four reference frames: B (Box), F (Finger), T (Table), W (World)
-    fc1_B = cp_box_table.contact_point_A.contact_force
-    fc1_T = cp_box_table.contact_point_B.contact_force
-    pc1_B = cp_box_table.contact_point_A.contact_position
-    pc1_T = cp_box_table.contact_point_B.contact_position
+    for ctrl_point_idx in range(NUM_CTRL_POINTS):
+        box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+        table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
+        finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
 
-    fc2_B = cp_box_finger.contact_point_A.contact_force
-    fc2_F = cp_box_finger.contact_point_B.contact_force
-    pc2_B = cp_box_finger.contact_point_A.contact_position
-    pc2_F = cp_box_finger.contact_point_B.contact_position
-
-    # Constant variables
-    fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
-
-    # TODO maybe these should become part of the other objects?
-    cos_th = sym.Variable("cos")
-    sin_th = sym.Variable("sin")
-    R_TB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
-    R_WB = R_TB  # World frame is the same as table frame
-
-    prog.AddDecisionVariables(np.array([cos_th, sin_th]))
-    prog.AddDecisionVariables(cp_box_table.variables)
-    prog.AddDecisionVariables(cp_box_finger.variables)
-
-    if USE_FRICTION_CONE_CONSTRAINT:
-        prog.AddLinearConstraint(
-            cp_box_table.contact_point_A.create_friction_cone_constraints()
+        cp_box_table = ContactPair(
+            "contact_1",
+            box,
+            "corner_4",
+            "box",
+            table,
+            "face_1",
+            "table",
+            FRICTION_COEFF,
         )
-        prog.AddLinearConstraint(
-            cp_box_table.contact_point_B.create_friction_cone_constraints()
-        )
-        prog.AddLinearConstraint(
-            cp_box_finger.contact_point_A.create_friction_cone_constraints()
+        cp_box_finger = ContactPair(
+            "contact_2",
+            box,
+            "face_2",
+            "box",
+            finger,
+            "corner_1",
+            "finger",
+            FRICTION_COEFF,
         )
 
-    if USE_FORCE_BALANCE_CONSTRAINT:
-        sum_of_forces_B = fc1_B + fc2_B + R_WB.T.dot(fg_W)
-        prog.AddLinearConstraint(eq(sum_of_forces_B, 0))
+        # Four reference frames: B (Box), F (Finger), T (Table), W (World)
+        fc1_B = cp_box_table.contact_point_A.contact_force
+        fc1_T = cp_box_table.contact_point_B.contact_force
+        pc1_B = cp_box_table.contact_point_A.contact_position
+        pc1_T = cp_box_table.contact_point_B.contact_position
 
-    if USE_MOMENT_BALANCE:
-        # Add moment balance using a linear relaxation
-        sum_of_moments_B = cross_2d(pc1_B, fc1_B) + cross_2d(pc2_B, fc2_B)
+        fc2_B = cp_box_finger.contact_point_A.contact_force
+        fc2_F = cp_box_finger.contact_point_B.contact_force
+        pc2_B = cp_box_finger.contact_point_A.contact_position
+        pc2_F = cp_box_finger.contact_point_B.contact_position
 
-        MAX_FORCE = 4
-        # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
-        variable_bounds = {
-            "contact_2_box_lam": (0.0, 1.0),
-            "contact_2_box_c_n": (0, MAX_FORCE),
-        }
-        (
-            relaxed_sum_of_moments,
-            new_vars,
-            mccormick_envelope_constraints,
-        ) = relax_bilinear_expression(sum_of_moments_B, variable_bounds)
-        prog.AddDecisionVariables(new_vars)
-        prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
-        for c in mccormick_envelope_constraints:
-            prog.AddLinearConstraint(c)
+        fc1_Bs.append(fc1_B)
+        fc1_Ts.append(fc1_T)
+        pc1_Bs.append(pc1_B)
+        pc1_Ts.append(pc1_T)
+        fc2_Bs.append(fc2_B)
+        fc2_Fs.append(fc2_F)
+        pc2_Bs.append(pc2_B)
+        pc2_Fs.append(pc2_F)
 
-    if USE_SO2_CONSTRAINT:
-        # Relaxed SO(2) constraint
-        prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
+        # Constant variables
+        fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
 
-    if USE_NON_PENETRATION_CONSTRAINT:
-        # Add nonpenetration constraint in table frame
-        table_a_T = table.a1[0]
-        pm1_B = box.p1
-        pm3_B = box.p3
+        # TODO maybe these should become part of the other objects?
+        cos_th = sym.Variable("cos")
+        sin_th = sym.Variable("sin")
+        R_TB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
+        R_WB = R_TB  # World frame is the same as table frame
 
-        nonpen_1_T = table_a_T.T.dot(R_TB).dot(pm1_B - pc1_B)[0, 0] >= 0
-        nonpen_2_T = table_a_T.T.dot(R_TB).dot(pm3_B - pc1_B)[0, 0] >= 0
-        prog.AddLinearConstraint(nonpen_1_T)
-        prog.AddLinearConstraint(nonpen_2_T)
+        prog.AddDecisionVariables(np.array([cos_th, sin_th]))
+        prog.AddDecisionVariables(cp_box_table.variables)
+        prog.AddDecisionVariables(cp_box_finger.variables)
 
+        if USE_FRICTION_CONE_CONSTRAINT:
+            prog.AddLinearConstraint(
+                cp_box_table.contact_point_A.create_friction_cone_constraints()
+            )
+            prog.AddLinearConstraint(
+                cp_box_table.contact_point_B.create_friction_cone_constraints()
+            )
+            prog.AddLinearConstraint(
+                cp_box_finger.contact_point_A.create_friction_cone_constraints()
+            )
 
-    if USE_SO2_CUT:
-        # Add SO(2) tightening
-        cut_p1 = np.array([0, 1]).reshape((-1, 1))
-        cut_p2 = np.array([1, 0]).reshape((-1, 1))
-        a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
-        temp = R_TB[:, 0:1]
-        cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
-        prog.AddLinearConstraint(cut)
+        if USE_FORCE_BALANCE_CONSTRAINT:
+            sum_of_forces_B = fc1_B + fc2_B + R_WB.T.dot(fg_W)
+            prog.AddLinearConstraint(eq(sum_of_forces_B, 0))
 
+        if USE_MOMENT_BALANCE:
+            # Add moment balance using a linear relaxation
+            sum_of_moments_B = cross_2d(pc1_B, fc1_B) + cross_2d(pc2_B, fc2_B)
 
-    if USE_QUADRATIC_COST:
-        # Quadratic cost on force
-        forces_squared = fc1_B.T.dot(fc1_B)[0, 0] + fc2_B.T.dot(fc2_B)[0, 0]
-        prog.AddQuadraticCost(forces_squared)
+            MAX_FORCE = 4
+            # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
+            variable_bounds = {
+                "contact_2_box_lam": (0.0, 1.0),
+                "contact_2_box_c_n": (0, MAX_FORCE),
+            }
+            (
+                relaxed_sum_of_moments,
+                new_vars,
+                mccormick_envelope_constraints,
+            ) = relax_bilinear_expression(sum_of_moments_B, variable_bounds)
+            prog.AddDecisionVariables(new_vars)
+            prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
+            for c in mccormick_envelope_constraints:
+                prog.AddLinearConstraint(c)
 
-    else:
-        z = sym.Variable("z")
-        prog.AddDecisionVariables(np.array([z]))
-        prog.AddLinearCost(1 * z)
+        if USE_SO2_CONSTRAINT:
+            # Relaxed SO(2) constraint
+            prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
 
-        for f in fc1_B.flatten():
-            prog.AddLinearConstraint(z >= f)
-            prog.AddLinearConstraint(z >= -f)
+        if USE_NON_PENETRATION_CONSTRAINT:
+            # Add nonpenetration constraint in table frame
+            table_a_T = table.a1[0]
+            pm1_B = box.p1
+            pm3_B = box.p3
 
-        for f in fc2_B.flatten():
-            prog.AddLinearConstraint(z >= f)
-            prog.AddLinearConstraint(z >= -f)
+            nonpen_1_T = table_a_T.T.dot(R_TB).dot(pm1_B - pc1_B)[0, 0] >= 0
+            nonpen_2_T = table_a_T.T.dot(R_TB).dot(pm3_B - pc1_B)[0, 0] >= 0
+            prog.AddLinearConstraint(nonpen_1_T)
+            prog.AddLinearConstraint(nonpen_2_T)
 
-    breakpoint()
+        if USE_SO2_CUT:
+            # Add SO(2) tightening
+            cut_p1 = np.array([0, 1]).reshape((-1, 1))
+            cut_p2 = np.array([1, 0]).reshape((-1, 1))
+            a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
+            temp = R_TB[:, 0:1]
+            cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
+            prog.AddLinearConstraint(cut)
+
+        if USE_QUADRATIC_COST:
+            # Quadratic cost on force
+            forces_squared = fc1_B.T.dot(fc1_B)[0, 0] + fc2_B.T.dot(fc2_B)[0, 0]
+            prog.AddQuadraticCost(forces_squared)
+
+        else:
+            z = sym.Variable("z")
+            prog.AddDecisionVariables(np.array([z]))
+            prog.AddLinearCost(1 * z)
+
+            for f in fc1_B.flatten():
+                prog.AddLinearConstraint(z >= f)
+                prog.AddLinearConstraint(z >= -f)
+
+            for f in fc2_B.flatten():
+                prog.AddLinearConstraint(z >= f)
+                prog.AddLinearConstraint(z >= -f)
+
+        cos_ths.append(cos_th)
+        sin_ths.append(sin_th)
 
     # Path length minimization cost
     # cos_cost = np.sum(np.diff(cos_ths) ** 2)
@@ -282,13 +304,13 @@ def plan_box_flip_up_newtons_third_law():
     # prog.AddQuadraticCost(cos_cost + sin_cost)
 
     # Initial and final condition
-    # th_initial = 0
-    # prog.AddLinearConstraint(cos_ths[0, 0] == np.cos(th_initial))
-    # prog.AddLinearConstraint(sin_ths[0, 0] == np.sin(th_initial))
-    #
-    # th_final = 0.9
-    # prog.AddLinearConstraint(cos_ths[0, -1] == np.cos(th_final))
-    # prog.AddLinearConstraint(sin_ths[0, -1] == np.sin(th_final))
+    th_initial = 0
+    prog.AddLinearConstraint(cos_ths[0] == np.cos(th_initial))
+    prog.AddLinearConstraint(sin_ths[0] == np.sin(th_initial))
+
+    th_final = 0.9
+    prog.AddLinearConstraint(cos_ths[-1] == np.cos(th_final))
+    prog.AddLinearConstraint(sin_ths[-1] == np.sin(th_final))
 
     # Solve
     result = Solve(prog)
@@ -296,45 +318,39 @@ def plan_box_flip_up_newtons_third_law():
 
     print(f"Cost: {result.get_optimal_cost()}")
 
-    # Reconstruct ctrl_points
-    cos_th_vals = result.GetSolution(cos_ths)
-    sin_th_vals = result.GetSolution(sin_ths)
-
-    c_n_1_vals = result.GetSolution(c_n_1s)
-    c_n_2_vals = result.GetSolution(c_n_2s)
-    c_f_1_vals = result.GetSolution(c_f_1s)
-    c_f_2_vals = result.GetSolution(c_f_2s)
-
-    aux_var_vals = result.GetSolution(aux_vars)
-    lam_val = result.GetSolution(lam)
-
-    if USE_MOMENT_BALANCE:
-        relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
-        print("Solved with relaxation errors:")
-        print(relaxation_errors)
-
-        moment_balance_violations = [result.GetSolution(mb) for mb in moment_balances]
-        for idx, val in enumerate(moment_balance_violations):
-            print(f"Violation for keypoint {idx}: {val}")
-
-    corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
-    finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
-
+    cos_th_vals = np.hstack([result.GetSolution(c) for c in cos_ths]).reshape((1, -1))
+    sin_th_vals = np.hstack([result.GetSolution(s) for s in sin_ths]).reshape((1, -1))
     sin_curve = BezierCurve.create_from_ctrl_points(sin_th_vals).eval_entire_interval()
     cos_curve = BezierCurve.create_from_ctrl_points(cos_th_vals).eval_entire_interval()
-
     R_curve = [
         np.array([[c[0], -s[0]], [s[0], c[0]]]) for c, s in zip(cos_curve, sin_curve)
     ]
 
-    corner_curve = BezierCurve.create_from_ctrl_points(
-        corner_forces
-    ).eval_entire_interval()
-    finger_curve = BezierCurve.create_from_ctrl_points(
-        finger_forces
-    ).eval_entire_interval()
+    # TODO helper function that should ideally be used other places too!
+    def _get_trajectory_from_solution(
+        expressions: List[Union[sym.Variable, sym.Expression]],
+        result: MathematicalProgramResult,
+    ) -> npt.NDArray[np.float64]:
 
-    p_WB_curve = [pm4_W - R.dot(pm4_B) for R in R_curve]
+        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
+        ctrl_points = np.hstack([from_expr_to_float(result.GetSolution(e)) for e in expressions])  # type: ignore
+        curve = BezierCurve.create_from_ctrl_points(ctrl_points).eval_entire_interval()
+        return curve
+
+    fc1_B_curve = _get_trajectory_from_solution(fc1_Bs, result)
+    fc1_T_curve = _get_trajectory_from_solution(fc1_Ts, result)
+    pc1_B_curve = _get_trajectory_from_solution(pc1_Bs, result)
+    pc1_T_curve = _get_trajectory_from_solution(pc1_Ts, result)
+    fc2_B_curve = _get_trajectory_from_solution(fc2_Bs, result)
+    fc2_F_curve = _get_trajectory_from_solution(fc2_Fs, result)
+    pc2_B_curve = _get_trajectory_from_solution(pc2_Bs, result)
+    pc2_F_curve = _get_trajectory_from_solution(pc2_Fs, result)
+
+    pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
+    pc1_B = pc1_B_curve[
+        0:1, :
+    ].T  # NOTE: This stays fixed for the entire interval, due to being a corner! This is a quick fix
+    p_WB_curve = [pm4_W - R.dot(pc1_B) for R in R_curve]
 
     ## Plotting
 
@@ -373,8 +389,8 @@ def plan_box_flip_up_newtons_third_law():
         det_R = np.linalg.det(R_WB_val)
         p_WB = p_WB_curve[idx]
 
-        f_Bc1_val = corner_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        f_Bc2_val = finger_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        f_Bc1_val = fc1_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        f_Bc2_val = fc2_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
 
         sum_of_forces = f_Bc1_val + f_Bc2_val + R_WB_val.T.dot(f_Wg_val)
         if any(np.abs(sum_of_forces) > 1e-8):
@@ -390,7 +406,7 @@ def plan_box_flip_up_newtons_third_law():
             np.hstack([pm4_W, pm4_W + R_WB_val.dot(f_Bc1_val)])
         )
         canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
-        pc_B_val = box.p2 * lam_val + box.p3 * (1 - lam_val)
+        pc_B_val = pc2_B_curve[idx].reshape((-1, 1))
         force_2_points = make_plotable(
             np.hstack(
                 [
