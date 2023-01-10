@@ -298,11 +298,6 @@ def plan_box_flip_up_newtons_third_law():
         cos_ths.append(cos_th)
         sin_ths.append(sin_th)
 
-    # Path length minimization cost
-    # cos_cost = np.sum(np.diff(cos_ths) ** 2)
-    # sin_cost = np.sum(np.diff(sin_ths) ** 2)
-    # prog.AddQuadraticCost(cos_cost + sin_cost)
-
     # Initial and final condition
     th_initial = 0
     prog.AddLinearConstraint(cos_ths[0] == np.cos(th_initial))
@@ -311,6 +306,10 @@ def plan_box_flip_up_newtons_third_law():
     th_final = 0.9
     prog.AddLinearConstraint(cos_ths[-1] == np.cos(th_final))
     prog.AddLinearConstraint(sin_ths[-1] == np.sin(th_final))
+
+    # Don't allow contact position to change
+    prog.AddLinearConstraint(eq(pc2_Bs[0], pc2_Bs[1]))
+    prog.AddLinearConstraint(eq(pc2_Bs[1], pc2_Bs[2]))
 
     # Solve
     result = Solve(prog)
@@ -367,18 +366,32 @@ def plan_box_flip_up_newtons_third_law():
     PLOT_SCALE = 50
     FORCE_SCALE = 0.2
 
-    def flatten_points(points):
+    def _flatten_points(points):
         return list(points.flatten(order="F"))
 
-    def make_plotable(
+    def _make_plotable(
         points: npt.NDArray[np.float64],
         scale: float = PLOT_SCALE,
         center: float = PLOT_CENTER,
     ) -> List[float]:
         points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
         points_transformed = points_flipped_y_axis * scale + center
-        plotable_points = flatten_points(points_transformed)
+        plotable_points = _flatten_points(points_transformed)
         return plotable_points
+
+    def _plot_force(
+        pos_B: npt.NDArray[np.float64],
+        force_B: npt.NDArray[np.float64],
+        R_WB: npt.NDArray[np.float64],
+        p_WB: npt.NDArray[np.float64],
+        canvas,
+        color: str = "#0f0"
+    ):
+        force_W = np.hstack(
+            [p_WB + R_WB.dot(pos_B), p_WB + R_WB.dot(pos_B + force_B)]
+        )
+        force_points = _make_plotable(force_W)
+        canvas.create_line(force_points, width=2, arrow=tk.LAST, fill=color)
 
     # TODO clean up this code!
     f_Wg_val = fg_W * FORCE_SCALE
@@ -387,54 +400,44 @@ def plan_box_flip_up_newtons_third_law():
         canvas.delete("all")
         R_WB_val = R_curve[idx]
         det_R = np.linalg.det(R_WB_val)
+
         p_WB = p_WB_curve[idx]
 
-        f_Bc1_val = fc1_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        f_Bc2_val = fc2_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        fc1_B_val = fc1_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        pc1_B_val = pc1_B_curve[idx].reshape((-1, 1))
 
-        sum_of_forces = f_Bc1_val + f_Bc2_val + R_WB_val.T.dot(f_Wg_val)
+        fc2_B_val = fc2_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        pc2_B_val = pc2_B_curve[idx].reshape((-1, 1))
+
+        fc1_T_val = fc1_T_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        pc1_T_val = pc1_T_curve[idx].reshape((-1, 1))
+
+        fc2_F_val = fc2_F_curve[idx].reshape((-1, 1)) * FORCE_SCALE
+        pc2_F_val = pc2_F_curve[idx].reshape((-1, 1))
+
+        sum_of_forces = fc1_B_val + fc2_B_val + R_WB_val.T.dot(f_Wg_val)
         if any(np.abs(sum_of_forces) > 1e-8):
             breakpoint()
 
-        points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
-        points_table = make_plotable(table.corners)
+        points_box = _make_plotable(p_WB + R_WB_val.dot(box.corners))
+        points_table = _make_plotable(table.corners)
 
         canvas.create_polygon(points_box, fill="#88f")
         canvas.create_polygon(points_table, fill="#2f2f2f")
 
-        force_1_points = make_plotable(
-            np.hstack([pm4_W, pm4_W + R_WB_val.dot(f_Bc1_val)])
-        )
-        canvas.create_line(force_1_points, width=2, arrow=tk.LAST, fill="#0f0")
-        pc_B_val = pc2_B_curve[idx].reshape((-1, 1))
-        force_2_points = make_plotable(
-            np.hstack(
-                [
-                    p_WB + R_WB_val.dot(pc_B_val),
-                    p_WB + R_WB_val.dot(pc_B_val + f_Bc2_val),
-                ]
-            )
-        )
-        canvas.create_line(force_2_points, width=2, arrow=tk.LAST, fill="#0f0")
+        _plot_force(pc1_B_val, fc1_B_val, R_WB_val, p_WB, canvas, "#0f0")
+        _plot_force(pc2_B_val, fc2_B_val, R_WB_val, p_WB, canvas, "#0f0")
 
-        grav_force = make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
+        _plot_force(pc1_T_val, fc1_T_val, R_WB_val.T, p_WB, canvas, "#ff3") # TODO these forces may be wrongly plotted
+        _plot_force(pc2_F_val, fc2_F_val, R_WB_val.T, p_WB, canvas, "#ff3")
+
+        grav_force = _make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
         canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#f00")
 
         canvas.update()
         time.sleep(0.05)
         if idx == 0:
             time.sleep(2)
-
-        # a = np.array([10,10,10,100,200,100,200,10])
-        # canvas.create_polygon(list(a), fill="#f32")
-        #
-        # b = np.array([10,10,10,100,200,100,200,10]) + 100
-        # canvas.create_polygon(list(b), fill="#34f")
-        #
-        # c = np.array([10,10,10,100,200,100,200,10]) + 150
-        # canvas.create_polygon(list(c), fill="#3f5")
-
-        # canvas.create_line([10, 10, 10, 100, 50, 100])
 
     app.mainloop()
 
