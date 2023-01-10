@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -158,3 +158,51 @@ class Box2d:
     @property
     def tc4(self) -> npt.NDArray[np.float64]:
         return self.nc3
+
+    def get_norm_and_tang_vecs_from_location(
+        self, location: str
+    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        if location == "face_1":
+            return self.n1, self.t1
+        elif location == "face_2":
+            return self.n2, self.t2
+        elif location == "face_3":
+            return self.n3, self.t3
+        elif location == "face_4":
+            return self.n4, self.t4
+
+        elif location == "corner_1":
+            return self.nc1, self.tc1
+        elif location == "corner_2":
+            return self.nc2, self.tc2
+        elif location == "corner_3":
+            return self.nc3, self.tc3
+        elif location == "corner_4":
+            return self.nc4, self.tc4
+        else:
+            raise NotImplementedError(f"Location {location} not yet implemented")
+
+    def get_proximate_vertices_from_location(
+        self, location: str
+    ) -> Union[
+        npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    ]:
+        if location == "face_1":
+            return self.p1, self.p2
+        elif location == "face_2":
+            return self.p2, self.p3
+        elif location == "face_3":
+            return self.p3, self.p4
+        elif location == "face_4":
+            return self.p4, self.p1
+
+        elif location == "corner_1":
+            return self.p1
+        elif location == "corner_2":
+            return self.p2
+        elif location == "corner_3":
+            return self.p3
+        elif location == "corner_4":
+            return self.p4
+        else:
+            raise NotImplementedError(f"Location {location} not yet implemented")
