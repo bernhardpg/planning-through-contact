@@ -66,6 +66,15 @@ def _draw_circle(
     canvas.create_oval(points[0], points[1], points[2], points[3], fill=color, width=0)
 
 
+############
+
+
+def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
+    lhs, rhs = form.Unapply()[1]  # type: ignore
+    expr = lhs - rhs
+    return expr
+
+
 T = TypeVar("T")
 
 
@@ -79,11 +88,11 @@ def _create_rot_matrix(
     return rot_matrix
 
 
-# NOTE that this does not use the ContactPoint2D defined in the library
+# NOTE that this does not use the ContactPoint defined in the library
 # TODO this should be unified
 
 
-class ContactPoint2D:
+class ContactPoint2d:
     def __init__(
         self,
         body: Box2d,
@@ -150,24 +159,51 @@ class ContactPair:
         name_B: str,
         friction_coeff: float,
     ) -> None:
-        self.contact_point_A = ContactPoint2D(
+        self.contact_point_A = ContactPoint2d(
             body_A,
             contact_location_A,
             friction_coeff,
             name=f"{pair_name}_{name_A}",
         )
-        self.contact_point_B = ContactPoint2D(
+        self.contact_point_B = ContactPoint2d(
             body_B,
             contact_location_B,
             friction_coeff,
             name=f"{pair_name}_{name_B}",
         )
 
+        cos_th = sym.Variable(f"{pair_name}_cos_th")
+        sin_th = sym.Variable(f"{pair_name}_sin_th")
+        self.R_AB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
+
+        # TODO remove
+        # p_AB_x = sym.Variable(f"{pair_name}_p_AB_x")
+        # p_AB_y = sym.Variable(f"{pair_name}_p_AB_y")
+        # self.p_AB = np.array([p_AB_x, p_AB_y]).reshape((-1, 1))
+
     @property
     def variables(self) -> npt.NDArray[sym.Variable]:  # type: ignore
         return np.concatenate(
             [self.contact_point_A.variables, self.contact_point_B.variables]
         )
+
+        # TODO remove
+
+    # @property
+    # def p_BA(self) -> npt.NDArray[sym.Variable]:  # type: ignore
+    #     return -self.p_AB
+
+    def create_equal_contact_point_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
+        p_Ac_A = self.contact_point_A.contact_position
+        p_Bc_B = self.contact_point_B.contact_position
+
+        p_Bc_A = self.R_AB.dot(p_Bc_B)
+        constraints_in_frame_A = eq(p_Ac_A, p_Bc_A)
+
+        p_Ac_B = self.R_AB.T.dot(p_Ac_A)
+        constraints_in_frame_B = eq(p_Bc_B, p_Ac_B)
+        return constraints_in_frame_B
+        # return np.vstack((constraint_1, constraint_2))
 
 
 def plan_box_flip_up_newtons_third_law():
@@ -178,6 +214,7 @@ def plan_box_flip_up_newtons_third_law():
     USE_SO2_CONSTRAINT = True
     USE_SO2_CUT = True
     USE_NON_PENETRATION_CONSTRAINT = True
+    USE_EQUAL_CONTACT_POINT_CONSTRAINT = False
 
     NUM_CTRL_POINTS = 3
 
@@ -218,12 +255,12 @@ def plan_box_flip_up_newtons_third_law():
 
         cp_box_table = ContactPair(
             "contact_1",
-            box,
-            "corner_4",
-            "box",
             table,
             "face_1",
             "table",
+            box,
+            "corner_4",
+            "box",
             FRICTION_COEFF,
         )
         cp_box_finger = ContactPair(
@@ -238,10 +275,10 @@ def plan_box_flip_up_newtons_third_law():
         )
 
         # Four reference frames: B (Box), F (Finger), T (Table), W (World)
-        fc1_B = cp_box_table.contact_point_A.contact_force
-        fc1_T = cp_box_table.contact_point_B.contact_force
-        pc1_B = cp_box_table.contact_point_A.contact_position
-        pc1_T = cp_box_table.contact_point_B.contact_position
+        fc1_B = cp_box_table.contact_point_B.contact_force
+        fc1_T = cp_box_table.contact_point_A.contact_force
+        pc1_B = cp_box_table.contact_point_B.contact_position
+        pc1_T = cp_box_table.contact_point_A.contact_position
 
         fc2_B = cp_box_finger.contact_point_A.contact_force
         fc2_F = cp_box_finger.contact_point_B.contact_force
@@ -260,10 +297,9 @@ def plan_box_flip_up_newtons_third_law():
         # Constant variables
         fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
 
-        # TODO maybe these should become part of the other objects?
-        cos_th = sym.Variable("cos")
-        sin_th = sym.Variable("sin")
-        R_TB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
+        R_TB = cp_box_table.R_AB # NOTE: It seems that some sign is flipped here
+        cos_th = R_TB[0, 0]
+        sin_th = R_TB[1, 0]
         R_WB = R_TB  # World frame is the same as table frame
 
         prog.AddDecisionVariables(np.array([cos_th, sin_th]))
@@ -282,11 +318,13 @@ def plan_box_flip_up_newtons_third_law():
             )
 
         if USE_FORCE_BALANCE_CONSTRAINT:
+            # TODO now this is hardcoded, in the future this should be automatically added for all unactuated objects
             sum_of_forces_B = fc1_B + fc2_B + R_WB.T.dot(fg_W)
             prog.AddLinearConstraint(eq(sum_of_forces_B, 0))
 
         if USE_MOMENT_BALANCE:
             # Add moment balance using a linear relaxation
+            # TODO now this is hardcoded, in the future this should be automatically added for all unactuated objects
             sum_of_moments_B = cross_2d(pc1_B, fc1_B) + cross_2d(pc2_B, fc2_B)
 
             MAX_FORCE = 4
@@ -305,11 +343,44 @@ def plan_box_flip_up_newtons_third_law():
             for c in mccormick_envelope_constraints:
                 prog.AddLinearConstraint(c)
 
+        if USE_EQUAL_CONTACT_POINT_CONSTRAINT:
+            # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
+            variable_bounds = {
+                "contact_1_table_lam": (0.0, 1.0),
+                "contact_1_sin_th": (-1, 1),
+                "contact_1_cos_th": (-1, 1),
+            }
+
+            equal_contact_point_constraints = (
+                cp_box_table.create_equal_contact_point_constraints()
+            )
+
+            prog.AddLinearConstraint(equal_contact_point_constraints[0, 0])
+            # prog.AddLinearConstraint(equal_contact_point_constraints[1, 0])
+            # for row in equal_contact_point_constraints:
+            #     for element in row:
+            #         expr = _convert_formula_to_lhs_expression(element)
+            #         expression_not_bilinear = sym.Polynomial(expr).TotalDegree() < 2
+            #         if expression_not_bilinear:
+            #             breakpoint()
+            #             prog.AddLinearConstraint(expr == 0)
+            # continue
+
+            # (
+            #     relaxed_expr,
+            #     new_vars,
+            #     mccormick_envelope_constraints,
+            # ) = relax_bilinear_expression(expr, variable_bounds)
+
+            # constraints = cp_box_finger.create_equal_contact_point_constraints()
+
         if USE_SO2_CONSTRAINT:
             # Relaxed SO(2) constraint
-            prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
+            relaxed_so_2_constraint = (R_WB.T.dot(R_WB))[0, 0]
+            prog.AddLorentzConeConstraint(1, relaxed_so_2_constraint)
 
         if USE_NON_PENETRATION_CONSTRAINT:
+            # NOTE! These are frame-dependent, keep in mind when generalizing these
             # Add nonpenetration constraint in table frame
             table_a_T = table.a1[0]
             pm1_B = box.p1
@@ -321,6 +392,7 @@ def plan_box_flip_up_newtons_third_law():
             prog.AddLinearConstraint(nonpen_2_T)
 
         if USE_SO2_CUT:
+            # NOTE! These are frame-dependent, keep in mind when generalizing these
             # Add SO(2) tightening
             cut_p1 = np.array([0, 1]).reshape((-1, 1))
             cut_p2 = np.array([1, 0]).reshape((-1, 1))
@@ -366,6 +438,7 @@ def plan_box_flip_up_newtons_third_law():
     # Solve
     result = Solve(prog)
     assert result.is_success()
+    breakpoint()
 
     print(f"Cost: {result.get_optimal_cost()}")
 
@@ -407,7 +480,9 @@ def plan_box_flip_up_newtons_third_law():
     R_WT = np.eye(2)  # there is no rotation from table to world frame
     p_WT = np.array([0, 0]).reshape((-1, 1))
     R_WF = np.eye(2)  # same for finger
-    p_WF = np.array([0, 0]).reshape((-1, 1)) # TODO This is wrong. This should be a decision variable!
+    p_WF = np.array([0, 0]).reshape(
+        (-1, 1)
+    )  # TODO This is wrong. This should be a decision variable!
 
     ## Plotting
 
@@ -465,7 +540,7 @@ def plan_box_flip_up_newtons_third_law():
         _draw_circle(pc2_B_val, R_WB_val, p_WB, canvas)
 
         _draw_circle(pc1_T_val, R_WT, p_WT, canvas, color="#1e81b0")
-        _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0")
+        # _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0")
 
         canvas.update()
         time.sleep(0.05)

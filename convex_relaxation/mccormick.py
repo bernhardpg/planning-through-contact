@@ -9,9 +9,19 @@ def _create_aux_variable(m: sym.Monomial) -> sym.Variable:
 
 
 def _create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
+    u_name = u.get_name().split("(")[0]
+    v_name = v.get_name().split("(")[0]
+
+    if u_name not in variable_bounds.keys():
+        raise RuntimeError(f"Name not in variable bounds: {u_name}")
+
+    if v_name not in variable_bounds.keys():
+        raise RuntimeError(f"Name not in variable bounds: {v_name}")
+
+    # TODO will not be used, should be cleaned up
     BIG_NUM = 999
-    u_L, u_U = variable_bounds.get(u.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
-    v_L, v_U = variable_bounds.get(v.get_name().split("(")[0], (-BIG_NUM, BIG_NUM))
+    u_L, u_U = variable_bounds.get(u_name, (-BIG_NUM, BIG_NUM))
+    v_L, v_U = variable_bounds.get(v_name, (-BIG_NUM, BIG_NUM))
     w_L = u_L * v_L
     w_U = u_U * v_U
 
@@ -36,6 +46,7 @@ def relax_bilinear_expression(
     expr: sym.Expression, variable_bounds: Dict[str, Tuple[float, float]]
 ) -> Tuple[sym.Expression, List[sym.Variable], List[sym.Formula]]:
     poly = sym.Polynomial(expr)
+
     coeff_map = poly.monomial_to_coefficient_map()
     monomials, coeffs = zip(*list(coeff_map.items()))
 
