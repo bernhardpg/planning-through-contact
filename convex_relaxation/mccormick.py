@@ -1,3 +1,4 @@
+import warnings
 from typing import Dict, List, Tuple
 
 import pydrake.symbolic as sym  # type: ignore
@@ -13,10 +14,10 @@ def _create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
     v_name = v.get_name().split("(")[0]
 
     if u_name not in variable_bounds.keys():
-        raise RuntimeError(f"Name not in variable bounds: {u_name}")
+        warnings.warn(f"Name not in variable bounds: {u_name}")
 
     if v_name not in variable_bounds.keys():
-        raise RuntimeError(f"Name not in variable bounds: {v_name}")
+        warnings.warn(f"Name not in variable bounds: {v_name}")
 
     # TODO will not be used, should be cleaned up
     BIG_NUM = 999
