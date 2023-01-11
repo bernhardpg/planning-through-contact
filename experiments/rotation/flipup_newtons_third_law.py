@@ -1,5 +1,7 @@
 import time
+import tkinter as tk
 from dataclasses import dataclass
+from tkinter import Canvas
 from typing import List, TypeVar, Union
 
 import numpy as np
@@ -13,6 +15,56 @@ from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.contact_point import ContactPoint
 from geometry.utilities import cross_2d
+
+# TODO move to its own plotting library
+# Plotting
+PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
+PLOT_SCALE = 50
+FORCE_SCALE = 0.2
+
+
+def _flatten_points(points):
+    return list(points.flatten(order="F"))
+
+
+def _make_plotable(
+    points: npt.NDArray[np.float64],
+    scale: float = PLOT_SCALE,
+    center: float = PLOT_CENTER,
+) -> List[float]:
+    points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
+    points_transformed = points_flipped_y_axis * scale + center
+    plotable_points = _flatten_points(points_transformed)
+    return plotable_points
+
+
+def _draw_force(
+    pos_B: npt.NDArray[np.float64],
+    force_B: npt.NDArray[np.float64],
+    R_WB: npt.NDArray[np.float64],
+    p_WB: npt.NDArray[np.float64],
+    canvas,
+    color: str = "#0f0",
+):
+    force_W = np.hstack([p_WB + R_WB.dot(pos_B), p_WB + R_WB.dot(pos_B + force_B)])
+    force_points = _make_plotable(force_W)
+    canvas.create_line(force_points, width=2, arrow=tk.LAST, fill=color)
+
+
+def _draw_circle(
+    pos_B: npt.NDArray[np.float64],
+    R_WB: npt.NDArray[np.float64],
+    p_WB: npt.NDArray[np.float64],
+    canvas,
+    radius: float = 0.1,
+    color: str = "#e28743",
+) -> None:
+    pos_W = p_WB + R_WB.dot(pos_B)
+    lower_left = pos_W - radius
+    upper_right = pos_W + radius
+    points = _make_plotable(np.hstack([lower_left, upper_right]))
+    canvas.create_oval(points[0], points[1], points[2], points[3], fill=color, width=0)
+
 
 T = TypeVar("T")
 
@@ -144,8 +196,6 @@ def plan_box_flip_up_newtons_third_law():
 
     prog = MathematicalProgram()
 
-    # FIRST STEP: Only one ctrl point
-    # TODO: I can just run all of this code for each ctrl point
     cos_ths = []
     sin_ths = []
 
@@ -159,7 +209,9 @@ def plan_box_flip_up_newtons_third_law():
     pc2_Bs = []
     pc2_Fs = []
 
+    # TODO: Not the most efficient way to do this once per keypoint, but the code is at least very readable this way
     for ctrl_point_idx in range(NUM_CTRL_POINTS):
+
         box = Box2d(BOX_WIDTH, BOX_HEIGHT)
         table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
         finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
@@ -351,47 +403,19 @@ def plan_box_flip_up_newtons_third_law():
     ].T  # NOTE: This stays fixed for the entire interval, due to being a corner! This is a quick fix
     p_WB_curve = [pm4_W - R.dot(pc1_B) for R in R_curve]
 
-    ## Plotting
+    # Helper transforms
+    R_WT = np.eye(2)  # there is no rotation from table to world frame
+    p_WT = np.array([0, 0]).reshape((-1, 1))
+    R_WF = np.eye(2)  # same for finger
+    p_WF = np.array([0, 0]).reshape((-1, 1)) # TODO This is wrong. This should be a decision variable!
 
-    import tkinter as tk
-    from tkinter import Canvas
+    ## Plotting
 
     app = tk.Tk()
     app.title("Box")
 
     canvas = Canvas(app, width=500, height=500)
     canvas.pack()
-
-    PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
-    PLOT_SCALE = 50
-    FORCE_SCALE = 0.2
-
-    def _flatten_points(points):
-        return list(points.flatten(order="F"))
-
-    def _make_plotable(
-        points: npt.NDArray[np.float64],
-        scale: float = PLOT_SCALE,
-        center: float = PLOT_CENTER,
-    ) -> List[float]:
-        points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
-        points_transformed = points_flipped_y_axis * scale + center
-        plotable_points = _flatten_points(points_transformed)
-        return plotable_points
-
-    def _plot_force(
-        pos_B: npt.NDArray[np.float64],
-        force_B: npt.NDArray[np.float64],
-        R_WB: npt.NDArray[np.float64],
-        p_WB: npt.NDArray[np.float64],
-        canvas,
-        color: str = "#0f0"
-    ):
-        force_W = np.hstack(
-            [p_WB + R_WB.dot(pos_B), p_WB + R_WB.dot(pos_B + force_B)]
-        )
-        force_points = _make_plotable(force_W)
-        canvas.create_line(force_points, width=2, arrow=tk.LAST, fill=color)
 
     # TODO clean up this code!
     f_Wg_val = fg_W * FORCE_SCALE
@@ -425,14 +449,23 @@ def plan_box_flip_up_newtons_third_law():
         canvas.create_polygon(points_box, fill="#88f")
         canvas.create_polygon(points_table, fill="#2f2f2f")
 
-        _plot_force(pc1_B_val, fc1_B_val, R_WB_val, p_WB, canvas, "#0f0")
-        _plot_force(pc2_B_val, fc2_B_val, R_WB_val, p_WB, canvas, "#0f0")
+        _draw_force(pc1_B_val, fc1_B_val, R_WB_val, p_WB, canvas, "#0f0")
+        _draw_force(pc2_B_val, fc2_B_val, R_WB_val, p_WB, canvas, "#0f0")
 
-        _plot_force(pc1_T_val, fc1_T_val, R_WB_val.T, p_WB, canvas, "#ff3") # TODO these forces may be wrongly plotted
-        _plot_force(pc2_F_val, fc2_F_val, R_WB_val.T, p_WB, canvas, "#ff3")
+        _draw_force(
+            pc1_T_val, fc1_T_val, R_WB_val.T, p_WB, canvas, "#ff3"
+        )  # TODO these forces may be wrongly plotted
+        _draw_force(pc2_F_val, fc2_F_val, R_WB_val.T, p_WB, canvas, "#ff3")
 
         grav_force = _make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
         canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#f00")
+
+        # Plot contact locations
+        _draw_circle(pc1_B_val, R_WB_val, p_WB, canvas)
+        _draw_circle(pc2_B_val, R_WB_val, p_WB, canvas)
+
+        _draw_circle(pc1_T_val, R_WT, p_WT, canvas, color="#1e81b0")
+        _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0")
 
         canvas.update()
         time.sleep(0.05)
