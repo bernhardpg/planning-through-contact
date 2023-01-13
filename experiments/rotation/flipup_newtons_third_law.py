@@ -212,8 +212,8 @@ class ContactPair:
             (
                 constraints_in_frame_A,
                 constraints_in_frame_B,
-                rel_pos_equal_in_A,
-                rel_pos_equal_in_B,
+                # rel_pos_equal_in_A, # TODO for some reason these are making the relaxation looser?
+                # rel_pos_equal_in_B,
             )
         )
 
@@ -226,8 +226,8 @@ class ContactPair:
 
         return np.vstack(
             (
-                equal_and_opposite_in_A[0:1,0:1],
-                # equal_and_opposite_in_B,
+                equal_and_opposite_in_A,
+                equal_and_opposite_in_B,
             )
         )
 
@@ -241,12 +241,12 @@ def plan_box_flip_up_newtons_third_law():
     USE_SO2_CUT = True
     USE_NON_PENETRATION_CONSTRAINT = True
     USE_EQUAL_CONTACT_POINT_CONSTRAINT = True
-    USE_NEWTONS_THIRD_LAW_CONSTRAINT = False
+    USE_NEWTONS_THIRD_LAW_CONSTRAINT = True 
 
     FRICTION_COEFF = 0.7
 
     # TODO this should be cleaned up
-    MAX_FORCE = 4  # only used for mccorimick constraints
+    MAX_FORCE = 10  # only used for mccorimick constraints
     variable_bounds = {
         "contact_1_box_c_n": (0.0, MAX_FORCE),
         "contact_1_box_c_f": (
@@ -431,7 +431,6 @@ def plan_box_flip_up_newtons_third_law():
                             mccormick_envelope_constraints,
                         ) = relax_bilinear_expression(expr, variable_bounds)
                         prog.AddDecisionVariables(new_vars)
-                        breakpoint()
                         prog.AddLinearConstraint(relaxed_expr == 0)
                         for c in mccormick_envelope_constraints:
                             prog.AddLinearConstraint(c)
@@ -598,10 +597,9 @@ def plan_box_flip_up_newtons_third_law():
         _draw_force(pc1_B_val, fc1_B_val, R_WB_val, p_WB, canvas, "#0f0")
         _draw_force(pc2_B_val, fc2_B_val, R_WB_val, p_WB, canvas, "#0f0")
 
-        _draw_force(
-            pc1_T_val, fc1_T_val, R_WB_val.T, p_WB, canvas, "#ff3"
-        )  # TODO these forces may be wrongly plotted
         _draw_force(pc2_F_val, fc2_F_val, R_WB_val.T, p_WB, canvas, "#ff3")
+
+        _draw_force(pc1_T_val, fc1_T_val, R_WT, p_WT, canvas, "#ff3")  
 
         grav_force = _make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
         canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#f00")
