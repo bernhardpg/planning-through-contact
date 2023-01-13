@@ -45,6 +45,24 @@ def compute_so_2_intersection(plane_normal_vec):
     return int1, int2
 
 
+def plot_so_2():
+    from sympy import And, Eq, plot_implicit, symbols
+
+    cos_th, sin_th = symbols("c s")
+    so_2_constraint = 1 - cos_th**2 - sin_th**2
+    plot_implicit(
+        Eq(so_2_constraint, 0),
+        x_var=cos_th,
+        y_var=sin_th,
+    )
+
+    plot_implicit(
+        so_2_constraint > 0,
+        x_var=cos_th,
+        y_var=sin_th,
+    )
+
+
 def plot_cuts_corners_fixed(use_relaxation: bool = False):
     use_relaxation = True
     from sympy import And, Eq, plot_implicit, symbols
@@ -445,4 +463,5 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
 
 
 if __name__ == "__main__":
-    test_sdp_relaxation()
+    # test_sdp_relaxation()
+    plot_so_2()

@@ -455,7 +455,6 @@ def plan_box_flip_up_newtons_third_law():
 
     # Solve
     result = Solve(prog)
-    breakpoint()
     assert result.is_success()
 
     print(f"Cost: {result.get_optimal_cost()}")
@@ -563,7 +562,7 @@ def plan_box_flip_up_newtons_third_law():
 
         _draw_circle(pc2_B_val, R_WB_val, p_WB, canvas)
 
-        # _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0")
+        # _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0") # finger location is constant in finger frame
 
         p_TB_val = p_TB_curve[idx].reshape((-1, 1))
         _draw_circle(p_TB_val, np.eye(2), np.array([[0], [0]]), canvas, color="#1e8dff")
