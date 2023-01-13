@@ -212,8 +212,22 @@ class ContactPair:
             (
                 constraints_in_frame_A,
                 constraints_in_frame_B,
-                # rel_pos_equal_in_A,
-                # rel_pos_equal_in_B,
+                rel_pos_equal_in_A,
+                rel_pos_equal_in_B,
+            )
+        )
+
+    def create_newtons_third_law_force_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
+        f_c_A = self.contact_point_A.contact_force
+        f_c_B = self.contact_point_B.contact_force
+
+        equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B))
+        equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A))
+
+        return np.vstack(
+            (
+                equal_and_opposite_in_A[0:1,0:1],
+                # equal_and_opposite_in_B,
             )
         )
 
@@ -227,6 +241,29 @@ def plan_box_flip_up_newtons_third_law():
     USE_SO2_CUT = True
     USE_NON_PENETRATION_CONSTRAINT = True
     USE_EQUAL_CONTACT_POINT_CONSTRAINT = True
+    USE_NEWTONS_THIRD_LAW_CONSTRAINT = False
+
+    FRICTION_COEFF = 0.7
+
+    # TODO this should be cleaned up
+    MAX_FORCE = 4  # only used for mccorimick constraints
+    variable_bounds = {
+        "contact_1_box_c_n": (0.0, MAX_FORCE),
+        "contact_1_box_c_f": (
+            -FRICTION_COEFF * MAX_FORCE,
+            FRICTION_COEFF * MAX_FORCE,
+        ),
+        "contact_1_table_c_n": (0.0, MAX_FORCE),
+        "contact_1_table_c_f": (
+            -FRICTION_COEFF * MAX_FORCE,
+            FRICTION_COEFF * MAX_FORCE,
+        ),
+        "contact_1_table_lam": (0.0, 1.0),
+        "contact_1_sin_th": (-1, 1),
+        "contact_1_cos_th": (-1, 1),
+        "contact_2_box_lam": (0.0, 1.0),
+        "contact_2_box_c_n": (0, MAX_FORCE),
+    }
 
     NUM_CTRL_POINTS = 3
 
@@ -241,7 +278,6 @@ def plan_box_flip_up_newtons_third_law():
 
     BOX_MASS = 1
     GRAV_ACC = 9.81
-    FRICTION_COEFF = 0.7
 
     prog = MathematicalProgram()
 
@@ -344,12 +380,7 @@ def plan_box_flip_up_newtons_third_law():
             # TODO now this is hardcoded, in the future this should be automatically added for all unactuated objects
             sum_of_moments_B = cross_2d(pc1_B, fc1_B) + cross_2d(pc2_B, fc2_B)
 
-            MAX_FORCE = 4
             # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
-            variable_bounds = {
-                "contact_2_box_lam": (0.0, 1.0),
-                "contact_2_box_c_n": (0, MAX_FORCE),
-            }
             (
                 relaxed_sum_of_moments,
                 new_vars,
@@ -361,13 +392,6 @@ def plan_box_flip_up_newtons_third_law():
                 prog.AddLinearConstraint(c)
 
         if USE_EQUAL_CONTACT_POINT_CONSTRAINT:
-            # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
-            variable_bounds = {
-                "contact_1_table_lam": (0.0, 1.0),
-                "contact_1_sin_th": (-1, 1),
-                "contact_1_cos_th": (-1, 1),
-            }
-
             equal_contact_point_constraints = (
                 cp_table_box.create_equal_contact_point_constraints()
             )
@@ -385,6 +409,29 @@ def plan_box_flip_up_newtons_third_law():
                             mccormick_envelope_constraints,
                         ) = relax_bilinear_expression(expr, variable_bounds)
                         prog.AddDecisionVariables(new_vars)
+                        prog.AddLinearConstraint(relaxed_expr == 0)
+                        for c in mccormick_envelope_constraints:
+                            prog.AddLinearConstraint(c)
+
+        if USE_NEWTONS_THIRD_LAW_CONSTRAINT:
+            newtons_third_law_constraints = (
+                cp_table_box.create_newtons_third_law_force_constraints()
+            )
+            # TODO this is duplicated code, clean up!
+            for row in newtons_third_law_constraints:
+                for constraint in row:
+                    expr = _convert_formula_to_lhs_expression(constraint)
+                    expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
+                    if expression_is_linear:
+                        prog.AddLinearConstraint(expr == 0)
+                    else:
+                        (
+                            relaxed_expr,
+                            new_vars,
+                            mccormick_envelope_constraints,
+                        ) = relax_bilinear_expression(expr, variable_bounds)
+                        prog.AddDecisionVariables(new_vars)
+                        breakpoint()
                         prog.AddLinearConstraint(relaxed_expr == 0)
                         for c in mccormick_envelope_constraints:
                             prog.AddLinearConstraint(c)
@@ -455,6 +502,8 @@ def plan_box_flip_up_newtons_third_law():
 
     # Solve
     result = Solve(prog)
+    print(f"Solution result: {result.get_solution_result()}")
+    breakpoint()
     assert result.is_success()
 
     print(f"Cost: {result.get_optimal_cost()}")
@@ -491,7 +540,7 @@ def plan_box_flip_up_newtons_third_law():
         np.hstack([result.GetSolution(step).reshape((-1, 1)) for step in p_TBs])
     ).eval_entire_interval()
 
-    pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1)) # TODO investigate this
+    pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))  # TODO investigate this
     pc1_B = pc1_B_curve[
         0:1, :
     ].T  # NOTE: This stays fixed for the entire interval, due to being a corner! This is a quick fix
@@ -537,7 +586,8 @@ def plan_box_flip_up_newtons_third_law():
 
         sum_of_forces = fc1_B_val + fc2_B_val + R_WB_val.T.dot(f_Wg_val)
         if any(np.abs(sum_of_forces) > 1e-8):
-            breakpoint()
+            ...
+            # breakpoint()
 
         points_box = _make_plotable(p_WB + R_WB_val.dot(box.corners))
         points_table = _make_plotable(table.corners)

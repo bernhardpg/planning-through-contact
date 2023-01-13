@@ -98,6 +98,10 @@ class Box2d:
     def n4(self) -> npt.NDArray[np.float64]:
         return -np.array([-1, 0]).reshape((-1, 1))
 
+    # NOTE! All of these arrows are the wrong ways
+
+    # Right handed coordinate frame with z-axis out of plane and x-axis along normal
+
     #       <--t1
     #       ---------
     #       |       | ^

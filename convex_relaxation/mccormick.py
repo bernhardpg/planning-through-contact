@@ -1,5 +1,6 @@
 import warnings
 from typing import Dict, List, Tuple
+import numpy as np
 
 import pydrake.symbolic as sym  # type: ignore
 
@@ -23,9 +24,16 @@ def _create_mccormick_envelopes(u, v, w, variable_bounds) -> List[sym.Formula]:
     BIG_NUM = 999
     u_L, u_U = variable_bounds.get(u_name, (-BIG_NUM, BIG_NUM))
     v_L, v_U = variable_bounds.get(v_name, (-BIG_NUM, BIG_NUM))
-    w_L = u_L * v_L
     w_U = u_U * v_U
 
+    # NOTE: handle negative lower limits
+    # TODO: consider doing this with affine transformations instead
+    if u_L == 0 or v_L == 0:
+        w_L = 0
+    else:
+        w_L = min(u_L * v_L, u_L * v_U, u_U * v_L)
+
+    # TODO fix these! They can not be negative!
     var_bounds = [
         w_L <= w,
         w <= w_U,
