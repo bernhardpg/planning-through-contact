@@ -212,8 +212,8 @@ class ContactPair:
             (
                 constraints_in_frame_A,
                 constraints_in_frame_B,
-                # rel_pos_equal_in_A, # TODO for some reason these are making the relaxation looser?
-                # rel_pos_equal_in_B,
+                rel_pos_equal_in_A,
+                rel_pos_equal_in_B,
             )
         )
 
@@ -558,7 +558,7 @@ def plan_box_flip_up_newtons_third_law():
     app = tk.Tk()
     app.title("Box")
 
-    canvas = Canvas(app, width=500, height=500)
+    canvas = Canvas(app, width=500, height=500, bg='white')
     canvas.pack()
 
     # TODO clean up this code!
