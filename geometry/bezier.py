@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -10,6 +10,7 @@ from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgram, Solve
 
 
+# TODO: At some point this will be deprecated
 @dataclass
 class BezierVariable:
     dim: int
@@ -139,6 +140,24 @@ class BernsteinPolynomial:
         return value_at_s
 
 
+# TODO use this everywhere instead of just a numpy array
+@dataclass
+class BezierCtrlPoints:
+    ctrl_points: npt.NDArray[np.float64]
+
+    @property
+    def dim(self) -> int:
+        return self.ctrl_points.shape[0]
+
+    @property
+    def order(self) -> int:
+        return self.ctrl_points.shape[1] - 1
+
+    @classmethod
+    def from_list(cls, points: List[npt.NDArray[np.float64]]) -> "BezierCtrlPoints":
+        return cls(np.hstack(points))
+
+
 @dataclass
 class BezierCurve:
     order: int
@@ -152,7 +171,7 @@ class BezierCurve:
 
     @classmethod
     def create_from_ctrl_points(
-        cls, ctrl_points: npt.NDArray[np.float64]
+        cls, ctrl_points: npt.NDArray[np.float64]  # (num_dims, num_ctrl_points)
     ) -> "BezierCurve":
         dim = ctrl_points.shape[0]
         order = ctrl_points.shape[1] - 1
