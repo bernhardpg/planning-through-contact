@@ -139,57 +139,6 @@ class BoxFlipupVisualizer:
         )
 
 
-# TODO remove
-PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
-PLOT_SCALE = 50
-FORCE_SCALE = 0.2
-
-
-def _flatten_points(points):
-    return list(points.flatten(order="F"))
-
-
-def _make_plotable(
-    points: npt.NDArray[np.float64],
-    scale: float = PLOT_SCALE,
-    center: float = PLOT_CENTER,
-) -> List[float]:
-    points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
-    points_transformed = points_flipped_y_axis * scale + center
-    plotable_points = _flatten_points(points_transformed)
-    return plotable_points
-
-
-def _draw_force(
-    pos_B: npt.NDArray[np.float64],
-    force_B: npt.NDArray[np.float64],
-    R_WB: npt.NDArray[np.float64],
-    p_WB: npt.NDArray[np.float64],
-    canvas,
-    color: str = "#0f0",
-):
-    force_W = np.hstack([p_WB + R_WB.dot(pos_B), p_WB + R_WB.dot(pos_B + force_B)])
-    force_points = _make_plotable(force_W)
-    canvas.create_line(force_points, width=2, arrow=tk.LAST, fill=color)
-
-
-def _draw_circle(
-    pos_B: npt.NDArray[np.float64],
-    R_WB: npt.NDArray[np.float64],
-    p_WB: npt.NDArray[np.float64],
-    canvas,
-    radius: float = 0.1,
-    color: str = "#e28743",
-) -> None:
-    pos_W = p_WB + R_WB.dot(pos_B)
-    lower_left = pos_W - radius
-    upper_right = pos_W + radius
-    points = _make_plotable(np.hstack([lower_left, upper_right]))
-    canvas.create_oval(points[0], points[1], points[2], points[3], fill=color, width=0)
-
-
-############
-
 
 def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
     lhs, rhs = form.Unapply()[1]  # type: ignore
@@ -219,8 +168,6 @@ def _create_rot_matrix_from_ctrl_point_idx(
 
 # NOTE that this does not use the ContactPoint defined in the library
 # TODO this should be unified
-
-
 class ContactPoint2d:
     def __init__(
         self,
@@ -741,9 +688,6 @@ def plan_box_flip_up_newtons_third_law():
     prog = BoxFlipupDemo()
     prog.solve()
 
-    # fb_violation = prog.get_force_balance_violation()
-    # mb_violation = prog.get_moment_balance_violation()
-
     contact_positions_ctrl_points = [
         prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
     ]
@@ -772,125 +716,8 @@ def plan_box_flip_up_newtons_third_law():
     viz = BoxFlipupVisualizer()
     viz.visualize(contact_positions + [box_com], contact_forces + [gravitional_force])
 
-    breakpoint()
-
-    cos_th_vals = result.GetSolution(cos_ths).reshape((1, -1))
-    sin_th_vals = result.GetSolution(sin_ths).reshape((1, -1))
-    R_WB_vals = [
-        _create_rot_matrix_from_ctrl_point_idx(cos_th_vals, sin_th_vals, idx)
-        for idx in range(cos_th_vals.shape[1])
-    ]
-
-    #######
-    # Animation
-
-    sin_curve = BezierCurve.create_from_ctrl_points(sin_th_vals).eval_entire_interval()
-    cos_curve = BezierCurve.create_from_ctrl_points(cos_th_vals).eval_entire_interval()
-    R_curve = [
-        np.array([[c[0], -s[0]], [s[0], c[0]]]) for c, s in zip(cos_curve, sin_curve)
-    ]
-
-    # TODO helper function that should ideally be used other places too!
-    def _get_trajectory_from_solution(
-        expressions: List[Union[sym.Variable, sym.Expression]],
-        result: MathematicalProgramResult,
-    ) -> npt.NDArray[np.float64]:
-
-        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
-        ctrl_points = np.hstack([from_expr_to_float(result.GetSolution(e)) for e in expressions])  # type: ignore
-        curve = BezierCurve.create_from_ctrl_points(ctrl_points).eval_entire_interval()
-        return curve
-
-    fc1_B_curve = _get_trajectory_from_solution(fc1_Bs, result)
-    fc1_T_curve = _get_trajectory_from_solution(fc1_Ts, result)
-    pc1_B_curve = _get_trajectory_from_solution(pc1_Bs, result)
-    pc1_T_curve = _get_trajectory_from_solution(pc1_Ts, result)
-    fc2_B_curve = _get_trajectory_from_solution(fc2_Bs, result)
-    fc2_F_curve = _get_trajectory_from_solution(fc2_Fs, result)
-    pc2_B_curve = _get_trajectory_from_solution(pc2_Bs, result)
-    pc2_F_curve = _get_trajectory_from_solution(pc2_Fs, result)
-
-    p_TB_curve = BezierCurve.create_from_ctrl_points(
-        np.hstack([result.GetSolution(step).reshape((-1, 1)) for step in p_TBs])
-    ).eval_entire_interval()
-
-    pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))  # TODO investigate this
-    pc1_B = pc1_B_curve[
-        0:1, :
-    ].T  # NOTE: This stays fixed for the entire interval, due to being a corner! This is a quick fix
-    p_WB_curve = [pm4_W - R.dot(pc1_B) for R in R_curve]
-
-    # Helper transforms
-    R_WT = np.eye(2)  # there is no rotation from table to world frame
-    p_WT = np.array([0, 0]).reshape((-1, 1))
-    R_WF = np.eye(2)  # same for finger
-    p_WF = np.array([0, 0]).reshape(
-        (-1, 1)
-    )  # TODO This is wrong. This should be a decision variable!
-
-    ## plotting
-
-    app = tk.Tk()
-    app.title("box")
-
-    canvas = Canvas(app, width=500, height=500, bg="white")
-    canvas.pack()
-
-    # TODO clean up this code!
-    f_Wg_val = fg_W * FORCE_SCALE
-    for idx in range(len(cos_curve)):
-
-        canvas.delete("all")
-        R_WB_val = R_curve[idx]
-        det_R = np.linalg.det(R_WB_val)
-
-        p_WB = p_WB_curve[idx]
-
-        fc1_B_val = fc1_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        pc1_B_val = pc1_B_curve[idx].reshape((-1, 1))
-
-        fc2_B_val = fc2_B_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        pc2_B_val = pc2_B_curve[idx].reshape((-1, 1))
-
-        fc1_T_val = fc1_T_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        pc1_T_val = pc1_T_curve[idx].reshape((-1, 1))
-
-        fc2_F_val = fc2_F_curve[idx].reshape((-1, 1)) * FORCE_SCALE
-        pc2_F_val = pc2_F_curve[idx].reshape((-1, 1))
-
-        points_box = _make_plotable(p_WB + R_WB_val.dot(box.corners))
-        points_table = _make_plotable(table.corners)
-
-        canvas.create_polygon(points_box, fill="#88f")
-        canvas.create_polygon(points_table, fill="#2f2f2f")
-
-        _draw_force(pc1_B_val, fc1_B_val, R_WB_val, p_WB, canvas, "#0f0")
-        _draw_force(pc2_B_val, fc2_B_val, R_WB_val, p_WB, canvas, "#0f0")
-
-        _draw_force(pc2_F_val, fc2_F_val, R_WB_val.T, p_WB, canvas, "#ff3")
-
-        _draw_force(pc1_T_val, fc1_T_val, R_WT, p_WT, canvas, "#ff3")
-
-        grav_force = _make_plotable(np.hstack([p_WB, p_WB + f_Wg_val * det_R]))
-        canvas.create_line(grav_force, width=2, arrow=tk.LAST, fill="#f00")
-
-        # Plot contact locations
-        _draw_circle(pc1_B_val, R_WB_val, p_WB, canvas)
-        _draw_circle(pc1_T_val, R_WT, p_WT, canvas, color="#1e81b0")
-
-        _draw_circle(pc2_B_val, R_WB_val, p_WB, canvas)
-
-        # _draw_circle(pc2_F_val, R_WF, p_WF, canvas, color="#1e81b0") # finger location is constant in finger frame
-
-        p_TB_val = p_TB_curve[idx].reshape((-1, 1))
-        _draw_circle(p_TB_val, np.eye(2), np.array([[0], [0]]), canvas, color="#1e8dff")
-
-        canvas.update()
-        time.sleep(0.05)
-        if idx == 0:
-            time.sleep(2)
-
-    app.mainloop()
+    # fb_violation = prog.get_force_balance_violation()
+    # mb_violation = prog.get_moment_balance_violation()
 
 
 if __name__ == "__main__":
