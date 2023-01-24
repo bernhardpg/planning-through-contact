@@ -17,12 +17,6 @@ from geometry.contact_point import ContactPoint
 from geometry.utilities import cross_2d
 from visualize.colors import COLORS, RGB
 
-# TODO move to its own plotting library
-# Plotting
-PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
-PLOT_SCALE = 50
-FORCE_SCALE = 0.2
-
 
 @dataclass
 class VisualizationPoint:
@@ -36,7 +30,7 @@ class VisualizationPoint:
         position_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points
         ).eval_entire_interval()
-        return cls(position_curve, COLORS[color].hex_format)
+        return cls(position_curve, COLORS[color])
 
 
 @dataclass
@@ -58,7 +52,76 @@ class VisualizationForce(VisualizationPoint):
         force_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_force
         ).eval_entire_interval()
-        return cls(position_curve, COLORS[color].hex_format, force_curve)
+        return cls(position_curve, COLORS[color], force_curve)
+
+
+class BoxFlipupVisualizer:
+    def __init__(self) -> None:
+        self.plot_center = np.array([200, 300]).reshape((-1, 1))
+        self.plot_scale = 50
+        self.force_scale = 0.2
+
+    def visualize(
+        self, positions: List[VisualizationPoint], forces: List[VisualizationForce]
+    ) -> None:
+        curve_lengths = np.array(
+            [len(p.position_curve) for p in positions]
+            + [len(f.position_curve) for f in forces]
+        )
+        if not np.all(curve_lengths == curve_lengths[0]):
+            raise ValueError("Curve lengths for plotting must match!")
+        num_frames = curve_lengths[0]
+
+        self.app = tk.Tk()
+        self.app.title("box")
+
+        self.canvas = Canvas(self.app, width=500, height=500, bg="white")
+        self.canvas.pack()
+
+        for frame_idx in range(num_frames):
+            self.canvas.delete("all")
+
+            for force in forces:
+                self._draw_force(force, frame_idx)
+
+            self.canvas.update()
+            time.sleep(0.05)
+            if frame_idx == 0:
+                time.sleep(2)
+
+        self.app.mainloop()
+
+    def _transform_points_for_plotting(
+        self,
+        points: npt.NDArray[np.float64],
+    ) -> List[float]:
+        points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
+        points_transformed = points_flipped_y_axis * self.plot_scale + self.plot_center
+        plotable_points = self._flatten_points(points_transformed)
+        return plotable_points
+
+    @staticmethod
+    def _flatten_points(points: npt.NDArray[np.float64]) -> List[float]:
+        return list(points.flatten(order="F"))
+
+    def _draw_force(self, force: VisualizationForce, idx: int) -> None:
+        force_strength = force.force_curve[idx] * self.force_scale
+        force_endpoints = np.hstack(
+            [
+                force.position_curve[idx].reshape((-1, 1)),
+                (force.position_curve[idx] + force_strength).reshape((-1, 1)),
+            ]
+        )
+        force_points = self._transform_points_for_plotting(force_endpoints)
+        self.canvas.create_line(
+            force_points, width=2, arrow=tk.LAST, fill=force.color.hex_format()
+        )
+
+
+# TODO remove
+PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
+PLOT_SCALE = 50
+FORCE_SCALE = 0.2
 
 
 def _flatten_points(points):
@@ -325,12 +388,19 @@ class BoxFlipupCtrlPoint:
         # Constant variables
         self.fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
 
-        self.p_TB = self.table_box.p_AB_A
+        self.p_TB_T = self.table_box.p_AB_A
+        self.p_WB_W = self.p_TB_T
+
+        self.p_BT_B = self.table_box.p_BA_B
+        self.p_BW_B = self.p_BT_B
+
+        # TODO add in finger position relative to box
+
         self.R_TB = self.table_box.R_AB
+        self.R_WB = self.R_TB  # World frame is the same as table frame
 
         self.cos_th = self.R_TB[0, 0]
         self.sin_th = self.R_TB[1, 0]
-        self.R_WB = self.R_TB  # World frame is the same as table frame
 
         self.fc1_B = self.table_box.contact_point_B.contact_force
         self.fc1_T = self.table_box.contact_point_A.contact_force
@@ -386,7 +456,7 @@ class BoxFlipupCtrlPoint:
 # TODO: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
 @dataclass
 class BoxFlipupDemo:
-    friction_coeff: float = 0.7 # TODO unify this with ctrl point constants
+    friction_coeff: float = 0.7  # TODO unify this with ctrl point constants
     use_quadratic_cost: bool = True
     use_moment_balance: bool = True
     use_friction_cone_constraint: bool = True
@@ -598,8 +668,36 @@ class BoxFlipupDemo:
         return solutions
 
     @property
-    def forces(self) -> npt.NDArray[Union[sym.Expression, sym.Variable]]:  # type: ignore
-        return np.hstack(self.ctrl_points[0].fc1_B)
+    def contact_forces_in_W(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
+        fc1_B_ctrl_points = np.hstack(
+            [cp.R_WB.dot(cp.fc1_B) for cp in self.ctrl_points]
+        )
+        fc1_T_ctrl_points = np.hstack(
+            [cp.fc1_T for cp in self.ctrl_points]
+        )  # T and W are the same frames
+
+        fc2_B_ctrl_points = np.hstack(
+            [cp.R_WB.dot(cp.fc2_B) for cp in self.ctrl_points]
+        )
+        # fc2_F_ctrl_points = np.hstack([cp.fc2_F for cp in self.ctrl_points]) # TODO need rotation for this
+
+        return [fc1_B_ctrl_points, fc1_T_ctrl_points, fc2_B_ctrl_points]
+
+    @property
+    def contact_positions_in_W(self) -> List[npt.NDArray[sym.Expression]]:  # type: ignore
+        pc1_B_ctrl_points_in_W = np.hstack(
+            [cp.p_WB_W + cp.R_WB.dot(cp.pc1_B) for cp in self.ctrl_points]
+        )
+        pc1_T_ctrl_points_in_W = np.hstack(
+            [cp.pc1_T for cp in self.ctrl_points]
+        )  # T and W are the same frames
+
+        pc2_B_ctrl_points_in_W = np.hstack(
+            [cp.p_WB_W + cp.R_WB.dot(cp.pc2_B) for cp in self.ctrl_points]
+        )
+        # pc2_F_ctrl_points_in_W = np.hstack([cp.pc2_F for cp in self.ctrl_points]) # TODO need to add rotation for this
+
+        return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
 
 
 def plan_box_flip_up_newtons_third_law():
@@ -610,9 +708,24 @@ def plan_box_flip_up_newtons_third_law():
     fb_violation = prog.get_force_balance_violation()
     mb_violation = prog.get_moment_balance_violation()
 
-    breakpoint()
+    contact_positions_ctrl_points = [
+        prog._get_solution_for_np_exprs(pos) for pos in prog.contact_positions_in_W
+    ]
+    contact_forces_ctrl_points = [
+        prog._get_solution_for_np_exprs(force) for force in prog.contact_forces_in_W
+    ]
 
-    force_test = BezierCtrlPoints(prog.result.GetSolution(prog.forces))
+    positions = [
+        VisualizationPoint.from_ctrl_points(pos, "lightblue")
+        for pos in contact_positions_ctrl_points
+    ]
+    forces = [
+        VisualizationForce.from_ctrl_points(pos, force, "green1")
+        for pos, force in zip(contact_positions_ctrl_points, contact_forces_ctrl_points)
+    ]
+
+    viz = BoxFlipupVisualizer()
+    viz.visualize(positions, forces)
 
     breakpoint()
 
@@ -670,10 +783,10 @@ def plan_box_flip_up_newtons_third_law():
         (-1, 1)
     )  # TODO This is wrong. This should be a decision variable!
 
-    ## Plotting
+    ## plotting
 
     app = tk.Tk()
-    app.title("Box")
+    app.title("box")
 
     canvas = Canvas(app, width=500, height=500, bg="white")
     canvas.pack()
