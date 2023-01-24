@@ -45,7 +45,7 @@ class VisualizationForce(VisualizationPoint):
         ],  # TODO create a struct or class for ctrl points
         ctrl_points_force: npt.NDArray[np.float64],
         color: str = "red1",
-    ) -> "VisualizationPoint":
+    ) -> "VisualizationForce":
         position_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_position
         ).eval_entire_interval()
@@ -60,12 +60,13 @@ class BoxFlipupVisualizer:
         self.plot_center = np.array([200, 300]).reshape((-1, 1))
         self.plot_scale = 50
         self.force_scale = 0.2
+        self.point_radius = 0.1
 
     def visualize(
-        self, positions: List[VisualizationPoint], forces: List[VisualizationForce]
+        self, points: List[VisualizationPoint], forces: List[VisualizationForce]
     ) -> None:
         curve_lengths = np.array(
-            [len(p.position_curve) for p in positions]
+            [len(p.position_curve) for p in points]
             + [len(f.position_curve) for f in forces]
         )
         if not np.all(curve_lengths == curve_lengths[0]):
@@ -80,6 +81,9 @@ class BoxFlipupVisualizer:
 
         for frame_idx in range(num_frames):
             self.canvas.delete("all")
+
+            for point in points:
+                self._draw_point(point, frame_idx)
 
             for force in forces:
                 self._draw_force(force, frame_idx)
@@ -103,6 +107,23 @@ class BoxFlipupVisualizer:
     @staticmethod
     def _flatten_points(points: npt.NDArray[np.float64]) -> List[float]:
         return list(points.flatten(order="F"))
+
+    def _draw_point(self, point: VisualizationPoint, idx: int) -> None:
+        pos = point.position_curve[idx].reshape((-1, 1))
+
+        lower_left = pos - self.point_radius
+        upper_right = pos + self.point_radius
+        points = self._transform_points_for_plotting(
+            np.hstack([lower_left, upper_right])
+        )
+        self.canvas.create_oval(
+            points[0],
+            points[1],
+            points[2],
+            points[3],
+            fill=point.color.hex_format(),
+            width=0,
+        )
 
     def _draw_force(self, force: VisualizationForce, idx: int) -> None:
         force_strength = force.force_curve[idx] * self.force_scale
@@ -656,6 +677,11 @@ class BoxFlipupDemo:
     def get_moment_balance_violation(self) -> npt.NDArray[np.float64]:
         return self._get_solution_for_exprs(self.moment_balances)
 
+    def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
+        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
+        solutions = from_expr_to_float(self.result.GetSolution(expr))
+        return solutions
+
     def _get_solution_for_np_exprs(self, exprs: List[npt.NDArray[sym.Expression]]) -> npt.NDArray[np.float64]:  # type: ignore
         from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
         solutions = np.array(
@@ -699,33 +725,52 @@ class BoxFlipupDemo:
 
         return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
 
+    @property
+    def gravitational_force_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
+        return np.hstack([cp.fg_W for cp in self.ctrl_points])
+
+    @property
+    def box_com_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
+        return np.hstack([cp.p_WB_W for cp in self.ctrl_points])
+
 
 def plan_box_flip_up_newtons_third_law():
+    CONTACT_COLOR = "brown1"
+    GRAVITY_COLOR = "blueviolet"
+
     prog = BoxFlipupDemo()
-    breakpoint
     prog.solve()
 
-    fb_violation = prog.get_force_balance_violation()
-    mb_violation = prog.get_moment_balance_violation()
+    # fb_violation = prog.get_force_balance_violation()
+    # mb_violation = prog.get_moment_balance_violation()
 
     contact_positions_ctrl_points = [
-        prog._get_solution_for_np_exprs(pos) for pos in prog.contact_positions_in_W
+        prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
     ]
     contact_forces_ctrl_points = [
-        prog._get_solution_for_np_exprs(force) for force in prog.contact_forces_in_W
+        prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
     ]
 
-    positions = [
-        VisualizationPoint.from_ctrl_points(pos, "lightblue")
+    contact_positions = [
+        VisualizationPoint.from_ctrl_points(pos, CONTACT_COLOR)
         for pos in contact_positions_ctrl_points
     ]
-    forces = [
-        VisualizationForce.from_ctrl_points(pos, force, "green1")
+    contact_forces = [
+        VisualizationForce.from_ctrl_points(pos, force, CONTACT_COLOR)
         for pos, force in zip(contact_positions_ctrl_points, contact_forces_ctrl_points)
     ]
 
+    box_com = VisualizationPoint.from_ctrl_points(
+        prog.result.GetSolution(prog.box_com_in_W), GRAVITY_COLOR
+    )
+    gravitional_force = VisualizationForce.from_ctrl_points(
+        prog.result.GetSolution(prog.box_com_in_W),
+        prog.result.GetSolution(prog.gravitational_force_in_W),
+        GRAVITY_COLOR,
+    )
+
     viz = BoxFlipupVisualizer()
-    viz.visualize(positions, forces)
+    viz.visualize(contact_positions + [box_com], contact_forces + [gravitional_force])
 
     breakpoint()
 
