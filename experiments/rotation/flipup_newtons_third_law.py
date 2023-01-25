@@ -748,6 +748,9 @@ def plan_box_flip_up_newtons_third_law():
     CONTACT_COLOR = "brown1"
     GRAVITY_COLOR = "blueviolet"
     BOX_COLOR = "aquamarine4"
+    TABLE_COLOR = "bisque3"
+
+    NUM_CTRL_POINTS = 3
 
     prog = BoxFlipupDemo()
     prog.solve()
@@ -785,11 +788,21 @@ def plan_box_flip_up_newtons_third_law():
         box_com_ctrl_points, orientation_ctrl_points, prog.ctrl_points[0].box, BOX_COLOR
     )
 
+    table_pos_ctrl_points = np.zeros((2, NUM_CTRL_POINTS))
+    table_orientation_ctrl_points = [np.eye(2)] * NUM_CTRL_POINTS
+
+    viz_table = VisualizationPolygon.from_ctrl_points(
+        table_pos_ctrl_points,
+        table_orientation_ctrl_points,
+        prog.ctrl_points[0].table,
+        TABLE_COLOR,
+    )
+
     viz = BoxFlipupVisualizer()
     viz.visualize(
         viz_contact_positions + [viz_box_com],
         viz_contact_forces + [viz_gravitional_force],
-        [viz_box],
+        [viz_box, viz_table],
     )
 
     # fb_violation = prog.get_force_balance_violation()
