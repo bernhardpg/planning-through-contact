@@ -405,7 +405,6 @@ class BoxFlipupDemo:
             fc1_B_ctrl_points,
             fc1_T_ctrl_points,
             fc2_B_ctrl_points,
-            fc1_T_ctrl_points,
         ]
 
     @property
@@ -432,6 +431,11 @@ class BoxFlipupDemo:
     @property
     def box_com_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
         return np.hstack([cp.p_WB_W for cp in self.ctrl_points])
+
+    # FIX: Naming
+    @property
+    def box_com_B_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
+        return np.hstack([-cp.R_WB.dot(cp.p_BW_B) for cp in self.ctrl_points])
 
     @property
     def box_orientation(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
@@ -510,9 +514,15 @@ def plan_box_flip_up_newtons_third_law():
             TABLE_COLOR,
         )
 
+        # FIX: Naming
+        box_com_B_ctrl_points = prog.result.GetSolution(prog.box_com_B_in_W)
+        viz_box_com_B = VisualizationPoint2d.from_ctrl_points(
+            box_com_B_ctrl_points, "carrot"
+        )
+
         viz = Visualizer2d()
         viz.visualize(
-            viz_contact_positions + [viz_box_com],
+            viz_contact_positions + [viz_box_com, viz_box_com_B],
             viz_contact_forces + [viz_gravitional_force],
             [viz_box, viz_table],
         )
@@ -534,8 +544,6 @@ def plan_box_flip_up_newtons_third_law():
         create_static_equilibrium_analysis(
             fb_violation_ctrl_points, mb_violation_ctrl_points
         )
-
-        breakpoint()
 
         show_plots()
 

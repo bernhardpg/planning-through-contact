@@ -113,23 +113,37 @@ def create_newtons_third_law_analysis(
 
     fig.suptitle("Newtons Third Law constraint violations")
 
+    MIN_Y_AXIS_METER = -0.5
+    MAX_Y_AXIS_METER = max(
+        np.concatenate(
+            (
+                eq_contact_point_A,
+                eq_contact_point_B,
+                eq_rel_position_A,
+                eq_rel_position_B,
+            )
+        )
+    ) * 1.25
+
     axs[0, 0].plot(x_axis, eq_contact_point_A)
     axs[0, 1].plot(x_axis, eq_contact_point_B)
     axs[0, 0].set_title("Contact points: T frame")
     axs[0, 1].set_title("Contact points: B frame")
     axs[0, 0].set(ylabel="[m]")
+    axs[0, 0].set_ylim(MIN_Y_AXIS_METER, MAX_Y_AXIS_METER)
 
-    axs[1, 0].plot(x_axis, newtons_third_law_A)
-    axs[1, 1].plot(x_axis, newtons_third_law_B)
-    axs[1, 0].set_title("Contact forces: T frame")
-    axs[1, 1].set_title("Contact forces: B frame")
-    axs[1, 0].set(ylabel="[N]")
+    axs[1, 0].plot(x_axis, eq_rel_position_A)
+    axs[1, 1].plot(x_axis, eq_rel_position_B)
+    axs[1, 0].set_title("Relative positions: T frame")
+    axs[1, 1].set_title("Relative positions: B frame")
+    axs[1, 0].set(ylabel="[m]")
+    axs[1, 0].set_ylim(MIN_Y_AXIS_METER, MAX_Y_AXIS_METER)
 
-    axs[2, 0].plot(x_axis, eq_rel_position_A)
-    axs[2, 1].plot(x_axis, eq_rel_position_B)
-    axs[2, 0].set_title("Relative positions: T frame")
-    axs[2, 1].set_title("Relative positions: B frame")
-    axs[2, 0].set(ylabel="[m]")
+    axs[2, 0].plot(x_axis, newtons_third_law_A)
+    axs[2, 1].plot(x_axis, newtons_third_law_B)
+    axs[2, 0].set_title("Contact forces: T frame")
+    axs[2, 1].set_title("Contact forces: B frame")
+    axs[2, 0].set(ylabel="[N]")
 
     axs[2, 0].set(xlabel="Control point")
     axs[2, 1].set(xlabel="Control point")
