@@ -1,7 +1,4 @@
-import time
-import tkinter as tk
 from dataclasses import dataclass
-from tkinter import Canvas
 from typing import List, TypeVar, Union
 
 import numpy as np
@@ -11,192 +8,14 @@ from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
-from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
-from visualize.colors import COLORS, RGB
-
-
-@dataclass
-class VisualizationPoint:
-    position_curve: npt.NDArray[np.float64]  # (N, dims)
-    color: RGB
-
-    @classmethod
-    def from_ctrl_points(
-        cls, ctrl_points: npt.NDArray[np.float64], color: str = "red1"
-    ) -> "VisualizationPoint":
-        position_curve = BezierCurve.create_from_ctrl_points(
-            ctrl_points
-        ).eval_entire_interval()
-        return cls(position_curve, COLORS[color])
-
-
-@dataclass
-class VisualizationForce(VisualizationPoint):
-    force_curve: npt.NDArray[np.float64]  # (N, dims)
-
-    @classmethod
-    def from_ctrl_points(
-        cls,
-        ctrl_points_position: npt.NDArray[
-            np.float64
-        ],  # TODO: create a struct or class for ctrl points
-        ctrl_points_force: npt.NDArray[np.float64],
-        color: str = "red1",
-    ) -> "VisualizationForce":
-
-        position_curve = BezierCurve.create_from_ctrl_points(
-            ctrl_points_position
-        ).eval_entire_interval()
-
-        force_curve = BezierCurve.create_from_ctrl_points(
-            ctrl_points_force
-        ).eval_entire_interval()
-
-        return cls(position_curve, COLORS[color], force_curve)
-
-
-@dataclass
-class VisualizationPolygon(VisualizationPoint):
-    corner_curves: List[npt.NDArray[np.float64]]  # [(N, dims), (N,dims), ...]
-
-    @classmethod
-    def from_ctrl_points(
-        cls,
-        ctrl_points_position: npt.NDArray[
-            np.float64
-        ],  # TODO: create a struct or class for ctrl points
-        ctrl_points_orientation: List[npt.NDArray[np.float64]],
-        box: Box2d,
-        color: str = "red1",
-    ) -> "VisualizationPolygon":
-
-        position_curve = BezierCurve.create_from_ctrl_points(
-            ctrl_points_position
-        ).eval_entire_interval()
-
-        temp = np.array(
-            [
-                pos.reshape((-1, 1)) + rot.dot(box.corners)
-                for rot, pos in zip(ctrl_points_orientation, ctrl_points_position.T)
-            ]
-        )  # (ctrl_points, dims, num_corners)
-        temp2 = np.transpose(temp, axes=[1, 0, 2])  # (dims, ctrl_points, num_corners)
-        num_corners = temp2.shape[2]
-        corner_ctrl_points_in_W = [temp2[:, :, idx] for idx in range(num_corners)]
-
-        corner_curves = [
-            BezierCurve.create_from_ctrl_points(ctrl_points).eval_entire_interval()
-            for ctrl_points in corner_ctrl_points_in_W
-        ]
-
-        return cls(position_curve, COLORS[color], corner_curves)
-
-
-class BoxFlipupVisualizer:
-    PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
-    PLOT_SCALE = 50
-    FORCE_SCALE = 0.2
-    POINT_RADIUS = 0.1
-
-    def visualize(
-        self,
-        points: List[VisualizationPoint],
-        forces: List[VisualizationForce],
-        polygons: List[VisualizationPolygon],
-    ) -> None:
-        curve_lengths = np.array(
-            [len(p.position_curve) for p in points]
-            + [len(f.position_curve) for f in forces]
-        )
-        if not np.all(curve_lengths == curve_lengths[0]):
-            raise ValueError("Curve lengths for plotting must match!")
-        num_frames = curve_lengths[0]
-
-        self.app = tk.Tk()
-        self.app.title("box")
-
-        self.canvas = Canvas(self.app, width=500, height=500, bg="white")
-        self.canvas.pack()
-
-        for frame_idx in range(num_frames):
-            self.canvas.delete("all")
-
-            for polygon in polygons:
-                self._draw_polygon(polygon, frame_idx)
-
-            for point in points:
-                self._draw_point(point, frame_idx)
-
-            for force in forces:
-                self._draw_force(force, frame_idx)
-
-            self.canvas.update()
-            time.sleep(0.05)
-            if frame_idx == 0:
-                time.sleep(2)
-
-        self.app.mainloop()
-
-    def _transform_points_for_plotting(
-        self,
-        points: npt.NDArray[np.float64],
-    ) -> List[float]:
-        points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
-        points_transformed = points_flipped_y_axis * self.PLOT_SCALE + self.PLOT_CENTER
-        plotable_points = self._flatten_points(points_transformed)
-        return plotable_points
-
-    @staticmethod
-    def _flatten_points(points: npt.NDArray[np.float64]) -> List[float]:
-        return list(points.flatten(order="F"))
-
-    def _draw_point(
-        self, point: VisualizationPoint, idx: int, radius: float = POINT_RADIUS
-    ) -> None:
-        pos = point.position_curve[idx].reshape((-1, 1))
-
-        lower_left = pos - radius
-        upper_right = pos + radius
-        points = self._transform_points_for_plotting(
-            np.hstack([lower_left, upper_right])
-        )
-        self.canvas.create_oval(
-            points[0],
-            points[1],
-            points[2],
-            points[3],
-            fill=point.color.hex_format(),
-            width=0,
-        )
-
-    def _draw_force(self, force: VisualizationForce, idx: int) -> None:
-        force_strength = force.force_curve[idx] * self.FORCE_SCALE
-        force_endpoints = np.hstack(
-            [
-                force.position_curve[idx].reshape((-1, 1)),
-                (force.position_curve[idx] + force_strength).reshape((-1, 1)),
-            ]
-        )
-        force_points = self._transform_points_for_plotting(force_endpoints)
-        self.canvas.create_line(
-            force_points, width=2, arrow=tk.LAST, fill=force.color.hex_format()
-        )
-
-    def _draw_polygon(self, polygon: VisualizationPolygon, idx: int) -> None:
-        corners = np.hstack([c[idx].reshape((-1, 1)) for c in polygon.corner_curves])
-        polygon_points = self._transform_points_for_plotting(corners)
-        self.canvas.create_polygon(polygon_points, fill=polygon.color.hex_format())
-
-        DARKENING = 50
-        com_color = RGB(
-            polygon.color.red - DARKENING,
-            polygon.color.green - DARKENING,
-            polygon.color.blue - DARKENING,
-        )
-        viz_com = VisualizationPoint(polygon.position_curve, com_color)
-        self._draw_point(viz_com, idx, radius=0.2)
+from visualize.visualizer_2d import (
+    VisualizationForce2d,
+    VisualizationPoint2d,
+    VisualizationPolygon2d,
+    Visualizer2d,
+)
 
 
 def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
@@ -212,16 +31,6 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
     rot_matrix = np.array(
         [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
     )
-    return rot_matrix
-
-
-def _create_rot_matrix_from_ctrl_point_idx(
-    cos_ths: npt.NDArray[T],  # type: ignore
-    sin_ths: npt.NDArray[T],  # type: ignore
-    ctrl_point_idx: int,
-) -> npt.NDArray[T]:  # type: ignore
-    cos_th, sin_th = cos_ths[0, ctrl_point_idx], sin_ths[0, ctrl_point_idx]
-    rot_matrix = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
     return rot_matrix
 
 
@@ -763,19 +572,19 @@ def plan_box_flip_up_newtons_third_law():
     ]
 
     viz_contact_positions = [
-        VisualizationPoint.from_ctrl_points(pos, CONTACT_COLOR)
+        VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
         for pos in contact_positions_ctrl_points
     ]
     viz_contact_forces = [
-        VisualizationForce.from_ctrl_points(pos, force, CONTACT_COLOR)
+        VisualizationForce2d.from_ctrl_points(pos, force, CONTACT_COLOR)
         for pos, force in zip(contact_positions_ctrl_points, contact_forces_ctrl_points)
     ]
 
     box_com_ctrl_points = prog.result.GetSolution(prog.box_com_in_W)
-    viz_box_com = VisualizationPoint.from_ctrl_points(
+    viz_box_com = VisualizationPoint2d.from_ctrl_points(
         box_com_ctrl_points, GRAVITY_COLOR
     )
-    viz_gravitional_force = VisualizationForce.from_ctrl_points(
+    viz_gravitional_force = VisualizationForce2d.from_ctrl_points(
         prog.result.GetSolution(prog.box_com_in_W),
         prog.result.GetSolution(prog.gravitational_force_in_W),
         GRAVITY_COLOR,
@@ -784,21 +593,21 @@ def plan_box_flip_up_newtons_third_law():
     orientation_ctrl_points = [
         prog._get_solution_for_np_expr(R) for R in prog.box_orientation
     ]
-    viz_box = VisualizationPolygon.from_ctrl_points(
+    viz_box = VisualizationPolygon2d.from_ctrl_points(
         box_com_ctrl_points, orientation_ctrl_points, prog.ctrl_points[0].box, BOX_COLOR
     )
 
     table_pos_ctrl_points = np.zeros((2, NUM_CTRL_POINTS))
     table_orientation_ctrl_points = [np.eye(2)] * NUM_CTRL_POINTS
 
-    viz_table = VisualizationPolygon.from_ctrl_points(
+    viz_table = VisualizationPolygon2d.from_ctrl_points(
         table_pos_ctrl_points,
         table_orientation_ctrl_points,
         prog.ctrl_points[0].table,
         TABLE_COLOR,
     )
 
-    viz = BoxFlipupVisualizer()
+    viz = Visualizer2d()
     viz.visualize(
         viz_contact_positions + [viz_box_com],
         viz_contact_forces + [viz_gravitional_force],
