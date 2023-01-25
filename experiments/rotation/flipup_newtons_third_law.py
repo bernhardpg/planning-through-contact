@@ -12,12 +12,14 @@ from convex_relaxation.mccormick import (
     add_bilinear_expressions_to_prog,
     relax_bilinear_expression,
 )
-from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.orientation.contact_pair_2d import ContactPair2d, ContactPointConstraints
 from geometry.utilities import cross_2d
-from tools.utils import convert_formula_to_lhs_expression
-from visualize.analysis import create_static_equilibrium_analysis
+from visualize.analysis import (
+    create_newtons_third_law_analysis,
+    create_static_equilibrium_analysis,
+    show_plots,
+)
 from visualize.visualizer_2d import (
     VisualizationForce2d,
     VisualizationPoint2d,
@@ -399,7 +401,12 @@ class BoxFlipupDemo:
         )
         # fc2_F_ctrl_points = np.hstack([cp.fc2_F for cp in self.ctrl_points]) # TODO: need rotation for this
 
-        return [fc1_B_ctrl_points, fc1_T_ctrl_points, fc2_B_ctrl_points]
+        return [
+            fc1_B_ctrl_points,
+            fc1_T_ctrl_points,
+            fc2_B_ctrl_points,
+            fc1_T_ctrl_points,
+        ]
 
     @property
     def contact_positions_in_W(self) -> List[npt.NDArray[sym.Expression]]:  # type: ignore
@@ -413,6 +420,7 @@ class BoxFlipupDemo:
         pc2_B_ctrl_points_in_W = np.hstack(
             [cp.p_WB_W + cp.R_WB.dot(cp.pc2_B) for cp in self.ctrl_points]
         )
+
         # pc2_F_ctrl_points_in_W = np.hstack([cp.pc2_F for cp in self.ctrl_points]) # TODO: need to add rotation for this
 
         return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
@@ -512,7 +520,12 @@ def plan_box_flip_up_newtons_third_law():
         equal_contact_point_violation = prog.get_equal_contact_point_violation()
         equal_rel_position_violation = prog.get_equal_rel_position_violation()
         newtons_third_law_violation = prog.get_newtons_third_law_violation()
-        breakpoint()
+
+        create_newtons_third_law_analysis(
+            equal_contact_point_violation,
+            equal_rel_position_violation,
+            newtons_third_law_violation,
+        )
 
         fb_violation_ctrl_points = prog.get_force_balance_violation()
         mb_violation_ctrl_points = prog.get_moment_balance_violation()
@@ -520,6 +533,8 @@ def plan_box_flip_up_newtons_third_law():
         create_static_equilibrium_analysis(
             fb_violation_ctrl_points, mb_violation_ctrl_points
         )
+
+        show_plots()
 
 
 if __name__ == "__main__":
