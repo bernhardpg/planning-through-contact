@@ -2,18 +2,17 @@ import time
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import Canvas
-from typing import List, NamedTuple, TypeVar, Union
+from typing import List, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, Solve
+from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
-from geometry.bezier import BezierCtrlPoints, BezierCurve
+from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
-from geometry.contact_point import ContactPoint
 from geometry.utilities import cross_2d
 from visualize.colors import COLORS, RGB
 
@@ -42,28 +41,70 @@ class VisualizationForce(VisualizationPoint):
         cls,
         ctrl_points_position: npt.NDArray[
             np.float64
-        ],  # TODO create a struct or class for ctrl points
+        ],  # TODO: create a struct or class for ctrl points
         ctrl_points_force: npt.NDArray[np.float64],
         color: str = "red1",
     ) -> "VisualizationForce":
+
         position_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_position
         ).eval_entire_interval()
+
         force_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_force
         ).eval_entire_interval()
+
         return cls(position_curve, COLORS[color], force_curve)
 
 
+@dataclass
+class VisualizationPolygon(VisualizationPoint):
+    corner_curves: List[npt.NDArray[np.float64]]  # [(N, dims), (N,dims), ...]
+
+    @classmethod
+    def from_ctrl_points(
+        cls,
+        ctrl_points_position: npt.NDArray[
+            np.float64
+        ],  # TODO: create a struct or class for ctrl points
+        ctrl_points_orientation: List[npt.NDArray[np.float64]],
+        box: Box2d,
+        color: str = "red1",
+    ) -> "VisualizationPolygon":
+
+        position_curve = BezierCurve.create_from_ctrl_points(
+            ctrl_points_position
+        ).eval_entire_interval()
+
+        temp = np.array(
+            [
+                pos.reshape((-1, 1)) + rot.dot(box.corners)
+                for rot, pos in zip(ctrl_points_orientation, ctrl_points_position.T)
+            ]
+        )  # (ctrl_points, dims, num_corners)
+        temp2 = np.transpose(temp, axes=[1, 0, 2])  # (dims, ctrl_points, num_corners)
+        num_corners = temp2.shape[2]
+        corner_ctrl_points_in_W = [temp2[:, :, idx] for idx in range(num_corners)]
+
+        corner_curves = [
+            BezierCurve.create_from_ctrl_points(ctrl_points).eval_entire_interval()
+            for ctrl_points in corner_ctrl_points_in_W
+        ]
+
+        return cls(position_curve, COLORS[color], corner_curves)
+
+
 class BoxFlipupVisualizer:
-    def __init__(self) -> None:
-        self.plot_center = np.array([200, 300]).reshape((-1, 1))
-        self.plot_scale = 50
-        self.force_scale = 0.2
-        self.point_radius = 0.1
+    PLOT_CENTER = np.array([200, 300]).reshape((-1, 1))
+    PLOT_SCALE = 50
+    FORCE_SCALE = 0.2
+    POINT_RADIUS = 0.1
 
     def visualize(
-        self, points: List[VisualizationPoint], forces: List[VisualizationForce]
+        self,
+        points: List[VisualizationPoint],
+        forces: List[VisualizationForce],
+        polygons: List[VisualizationPolygon],
     ) -> None:
         curve_lengths = np.array(
             [len(p.position_curve) for p in points]
@@ -81,6 +122,9 @@ class BoxFlipupVisualizer:
 
         for frame_idx in range(num_frames):
             self.canvas.delete("all")
+
+            for polygon in polygons:
+                self._draw_polygon(polygon, frame_idx)
 
             for point in points:
                 self._draw_point(point, frame_idx)
@@ -100,7 +144,7 @@ class BoxFlipupVisualizer:
         points: npt.NDArray[np.float64],
     ) -> List[float]:
         points_flipped_y_axis = np.vstack([points[0, :], -points[1, :]])
-        points_transformed = points_flipped_y_axis * self.plot_scale + self.plot_center
+        points_transformed = points_flipped_y_axis * self.PLOT_SCALE + self.PLOT_CENTER
         plotable_points = self._flatten_points(points_transformed)
         return plotable_points
 
@@ -108,11 +152,13 @@ class BoxFlipupVisualizer:
     def _flatten_points(points: npt.NDArray[np.float64]) -> List[float]:
         return list(points.flatten(order="F"))
 
-    def _draw_point(self, point: VisualizationPoint, idx: int) -> None:
+    def _draw_point(
+        self, point: VisualizationPoint, idx: int, radius: float = POINT_RADIUS
+    ) -> None:
         pos = point.position_curve[idx].reshape((-1, 1))
 
-        lower_left = pos - self.point_radius
-        upper_right = pos + self.point_radius
+        lower_left = pos - radius
+        upper_right = pos + radius
         points = self._transform_points_for_plotting(
             np.hstack([lower_left, upper_right])
         )
@@ -126,7 +172,7 @@ class BoxFlipupVisualizer:
         )
 
     def _draw_force(self, force: VisualizationForce, idx: int) -> None:
-        force_strength = force.force_curve[idx] * self.force_scale
+        force_strength = force.force_curve[idx] * self.FORCE_SCALE
         force_endpoints = np.hstack(
             [
                 force.position_curve[idx].reshape((-1, 1)),
@@ -138,6 +184,19 @@ class BoxFlipupVisualizer:
             force_points, width=2, arrow=tk.LAST, fill=force.color.hex_format()
         )
 
+    def _draw_polygon(self, polygon: VisualizationPolygon, idx: int) -> None:
+        corners = np.hstack([c[idx].reshape((-1, 1)) for c in polygon.corner_curves])
+        polygon_points = self._transform_points_for_plotting(corners)
+        self.canvas.create_polygon(polygon_points, fill=polygon.color.hex_format())
+
+        DARKENING = 50
+        com_color = RGB(
+            polygon.color.red - DARKENING,
+            polygon.color.green - DARKENING,
+            polygon.color.blue - DARKENING,
+        )
+        viz_com = VisualizationPoint(polygon.position_curve, com_color)
+        self._draw_point(viz_com, idx, radius=0.2)
 
 
 def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
@@ -166,8 +225,8 @@ def _create_rot_matrix_from_ctrl_point_idx(
     return rot_matrix
 
 
-# NOTE that this does not use the ContactPoint defined in the library
-# TODO this should be unified
+# NOTE: that this does not use the ContactPoint defined in the library
+# TODO: this should be unified
 class ContactPoint2d:
     def __init__(
         self,
@@ -184,7 +243,7 @@ class ContactPoint2d:
         self.normal_force = sym.Variable(f"{name}_c_n")
         self.friction_force = sym.Variable(f"{name}_c_f")
 
-        # TODO use enums instead
+        # TODO: use enums instead
         if "face" in contact_location:
             self.contact_type = "face"
         elif "corner" in contact_location:
@@ -308,7 +367,7 @@ class ContactPair:
         )
 
 
-# TODO should be in a file with boxflipup demo
+# TODO: should be in a file with boxflipup demo
 class BoxFlipupCtrlPoint:
     table_box: ContactPair
     box_finger: ContactPair
@@ -328,26 +387,26 @@ class BoxFlipupCtrlPoint:
 
         FRICTION_COEFF = 0.7
 
-        box = Box2d(BOX_WIDTH, BOX_HEIGHT)
-        table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
-        finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
+        self.box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+        self.table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
+        self.finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
 
         self.table_box = ContactPair(
             "contact_1",
-            table,
+            self.table,
             "face_1",
             "table",
-            box,
+            self.box,
             "corner_4",
             "box",
             FRICTION_COEFF,
         )
         self.box_finger = ContactPair(
             "contact_2",
-            box,
+            self.box,
             "face_2",
             "box",
-            finger,
+            self.finger,
             "corner_1",
             "finger",
             FRICTION_COEFF,
@@ -362,7 +421,7 @@ class BoxFlipupCtrlPoint:
         self.p_BT_B = self.table_box.p_BA_B
         self.p_BW_B = self.p_BT_B
 
-        # TODO add in finger position relative to box
+        # TODO: add in finger position relative to box
 
         self.R_TB = self.table_box.R_AB
         self.R_WB = self.R_TB  # World frame is the same as table frame
@@ -382,14 +441,14 @@ class BoxFlipupCtrlPoint:
 
         self.sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB.T.dot(self.fg_W)  # type: ignore
 
-        # TODO clean up, this is just for plotting rounding error!
+        # TODO: clean up, this is just for plotting rounding error!
         self.R_WB_normalized = self.R_WB / sym.sqrt(
             (self.cos_th**2 + self.sin_th**2)
         )
         self.true_sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB_normalized.T.dot(self.fg_W)  # type: ignore
 
         # Add moment balance using a linear relaxation
-        # TODO now this is hardcoded, in the future this should be automatically added for all unactuated objects
+        # TODO: now this is hardcoded, in the future this should be automatically added for all unactuated objects
         self.sum_of_moments_B = cross_2d(self.pc1_B, self.fc1_B) + cross_2d(
             self.pc2_B, self.fc2_B
         )
@@ -397,17 +456,17 @@ class BoxFlipupCtrlPoint:
         self.relaxed_so_2_constraint = (self.R_WB.T.dot(self.R_WB))[0, 0]
 
         # Non-penetration constraint
-        # NOTE! These are frame-dependent, keep in mind when generalizing these
+        # NOTE:! These are frame-dependent, keep in mind when generalizing these
         # Add nonpenetration constraint in table frame
-        table_a_T = table.a1[0]
-        pm1_B = box.p1
-        pm3_B = box.p3
+        table_a_T = self.table.a1[0]
+        pm1_B = self.box.p1
+        pm3_B = self.box.p3
 
         self.nonpen_1_T = table_a_T.T.dot(self.R_TB).dot(pm1_B - self.pc1_B)[0, 0] >= 0
         self.nonpen_2_T = table_a_T.T.dot(self.R_TB).dot(pm3_B - self.pc1_B)[0, 0] >= 0
 
         # SO2 relaxation tightening
-        # NOTE! These are frame-dependent, keep in mind when generalizing these
+        # NOTE:! These are frame-dependent, keep in mind when generalizing these
         # Add SO(2) tightening
         cut_p1 = np.array([0, 1]).reshape((-1, 1))
         cut_p2 = np.array([1, 0]).reshape((-1, 1))
@@ -421,10 +480,10 @@ class BoxFlipupCtrlPoint:
         )
 
 
-# TODO: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
+# TODO:: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
 @dataclass
 class BoxFlipupDemo:
-    friction_coeff: float = 0.7  # TODO unify this with ctrl point constants
+    friction_coeff: float = 0.7  # TODO: unify this with ctrl point constants
     use_quadratic_cost: bool = True
     use_moment_balance: bool = True
     use_friction_cone_constraint: bool = True
@@ -458,7 +517,7 @@ class BoxFlipupDemo:
     def _setup_box_flipup_prog(self) -> None:
         self.prog = MathematicalProgram()
 
-        # TODO this should be cleaned up
+        # TODO: this should be cleaned up
         MAX_FORCE = 10  # only used for mccorimick constraints
         variable_bounds = {
             "contact_1_box_c_n": (0.0, MAX_FORCE),
@@ -539,7 +598,7 @@ class BoxFlipupDemo:
                 newtons_third_law_constraints = (
                     ctrl_point.table_box.create_newtons_third_law_force_constraints()
                 )
-                # TODO this is duplicated code, clean up!
+                # TODO: this is duplicated code, clean up!
                 for row in newtons_third_law_constraints:
                     for constraint in row:
                         expr = _convert_formula_to_lhs_expression(constraint)
@@ -652,7 +711,7 @@ class BoxFlipupDemo:
         fc2_B_ctrl_points = np.hstack(
             [cp.R_WB.dot(cp.fc2_B) for cp in self.ctrl_points]
         )
-        # fc2_F_ctrl_points = np.hstack([cp.fc2_F for cp in self.ctrl_points]) # TODO need rotation for this
+        # fc2_F_ctrl_points = np.hstack([cp.fc2_F for cp in self.ctrl_points]) # TODO: need rotation for this
 
         return [fc1_B_ctrl_points, fc1_T_ctrl_points, fc2_B_ctrl_points]
 
@@ -668,7 +727,7 @@ class BoxFlipupDemo:
         pc2_B_ctrl_points_in_W = np.hstack(
             [cp.p_WB_W + cp.R_WB.dot(cp.pc2_B) for cp in self.ctrl_points]
         )
-        # pc2_F_ctrl_points_in_W = np.hstack([cp.pc2_F for cp in self.ctrl_points]) # TODO need to add rotation for this
+        # pc2_F_ctrl_points_in_W = np.hstack([cp.pc2_F for cp in self.ctrl_points]) # TODO: need to add rotation for this
 
         return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
 
@@ -680,10 +739,15 @@ class BoxFlipupDemo:
     def box_com_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
         return np.hstack([cp.p_WB_W for cp in self.ctrl_points])
 
+    @property
+    def box_orientation(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
+        return [cp.R_WB for cp in self.ctrl_points]
+
 
 def plan_box_flip_up_newtons_third_law():
     CONTACT_COLOR = "brown1"
     GRAVITY_COLOR = "blueviolet"
+    BOX_COLOR = "aquamarine4"
 
     prog = BoxFlipupDemo()
     prog.solve()
@@ -695,26 +759,38 @@ def plan_box_flip_up_newtons_third_law():
         prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
     ]
 
-    contact_positions = [
+    viz_contact_positions = [
         VisualizationPoint.from_ctrl_points(pos, CONTACT_COLOR)
         for pos in contact_positions_ctrl_points
     ]
-    contact_forces = [
+    viz_contact_forces = [
         VisualizationForce.from_ctrl_points(pos, force, CONTACT_COLOR)
         for pos, force in zip(contact_positions_ctrl_points, contact_forces_ctrl_points)
     ]
 
-    box_com = VisualizationPoint.from_ctrl_points(
-        prog.result.GetSolution(prog.box_com_in_W), GRAVITY_COLOR
+    box_com_ctrl_points = prog.result.GetSolution(prog.box_com_in_W)
+    viz_box_com = VisualizationPoint.from_ctrl_points(
+        box_com_ctrl_points, GRAVITY_COLOR
     )
-    gravitional_force = VisualizationForce.from_ctrl_points(
+    viz_gravitional_force = VisualizationForce.from_ctrl_points(
         prog.result.GetSolution(prog.box_com_in_W),
         prog.result.GetSolution(prog.gravitational_force_in_W),
         GRAVITY_COLOR,
     )
 
+    orientation_ctrl_points = [
+        prog._get_solution_for_np_expr(R) for R in prog.box_orientation
+    ]
+    viz_box = VisualizationPolygon.from_ctrl_points(
+        box_com_ctrl_points, orientation_ctrl_points, prog.ctrl_points[0].box, BOX_COLOR
+    )
+
     viz = BoxFlipupVisualizer()
-    viz.visualize(contact_positions + [box_com], contact_forces + [gravitional_force])
+    viz.visualize(
+        viz_contact_positions + [viz_box_com],
+        viz_contact_forces + [viz_gravitional_force],
+        [viz_box],
+    )
 
     # fb_violation = prog.get_force_balance_violation()
     # mb_violation = prog.get_moment_balance_violation()
