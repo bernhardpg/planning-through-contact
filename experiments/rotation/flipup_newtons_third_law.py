@@ -43,14 +43,14 @@ class BoxFlipupCtrlPoint:
     box_finger: ContactPair2d
 
     def __init__(self) -> None:
-        BOX_WIDTH = 3
-        BOX_HEIGHT = 2
+        BOX_WIDTH = 0.3
+        BOX_HEIGHT = 0.2
 
-        TABLE_HEIGHT = 2
-        TABLE_WIDTH = 10
+        TABLE_HEIGHT = 0.5
+        TABLE_WIDTH = 2
 
-        FINGER_HEIGHT = 1
-        FINGER_WIDTH = 1
+        FINGER_HEIGHT = 0.1
+        FINGER_WIDTH = 0.1
 
         BOX_MASS = 1
         GRAV_ACC = 9.81
@@ -460,13 +460,14 @@ def plan_box_flip_up_newtons_third_law():
     prog = BoxFlipupDemo()
     prog.solve()
 
+    contact_positions_ctrl_points = [
+        prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
+    ]
+    contact_forces_ctrl_points = [
+        prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
+    ]
+
     if show_animation:
-        contact_positions_ctrl_points = [
-            prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
-        ]
-        contact_forces_ctrl_points = [
-            prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
-        ]
 
         viz_contact_positions = [
             VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
@@ -533,6 +534,8 @@ def plan_box_flip_up_newtons_third_law():
         create_static_equilibrium_analysis(
             fb_violation_ctrl_points, mb_violation_ctrl_points
         )
+
+        breakpoint()
 
         show_plots()
 

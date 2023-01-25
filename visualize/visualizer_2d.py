@@ -92,10 +92,10 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 class Visualizer2d:
     WINDOW_WIDTH = 500
     WINDOW_HEIGHT = 500
-    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2]).reshape((-1, 1))
-    PLOT_SCALE = 50
-    FORCE_SCALE = 0.2
-    POINT_RADIUS = 0.07
+    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT * 3 / 4]).reshape((-1, 1))
+    PLOT_SCALE = 400
+    FORCE_SCALE = 0.02
+    POINT_RADIUS = 0.001
 
     def visualize(
         self,
@@ -195,4 +195,4 @@ class Visualizer2d:
             polygon.color.blue - DARKENING,
         )
         viz_com = VisualizationPoint2d(polygon.position_curve, com_color)
-        self._draw_point(viz_com, idx, radius=0.1)
+        self._draw_point(viz_com, idx, radius=self.POINT_RADIUS * 1.2) # make com points a bit bigger
