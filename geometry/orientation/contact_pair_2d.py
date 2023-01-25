@@ -62,18 +62,24 @@ class ContactPair2d:
         p_Bc_B = self.contact_point_B.contact_position
 
         p_Bc_A = self.R_AB.dot(p_Bc_B)
-        constraints_in_frame_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
+        eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
 
         p_Ac_B = self.R_AB.T.dot(p_Ac_A)
-        constraints_in_frame_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B)
+        eq_contact_point_in_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B)
 
+        return np.vstack(
+            (
+                eq_contact_point_in_A,
+                eq_contact_point_in_B,
+            )
+        )
+
+    def create_equal_rel_position_constraints(self) -> npt.NDArray[sym.Formula]: # type: ignore
         rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B))
         rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A))
 
         return np.vstack(
             (
-                constraints_in_frame_A,
-                constraints_in_frame_B,
                 rel_pos_equal_in_A,
                 rel_pos_equal_in_B,
             )

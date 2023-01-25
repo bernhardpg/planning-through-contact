@@ -7,7 +7,10 @@ import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.mccormick import relax_bilinear_expression
+from convex_relaxation.mccormick import (
+    add_bilinear_expressions_to_prog,
+    relax_bilinear_expression,
+)
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.orientation.contact_pair_2d import ContactPair2d
@@ -19,13 +22,6 @@ from visualize.visualizer_2d import (
     VisualizationPolygon2d,
     Visualizer2d,
 )
-
-
-def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
-    lhs, rhs = form.Unapply()[1]  # type: ignore
-    expr = lhs - rhs
-    return expr
-
 
 T = TypeVar("T")
 
@@ -149,6 +145,18 @@ class BoxFlipupCtrlPoint:
             self.fc1_B.T.dot(self.fc1_B)[0, 0] + self.fc2_B.T.dot(self.fc2_B)[0, 0]
         )
 
+        self.equal_contact_point_constraints = (
+            self.table_box.create_equal_contact_point_constraints()
+        )
+
+        self.equal_rel_position_constraints = (
+            self.table_box.create_equal_rel_position_constraints()
+        )
+
+        self.newtons_third_law_constraints = (
+            self.table_box.create_newtons_third_law_force_constraints()
+        )
+
 
 # TODO:: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
 @dataclass
@@ -162,6 +170,7 @@ class BoxFlipupDemo:
     use_so2_cut: bool = True
     use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
+    use_equal_rel_position_constraint: bool = True # TODO: Does not seem to tighten relaxation!
     use_newtons_third_law_constraint: bool = True
 
     def __init__(self) -> None:
@@ -243,48 +252,23 @@ class BoxFlipupDemo:
                     self.prog.AddLinearConstraint(c)
 
             if self.use_equal_contact_point_constraint:
-                equal_contact_point_constraints = (
-                    ctrl_point.table_box.create_equal_contact_point_constraints()
+                add_bilinear_expressions_to_prog(
+                    ctrl_point.equal_contact_point_constraints,
+                    self.prog,
+                    variable_bounds,
                 )
 
-                for row in equal_contact_point_constraints:
-                    for constraint in row:
-                        expr = _convert_formula_to_lhs_expression(constraint)
-                        expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
-                        if expression_is_linear:
-                            self.prog.AddLinearConstraint(expr == 0)
-                        else:
-                            (
-                                relaxed_expr,
-                                new_vars,
-                                mccormick_envelope_constraints,
-                            ) = relax_bilinear_expression(expr, variable_bounds)
-                            self.prog.AddDecisionVariables(new_vars)  # type: ignore
-                            self.prog.AddLinearConstraint(relaxed_expr == 0)
-                            for c in mccormick_envelope_constraints:
-                                self.prog.AddLinearConstraint(c)
+            if self.use_equal_rel_position_constraint:
+                add_bilinear_expressions_to_prog(
+                    ctrl_point.equal_rel_position_constraints,
+                    self.prog,
+                    variable_bounds,
+                )
 
             if self.use_newtons_third_law_constraint:
-                newtons_third_law_constraints = (
-                    ctrl_point.table_box.create_newtons_third_law_force_constraints()
+                add_bilinear_expressions_to_prog(
+                    ctrl_point.newtons_third_law_constraints, self.prog, variable_bounds
                 )
-                # TODO: this is duplicated code, clean up!
-                for row in newtons_third_law_constraints:
-                    for constraint in row:
-                        expr = _convert_formula_to_lhs_expression(constraint)
-                        expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
-                        if expression_is_linear:
-                            self.prog.AddLinearConstraint(expr == 0)
-                        else:
-                            (
-                                relaxed_expr,
-                                new_vars,
-                                mccormick_envelope_constraints,
-                            ) = relax_bilinear_expression(expr, variable_bounds)
-                            self.prog.AddDecisionVariables(new_vars)  # type: ignore
-                            self.prog.AddLinearConstraint(relaxed_expr == 0)
-                            for c in mccormick_envelope_constraints:
-                                self.prog.AddLinearConstraint(c)
 
             if self.use_so2_constraint:
                 self.prog.AddLorentzConeConstraint(1, ctrl_point.relaxed_so_2_constraint)  # type: ignore
@@ -339,6 +323,22 @@ class BoxFlipupDemo:
         for c in condition:
             self.prog.AddLinearConstraint(c)
 
+    def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
+        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
+        solutions = from_expr_to_float(self.result.GetSolution(expr))
+        return solutions
+
+    def _get_solution_for_np_exprs(self, exprs: List[npt.NDArray[sym.Expression]]) -> npt.NDArray[np.float64]:  # type: ignore
+        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
+        solutions = np.array(
+            [from_expr_to_float(self.result.GetSolution(e).flatten()) for e in exprs]
+        )
+        return solutions
+
+    def _get_solution_for_exprs(self, expr: List[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
+        solutions = np.array([self.result.GetSolution(e).Evaluate() for e in expr])
+        return solutions
+
     def solve(self) -> None:
         self.result = Solve(self.prog)
         print(f"Solution result: {self.result.get_solution_result()}")
@@ -357,21 +357,15 @@ class BoxFlipupDemo:
             (1, -1)
         )  # (1, ctrl_points)
 
-    def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
-        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
-        solutions = from_expr_to_float(self.result.GetSolution(expr))
-        return solutions
-
-    def _get_solution_for_np_exprs(self, exprs: List[npt.NDArray[sym.Expression]]) -> npt.NDArray[np.float64]:  # type: ignore
-        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
-        solutions = np.array(
-            [from_expr_to_float(self.result.GetSolution(e).flatten()) for e in exprs]
+    def get_equal_contact_point_violation(self) -> npt.NDArray[np.float64]:
+        return self._get_solution_for_np_exprs(
+            [cp.equal_contact_point_constraints for cp in self.ctrl_points]
         )
-        return solutions
 
-    def _get_solution_for_exprs(self, expr: List[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
-        solutions = np.array([self.result.GetSolution(e).Evaluate() for e in expr])
-        return solutions
+    def get_newtons_third_law_violation(self) -> npt.NDArray[np.float64]:
+        return self._get_solution_for_np_exprs(
+            [cp.newtons_third_law_constraints for cp in self.ctrl_points]
+        )
 
     @property
     def contact_forces_in_W(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
@@ -429,7 +423,7 @@ def plan_box_flip_up_newtons_third_law():
     prog = BoxFlipupDemo()
     prog.solve()
 
-    show_animation = False
+    show_animation = True
 
     if show_animation:
         contact_positions_ctrl_points = [

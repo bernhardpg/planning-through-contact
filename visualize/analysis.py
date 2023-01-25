@@ -58,3 +58,6 @@ def create_static_equilibrium_analysis(
     fig.tight_layout()  # type: ignore
 
     plt.show()
+
+def create_newtons_third_law_analysis():
+    ...

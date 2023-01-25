@@ -1,8 +1,10 @@
 import warnings
 from typing import Dict, List, Tuple
-import numpy as np
 
+import numpy as np
+import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
+from pydrake.solvers import MathematicalProgram
 
 
 def _create_aux_variable(m: sym.Monomial) -> sym.Variable:
@@ -89,3 +91,29 @@ def relax_bilinear_expression(
         new_aux_variables,
         mccormick_envelope_constraints,
     )
+
+
+def _convert_formula_to_lhs_expression(form: sym.Formula) -> sym.Expression:
+    lhs, rhs = form.Unapply()[1]  # type: ignore
+    expr = lhs - rhs
+    return expr
+
+
+# TODO: This is moved here to avoid duplicated code. However, the code in itself should be cleaned up.
+def add_bilinear_expressions_to_prog(constraint_list: List[npt.NDArray[sym.Formula]], prog: MathematicalProgram, variable_bounds: Dict[str, Tuple[float, float]]) -> None:  # type: ignore
+    for row in constraint_list:
+        for constraint in row:
+            expr = _convert_formula_to_lhs_expression(constraint)
+            expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
+            if expression_is_linear:
+                prog.AddLinearConstraint(expr == 0)
+            else:
+                (
+                    relaxed_expr,
+                    new_vars,
+                    mccormick_envelope_constraints,
+                ) = relax_bilinear_expression(expr, variable_bounds)
+                prog.AddDecisionVariables(new_vars)  # type: ignore
+                prog.AddLinearConstraint(relaxed_expr == 0)
+                for c in mccormick_envelope_constraints:
+                    prog.AddLinearConstraint(c)
