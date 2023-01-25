@@ -1,12 +1,25 @@
 from dataclasses import dataclass
+from typing import NamedTuple, Union
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
+from pydrake.solvers import MathematicalProgramResult
 
-from geometry.orientation.contact_point_2d import ContactPoint2d
 from geometry.box import Box2d
+from geometry.orientation.contact_point_2d import ContactPoint2d
+from tools.types import NpExpressionArray, NpFormulaArray
+from tools.utils import evaluate_np_formulas_array
+
+
+class ContactPointConstraints(NamedTuple):
+    in_frame_A: Union[NpFormulaArray, NpExpressionArray, npt.NDArray[np.float64]]
+    in_frame_B: Union[NpFormulaArray, NpExpressionArray, npt.NDArray[np.float64]]
+
+    def evaluate(self, result: MathematicalProgramResult) -> "ContactPointConstraints":
+        return ContactPointConstraints(*evaluate_np_formulas_array(self, result))
+
 
 @dataclass
 class ContactPair2d:
@@ -57,7 +70,7 @@ class ContactPair2d:
             ]
         )
 
-    def create_equal_contact_point_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
+    def create_equal_contact_point_constraints(self) -> ContactPointConstraints:
         p_Ac_A = self.contact_point_A.contact_position
         p_Bc_B = self.contact_point_B.contact_position
 
@@ -67,34 +80,19 @@ class ContactPair2d:
         p_Ac_B = self.R_AB.T.dot(p_Ac_A)
         eq_contact_point_in_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B)
 
-        return np.vstack(
-            (
-                eq_contact_point_in_A,
-                eq_contact_point_in_B,
-            )
-        )
+        return ContactPointConstraints(eq_contact_point_in_A, eq_contact_point_in_B)
 
-    def create_equal_rel_position_constraints(self) -> npt.NDArray[sym.Formula]: # type: ignore
+    def create_equal_rel_position_constraints(self) -> ContactPointConstraints:
         rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B))
         rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A))
 
-        return np.vstack(
-            (
-                rel_pos_equal_in_A,
-                rel_pos_equal_in_B,
-            )
-        )
+        return ContactPointConstraints(rel_pos_equal_in_A, rel_pos_equal_in_B)
 
-    def create_newtons_third_law_force_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
+    def create_newtons_third_law_force_constraints(self) -> ContactPointConstraints:
         f_c_A = self.contact_point_A.contact_force
         f_c_B = self.contact_point_B.contact_force
 
         equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B))
         equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A))
 
-        return np.vstack(
-            (
-                equal_and_opposite_in_A,
-                equal_and_opposite_in_B,
-            )
-        )
+        return ContactPointConstraints(equal_and_opposite_in_A, equal_and_opposite_in_B)

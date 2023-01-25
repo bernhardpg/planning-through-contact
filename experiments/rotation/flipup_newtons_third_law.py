@@ -1,3 +1,4 @@
+import argparse
 from dataclasses import dataclass
 from typing import List, TypeVar, Union
 
@@ -13,8 +14,9 @@ from convex_relaxation.mccormick import (
 )
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
-from geometry.orientation.contact_pair_2d import ContactPair2d
+from geometry.orientation.contact_pair_2d import ContactPair2d, ContactPointConstraints
 from geometry.utilities import cross_2d
+from tools.utils import convert_formula_to_lhs_expression
 from visualize.analysis import create_static_equilibrium_analysis
 from visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -170,7 +172,9 @@ class BoxFlipupDemo:
     use_so2_cut: bool = True
     use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
-    use_equal_rel_position_constraint: bool = True # TODO: Does not seem to tighten relaxation!
+    use_equal_rel_position_constraint: bool = (
+        True  # TODO: Does not seem to tighten relaxation!
+    )
     use_newtons_third_law_constraint: bool = True
 
     def __init__(self) -> None:
@@ -323,11 +327,13 @@ class BoxFlipupDemo:
         for c in condition:
             self.prog.AddLinearConstraint(c)
 
+    # TODO: Deprecate these
     def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
         from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
         solutions = from_expr_to_float(self.result.GetSolution(expr))
         return solutions
 
+    # TODO: Deprecate these
     def _get_solution_for_np_exprs(self, exprs: List[npt.NDArray[sym.Expression]]) -> npt.NDArray[np.float64]:  # type: ignore
         from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
         solutions = np.array(
@@ -335,6 +341,7 @@ class BoxFlipupDemo:
         )
         return solutions
 
+    # TODO: Deprecate these
     def _get_solution_for_exprs(self, expr: List[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
         solutions = np.array([self.result.GetSolution(e).Evaluate() for e in expr])
         return solutions
@@ -357,15 +364,26 @@ class BoxFlipupDemo:
             (1, -1)
         )  # (1, ctrl_points)
 
-    def get_equal_contact_point_violation(self) -> npt.NDArray[np.float64]:
-        return self._get_solution_for_np_exprs(
-            [cp.equal_contact_point_constraints for cp in self.ctrl_points]
-        )
+    def get_equal_contact_point_violation(self) -> List[ContactPointConstraints]:
+        violations = [
+            cp.equal_contact_point_constraints.evaluate(self.result)
+            for cp in self.ctrl_points
+        ]
+        return violations
 
-    def get_newtons_third_law_violation(self) -> npt.NDArray[np.float64]:
-        return self._get_solution_for_np_exprs(
-            [cp.newtons_third_law_constraints for cp in self.ctrl_points]
-        )
+    def get_newtons_third_law_violation(self) -> List[ContactPointConstraints]:
+        violations = [
+            cp.newtons_third_law_constraints.evaluate(self.result)
+            for cp in self.ctrl_points
+        ]
+        return violations
+
+    def get_equal_rel_position_violation(self) -> List[ContactPointConstraints]:
+        violations = [
+            cp.equal_rel_position_constraints.evaluate(self.result)
+            for cp in self.ctrl_points
+        ]
+        return violations
 
     @property
     def contact_forces_in_W(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
@@ -420,10 +438,19 @@ def plan_box_flip_up_newtons_third_law():
 
     NUM_CTRL_POINTS = 3
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--animate", help="Show animation", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--analysis", help="Show analysis", action="store_true", default=False
+    )
+    args = parser.parse_args()
+    show_animation = args.animate
+    show_analysis = args.analysis
+
     prog = BoxFlipupDemo()
     prog.solve()
-
-    show_animation = True
 
     if show_animation:
         contact_positions_ctrl_points = [
@@ -481,12 +508,18 @@ def plan_box_flip_up_newtons_third_law():
             [viz_box, viz_table],
         )
 
-    fb_violation_ctrl_points = prog.get_force_balance_violation()
-    mb_violation_ctrl_points = prog.get_moment_balance_violation()
+    if show_analysis:
+        equal_contact_point_violation = prog.get_equal_contact_point_violation()
+        equal_rel_position_violation = prog.get_equal_rel_position_violation()
+        newtons_third_law_violation = prog.get_newtons_third_law_violation()
+        breakpoint()
 
-    create_static_equilibrium_analysis(
-        fb_violation_ctrl_points, mb_violation_ctrl_points
-    )
+        fb_violation_ctrl_points = prog.get_force_balance_violation()
+        mb_violation_ctrl_points = prog.get_moment_balance_violation()
+
+        create_static_equilibrium_analysis(
+            fb_violation_ctrl_points, mb_violation_ctrl_points
+        )
 
 
 if __name__ == "__main__":

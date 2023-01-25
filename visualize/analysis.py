@@ -57,7 +57,6 @@ def create_static_equilibrium_analysis(
     fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
     fig.tight_layout()  # type: ignore
 
-    plt.show()
 
 def create_newtons_third_law_analysis():
     ...
