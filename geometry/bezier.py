@@ -140,7 +140,7 @@ class BernsteinPolynomial:
         return value_at_s
 
 
-# TODO use this everywhere instead of just a numpy array
+# TODO: use this everywhere instead of just a numpy array
 @dataclass
 class BezierCtrlPoints:
     ctrl_points: npt.NDArray[np.float64]

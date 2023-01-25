@@ -8,9 +8,11 @@ from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
+from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.orientation.contact_pair_2d import ContactPair2d
 from geometry.utilities import cross_2d
+from visualize.analysis import create_static_equilibrium_analysis
 from visualize.visualizer_2d import (
     VisualizationForce2d,
     VisualizationPoint2d,
@@ -345,11 +347,15 @@ class BoxFlipupDemo:
         print(f"Cost: {self.result.get_optimal_cost()}")
 
     def get_force_balance_violation(self) -> npt.NDArray[np.float64]:
-        fb_violation = self._get_solution_for_np_exprs(self.force_balances)
+        fb_violation = self._get_solution_for_np_exprs(
+            self.force_balances
+        ).T  # (dims, ctrl_points)
         return fb_violation
 
     def get_moment_balance_violation(self) -> npt.NDArray[np.float64]:
-        return self._get_solution_for_exprs(self.moment_balances)
+        return self._get_solution_for_exprs(self.moment_balances).reshape(
+            (1, -1)
+        )  # (1, ctrl_points)
 
     def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
         from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
@@ -423,58 +429,70 @@ def plan_box_flip_up_newtons_third_law():
     prog = BoxFlipupDemo()
     prog.solve()
 
-    contact_positions_ctrl_points = [
-        prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
-    ]
-    contact_forces_ctrl_points = [
-        prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
-    ]
+    show_animation = False
 
-    viz_contact_positions = [
-        VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
-        for pos in contact_positions_ctrl_points
-    ]
-    viz_contact_forces = [
-        VisualizationForce2d.from_ctrl_points(pos, force, CONTACT_COLOR)
-        for pos, force in zip(contact_positions_ctrl_points, contact_forces_ctrl_points)
-    ]
+    if show_animation:
+        contact_positions_ctrl_points = [
+            prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
+        ]
+        contact_forces_ctrl_points = [
+            prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
+        ]
 
-    box_com_ctrl_points = prog.result.GetSolution(prog.box_com_in_W)
-    viz_box_com = VisualizationPoint2d.from_ctrl_points(
-        box_com_ctrl_points, GRAVITY_COLOR
+        viz_contact_positions = [
+            VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
+            for pos in contact_positions_ctrl_points
+        ]
+        viz_contact_forces = [
+            VisualizationForce2d.from_ctrl_points(pos, force, CONTACT_COLOR)
+            for pos, force in zip(
+                contact_positions_ctrl_points, contact_forces_ctrl_points
+            )
+        ]
+
+        box_com_ctrl_points = prog.result.GetSolution(prog.box_com_in_W)
+        viz_box_com = VisualizationPoint2d.from_ctrl_points(
+            box_com_ctrl_points, GRAVITY_COLOR
+        )
+        viz_gravitional_force = VisualizationForce2d.from_ctrl_points(
+            prog.result.GetSolution(prog.box_com_in_W),
+            prog.result.GetSolution(prog.gravitational_force_in_W),
+            GRAVITY_COLOR,
+        )
+
+        orientation_ctrl_points = [
+            prog._get_solution_for_np_expr(R) for R in prog.box_orientation
+        ]
+        viz_box = VisualizationPolygon2d.from_ctrl_points(
+            box_com_ctrl_points,
+            orientation_ctrl_points,
+            prog.ctrl_points[0].box,
+            BOX_COLOR,
+        )
+
+        table_pos_ctrl_points = np.zeros((2, NUM_CTRL_POINTS))
+        table_orientation_ctrl_points = [np.eye(2)] * NUM_CTRL_POINTS
+
+        viz_table = VisualizationPolygon2d.from_ctrl_points(
+            table_pos_ctrl_points,
+            table_orientation_ctrl_points,
+            prog.ctrl_points[0].table,
+            TABLE_COLOR,
+        )
+
+        viz = Visualizer2d()
+        viz.visualize(
+            viz_contact_positions + [viz_box_com],
+            viz_contact_forces + [viz_gravitional_force],
+            [viz_box, viz_table],
+        )
+
+    fb_violation_ctrl_points = prog.get_force_balance_violation()
+    mb_violation_ctrl_points = prog.get_moment_balance_violation()
+
+    create_static_equilibrium_analysis(
+        fb_violation_ctrl_points, mb_violation_ctrl_points
     )
-    viz_gravitional_force = VisualizationForce2d.from_ctrl_points(
-        prog.result.GetSolution(prog.box_com_in_W),
-        prog.result.GetSolution(prog.gravitational_force_in_W),
-        GRAVITY_COLOR,
-    )
-
-    orientation_ctrl_points = [
-        prog._get_solution_for_np_expr(R) for R in prog.box_orientation
-    ]
-    viz_box = VisualizationPolygon2d.from_ctrl_points(
-        box_com_ctrl_points, orientation_ctrl_points, prog.ctrl_points[0].box, BOX_COLOR
-    )
-
-    table_pos_ctrl_points = np.zeros((2, NUM_CTRL_POINTS))
-    table_orientation_ctrl_points = [np.eye(2)] * NUM_CTRL_POINTS
-
-    viz_table = VisualizationPolygon2d.from_ctrl_points(
-        table_pos_ctrl_points,
-        table_orientation_ctrl_points,
-        prog.ctrl_points[0].table,
-        TABLE_COLOR,
-    )
-
-    viz = Visualizer2d()
-    viz.visualize(
-        viz_contact_positions + [viz_box_com],
-        viz_contact_forces + [viz_gravitional_force],
-        [viz_box, viz_table],
-    )
-
-    # fb_violation = prog.get_force_balance_violation()
-    # mb_violation = prog.get_moment_balance_violation()
 
 
 if __name__ == "__main__":
