@@ -66,8 +66,8 @@ def create_static_equilibrium_analysis(
 
 def create_newtons_third_law_analysis(
     equal_contact_point_ctrl_points: List[ContactPointConstraints],
-    newtons_third_law_ctrl_points: List[ContactPointConstraints],
     equal_rel_position_ctrl_points: List[ContactPointConstraints],
+    newtons_third_law_ctrl_points: List[ContactPointConstraints],
 ):
 
     # Local helper functions
@@ -113,17 +113,17 @@ def create_newtons_third_law_analysis(
 
     fig.suptitle("Newtons Third Law constraint violations")
 
-    MIN_Y_AXIS_METER = -0.5
-    MAX_Y_AXIS_METER = max(
-        np.concatenate(
-            (
-                eq_contact_point_A,
-                eq_contact_point_B,
-                eq_rel_position_A,
-                eq_rel_position_B,
-            )
+    all_pos_curves = np.concatenate(
+        (
+            eq_contact_point_A,
+            eq_contact_point_B,
+            eq_rel_position_A,
+            eq_rel_position_B,
         )
-    ) * 1.25
+    )
+
+    MIN_Y_AXIS_METER = min(min(all_pos_curves), -0.1) * 1.25
+    MAX_Y_AXIS_METER = max(max(all_pos_curves), 0.1) * 1.25
 
     axs[0, 0].plot(x_axis, eq_contact_point_A)
     axs[0, 1].plot(x_axis, eq_contact_point_B)
