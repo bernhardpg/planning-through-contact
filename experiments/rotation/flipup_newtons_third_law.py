@@ -9,6 +9,7 @@ from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
 from geometry.box import Box2d, construct_2d_plane_from_points
+from geometry.orientation.contact_pair_2d import ContactPair2d
 from geometry.utilities import cross_2d
 from visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -34,152 +35,10 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
     return rot_matrix
 
 
-# NOTE: that this does not use the ContactPoint defined in the library
-# TODO: this should be unified
-class ContactPoint2d:
-    def __init__(
-        self,
-        body: Box2d,
-        contact_location: str,
-        friction_coeff: float = 0.5,
-        name: str = "unnamed",
-    ) -> None:
-        self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
-            contact_location
-        )
-        self.friction_coeff = friction_coeff
-
-        self.normal_force = sym.Variable(f"{name}_c_n")
-        self.friction_force = sym.Variable(f"{name}_c_f")
-
-        # TODO: use enums instead
-        if "face" in contact_location:
-            self.contact_type = "face"
-        elif "corner" in contact_location:
-            self.contact_type = "corner"
-        else:
-            raise ValueError(f"Unsupported contact location: {contact_location}")
-
-        if self.contact_type == "face":
-            self.lam = sym.Variable(f"{name}_lam")
-            vertices = body.get_proximate_vertices_from_location(contact_location)
-            self.contact_position = (
-                self.lam * vertices[0] + (1 - self.lam) * vertices[1]
-            )
-        else:
-            corner_vertex = body.get_proximate_vertices_from_location(contact_location)
-            self.contact_position = corner_vertex
-
-    @property
-    def contact_force(self) -> npt.NDArray[sym.Expression]:  # type: ignore
-        return (
-            self.normal_force * self.normal_vec + self.friction_force * self.tangent_vec
-        )
-
-    @property
-    def variables(self) -> npt.NDArray[sym.Variable]:  # type: ignore
-        if self.contact_type == "face":
-            return np.array([self.normal_force, self.friction_force, self.lam])
-        else:
-            return np.array([self.normal_force, self.friction_force])
-
-    def create_friction_cone_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
-        upper_bound = self.friction_force <= self.friction_coeff * self.normal_force
-        lower_bound = -self.friction_coeff * self.normal_force <= self.friction_force
-        normal_force_positive = self.normal_force >= 0
-        return np.vstack([upper_bound, lower_bound, normal_force_positive])
-
-
-@dataclass
-class ContactPair:
-    def __init__(
-        self,
-        pair_name: str,
-        body_A: Box2d,
-        contact_location_A: str,
-        name_A: str,
-        body_B: Box2d,
-        contact_location_B: str,
-        name_B: str,
-        friction_coeff: float,
-    ) -> None:
-        self.contact_point_A = ContactPoint2d(
-            body_A,
-            contact_location_A,
-            friction_coeff,
-            name=f"{pair_name}_{name_A}",
-        )
-        self.contact_point_B = ContactPoint2d(
-            body_B,
-            contact_location_B,
-            friction_coeff,
-            name=f"{pair_name}_{name_B}",
-        )
-
-        cos_th = sym.Variable(f"{pair_name}_cos_th")
-        sin_th = sym.Variable(f"{pair_name}_sin_th")
-        self.R_AB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
-
-        p_AB_A_x = sym.Variable(f"{pair_name}_p_AB_A_x")
-        p_AB_A_y = sym.Variable(f"{pair_name}_p_AB_A_y")
-        self.p_AB_A = np.array([p_AB_A_x, p_AB_A_y]).reshape((-1, 1))
-
-        p_BA_B_x = sym.Variable(f"{pair_name}_p_BA_B_x")
-        p_BA_B_y = sym.Variable(f"{pair_name}_p_BA_B_y")
-        self.p_BA_B = np.array([p_BA_B_x, p_BA_B_y]).reshape((-1, 1))
-
-    @property
-    def variables(self) -> npt.NDArray[sym.Variable]:  # type: ignore
-        return np.concatenate(
-            [
-                self.contact_point_A.variables,
-                self.contact_point_B.variables,
-                self.p_AB_A.flatten(),
-                self.p_BA_B.flatten(),
-            ]
-        )
-
-    def create_equal_contact_point_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
-        p_Ac_A = self.contact_point_A.contact_position
-        p_Bc_B = self.contact_point_B.contact_position
-
-        p_Bc_A = self.R_AB.dot(p_Bc_B)
-        constraints_in_frame_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
-
-        p_Ac_B = self.R_AB.T.dot(p_Ac_A)
-        constraints_in_frame_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B)
-
-        rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B))
-        rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A))
-
-        return np.vstack(
-            (
-                constraints_in_frame_A,
-                constraints_in_frame_B,
-                rel_pos_equal_in_A,
-                rel_pos_equal_in_B,
-            )
-        )
-
-    def create_newtons_third_law_force_constraints(self) -> npt.NDArray[sym.Formula]:  # type: ignore
-        f_c_A = self.contact_point_A.contact_force
-        f_c_B = self.contact_point_B.contact_force
-
-        equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B))
-        equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A))
-
-        return np.vstack(
-            (
-                equal_and_opposite_in_A,
-                equal_and_opposite_in_B,
-            )
-        )
-
-
 # TODO: should be in a file with boxflipup demo
 class BoxFlipupCtrlPoint:
-    table_box: ContactPair
-    box_finger: ContactPair
+    table_box: ContactPair2d
+    box_finger: ContactPair2d
 
     def __init__(self) -> None:
         BOX_WIDTH = 3
@@ -200,7 +59,7 @@ class BoxFlipupCtrlPoint:
         self.table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
         self.finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
 
-        self.table_box = ContactPair(
+        self.table_box = ContactPair2d(
             "contact_1",
             self.table,
             "face_1",
@@ -210,7 +69,7 @@ class BoxFlipupCtrlPoint:
             "box",
             FRICTION_COEFF,
         )
-        self.box_finger = ContactPair(
+        self.box_finger = ContactPair2d(
             "contact_2",
             self.box,
             "face_2",
