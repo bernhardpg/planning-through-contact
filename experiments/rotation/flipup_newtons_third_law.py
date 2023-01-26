@@ -28,6 +28,9 @@ from visualize.visualizer_2d import (
     Visualizer2d,
 )
 
+# FIX: should not be defined here
+NUM_CTRL_POINTS = 2
+
 T = TypeVar("T")
 
 
@@ -171,12 +174,12 @@ class BoxFlipupDemo:
     use_moment_balance: bool = True
     use_friction_cone_constraint: bool = True
     use_force_balance_constraint: bool = True
-    use_so2_constraint: bool = True
+    use_so2_constraint: bool = False
     use_so2_cut: bool = True
     use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
     use_equal_rel_position_constraint: bool = (
-        True  # TODO: Does not seem to tighten relaxation!
+        False  # TODO: Does not seem to tighten relaxation!
     )
     use_newtons_third_law_constraint: bool = True
 
@@ -185,7 +188,6 @@ class BoxFlipupDemo:
         self._setup_box_flipup_prog()
 
     def _setup_ctrl_points(self) -> None:
-        NUM_CTRL_POINTS = 3
         self.ctrl_points = [BoxFlipupCtrlPoint() for _ in range(NUM_CTRL_POINTS)]
 
     @property
@@ -274,7 +276,9 @@ class BoxFlipupDemo:
 
             if self.use_newtons_third_law_constraint:
                 add_bilinear_expressions_to_prog(
-                    ctrl_point.newtons_third_law_constraints, self.prog, variable_bounds
+                    ctrl_point.newtons_third_law_constraints,
+                    self.prog,
+                    variable_bounds,
                 )
 
             if self.use_so2_constraint:
@@ -311,19 +315,13 @@ class BoxFlipupDemo:
         self._constrain_orientation_at_ctrl_point_idx(th_final, -1)
 
         # Don't allow contact position to change
-        self.prog.AddLinearConstraint(
-            eq(self.ctrl_points[0].pc2_B, self.ctrl_points[1].pc2_B)
-        )
-        self.prog.AddLinearConstraint(
-            eq(self.ctrl_points[1].pc2_B, self.ctrl_points[2].pc2_B)
-        )
-
-        self.prog.AddLinearConstraint(
-            eq(self.ctrl_points[0].pc1_T, self.ctrl_points[1].pc1_T)
-        )
-        self.prog.AddLinearConstraint(
-            eq(self.ctrl_points[1].pc1_T, self.ctrl_points[2].pc1_T)
-        )
+        for idx in range(NUM_CTRL_POINTS - 1):
+            self.prog.AddLinearConstraint(
+                eq(self.ctrl_points[idx].pc2_B, self.ctrl_points[idx + 1].pc2_B)
+            )
+            self.prog.AddLinearConstraint(
+                eq(self.ctrl_points[idx].pc1_T, self.ctrl_points[idx + 1].pc1_T)
+            )
 
     def _constrain_orientation_at_ctrl_point_idx(self, theta: float, idx: int) -> None:
         condition = eq(self.R_WBs[idx], _angle_to_2d_rot_matrix(theta))
@@ -448,8 +446,6 @@ def plan_box_flip_up_newtons_third_law():
     GRAVITY_COLOR = "blueviolet"
     BOX_COLOR = "aquamarine4"
     TABLE_COLOR = "bisque3"
-
-    NUM_CTRL_POINTS = 3
 
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -99,8 +99,18 @@ def add_bilinear_expressions_to_prog(
     constraints: ContactPointConstraints,
     prog: MathematicalProgram,
     variable_bounds: Dict[str, Tuple[float, float]],
+    only_A: bool = False,
+    only_B: bool = False,
 ) -> None:  # type: ignore
-    for constraint in constraints:
+    # TODO: Remove this code which is only for analysis
+    if only_A:
+        constraints_to_use = [constraints.in_frame_A]
+    elif only_B:
+        constraints_to_use = [constraints.in_frame_B]
+    else: # NOTE: There is a type error here, but it is just for analysis, so leave this for now
+        constraints_to_use = constraints
+        
+    for constraint in constraints_to_use:
         for formula in constraint.flatten():
             expr = convert_formula_to_lhs_expression(formula)
             expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1

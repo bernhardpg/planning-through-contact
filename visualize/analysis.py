@@ -10,6 +10,9 @@ from geometry.orientation.contact_pair_2d import ContactPointConstraints
 PLOT_WIDTH_INCH = 7
 PLOT_HEIGHT_INCH = 4.5
 
+DISTANCE_REF = 0.3 # Width of box
+FORCE_REF = 10 # Current max force
+TORQUE_REF = FORCE_REF * DISTANCE_REF # Almost max torque
 
 def show_plots() -> None:
     plt.show()
@@ -25,8 +28,6 @@ def create_static_equilibrium_analysis(
     fb_violation_ctrl_points: npt.NDArray[np.float64],
     mb_violation_ctrl_points: npt.NDArray[np.float64],
 ):
-    MIN_Y_AXIS_NEWTON = -1
-    MAX_Y_AXIS_NEWTON = 10
 
     num_ctrl_points = fb_violation_ctrl_points.shape[1]
 
@@ -50,15 +51,16 @@ def create_static_equilibrium_analysis(
     axs[0].plot(x_axis, fb_norm_violation)
     axs[0].set_title("Norm of force balance violation")
     axs[0].set(ylabel="[N]")
+    axs[0].set_ylim(-1, FORCE_REF)
 
     axs[1].plot(x_axis, mb_violation)
     axs[1].set_title("Torque balance violation")
     axs[1].set(xlabel="Control point", ylabel="[Nm]")
     axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
+    axs[1].set_ylim(-1, TORQUE_REF)
 
     for ax in axs:
         ax.grid()
-        ax.set_ylim(MIN_Y_AXIS_NEWTON, MAX_Y_AXIS_NEWTON)
 
     fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
     fig.tight_layout()  # type: ignore
@@ -122,11 +124,8 @@ def create_newtons_third_law_analysis(
         )
     )
 
-    MIN_Y_AXIS_METER = min(min(all_pos_curves), -0.5) * 1.25
-    MAX_Y_AXIS_METER = max(max(all_pos_curves), 0.5) * 1.25
-
-    MIN_Y_AXIS_NEWTON = -1
-    MAX_Y_AXIS_NEWTON = 10
+    MIN_Y_AXIS_METER = min(min(all_pos_curves), -DISTANCE_REF) * 1.25
+    MAX_Y_AXIS_METER = max(max(all_pos_curves), DISTANCE_REF) * 1.25
 
     axs[0, 0].plot(x_axis, eq_contact_point_A)
     axs[0, 1].plot(x_axis, eq_contact_point_B)
@@ -147,7 +146,7 @@ def create_newtons_third_law_analysis(
     axs[2, 0].set_title("Contact forces: T frame")
     axs[2, 1].set_title("Contact forces: B frame")
     axs[2, 0].set(ylabel="[N]")
-    axs[2, 0].set_ylim(MIN_Y_AXIS_NEWTON, MAX_Y_AXIS_NEWTON)
+    axs[2, 0].set_ylim(-1, FORCE_REF)
 
     axs[2, 0].set(xlabel="Control point")
     axs[2, 1].set(xlabel="Control point")
