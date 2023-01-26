@@ -16,6 +16,7 @@ from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.orientation.contact_pair_2d import ContactPair2d, ContactPointConstraints
 from geometry.utilities import cross_2d
 from visualize.analysis import (
+    create_force_plot,
     create_newtons_third_law_analysis,
     create_static_equilibrium_analysis,
     show_plots,
@@ -515,14 +516,14 @@ def plan_box_flip_up_newtons_third_law():
         )
 
         # FIX: Naming
-        box_com_B_ctrl_points = prog.result.GetSolution(prog.box_com_B_in_W)
-        viz_box_com_B = VisualizationPoint2d.from_ctrl_points(
-            box_com_B_ctrl_points, "carrot"
-        )
+        # box_com_B_ctrl_points = prog.result.GetSolution(prog.box_com_B_in_W)
+        # viz_box_com_B = VisualizationPoint2d.from_ctrl_points(
+        #     box_com_B_ctrl_points, "carrot"
+        # )
 
         viz = Visualizer2d()
         viz.visualize(
-            viz_contact_positions + [viz_box_com, viz_box_com_B],
+            viz_contact_positions + [viz_box_com],
             viz_contact_forces + [viz_gravitional_force],
             [viz_box, viz_table],
         )
@@ -543,6 +544,16 @@ def plan_box_flip_up_newtons_third_law():
 
         create_static_equilibrium_analysis(
             fb_violation_ctrl_points, mb_violation_ctrl_points
+        )
+
+        # TODO: Generalize so that I don't need to pass in names!
+        create_force_plot(
+            contact_forces_ctrl_points,
+            [
+                "fc1_B",
+                "fc1_T",
+                "fc2_B",
+            ],
         )
 
         show_plots()

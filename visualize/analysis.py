@@ -25,8 +25,8 @@ def create_static_equilibrium_analysis(
     fb_violation_ctrl_points: npt.NDArray[np.float64],
     mb_violation_ctrl_points: npt.NDArray[np.float64],
 ):
-    MIN_Y_AXIS = -1
-    MAX_Y_AXIS = 4
+    MIN_Y_AXIS_NEWTON = -1
+    MAX_Y_AXIS_NEWTON = 10
 
     num_ctrl_points = fb_violation_ctrl_points.shape[1]
 
@@ -58,7 +58,7 @@ def create_static_equilibrium_analysis(
 
     for ax in axs:
         ax.grid()
-        ax.set_ylim(MIN_Y_AXIS, MAX_Y_AXIS)
+        ax.set_ylim(MIN_Y_AXIS_NEWTON, MAX_Y_AXIS_NEWTON)
 
     fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
     fig.tight_layout()  # type: ignore
@@ -122,8 +122,11 @@ def create_newtons_third_law_analysis(
         )
     )
 
-    MIN_Y_AXIS_METER = min(min(all_pos_curves), -0.1) * 1.25
-    MAX_Y_AXIS_METER = max(max(all_pos_curves), 0.1) * 1.25
+    MIN_Y_AXIS_METER = min(min(all_pos_curves), -0.5) * 1.25
+    MAX_Y_AXIS_METER = max(max(all_pos_curves), 0.5) * 1.25
+
+    MIN_Y_AXIS_NEWTON = -1
+    MAX_Y_AXIS_NEWTON = 10
 
     axs[0, 0].plot(x_axis, eq_contact_point_A)
     axs[0, 1].plot(x_axis, eq_contact_point_B)
@@ -144,6 +147,7 @@ def create_newtons_third_law_analysis(
     axs[2, 0].set_title("Contact forces: T frame")
     axs[2, 1].set_title("Contact forces: B frame")
     axs[2, 0].set(ylabel="[N]")
+    axs[2, 0].set_ylim(MIN_Y_AXIS_NEWTON, MAX_Y_AXIS_NEWTON)
 
     axs[2, 0].set(xlabel="Control point")
     axs[2, 1].set(xlabel="Control point")
@@ -156,3 +160,41 @@ def create_newtons_third_law_analysis(
     axs[0, 0].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
 
     fig.tight_layout()  # type: ignore
+    fig.set_size_inches(10, 9)  # type: ignore
+
+
+def create_force_plot(
+    force_ctrl_points: List[npt.NDArray[np.float64]], force_names: List[str]
+) -> None:
+
+    MIN_Y_AXIS_NEWTON = -1
+    MAX_Y_AXIS_NEWTON = 10
+
+    force_curves = [
+        BezierCurve.create_from_ctrl_points(points).eval_entire_interval()
+        for points in force_ctrl_points
+    ]
+    force_norms = [_create_curve_norm(curve) for curve in force_curves]
+
+    # TODO: For now I will hardcode which forces to plot, but this shold be generalized
+    fig, axs = plt.subplots(2, 1, sharey=True, sharex="col")  # type: ignore
+
+    num_ctrl_points = force_ctrl_points[0].shape[1]
+    N = force_curves[0].shape[0]
+    x_axis = np.linspace(0, num_ctrl_points, N)
+
+    fig.suptitle("Norm of Contact Forces")
+    axs[0].set_title("table/box")
+    axs[0].plot(x_axis, np.hstack((force_norms[0], force_norms[1])))
+    axs[0].set(ylabel="[N]")
+    axs[0].legend(["in B frame", "in W frame"])
+    axs[0].set_ylim(MIN_Y_AXIS_NEWTON, MAX_Y_AXIS_NEWTON)
+
+    axs[1].set_title("box/finger")
+    axs[1].plot(x_axis, force_norms[2])
+    axs[1].set(ylabel="[N]")
+    axs[1].set(xlabel="Control point")
+    axs[1].legend(["in B frame"])
+
+    for ax in axs:
+        ax.grid()
