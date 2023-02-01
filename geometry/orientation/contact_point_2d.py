@@ -2,16 +2,15 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 
-from geometry.box import Box2d
+from geometry.box import RigidBody2d
+from geometry.contact_2d.types import ContactLocation, ContactType
 
 
-# NOTE: that this does not use the ContactPoint defined in the library
-# TODO: this should be unified
 class ContactPoint2d:
     def __init__(
         self,
-        body: Box2d,
-        contact_location: str,
+        body: RigidBody2d,
+        contact_location: ContactLocation,
         friction_coeff: float = 0.5,
         name: str = "unnamed",
     ) -> None:
@@ -22,23 +21,18 @@ class ContactPoint2d:
 
         self.normal_force = sym.Variable(f"{name}_c_n")
         self.friction_force = sym.Variable(f"{name}_c_f")
+        self.contact_location = contact_location
 
-        # TODO: use enums instead
-        if "face" in contact_location:
-            self.contact_type = "face"
-        elif "corner" in contact_location:
-            self.contact_type = "corner"
-        else:
-            raise ValueError(f"Unsupported contact location: {contact_location}")
-
-        if self.contact_type == "face":
+        if self.contact_location.type == ContactType.FACE:
             self.lam = sym.Variable(f"{name}_lam")
-            vertices = body.get_proximate_vertices_from_location(contact_location)
+            vertices = body.get_proximate_vertices_from_location(self.contact_location)
             self.contact_position = (
                 self.lam * vertices[0] + (1 - self.lam) * vertices[1]
             )
         else:
-            corner_vertex = body.get_proximate_vertices_from_location(contact_location)
+            corner_vertex = body.get_proximate_vertices_from_location(
+                self.contact_location
+            )
             self.contact_position = corner_vertex
 
     @property
@@ -49,7 +43,7 @@ class ContactPoint2d:
 
     @property
     def variables(self) -> npt.NDArray[sym.Variable]:  # type: ignore
-        if self.contact_type == "face":
+        if self.contact_location.type == ContactType.FACE:
             return np.array([self.normal_force, self.friction_force, self.lam])
         else:
             return np.array([self.normal_force, self.friction_force])

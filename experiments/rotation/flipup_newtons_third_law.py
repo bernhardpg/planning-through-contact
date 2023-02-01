@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from typing import List, TypeVar, Union
+from typing import List, NamedTuple, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +12,8 @@ from convex_relaxation.mccormick import (
     add_bilinear_expressions_to_prog,
     relax_bilinear_expression,
 )
-from geometry.box import Box2d, construct_2d_plane_from_points
+from geometry.box import Box2d, RigidBody2d, construct_2d_plane_from_points
+from geometry.contact_2d.types import ContactLocation, ContactType
 from geometry.orientation.contact_pair_2d import ContactPair2d, ContactPointConstraints
 from geometry.utilities import cross_2d
 from visualize.analysis import (
@@ -61,30 +62,41 @@ class BoxFlipupCtrlPoint:
 
         FRICTION_COEFF = 0.7
 
-        self.box = Box2d(BOX_WIDTH, BOX_HEIGHT)
-        self.table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
-        self.finger = Box2d(FINGER_WIDTH, FINGER_HEIGHT)
+        self.box = Box2d(actuated=False, name="box", width=BOX_WIDTH, height=BOX_HEIGHT)
+        self.table = Box2d(
+            actuated=True, name="table", width=TABLE_WIDTH, height=TABLE_HEIGHT
+        )
+        self.finger = Box2d(
+            actuated=True, name="finger", width=FINGER_WIDTH, height=FINGER_HEIGHT
+        )
 
         self.table_box = ContactPair2d(
             "contact_1",
             self.table,
-            "face_1",
-            "table",
+            ContactLocation(ContactType.FACE, 1),
             self.box,
-            "corner_4",
-            "box",
+            ContactLocation(ContactType.VERTEX, 4),
             FRICTION_COEFF,
         )
         self.box_finger = ContactPair2d(
             "contact_2",
             self.box,
-            "face_2",
-            "box",
+            ContactLocation(ContactType.FACE, 2),
             self.finger,
-            "corner_1",
-            "finger",
+            ContactLocation(ContactType.VERTEX, 1),
             FRICTION_COEFF,
         )
+
+        # FIX:
+        # Plan:
+        # 1. Define unactuated and actuated objects just once
+        # 2. Add force and torque balance automatically
+        # 3. Generalize non-penetration constraint creation
+        # 4. Generalize SO(2) constraint creation
+        # 5. Automatically create equal contact point constraint
+        # 6. Automatically create eq and opposite forces constraint
+        # 7. (Automatically create rel position constraint)
+        # 8. Cost should be created automatically
 
         # Constant variables
         self.fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
@@ -132,7 +144,7 @@ class BoxFlipupCtrlPoint:
         # Non-penetration constraint
         # NOTE:! These are frame-dependent, keep in mind when generalizing these
         # Add nonpenetration constraint in table frame
-        table_a_T = self.table.a1[0]
+        table_a_T = self.table.a1.a
         pm1_B = self.box.p1
         pm3_B = self.box.p3
 

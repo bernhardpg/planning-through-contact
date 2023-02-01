@@ -1,26 +1,53 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Tuple, Union, NamedTuple
 
 import numpy as np
 import numpy.typing as npt
 
+from geometry.contact_2d.types import ContactLocation, ContactType
+
+class Plane(NamedTuple):
+    a: npt.NDArray[np.float64]
+    b: npt.NDArray[np.float64]
 
 def construct_2d_plane_from_points(
     p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
-) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+) -> Plane:
     diff = p2 - p1
     normal_vec = np.array([-diff[1], diff[0]]).reshape((-1, 1))
     a = normal_vec / np.linalg.norm(normal_vec)
     b = a.T.dot(p1)
-    return (a, b)
+    return Plane(a, b)
 
 
 def normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     return vec / np.linalg.norm(vec)
 
 
+# FIX: Move to its own module
 @dataclass
-class Box2d:
+class RigidBody2d(ABC):
+    actuated: bool
+    name: str
+
+    @abstractmethod
+    def get_proximate_vertices_from_location(
+        self, ContactLocation
+    ) -> Union[
+        npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
+    ]:
+        pass
+
+    @abstractmethod
+    def get_norm_and_tang_vecs_from_location(
+        self, location: ContactLocation
+    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        pass
+
+
+@dataclass
+class Box2d(RigidBody2d):
     width: float = 3
     height: float = 2
 
@@ -55,26 +82,25 @@ class Box2d:
     # p4 --a3--- p3
 
     @property
-    def a1(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def a1(self) -> Plane:
         return construct_2d_plane_from_points(self.p1, self.p2)
 
     @property
-    def a2(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def a2(self) -> Plane:
         return construct_2d_plane_from_points(self.p2, self.p3)
 
     @property
-    def a3(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def a3(self) -> Plane:
         return construct_2d_plane_from_points(self.p3, self.p4)
 
     @property
-    def a4(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def a4(self) -> Plane:
         return construct_2d_plane_from_points(self.p4, self.p1)
 
-    # NOTE! All of these arrows are the wrong ways
+    # NOTE: All of these arrows are the wrong ways
 
     #           ^
     #           | n1
-    #       ---------
     #       |       |
     # n4 <- |       | -> n2
     #       |       |
@@ -98,7 +124,7 @@ class Box2d:
     def n4(self) -> npt.NDArray[np.float64]:
         return -np.array([-1, 0]).reshape((-1, 1))
 
-    # NOTE! All of these arrows are the wrong ways
+    # NOTE: All of these arrows are the wrong ways
 
     # Right handed coordinate frame with z-axis out of plane and x-axis along normal
 
@@ -164,49 +190,72 @@ class Box2d:
         return self.nc3
 
     def get_norm_and_tang_vecs_from_location(
-        self, location: str
+        self, location: ContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location == "face_1":
-            return self.n1, self.t1
-        elif location == "face_2":
-            return self.n2, self.t2
-        elif location == "face_3":
-            return self.n3, self.t3
-        elif location == "face_4":
-            return self.n4, self.t4
 
-        elif location == "corner_1":
-            return self.nc1, self.tc1
-        elif location == "corner_2":
-            return self.nc2, self.tc2
-        elif location == "corner_3":
-            return self.nc3, self.tc3
-        elif location == "corner_4":
-            return self.nc4, self.tc4
+        if location.type == ContactType.FACE:
+            if location.idx == 1:
+                return self.n1, self.t1
+            elif location.idx == 2:
+                return self.n2, self.t2
+            elif location.idx == 3:
+                return self.n3, self.t3
+            elif location.idx == 4:
+                return self.n4, self.t4
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
+        elif location.type == ContactType.VERTEX:
+            if location.idx == 1:
+                return self.nc1, self.tc1
+            elif location.idx == 2:
+                return self.nc2, self.tc2
+            elif location.idx == 3:
+                return self.nc3, self.tc3
+            elif location.idx == 4:
+                return self.nc4, self.tc4
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
         else:
-            raise NotImplementedError(f"Location {location} not yet implemented")
+            raise NotImplementedError(
+                f"Location {location.type}: {location.idx} not implemented"
+            )
 
     def get_proximate_vertices_from_location(
-        self, location: str
+        self, location: ContactLocation
     ) -> Union[
         npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
     ]:
-        if location == "face_1":
-            return self.p1, self.p2
-        elif location == "face_2":
-            return self.p2, self.p3
-        elif location == "face_3":
-            return self.p3, self.p4
-        elif location == "face_4":
-            return self.p4, self.p1
-
-        elif location == "corner_1":
-            return self.p1
-        elif location == "corner_2":
-            return self.p2
-        elif location == "corner_3":
-            return self.p3
-        elif location == "corner_4":
-            return self.p4
+        if location.type == ContactType.FACE:
+            if location.idx == 1:
+                return self.p1, self.p2
+            elif location.idx == 2:
+                return self.p2, self.p3
+            elif location.idx == 3:
+                return self.p3, self.p4
+            elif location.idx == 4:
+                return self.p4, self.p1
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
+        elif location.type == ContactType.VERTEX:
+            if location.idx == 1:
+                return self.p1
+            elif location.idx == 2:
+                return self.p2
+            elif location.idx == 3:
+                return self.p3
+            elif location.idx == 4:
+                return self.p4
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
         else:
-            raise NotImplementedError(f"Location {location} not yet implemented")
+            raise NotImplementedError(
+                f"Location {location.type}: {location.idx} not implemented"
+            )

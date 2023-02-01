@@ -7,8 +7,9 @@ import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgramResult
 
-from geometry.box import Box2d
+from geometry.box import RigidBody2d
 from geometry.orientation.contact_point_2d import ContactPoint2d
+from geometry.contact_2d.types import ContactLocation, ContactType
 from tools.types import NpExpressionArray, NpFormulaArray
 from tools.utils import evaluate_np_formulas_array
 
@@ -26,25 +27,23 @@ class ContactPair2d:
     def __init__(
         self,
         pair_name: str,
-        body_A: Box2d,
-        contact_location_A: str,
-        name_A: str,
-        body_B: Box2d,
-        contact_location_B: str,
-        name_B: str,
+        body_A: RigidBody2d,
+        contact_location_A: ContactLocation,
+        body_B: RigidBody2d,
+        contact_location_B: ContactLocation,
         friction_coeff: float,
     ) -> None:
         self.contact_point_A = ContactPoint2d(
             body_A,
             contact_location_A,
             friction_coeff,
-            name=f"{pair_name}_{name_A}",
+            name=f"{pair_name}_{body_A.name}",
         )
         self.contact_point_B = ContactPoint2d(
             body_B,
             contact_location_B,
             friction_coeff,
-            name=f"{pair_name}_{name_B}",
+            name=f"{pair_name}_{body_B.name}",
         )
 
         cos_th = sym.Variable(f"{pair_name}_cos_th")
