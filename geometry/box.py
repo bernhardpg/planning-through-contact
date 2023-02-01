@@ -1,15 +1,17 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Tuple, Union, NamedTuple
+from typing import NamedTuple, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 
 from geometry.contact_2d.types import ContactLocation, ContactType
 
+
 class Plane(NamedTuple):
     a: npt.NDArray[np.float64]
     b: npt.NDArray[np.float64]
+
 
 def construct_2d_plane_from_points(
     p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
@@ -51,62 +53,61 @@ class Box2d(RigidBody2d):
     width: float = 3
     height: float = 2
 
-    # p1 -- p2
+    # v1 -- v2
     # |     |
-    # p4 -- p3
+    # v4 -- v3
 
     @property
-    def p1(self) -> npt.NDArray[np.float64]:
+    def v1(self) -> npt.NDArray[np.float64]:
         return np.array([[-self.width / 2], [self.height / 2]])
 
     @property
-    def p2(self) -> npt.NDArray[np.float64]:
+    def v2(self) -> npt.NDArray[np.float64]:
         return np.array([[self.width / 2], [self.height / 2]])
 
     @property
-    def p3(self) -> npt.NDArray[np.float64]:
+    def v3(self) -> npt.NDArray[np.float64]:
         return np.array([[self.width / 2], [-self.height / 2]])
 
     @property
-    def p4(self) -> npt.NDArray[np.float64]:
+    def v4(self) -> npt.NDArray[np.float64]:
         return np.array([[-self.width / 2], [-self.height / 2]])
 
     @property
-    def corners(self) -> npt.NDArray[np.float64]:
-        return np.hstack([self.p1, self.p2, self.p3, self.p4])
+    def vertices(self) -> npt.NDArray[np.float64]:
+        return np.hstack([self.v1, self.v2, self.v3, self.v4])
 
-    # p1 - a1 - p2
+    # v1 - f1 - v2
     # |          |
-    # a4         a2
+    # f4         f2
     # |          |
-    # p4 --a3--- p3
+    # v4 --f3--- v3
 
     @property
-    def a1(self) -> Plane:
-        return construct_2d_plane_from_points(self.p1, self.p2)
+    def face_1(self) -> Plane:
+        return construct_2d_plane_from_points(self.v1, self.v2)
 
     @property
-    def a2(self) -> Plane:
-        return construct_2d_plane_from_points(self.p2, self.p3)
+    def face_2(self) -> Plane:
+        return construct_2d_plane_from_points(self.v2, self.v3)
 
     @property
-    def a3(self) -> Plane:
-        return construct_2d_plane_from_points(self.p3, self.p4)
+    def face_3(self) -> Plane:
+        return construct_2d_plane_from_points(self.v3, self.v4)
 
     @property
-    def a4(self) -> Plane:
-        return construct_2d_plane_from_points(self.p4, self.p1)
+    def face_4(self) -> Plane:
+        return construct_2d_plane_from_points(self.v4, self.v1)
 
-    # NOTE: All of these arrows are the wrong ways
-
-    #           ^
-    #           | n1
-    #       |       |
-    # n4 <- |       | -> n2
-    #       |       |
-    #       ---------
-    #           |
-    #           V n3
+    #  --------------------
+    #  |        |         |
+    #  |        v n1      |
+    #  |                  |
+    #  | --> n4    n2 <-- |
+    #  |                  |
+    #  |        ^         |
+    #  |        | n3      |
+    #  --------------------
 
     @property
     def n1(self) -> npt.NDArray[np.float64]:
@@ -124,17 +125,15 @@ class Box2d(RigidBody2d):
     def n4(self) -> npt.NDArray[np.float64]:
         return -np.array([-1, 0]).reshape((-1, 1))
 
-    # NOTE: All of these arrows are the wrong ways
-
     # Right handed coordinate frame with z-axis out of plane and x-axis along normal
-
-    #       <--t1
+    #
+    #           t1--->
     #       ---------
-    #       |       | ^
+    #    ^  |       |
     # t4 |  |       | | t2
-    #    V  |       |
+    #       |       | v
     #       ---------
-    #           --> t3
+    #       <--- t3
 
     @property
     def t1(self) -> npt.NDArray[np.float64]:
@@ -231,26 +230,26 @@ class Box2d(RigidBody2d):
     ]:
         if location.type == ContactType.FACE:
             if location.idx == 1:
-                return self.p1, self.p2
+                return self.v1, self.v2
             elif location.idx == 2:
-                return self.p2, self.p3
+                return self.v2, self.v3
             elif location.idx == 3:
-                return self.p3, self.p4
+                return self.v3, self.v4
             elif location.idx == 4:
-                return self.p4, self.p1
+                return self.v4, self.v1
             else:
                 raise NotImplementedError(
                     f"Location {location.type}: {location.idx} not implemented"
                 )
         elif location.type == ContactType.VERTEX:
             if location.idx == 1:
-                return self.p1
+                return self.v1
             elif location.idx == 2:
-                return self.p2
+                return self.v2
             elif location.idx == 3:
-                return self.p3
+                return self.v3
             elif location.idx == 4:
-                return self.p4
+                return self.v4
             else:
                 raise NotImplementedError(
                     f"Location {location.type}: {location.idx} not implemented"

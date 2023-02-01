@@ -54,7 +54,7 @@ class VisualizationForce2d(VisualizationPoint2d):
 
 @dataclass
 class VisualizationPolygon2d(VisualizationPoint2d):
-    corner_curves: List[npt.NDArray[np.float64]]  # [(N, dims), (N,dims), ...]
+    vertices_curves: List[npt.NDArray[np.float64]]  # [(N, dims), (N,dims), ...]
 
     @classmethod
     def from_ctrl_points(
@@ -73,13 +73,13 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 
         temp = np.array(
             [
-                pos.reshape((-1, 1)) + rot.dot(box.corners)
+                pos.reshape((-1, 1)) + rot.dot(box.vertices)
                 for rot, pos in zip(ctrl_points_orientation, ctrl_points_position.T)
             ]
-        )  # (ctrl_points, dims, num_corners)
-        temp2 = np.transpose(temp, axes=[1, 0, 2])  # (dims, ctrl_points, num_corners)
-        num_corners = temp2.shape[2]
-        corner_ctrl_points_in_W = [temp2[:, :, idx] for idx in range(num_corners)]
+        )  # (ctrl_points, dims, num_vertices)
+        temp2 = np.transpose(temp, axes=[1, 0, 2])  # (dims, ctrl_points, num_vertices)
+        num_vertices = temp2.shape[2]
+        corner_ctrl_points_in_W = [temp2[:, :, idx] for idx in range(num_vertices)]
 
         corner_curves = [
             BezierCurve.create_from_ctrl_points(ctrl_points).eval_entire_interval()
@@ -184,8 +184,8 @@ class Visualizer2d:
         )
 
     def _draw_polygon(self, polygon: VisualizationPolygon2d, idx: int) -> None:
-        corners = np.hstack([c[idx].reshape((-1, 1)) for c in polygon.corner_curves])
-        polygon_points = self._transform_points_for_plotting(corners)
+        vertices = np.hstack([c[idx].reshape((-1, 1)) for c in polygon.vertices_curves])
+        polygon_points = self._transform_points_for_plotting(vertices)
         self.canvas.create_polygon(polygon_points, fill=polygon.color.hex_format())
 
         DARKENING = 50

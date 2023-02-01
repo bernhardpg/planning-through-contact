@@ -144,9 +144,9 @@ class BoxFlipupCtrlPoint:
         # Non-penetration constraint
         # NOTE:! These are frame-dependent, keep in mind when generalizing these
         # Add nonpenetration constraint in table frame
-        table_a_T = self.table.a1.a
-        pm1_B = self.box.p1
-        pm3_B = self.box.p3
+        table_a_T = self.table.face_1.a
+        pm1_B = self.box.v1
+        pm3_B = self.box.v3
 
         self.nonpen_1_T = table_a_T.T.dot(self.R_TB).dot(pm1_B - self.pc1_B)[0, 0] >= 0
         self.nonpen_2_T = table_a_T.T.dot(self.R_TB).dot(pm3_B - self.pc1_B)[0, 0] >= 0
