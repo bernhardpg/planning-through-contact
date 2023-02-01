@@ -42,41 +42,22 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
     return rot_matrix
 
 
-# TODO: should be in a file with boxflipup demo
+@dataclass
 class BoxFlipupCtrlPoint:
-    table_box: ContactPair2d
-    box_finger: ContactPair2d
+    table: Box2d
+    box: Box2d
+    finger: Box2d
+    friction_coeff: float
+    idx: int
 
-    def __init__(self) -> None:
-        BOX_WIDTH = 0.3
-        BOX_HEIGHT = 0.2
-
-        TABLE_HEIGHT = 0.5
-        TABLE_WIDTH = 2
-
-        FINGER_HEIGHT = 0.1
-        FINGER_WIDTH = 0.1
-
-        BOX_MASS = 1
-        GRAV_ACC = 9.81
-
-        FRICTION_COEFF = 0.7
-
-        self.box = Box2d(actuated=False, name="box", width=BOX_WIDTH, height=BOX_HEIGHT)
-        self.table = Box2d(
-            actuated=True, name="table", width=TABLE_WIDTH, height=TABLE_HEIGHT
-        )
-        self.finger = Box2d(
-            actuated=True, name="finger", width=FINGER_WIDTH, height=FINGER_HEIGHT
-        )
-
+    def _create_contact_pairs(self) -> None:
         self.table_box = ContactPair2d(
             "contact_1",
             self.table,
             ContactLocation(ContactType.FACE, 1),
             self.box,
             ContactLocation(ContactType.VERTEX, 4),
-            FRICTION_COEFF,
+            self.friction_coeff,
         )
         self.box_finger = ContactPair2d(
             "contact_2",
@@ -84,22 +65,42 @@ class BoxFlipupCtrlPoint:
             ContactLocation(ContactType.FACE, 2),
             self.finger,
             ContactLocation(ContactType.VERTEX, 1),
-            FRICTION_COEFF,
+            self.friction_coeff,
         )
+
+        self.contact_pairs = [self.table_box, self.box_finger]
+
+    def __post_init__(
+        self,
+    ) -> None:
+
+        self.bodies = [self.table, self.box, self.finger]
+
+        self._create_contact_pairs()
 
         # FIX:
         # Plan:
-        # 1. Define unactuated and actuated objects just once
-        # 2. Add force and torque balance automatically
-        # 3. Generalize non-penetration constraint creation
-        # 4. Generalize SO(2) constraint creation
-        # 5. Automatically create equal contact point constraint
-        # 6. Automatically create eq and opposite forces constraint
-        # 7. (Automatically create rel position constraint)
-        # 8. Cost should be created automatically
+        #  - Fix the following:
 
-        # Constant variables
-        self.fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
+        # For each contact pair:
+        #   add so2 constraints
+        #   add nonpenetration constraints
+        #
+        #   add newtons 3rd law constraints
+        #   add eq contact point constraints
+        #
+        # for each body:
+        #   add friction cone constraints to all force
+        #   add force minimization
+        # 
+        #   if unactuated:
+        #       add static eq constraints
+        #
+
+        # - Add support for point contacts
+
+        if self.box.mass is None:
+            raise ValueError("Box must have a mass!")
 
         self.p_TB_T = self.table_box.p_AB_A
         self.p_WB_W = self.p_TB_T
@@ -124,7 +125,9 @@ class BoxFlipupCtrlPoint:
         self.fc2_F = self.box_finger.contact_point_B.contact_force
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
-
+       
+        GRAV_ACC = 9.81
+        self.fg_W = np.array([0, -self.box.mass * GRAV_ACC]).reshape((-1, 1))
         self.sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB.T.dot(self.fg_W)  # type: ignore
 
         # TODO: clean up, this is just for plotting rounding error!
@@ -181,7 +184,6 @@ class BoxFlipupCtrlPoint:
 # TODO:: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
 @dataclass
 class BoxFlipupDemo:
-    friction_coeff: float = 0.7  # TODO: unify this with ctrl point constants
     use_quadratic_cost: bool = True
     use_moment_balance: bool = True
     use_friction_cone_constraint: bool = True
@@ -190,17 +192,60 @@ class BoxFlipupDemo:
     use_so2_cut: bool = True
     use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
-    use_equal_rel_position_constraint: bool = (
-        False  # TODO: Does not seem to tighten relaxation!
-    )
+    use_equal_rel_position_constraint: bool = False
     use_newtons_third_law_constraint: bool = True
 
     def __init__(self) -> None:
+        self._setup_bodies()
         self._setup_ctrl_points()
         self._setup_box_flipup_prog()
 
+    def _setup_bodies(self) -> None:
+        BOX_WIDTH = 0.3
+        BOX_HEIGHT = 0.2
+
+        TABLE_HEIGHT = 0.5
+        TABLE_WIDTH = 2
+
+        FINGER_HEIGHT = 0.1
+        FINGER_WIDTH = 0.1
+
+        BOX_MASS = 1
+
+        FRICTION_COEFF = 0.7
+
+        self.friction_coeff = FRICTION_COEFF
+        self.box = Box2d(
+            actuated=False,
+            name="box",
+            mass=BOX_MASS,
+            width=BOX_WIDTH,
+            height=BOX_HEIGHT,
+        )
+        self.table = Box2d(
+            actuated=True,
+            name="table",
+            mass=None,
+            width=TABLE_WIDTH,
+            height=TABLE_HEIGHT,
+        )
+        self.finger = Box2d(
+            actuated=True,
+            name="finger",
+            mass=None,
+            width=FINGER_WIDTH,
+            height=FINGER_HEIGHT,
+        )
+
+        self.bodies = [self.box, self.table, self.finger]
+
     def _setup_ctrl_points(self) -> None:
-        self.ctrl_points = [BoxFlipupCtrlPoint() for _ in range(NUM_CTRL_POINTS)]
+        self.ctrl_points = [
+            BoxFlipupCtrlPoint(
+                self.table, self.box, self.finger, self.friction_coeff, idx
+            )
+            for idx in range(NUM_CTRL_POINTS)
+        ]
 
     @property
     def R_WBs(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore

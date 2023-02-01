@@ -8,9 +8,9 @@ from pydrake.math import eq
 from pydrake.solvers import MathematicalProgramResult
 
 from geometry.box import RigidBody2d
-from geometry.orientation.contact_point_2d import ContactPoint2d
 from geometry.contact_2d.types import ContactLocation, ContactType
-from tools.types import NpExpressionArray, NpFormulaArray
+from geometry.orientation.contact_point_2d import ContactPoint2d
+from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
 
 
@@ -59,7 +59,7 @@ class ContactPair2d:
         self.p_BA_B = np.array([p_BA_B_x, p_BA_B_y]).reshape((-1, 1))
 
     @property
-    def variables(self) -> npt.NDArray[sym.Variable]:  # type: ignore
+    def variables(self) -> NpVariableArray:
         return np.concatenate(
             [
                 self.contact_point_A.variables,

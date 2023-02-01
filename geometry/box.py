@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import NamedTuple, Tuple, Union
+from typing import NamedTuple, Tuple, Union, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -32,6 +32,7 @@ def normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 class RigidBody2d(ABC):
     actuated: bool
     name: str
+    mass: Optional[float]
 
     @abstractmethod
     def get_proximate_vertices_from_location(
