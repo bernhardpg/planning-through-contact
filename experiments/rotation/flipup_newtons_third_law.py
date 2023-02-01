@@ -29,7 +29,7 @@ from visualize.visualizer_2d import (
 )
 
 # FIX: should not be defined here
-NUM_CTRL_POINTS = 2
+NUM_CTRL_POINTS = 3
 
 T = TypeVar("T")
 
@@ -222,7 +222,7 @@ class BoxFlipupDemo:
             "contact_1_sin_th": (-1, 1),
             "contact_1_cos_th": (-1, 1),
             "contact_2_box_lam": (0.0, 1.0),
-            "contact_2_box_c_n": (0, MAX_FORCE),
+            "contact_2_box_c_n": (0, 3.8),
         }
 
         for ctrl_point in self.ctrl_points:
