@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.bezier import BezierCurve
-from geometry.box import Box2d
+from geometry.two_d.box_2d import Box2d
 from visualize.colors import COLORS, RGB
 
 
@@ -195,4 +195,6 @@ class Visualizer2d:
             polygon.color.blue - DARKENING,
         )
         viz_com = VisualizationPoint2d(polygon.position_curve, com_color)
-        self._draw_point(viz_com, idx, radius=self.POINT_RADIUS * 1.2) # make com points a bit bigger
+        self._draw_point(
+            viz_com, idx, radius=self.POINT_RADIUS * 1.2
+        )  # make com points a bit bigger

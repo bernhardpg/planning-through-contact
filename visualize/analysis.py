@@ -5,14 +5,15 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.bezier import BezierCurve
-from geometry.orientation.contact_pair_2d import ContactPointConstraints
+from geometry.two_d.contact.contact_pair_2d import ContactFrameConstraints
 
 PLOT_WIDTH_INCH = 7
 PLOT_HEIGHT_INCH = 4.5
 
-DISTANCE_REF = 0.3 # Width of box
-FORCE_REF = 10 # Current max force
-TORQUE_REF = FORCE_REF * DISTANCE_REF # Almost max torque
+DISTANCE_REF = 0.3  # Width of box
+FORCE_REF = 10  # Current max force
+TORQUE_REF = FORCE_REF * DISTANCE_REF  # Almost max torque
+
 
 def show_plots() -> None:
     plt.show()
@@ -67,21 +68,21 @@ def create_static_equilibrium_analysis(
 
 
 def create_newtons_third_law_analysis(
-    equal_contact_point_ctrl_points: List[ContactPointConstraints],
-    equal_rel_position_ctrl_points: List[ContactPointConstraints],
-    newtons_third_law_ctrl_points: List[ContactPointConstraints],
+    equal_contact_point_ctrl_points: List[ContactFrameConstraints],
+    equal_rel_position_ctrl_points: List[ContactFrameConstraints],
+    newtons_third_law_ctrl_points: List[ContactFrameConstraints],
 ):
 
     # Local helper functions
     def _extract_ctrl_points_as_np(
-        constraints: List[ContactPointConstraints],
+        constraints: List[ContactFrameConstraints],
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         return np.hstack([c.in_frame_A for c in constraints]), np.hstack(
             [c.in_frame_B for c in constraints]
         )
 
     def _create_2d_curves(
-        constraints: List[ContactPointConstraints],
+        constraints: List[ContactFrameConstraints],
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         ctrl_points = _extract_ctrl_points_as_np(constraints)
         curves = tuple(
@@ -91,7 +92,7 @@ def create_newtons_third_law_analysis(
         return curves
 
     def _create_2d_curve_norms(
-        constraints: List[ContactPointConstraints],
+        constraints: List[ContactFrameConstraints],
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         curves = _create_2d_curves(constraints)
         norm_curves = tuple(_create_curve_norm(c) for c in curves)

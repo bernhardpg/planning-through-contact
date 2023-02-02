@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 import pydrake.symbolic as sym  # type: ignore
 from pydrake.solvers import MathematicalProgram
 
-from geometry.orientation.contact_pair_2d import ContactPointConstraints
+from geometry.two_d.contact.contact_pair_2d import ContactFrameConstraints
 from tools.utils import convert_formula_to_lhs_expression
 
 
@@ -96,7 +96,7 @@ def relax_bilinear_expression(
 
 # TODO: This is moved here to avoid duplicated code. However, the code in itself should be cleaned up.
 def add_bilinear_expressions_to_prog(
-    constraints: ContactPointConstraints,
+    constraints: ContactFrameConstraints,
     prog: MathematicalProgram,
     variable_bounds: Dict[str, Tuple[float, float]],
     only_A: bool = False,
@@ -107,9 +107,9 @@ def add_bilinear_expressions_to_prog(
         constraints_to_use = [constraints.in_frame_A]
     elif only_B:
         constraints_to_use = [constraints.in_frame_B]
-    else: # NOTE: There is a type error here, but it is just for analysis, so leave this for now
+    else:  # NOTE: There is a type error here, but it is just for analysis, so leave this for now
         constraints_to_use = constraints
-        
+
     for constraint in constraints_to_use:
         for formula in constraint.flatten():
             expr = convert_formula_to_lhs_expression(formula)

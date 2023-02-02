@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, Iterable, List
 
 import numpy as np
 import numpy.typing as npt

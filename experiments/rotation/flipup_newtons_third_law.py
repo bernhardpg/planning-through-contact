@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from typing import List, NamedTuple, TypeVar, Union
+from typing import List, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -12,9 +12,13 @@ from convex_relaxation.mccormick import (
     add_bilinear_expressions_to_prog,
     relax_bilinear_expression,
 )
-from geometry.box import Box2d, RigidBody2d, construct_2d_plane_from_points
-from geometry.contact_2d.types import ContactLocation, ContactType
-from geometry.orientation.contact_pair_2d import ContactPair2d, ContactPointConstraints
+from geometry.hyperplane import construct_2d_plane_from_points
+from geometry.two_d.box_2d import Box2d
+from geometry.two_d.contact.contact_pair_2d import (
+    ContactPair2d,
+    EvaluatedContactFrameConstraints,
+)
+from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.utilities import cross_2d
 from visualize.analysis import (
     create_force_plot,
@@ -78,6 +82,11 @@ class BoxFlipupCtrlPoint:
 
         self._create_contact_pairs()
 
+        # for pair in self.contact_pairs:
+            # constraints = pair.create_constraints()
+            # breakpoint()
+            # ...
+
         # FIX:
         # Plan:
         #  - Fix the following:
@@ -92,15 +101,12 @@ class BoxFlipupCtrlPoint:
         # for each body:
         #   add friction cone constraints to all force
         #   add force minimization
-        # 
+        #
         #   if unactuated:
         #       add static eq constraints
         #
 
         # - Add support for point contacts
-
-        if self.box.mass is None:
-            raise ValueError("Box must have a mass!")
 
         self.p_TB_T = self.table_box.p_AB_A
         self.p_WB_W = self.p_TB_T
@@ -125,8 +131,11 @@ class BoxFlipupCtrlPoint:
         self.fc2_F = self.box_finger.contact_point_B.contact_force
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
-       
+
         GRAV_ACC = 9.81
+
+        if self.box.mass is None:
+            raise ValueError("Box must have a mass!")
         self.fg_W = np.array([0, -self.box.mass * GRAV_ACC]).reshape((-1, 1))
         self.sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB.T.dot(self.fg_W)  # type: ignore
 
@@ -177,7 +186,7 @@ class BoxFlipupCtrlPoint:
         )
 
         self.newtons_third_law_constraints = (
-            self.table_box.create_newtons_third_law_force_constraints()
+            self.table_box.create_equal_and_opposite_forces_constraint()
         )
 
 
@@ -422,21 +431,25 @@ class BoxFlipupDemo:
             (1, -1)
         )  # (1, ctrl_points)
 
-    def get_equal_contact_point_violation(self) -> List[ContactPointConstraints]:
+    def get_equal_contact_point_violation(
+        self,
+    ) -> List[EvaluatedContactFrameConstraints]:
         violations = [
             cp.equal_contact_point_constraints.evaluate(self.result)
             for cp in self.ctrl_points
         ]
         return violations
 
-    def get_newtons_third_law_violation(self) -> List[ContactPointConstraints]:
+    def get_newtons_third_law_violation(self) -> List[EvaluatedContactFrameConstraints]:
         violations = [
             cp.newtons_third_law_constraints.evaluate(self.result)
             for cp in self.ctrl_points
         ]
         return violations
 
-    def get_equal_rel_position_violation(self) -> List[ContactPointConstraints]:
+    def get_equal_rel_position_violation(
+        self,
+    ) -> List[EvaluatedContactFrameConstraints]:
         violations = [
             cp.equal_rel_position_constraints.evaluate(self.result)
             for cp in self.ctrl_points
