@@ -4,14 +4,40 @@ from typing import Dict, List, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
-import pydrake.symbolic as sym
+import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
-from geometry.contact_point import ContactPoint
+
+
+@dataclass
+class ContactPoint:
+    normal_vec: npt.NDArray[np.float64]
+    tangent_vec: npt.NDArray[np.float64]
+    friction_coeff: float
+
+    def force_vec_from_symbols(
+        self, normal_force: sym.Variable, friction_force: sym.Variable
+    ) -> npt.NDArray[sym.Expression]:  # type: ignore
+        return normal_force * self.normal_vec + friction_force * self.tangent_vec
+
+    def force_vec_from_values(
+        self, normal_force: float, friction_force: float
+    ) -> npt.NDArray[np.float64]:
+        force_vec = normal_force * self.normal_vec + friction_force * self.tangent_vec
+        return force_vec
+
+    def create_friction_cone_constraints(
+        self, normal_force: sym.Variable, friction_force: sym.Variable
+    ) -> npt.NDArray[sym.Formula]:  # type: ignore
+        upper_bound = friction_force <= self.friction_coeff * normal_force
+        lower_bound = -self.friction_coeff * normal_force <= friction_force
+        normal_force_positive = normal_force >= 0
+        return np.vstack([upper_bound, lower_bound, normal_force_positive])
+
 
 T = TypeVar("T")
 
@@ -46,10 +72,10 @@ def plan_box_flip_up_contact_point_fixed():
     # Constant variables
     fg_W = np.array([0, -BOX_MASS * GRAV_ACC]).reshape((-1, 1))
     pc_B = (
-        0.5 * box.p2 + 0.5 * box.p3
+        0.5 * box.v2 + 0.5 * box.v3
     )  # Contact point is on the middle on the right side
     pm4_W = np.array([0, TABLE_HEIGHT / 2]).reshape((-1, 1))
-    pm4_B = box.p4
+    pm4_B = box.v4
     mu = 0.7
 
     # Decision Va0riables
@@ -92,9 +118,9 @@ def plan_box_flip_up_contact_point_fixed():
         prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
 
         # Add nonpenetration constraint
-        table_a = table.a1[0]
-        pm1_B = box.p1
-        pm3_B = box.p3
+        table_a = table.face_1[0]
+        pm1_B = box.v1
+        pm3_B = box.v3
 
         nonpen_1 = table_a.T.dot(R_WB).dot(pm1_B - pm4_B)[0, 0] >= 0
         nonpen_2 = table_a.T.dot(R_WB).dot(pm3_B - pm4_B)[0, 0] >= 0
@@ -203,8 +229,8 @@ def plan_box_flip_up_contact_point_fixed():
         if any(np.abs(force_balance) > 1e-8):
             breakpoint()
 
-        points_box = make_plotable(p_WB + R_WB_val.dot(box.corners))
-        points_table = make_plotable(table.corners)
+        points_box = make_plotable(p_WB + R_WB_val.dot(box.vertices))
+        points_table = make_plotable(table.vertices)
 
         canvas.create_polygon(points_box, fill="#88f")
         canvas.create_polygon(points_table, fill="#2f2f2f")
@@ -241,5 +267,6 @@ def plan_box_flip_up_contact_point_fixed():
 
     app.mainloop()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     plan_box_flip_up_contact_point_fixed()
