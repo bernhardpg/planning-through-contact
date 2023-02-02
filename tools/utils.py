@@ -25,9 +25,9 @@ convert_np_exprs_array_to_floats: Callable[
 
 def evaluate_np_formulas_array(
     formulas: NpFormulaArray, result: MathematicalProgramResult
-) -> List[npt.NDArray[np.float64]]:
-    expressions = [convert_np_formulas_array_to_lhs_expressions(f) for f in formulas]
-    evaluated_expressions = [
-        convert_np_exprs_array_to_floats(result.GetSolution(e)) for e in expressions
-    ]
+) -> npt.NDArray[np.float64]:
+    expressions = convert_np_formulas_array_to_lhs_expressions(formulas)
+    evaluated_expressions = convert_np_exprs_array_to_floats(
+        result.GetSolution(expressions)
+    )
     return evaluated_expressions

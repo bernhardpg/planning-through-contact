@@ -8,18 +8,29 @@ from pydrake.math import eq
 from pydrake.solvers import MathematicalProgramResult
 
 from geometry.box import RigidBody2d
-from geometry.contact_2d.types import ContactLocation, ContactType
+from geometry.contact_2d.types import ContactLocation, ContactMode
 from geometry.orientation.contact_point_2d import ContactPoint2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
 
 
-class ContactPointConstraints(NamedTuple):
-    in_frame_A: Union[NpFormulaArray, NpExpressionArray, npt.NDArray[np.float64]]
-    in_frame_B: Union[NpFormulaArray, NpExpressionArray, npt.NDArray[np.float64]]
+class EvaluatedContactPointConstraints(NamedTuple):
+    in_frame_A: npt.NDArray[np.float64]
+    in_frame_B: npt.NDArray[np.float64]
 
-    def evaluate(self, result: MathematicalProgramResult) -> "ContactPointConstraints":
-        return ContactPointConstraints(*evaluate_np_formulas_array(self, result))
+
+class ContactPointConstraints(NamedTuple):
+    in_frame_A: Union[NpFormulaArray, NpExpressionArray]
+    in_frame_B: Union[NpFormulaArray, NpExpressionArray]
+
+    def evaluate(
+        self, result: MathematicalProgramResult
+    ) -> EvaluatedContactPointConstraints:
+        evaluated_in_frame_A = evaluate_np_formulas_array(self.in_frame_A, result)
+        evaluated_in_frame_B = evaluate_np_formulas_array(self.in_frame_B, result)
+        return EvaluatedContactPointConstraints(
+            evaluated_in_frame_A, evaluated_in_frame_B
+        )
 
 
 @dataclass
