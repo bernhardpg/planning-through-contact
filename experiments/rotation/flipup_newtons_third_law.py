@@ -18,6 +18,7 @@ from geometry.two_d.contact.contact_pair_2d import (
     ContactPair2d,
     EvaluatedContactFrameConstraints,
 )
+from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.utilities import cross_2d
 from visualize.analysis import (
@@ -82,6 +83,9 @@ class BoxFlipupCtrlPoint:
 
         self._create_contact_pairs()
 
+        contact_scene = ContactScene2d(self.bodies, self.contact_pairs, self.table)
+        contact_scene.create_static_equilibrium_constraints()
+
         # for pair in self.contact_pairs:
             # constraints = pair.create_constraints()
             # breakpoint()
@@ -133,7 +137,6 @@ class BoxFlipupCtrlPoint:
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
         GRAV_ACC = 9.81
-
         if self.box.mass is None:
             raise ValueError("Box must have a mass!")
         self.fg_W = np.array([0, -self.box.mass * GRAV_ACC]).reshape((-1, 1))
