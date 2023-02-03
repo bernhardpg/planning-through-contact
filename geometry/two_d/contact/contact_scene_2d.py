@@ -5,7 +5,8 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq
 
-from geometry.two_d.contact.contact_pair_2d import ContactPair2d
+from geometry.two_d.contact.contact_pair_2d import ContactPair2d, ContactPairConstraints
+from geometry.two_d.contact.types import ContactMode
 from geometry.two_d.rigid_body_2d import RigidBody2d
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray

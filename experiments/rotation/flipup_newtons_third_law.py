@@ -19,7 +19,7 @@ from geometry.two_d.contact.contact_pair_2d import (
     EvaluatedContactFrameConstraints,
 )
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactLocation, ContactType
+from geometry.two_d.contact.types import ContactLocation, ContactMode, ContactType
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
@@ -91,14 +91,30 @@ class BoxFlipupCtrlPoint:
             self.contact_scene.create_static_equilibrium_constraints_for_body(self.box)
         )
 
+        self.constraints = [
+            cp.create_constraints(ContactMode.ROLLING) for cp in self.contact_pairs
+        ]
+
         self.friction_cone_constraints = np.concatenate(
-            [cp.create_friction_cone_constraints() for cp in self.contact_pairs]
+            [c.friction_cone for c in self.constraints]
         )
 
-        # for pair in self.contact_pairs:
-        # constraints = pair.create_constraints()
-        # breakpoint()
-        # ...
+        self.relaxed_so_2_constraints = np.array(
+            [c.relaxed_so_2 for c in self.constraints]
+        )
+
+        self.equal_contact_point_constraints = [
+            c.equal_contact_points for c in self.constraints
+        ]
+
+        self.equal_rel_position_constraints = [
+            c.equal_relative_positions for c in self.constraints
+        ]
+
+        self.equal_and_opposite_forces_constraints = [
+            self.constraints[0].equal_and_opposite_forces
+            # c.equal_and_opposite_forces for c in self.constraints # FIX: I must first add support for point contacts, otherwise it is impossible to satisfy friction cone constraints
+        ]
 
         # FIX:
         # Plan:
@@ -142,14 +158,6 @@ class BoxFlipupCtrlPoint:
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
-        GRAV_ACC = 9.81
-        if self.box.mass is None:
-            raise ValueError("Box must have a mass!")
-        self.fg_W = np.array([0, -self.box.mass * GRAV_ACC]).reshape((-1, 1))
-        self.sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB.T.dot(self.fg_W)  # type: ignore
-
-        self.relaxed_so_2_constraint = (self.R_WB.T.dot(self.R_WB))[0, 0]
-
         # Non-penetration constraint
         # NOTE:! These are frame-dependent, keep in mind when generalizing these
         # Add nonpenetration constraint in table frame
@@ -174,18 +182,6 @@ class BoxFlipupCtrlPoint:
             self.fc1_B.T.dot(self.fc1_B)[0, 0] + self.fc2_B.T.dot(self.fc2_B)[0, 0]
         )
 
-        self.equal_contact_point_constraints = (
-            self.table_box.create_equal_contact_point_constraints()
-        )
-
-        self.equal_rel_position_constraints = (
-            self.table_box.create_equal_rel_position_constraints()
-        )
-
-        self.newtons_third_law_constraints = (
-            self.table_box.create_equal_and_opposite_forces_constraint()
-        )
-
     @property
     def variables(self) -> NpVariableArray:
         return self.contact_scene.variables
@@ -202,7 +198,9 @@ class BoxFlipupDemo:
     use_so2_cut: bool = True
     use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
-    use_equal_rel_position_constraint: bool = False
+    use_equal_rel_position_constraint: bool = (
+        False  # NOTE: this does not make the relaxation any tighter
+    )
     use_newtons_third_law_constraint: bool = True
 
     def __init__(self) -> None:
@@ -303,28 +301,27 @@ class BoxFlipupDemo:
                 )
 
             if self.use_equal_contact_point_constraint:
-                add_bilinear_frame_constraints_to_prog(
-                    ctrl_point.equal_contact_point_constraints,
-                    self.prog,
-                    variable_bounds,
-                )
+                for c in ctrl_point.equal_contact_point_constraints:
+                    add_bilinear_frame_constraints_to_prog(
+                        c, self.prog, variable_bounds
+                    )
 
             if self.use_equal_rel_position_constraint:
-                add_bilinear_frame_constraints_to_prog(
-                    ctrl_point.equal_rel_position_constraints,
-                    self.prog,
-                    variable_bounds,
-                )
+                for c in ctrl_point.equal_rel_position_constraints:
+                    add_bilinear_frame_constraints_to_prog(
+                        c, self.prog, variable_bounds
+                    )
 
             if self.use_newtons_third_law_constraint:
-                add_bilinear_frame_constraints_to_prog(
-                    ctrl_point.newtons_third_law_constraints,
-                    self.prog,
-                    variable_bounds,
-                )
+                for c in ctrl_point.equal_and_opposite_forces_constraints:
+                    add_bilinear_frame_constraints_to_prog(
+                        c, self.prog, variable_bounds
+                    )
 
             if self.use_so2_constraint:
-                self.prog.AddLorentzConeConstraint(1, ctrl_point.relaxed_so_2_constraint)  # type: ignore
+                for c in ctrl_point.relaxed_so_2_constraints:
+                    breakpoint()
+                    self.prog.AddLorentzConeConstraint(1, c)  # type: ignore
 
             if self.use_non_penetration_constraint:
                 self.prog.AddLinearConstraint(ctrl_point.nonpen_1_T)
@@ -412,7 +409,7 @@ class BoxFlipupDemo:
 
     def get_newtons_third_law_violation(self) -> List[EvaluatedContactFrameConstraints]:
         violations = [
-            cp.newtons_third_law_constraints.evaluate(self.result)
+            cp.equal_and_opposite_forces_constraints.evaluate(self.result)
             for cp in self.ctrl_points
         ]
         return violations
@@ -464,8 +461,8 @@ class BoxFlipupDemo:
         return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
 
     @property
-    def gravitational_force_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
-        return np.hstack([cp.fg_W for cp in self.ctrl_points])
+    def gravitational_force_in_W(self) -> npt.NDArray[np.float64]:
+        return np.hstack([cp.box.gravity_force_in_W for cp in self.ctrl_points])
 
     @property
     def box_com_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore

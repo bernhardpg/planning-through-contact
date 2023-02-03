@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import NamedTuple, Tuple, Union
+from typing import List, NamedTuple, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -33,7 +33,8 @@ class ContactFrameConstraints(NamedTuple):
         )
 
 
-class ContactPointConstraints(NamedTuple):
+class ContactPairConstraints(NamedTuple):
+    friction_cone: NpFormulaArray
     relaxed_so_2: sym.Formula
     # so_2_cut: sym.Formula # FIX:
     equal_contact_points: ContactFrameConstraints
@@ -141,9 +142,10 @@ class ContactPair2d:
             ]
         )
 
-    def create_constraints(self, contact_mode: ContactMode) -> ContactPointConstraints:
+    def create_constraints(self, contact_mode: ContactMode) -> ContactPairConstraints:
         if contact_mode == ContactMode.ROLLING:
-            return ContactPointConstraints(
+            return ContactPairConstraints(
+                self.create_friction_cone_constraints(),
                 self.create_relaxed_so2_constraint(),
                 self.create_equal_contact_point_constraints(),
                 self.create_equal_and_opposite_forces_constraint(),
