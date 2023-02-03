@@ -1,7 +1,8 @@
-from typing import List, NamedTuple, Union
+from typing import List, NamedTuple, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.symbolic as sym
 from pydrake.math import eq
 
 from geometry.two_d.contact.contact_pair_2d import ContactPair2d
@@ -13,6 +14,10 @@ from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 class StaticEquilibriumConstraints(NamedTuple):
     force_balance: NpFormulaArray
     torque_balance: NpFormulaArray
+
+    # Rotation matrix is normalized.
+    # This is to evaluate the force balance violation after the SO(2) constraints are relaxed
+    normalized_force_balance: Optional[NpFormulaArray]
 
 
 class ContactScene2d:
@@ -82,16 +87,27 @@ class ContactScene2d:
         contact_forces = self._get_contact_forces_acting_on_body(body)
         R_BW = self._get_transformation_to_W(body).T
 
+        R_BW_normalized = R_BW * (1 / sym.sqrt(R_BW[:, 0].dot(R_BW[:, 0])))  # type: ignore
+
         gravity_force = R_BW.dot(body.gravity_force_in_W)
         sum_of_forces = np.sum(contact_forces, axis=0) + gravity_force
         force_balance_condition = eq(sum_of_forces, 0)
+
+        normalized_force_balance = eq(
+            np.sum(contact_forces, axis=0)
+            + R_BW_normalized.dot(body.gravity_force_in_W),
+            0,
+        )
 
         contact_points = self._get_contact_points_on_body(body)
         contact_torques = [
             cross_2d(p_ci, f_ci) for p_ci, f_ci in zip(contact_points, contact_forces)
         ]
-        torque_balance_condition = eq(np.sum(contact_torques, axis=0), 0)
+        sum_of_contact_torqes = np.array(
+            [np.sum(contact_torques, axis=0)]
+        )  # Convert to np array so this works with downstream functions
+        torque_balance_condition = eq(sum_of_contact_torqes, 0)
 
         return StaticEquilibriumConstraints(
-            force_balance_condition, torque_balance_condition
+            force_balance_condition, torque_balance_condition, normalized_force_balance
         )

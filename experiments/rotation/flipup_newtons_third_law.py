@@ -11,7 +11,6 @@ from pydrake.solvers import MathematicalProgram, Solve
 from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
-    relax_bilinear_expression,
 )
 from geometry.hyperplane import construct_2d_plane_from_points
 from geometry.two_d.box_2d import Box2d
@@ -22,7 +21,8 @@ from geometry.two_d.contact.contact_pair_2d import (
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.utilities import cross_2d
-from tools.types import NpVariableArray
+from tools.types import NpExpressionArray, NpVariableArray
+from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
 from visualize.analysis import (
     create_force_plot,
     create_newtons_third_law_analysis,
@@ -147,18 +147,6 @@ class BoxFlipupCtrlPoint:
         self.fg_W = np.array([0, -self.box.mass * GRAV_ACC]).reshape((-1, 1))
         self.sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB.T.dot(self.fg_W)  # type: ignore
 
-        # TODO: clean up, this is just for plotting rounding error!
-        self.R_WB_normalized = self.R_WB / sym.sqrt(
-            (self.cos_th**2 + self.sin_th**2)
-        )
-        self.true_sum_of_forces_B = self.fc1_B + self.fc2_B + self.R_WB_normalized.T.dot(self.fg_W)  # type: ignore
-
-        # Add moment balance using a linear relaxation
-        # TODO: now this is hardcoded, in the future this should be automatically added for all unactuated objects
-        self.sum_of_moments_B = cross_2d(self.pc1_B, self.fc1_B) + cross_2d(
-            self.pc2_B, self.fc2_B
-        )
-
         self.relaxed_so_2_constraint = (self.R_WB.T.dot(self.R_WB))[0, 0]
 
         # Non-penetration constraint
@@ -271,14 +259,6 @@ class BoxFlipupDemo:
     @property
     def R_WBs(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
         return [cp.R_WB for cp in self.ctrl_points]
-
-    @property
-    def force_balances(self) -> List[npt.NDArray[sym.Expression]]:  # type: ignore
-        return [cp.true_sum_of_forces_B for cp in self.ctrl_points]
-
-    @property
-    def moment_balances(self) -> List[sym.Expression]:  # type: ignore
-        return [cp.sum_of_moments_B for cp in self.ctrl_points]
 
     def _setup_box_flipup_prog(self) -> None:
         self.prog = MathematicalProgram()
@@ -397,25 +377,6 @@ class BoxFlipupDemo:
         for c in condition:
             self.prog.AddLinearConstraint(c)
 
-    # TODO: Deprecate these
-    def _get_solution_for_np_expr(self, expr: npt.NDArray[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
-        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
-        solutions = from_expr_to_float(self.result.GetSolution(expr))
-        return solutions
-
-    # TODO: Deprecate these
-    def _get_solution_for_np_exprs(self, exprs: List[npt.NDArray[sym.Expression]]) -> npt.NDArray[np.float64]:  # type: ignore
-        from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
-        solutions = np.array(
-            [from_expr_to_float(self.result.GetSolution(e).flatten()) for e in exprs]
-        )
-        return solutions
-
-    # TODO: Deprecate these
-    def _get_solution_for_exprs(self, expr: List[sym.Expression]) -> npt.NDArray[np.float64]:  # type: ignore
-        solutions = np.array([self.result.GetSolution(e).Evaluate() for e in expr])
-        return solutions
-
     def solve(self) -> None:
         self.result = Solve(self.prog)
         print(f"Solution result: {self.result.get_solution_result()}")
@@ -424,15 +385,28 @@ class BoxFlipupDemo:
         print(f"Cost: {self.result.get_optimal_cost()}")
 
     def get_force_balance_violation(self) -> npt.NDArray[np.float64]:
-        fb_violation = self._get_solution_for_np_exprs(
-            self.force_balances
-        ).T  # (dims, ctrl_points)
+        # NOTE: This uses the force balance with normalized rotation matrix (because of SO(2) relaxation)
+        fb_violation = np.hstack(
+            [
+                evaluate_np_formulas_array(
+                    cp.static_equilibrium_constraints.normalized_force_balance,
+                    self.result,
+                )
+                for cp in self.ctrl_points
+            ]
+        )  # (dims, num_ctrl_points)
         return fb_violation
 
-    def get_moment_balance_violation(self) -> npt.NDArray[np.float64]:
-        return self._get_solution_for_exprs(self.moment_balances).reshape(
-            (1, -1)
-        )  # (1, ctrl_points)
+    def get_torque_balance_violation(self) -> npt.NDArray[np.float64]:
+        torque_balance_violation = np.hstack(
+            [
+                evaluate_np_formulas_array(
+                    cp.static_equilibrium_constraints.torque_balance, self.result
+                )
+                for cp in self.ctrl_points
+            ]
+        )  # (1, num_ctrl_points)
+        return torque_balance_violation
 
     def get_equal_contact_point_violation(
         self,
@@ -480,7 +454,7 @@ class BoxFlipupDemo:
         ]
 
     @property
-    def contact_positions_in_W(self) -> List[npt.NDArray[sym.Expression]]:  # type: ignore
+    def contact_positions_in_W(self) -> List[NpExpressionArray]:
         pc1_B_ctrl_points_in_W = np.hstack(
             [cp.p_WB_W + cp.R_WB.dot(cp.pc1_B) for cp in self.ctrl_points]
         )
@@ -535,10 +509,12 @@ def plan_box_flip_up_newtons_third_law():
     prog.solve()
 
     contact_positions_ctrl_points = [
-        prog._get_solution_for_np_expr(pos) for pos in prog.contact_positions_in_W
+        evaluate_np_expressions_array(pos, prog.result)
+        for pos in prog.contact_positions_in_W
     ]
     contact_forces_ctrl_points = [
-        prog._get_solution_for_np_expr(force) for force in prog.contact_forces_in_W
+        evaluate_np_expressions_array(force, prog.result)
+        for force in prog.contact_forces_in_W
     ]
 
     if show_animation:
@@ -565,7 +541,7 @@ def plan_box_flip_up_newtons_third_law():
         )
 
         orientation_ctrl_points = [
-            prog._get_solution_for_np_expr(R) for R in prog.box_orientation
+            evaluate_np_expressions_array(R, prog.result) for R in prog.box_orientation
         ]
         viz_box = VisualizationPolygon2d.from_ctrl_points(
             box_com_ctrl_points,
@@ -609,7 +585,7 @@ def plan_box_flip_up_newtons_third_law():
         )
 
         fb_violation_ctrl_points = prog.get_force_balance_violation()
-        mb_violation_ctrl_points = prog.get_moment_balance_violation()
+        mb_violation_ctrl_points = prog.get_torque_balance_violation()
 
         create_static_equilibrium_analysis(
             fb_violation_ctrl_points, mb_violation_ctrl_points

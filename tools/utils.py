@@ -31,3 +31,11 @@ def evaluate_np_formulas_array(
         result.GetSolution(expressions)
     )
     return evaluated_expressions
+
+
+def evaluate_np_expressions_array(
+    expr: NpExpressionArray, result: MathematicalProgramResult
+) -> npt.NDArray[np.float64]:
+    from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
+    solutions = from_expr_to_float(result.GetSolution(expr))
+    return solutions
