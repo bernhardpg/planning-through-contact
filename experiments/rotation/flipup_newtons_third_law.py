@@ -20,6 +20,7 @@ from geometry.two_d.contact.contact_pair_2d import (
 )
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactMode, ContactType
+from geometry.two_d.rigid_body_2d import Point2d
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
@@ -53,7 +54,7 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
 class BoxFlipupCtrlPoint:
     table: Box2d
     box: Box2d
-    finger: Box2d
+    finger: Point2d
     friction_coeff: float
     idx: int
 
@@ -111,6 +112,7 @@ class BoxFlipupCtrlPoint:
             c.equal_relative_positions for c in self.constraints
         ]
 
+        breakpoint()
         self.equal_and_opposite_forces_constraints = [
             self.constraints[0].equal_and_opposite_forces
             # c.equal_and_opposite_forces for c in self.constraints # FIX: I must first add support for point contacts, otherwise it is impossible to satisfy friction cone constraints
@@ -215,13 +217,11 @@ class BoxFlipupDemo:
         TABLE_HEIGHT = 0.5
         TABLE_WIDTH = 2
 
-        FINGER_HEIGHT = 0.1
-        FINGER_WIDTH = 0.1
-
         BOX_MASS = 1
 
         FRICTION_COEFF = 0.7
 
+        self.finger = Point2d(actuated=True, name="finger", mass=None)
         self.friction_coeff = FRICTION_COEFF
         self.box = Box2d(
             actuated=False,
@@ -236,13 +236,6 @@ class BoxFlipupDemo:
             mass=None,
             width=TABLE_WIDTH,
             height=TABLE_HEIGHT,
-        )
-        self.finger = Box2d(
-            actuated=True,
-            name="finger",
-            mass=None,
-            width=FINGER_WIDTH,
-            height=FINGER_HEIGHT,
         )
 
         self.bodies = [self.box, self.table, self.finger]

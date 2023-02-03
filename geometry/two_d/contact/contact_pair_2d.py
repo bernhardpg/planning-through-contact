@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, NamedTuple, Tuple, Union
+from typing import NamedTuple, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -7,9 +7,9 @@ import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgramResult
 
-from geometry.two_d.box_2d import RigidBody2d
 from geometry.two_d.contact.contact_point_2d import ContactPoint2d
 from geometry.two_d.contact.types import ContactLocation, ContactMode
+from geometry.two_d.rigid_body_2d import Point2d, RigidBody2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
 
@@ -56,21 +56,29 @@ class ContactPair2d:
         self.body_A = body_A
         self.contact_point_A = ContactPoint2d(
             body_A,
+            body_B,
             contact_location_A,
+            contact_location_B,
             friction_coeff,
             name=f"{pair_name}_{body_A.name}",
         )
         self.body_B = body_B
         self.contact_point_B = ContactPoint2d(
             body_B,
+            body_A,
             contact_location_B,
+            contact_location_A,
             friction_coeff,
             name=f"{pair_name}_{body_B.name}",
         )
 
-        self.cos_th = sym.Variable(f"{pair_name}_cos_th")
-        self.sin_th = sym.Variable(f"{pair_name}_sin_th")
-        self.R_AB = np.array([[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]])
+        # There is no relative rotation to a point contact
+        if not (isinstance(body_A, Point2d) or isinstance(body_B, Point2d)):
+            self.cos_th = sym.Variable(f"{pair_name}_cos_th")
+            self.sin_th = sym.Variable(f"{pair_name}_sin_th")
+            self.R_AB = np.array(
+                [[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]]
+            )
 
         p_AB_A_x = sym.Variable(f"{pair_name}_p_AB_A_x")
         p_AB_A_y = sym.Variable(f"{pair_name}_p_AB_A_y")
@@ -134,7 +142,6 @@ class ContactPair2d:
         return relaxed_so_2_constraint
 
     def create_friction_cone_constraints(self) -> NpFormulaArray:
-        # FIX: Remember to remove one of these for point contacts!
         return np.concatenate(
             [
                 self.contact_point_A.create_friction_cone_constraints(),

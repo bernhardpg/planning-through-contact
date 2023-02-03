@@ -6,7 +6,7 @@ import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
 from geometry.two_d.contact.types import ContactLocation, ContactType
-from geometry.two_d.rigid_body_2d import RigidBody2d
+from geometry.two_d.rigid_body_2d import Polytope2d
 
 
 def _normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -14,7 +14,7 @@ def _normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 
 
 @dataclass
-class Box2d(RigidBody2d):
+class Box2d(Polytope2d):
     width: float = 3
     height: float = 2
 

@@ -16,6 +16,16 @@ class RigidBody2d(ABC):
     name: str
     mass: Optional[float]
 
+    @property
+    def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
+        if self.mass is None:
+            raise ValueError(
+                "Rigid body must have a mass to calculate gravitational force"
+            )
+        return np.array([0, -self.mass * GRAV_ACC]).reshape((-1, 1))
+
+
+class Polytope2d(RigidBody2d):
     @abstractmethod
     def get_proximate_vertices_from_location(
         self, location: ContactLocation
@@ -28,10 +38,6 @@ class RigidBody2d(ABC):
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         pass
 
-    @property
-    def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
-        if self.mass is None:
-            raise ValueError(
-                "Rigid body must have a mass to calculate gravitational force"
-            )
-        return np.array([0, -self.mass * GRAV_ACC]).reshape((-1, 1))
+
+class Point2d(RigidBody2d):
+    ...

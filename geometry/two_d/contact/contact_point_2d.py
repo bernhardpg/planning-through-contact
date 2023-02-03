@@ -4,8 +4,8 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 
-from geometry.two_d.box_2d import RigidBody2d
 from geometry.two_d.contact.types import ContactLocation, ContactType
+from geometry.two_d.rigid_body_2d import Point2d, Polytope2d, RigidBody2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
 
@@ -13,10 +13,16 @@ class ContactPoint2d:
     def __init__(
         self,
         body: RigidBody2d,
+        other_body: RigidBody2d,
         contact_location: ContactLocation,
+        other_contact_location: ContactLocation,
         friction_coeff: float = 0.5,
         name: str = "unnamed",
     ) -> None:
+        """
+        Implements a contact point with all the corresponding contact constriants defined in the local frame of 'body'.
+        """
+
         self.name = name
         self.body = body
         self.friction_coeff = friction_coeff
@@ -24,25 +30,45 @@ class ContactPoint2d:
 
         self.normal_force = sym.Variable(f"{self.name}_c_n")
         self.friction_force = sym.Variable(f"{self.name}_c_f")
-        self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
-            contact_location
-        )
+
+        if isinstance(body, Point2d):
+            # Use the normal and tangent vector of the contact body if we are dealing with a point contact
+            (
+                self.normal_vec,
+                self.tangent_vec,
+            ) = other_body.get_norm_and_tang_vecs_from_location(  # type: ignore
+                other_contact_location
+            )
+        elif isinstance(body, Polytope2d):
+            (
+                self.normal_vec,
+                self.tangent_vec,
+            ) = body.get_norm_and_tang_vecs_from_location(contact_location)
+        else:
+            raise NotImplementedError(f"Body type {body} not supported")
 
         self.contact_position = self._set_contact_position()
 
-    def _set_contact_position(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
-        if self.contact_location.type == ContactType.FACE:
-            self.lam = sym.Variable(f"{self.name}_lam")
-            vertices = self.body.get_proximate_vertices_from_location(
-                self.contact_location
-            )
-            return self.lam * vertices[0] + (1 - self.lam) * vertices[1]
+    def _set_contact_position(
+        self,
+    ) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
+        if isinstance(self.body, Polytope2d):
+            if self.contact_location.type == ContactType.FACE:
+                self.lam = sym.Variable(f"{self.name}_lam")
+                vertices = self.body.get_proximate_vertices_from_location(
+                    self.contact_location
+                )
+                return self.lam * vertices[0] + (1 - self.lam) * vertices[1]
+            else:
+                # Get first element as we know this will only be one vertex
+                corner_vertex = self.body.get_proximate_vertices_from_location(
+                    self.contact_location
+                )[0]
+                return corner_vertex
+        elif isinstance(self.body, Point2d):
+            return np.array([[0], [0]])
         else:
-            # Get first element as we know this will only be one vertex
-            corner_vertex = self.body.get_proximate_vertices_from_location(
-                self.contact_location
-            )[0]
-            return corner_vertex
+            raise NotImplementedError(f"Body of type {self.body} not supported.")
 
     @property
     def contact_force(self) -> NpExpressionArray:
