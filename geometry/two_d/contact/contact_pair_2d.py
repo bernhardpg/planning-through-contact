@@ -132,6 +132,15 @@ class ContactPair2d:
         ] <= 1  # cos_th^2 + sin_th^2 <= 1
         return relaxed_so_2_constraint
 
+    def create_friction_cone_constraints(self) -> NpFormulaArray:
+        # FIX: Remember to remove one of these for point contacts!
+        return np.concatenate(
+            [
+                self.contact_point_A.create_friction_cone_constraints(),
+                self.contact_point_B.create_friction_cone_constraints(),
+            ]
+        )
+
     def create_constraints(self, contact_mode: ContactMode) -> ContactPointConstraints:
         if contact_mode == ContactMode.ROLLING:
             return ContactPointConstraints(

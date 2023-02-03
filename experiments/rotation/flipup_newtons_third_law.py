@@ -91,6 +91,10 @@ class BoxFlipupCtrlPoint:
             self.contact_scene.create_static_equilibrium_constraints_for_body(self.box)
         )
 
+        self.friction_cone_constraints = np.concatenate(
+            [cp.create_friction_cone_constraints() for cp in self.contact_pairs]
+        )
+
         # for pair in self.contact_pairs:
         # constraints = pair.create_constraints()
         # breakpoint()
@@ -127,9 +131,6 @@ class BoxFlipupCtrlPoint:
 
         self.R_TB = self.table_box.R_AB
         self.R_WB = self.R_TB  # World frame is the same as table frame
-
-        self.cos_th = self.R_TB[0, 0]
-        self.sin_th = self.R_TB[1, 0]
 
         self.fc1_B = self.table_box.contact_point_B.contact_force
         self.fc1_T = self.table_box.contact_point_A.contact_force
@@ -287,15 +288,7 @@ class BoxFlipupDemo:
             self.prog.AddDecisionVariables(ctrl_point.variables)
 
             if self.use_friction_cone_constraint:
-                self.prog.AddLinearConstraint(
-                    ctrl_point.table_box.contact_point_A.create_friction_cone_constraints()
-                )
-                self.prog.AddLinearConstraint(
-                    ctrl_point.table_box.contact_point_B.create_friction_cone_constraints()
-                )
-                self.prog.AddLinearConstraint(
-                    ctrl_point.box_finger.contact_point_A.create_friction_cone_constraints()
-                )
+                self.prog.AddLinearConstraint(ctrl_point.friction_cone_constraints)
 
             if self.use_force_balance_constraint:
                 self.prog.AddLinearConstraint(
