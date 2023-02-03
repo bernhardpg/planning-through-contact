@@ -1,3 +1,5 @@
+from typing import Union
+
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
@@ -15,27 +17,32 @@ class ContactPoint2d:
         friction_coeff: float = 0.5,
         name: str = "unnamed",
     ) -> None:
+        self.name = name
         self.body = body
-        self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
-            contact_location
-        )
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
-        self.normal_force = sym.Variable(f"{name}_c_n")
-        self.friction_force = sym.Variable(f"{name}_c_f")
+        self.normal_force = sym.Variable(f"{self.name}_c_n")
+        self.friction_force = sym.Variable(f"{self.name}_c_f")
+        self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
+            contact_location
+        )
 
+        self.contact_position = self._set_contact_position()
+
+    def _set_contact_position(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
         if self.contact_location.type == ContactType.FACE:
-            self.lam = sym.Variable(f"{name}_lam")
-            vertices = body.get_proximate_vertices_from_location(self.contact_location)
-            self.contact_position = (
-                self.lam * vertices[0] + (1 - self.lam) * vertices[1]
-            )
-        else:
-            corner_vertex = body.get_proximate_vertices_from_location(
+            self.lam = sym.Variable(f"{self.name}_lam")
+            vertices = self.body.get_proximate_vertices_from_location(
                 self.contact_location
             )
-            self.contact_position = corner_vertex
+            return self.lam * vertices[0] + (1 - self.lam) * vertices[1]
+        else:
+            # Get first element as we know this will only be one vertex
+            corner_vertex = self.body.get_proximate_vertices_from_location(
+                self.contact_location
+            )[0]
+            return corner_vertex
 
     @property
     def contact_force(self) -> NpExpressionArray:

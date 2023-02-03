@@ -9,7 +9,8 @@ from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import (
-    add_bilinear_expressions_to_prog,
+    add_bilinear_constraints_to_prog,
+    add_bilinear_frame_constraints_to_prog,
     relax_bilinear_expression,
 )
 from geometry.hyperplane import construct_2d_plane_from_points
@@ -21,6 +22,7 @@ from geometry.two_d.contact.contact_pair_2d import (
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.utilities import cross_2d
+from tools.types import NpVariableArray
 from visualize.analysis import (
     create_force_plot,
     create_newtons_third_law_analysis,
@@ -83,13 +85,16 @@ class BoxFlipupCtrlPoint:
 
         self._create_contact_pairs()
 
-        contact_scene = ContactScene2d(self.bodies, self.contact_pairs, self.table)
-        contact_scene.create_static_equilibrium_constraints()
+        self.contact_scene = ContactScene2d(self.bodies, self.contact_pairs, self.table)
+
+        self.static_equilibrium_constraints = (
+            self.contact_scene.create_static_equilibrium_constraints_for_body(self.box)
+        )
 
         # for pair in self.contact_pairs:
-            # constraints = pair.create_constraints()
-            # breakpoint()
-            # ...
+        # constraints = pair.create_constraints()
+        # breakpoint()
+        # ...
 
         # FIX:
         # Plan:
@@ -191,6 +196,10 @@ class BoxFlipupCtrlPoint:
         self.newtons_third_law_constraints = (
             self.table_box.create_equal_and_opposite_forces_constraint()
         )
+
+    @property
+    def variables(self) -> NpVariableArray:
+        return self.contact_scene.variables
 
 
 # TODO:: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
@@ -295,11 +304,7 @@ class BoxFlipupDemo:
         }
 
         for ctrl_point in self.ctrl_points:
-            self.prog.AddDecisionVariables(
-                np.array([ctrl_point.cos_th, ctrl_point.sin_th])
-            )
-            self.prog.AddDecisionVariables(ctrl_point.table_box.variables)
-            self.prog.AddDecisionVariables(ctrl_point.box_finger.variables)
+            self.prog.AddDecisionVariables(ctrl_point.variables)
 
             if self.use_friction_cone_constraint:
                 self.prog.AddLinearConstraint(
@@ -313,38 +318,33 @@ class BoxFlipupDemo:
                 )
 
             if self.use_force_balance_constraint:
-                self.prog.AddLinearConstraint(eq(ctrl_point.sum_of_forces_B, 0))
+                self.prog.AddLinearConstraint(
+                    ctrl_point.static_equilibrium_constraints.force_balance
+                )
 
             if self.use_moment_balance:
-                # This is hardcoded for now and should be generalized. It is used to define the mccormick envelopes
-                (
-                    relaxed_sum_of_moments,
-                    new_vars,
-                    mccormick_envelope_constraints,
-                ) = relax_bilinear_expression(
-                    ctrl_point.sum_of_moments_B, variable_bounds
+                add_bilinear_constraints_to_prog(
+                    ctrl_point.static_equilibrium_constraints.torque_balance,
+                    self.prog,
+                    variable_bounds,
                 )
-                self.prog.AddDecisionVariables(new_vars)  # type: ignore
-                self.prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
-                for c in mccormick_envelope_constraints:
-                    self.prog.AddLinearConstraint(c)
 
             if self.use_equal_contact_point_constraint:
-                add_bilinear_expressions_to_prog(
+                add_bilinear_frame_constraints_to_prog(
                     ctrl_point.equal_contact_point_constraints,
                     self.prog,
                     variable_bounds,
                 )
 
             if self.use_equal_rel_position_constraint:
-                add_bilinear_expressions_to_prog(
+                add_bilinear_frame_constraints_to_prog(
                     ctrl_point.equal_rel_position_constraints,
                     self.prog,
                     variable_bounds,
                 )
 
             if self.use_newtons_third_law_constraint:
-                add_bilinear_expressions_to_prog(
+                add_bilinear_frame_constraints_to_prog(
                     ctrl_point.newtons_third_law_constraints,
                     self.prog,
                     variable_bounds,

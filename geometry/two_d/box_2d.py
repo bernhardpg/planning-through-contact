@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
 
-from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
+from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.two_d.rigid_body_2d import RigidBody2d
 
 
@@ -190,31 +190,29 @@ class Box2d(RigidBody2d):
 
     def get_proximate_vertices_from_location(
         self, location: ContactLocation
-    ) -> Union[
-        npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
-    ]:
+    ) -> List[npt.NDArray[np.float64]]:
         if location.type == ContactType.FACE:
             if location.idx == 1:
-                return self.v1, self.v2
+                return [self.v1, self.v2]
             elif location.idx == 2:
-                return self.v2, self.v3
+                return [self.v2, self.v3]
             elif location.idx == 3:
-                return self.v3, self.v4
+                return [self.v3, self.v4]
             elif location.idx == 4:
-                return self.v4, self.v1
+                return [self.v4, self.v1]
             else:
                 raise NotImplementedError(
                     f"Location {location.type}: {location.idx} not implemented"
                 )
         elif location.type == ContactType.VERTEX:
             if location.idx == 1:
-                return self.v1
+                return [self.v1]
             elif location.idx == 2:
-                return self.v2
+                return [self.v2]
             elif location.idx == 3:
-                return self.v3
+                return [self.v3]
             elif location.idx == 4:
-                return self.v4
+                return [self.v4]
             else:
                 raise NotImplementedError(
                     f"Location {location.type}: {location.idx} not implemented"

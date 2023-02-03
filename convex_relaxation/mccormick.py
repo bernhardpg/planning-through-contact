@@ -5,6 +5,7 @@ import pydrake.symbolic as sym  # type: ignore
 from pydrake.solvers import MathematicalProgram
 
 from geometry.two_d.contact.contact_pair_2d import ContactFrameConstraints
+from tools.types import NpFormulaArray
 from tools.utils import convert_formula_to_lhs_expression
 
 
@@ -94,8 +95,29 @@ def relax_bilinear_expression(
     )
 
 
-# TODO: This is moved here to avoid duplicated code. However, the code in itself should be cleaned up.
-def add_bilinear_expressions_to_prog(
+def add_bilinear_constraints_to_prog(
+    constraints: NpFormulaArray,
+    prog: MathematicalProgram,
+    variable_bounds: Dict[str, Tuple[float, float]],
+) -> None:
+    for formula in constraints.flatten():
+        expr = convert_formula_to_lhs_expression(formula)
+        expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
+        if expression_is_linear:
+            prog.AddLinearConstraint(expr == 0)
+        else:
+            (
+                relaxed_expr,
+                new_vars,
+                mccormick_envelope_constraints,
+            ) = relax_bilinear_expression(expr, variable_bounds)
+            prog.AddDecisionVariables(new_vars)  # type: ignore
+            prog.AddLinearConstraint(relaxed_expr == 0)
+            for formula in mccormick_envelope_constraints:
+                prog.AddLinearConstraint(formula)
+
+
+def add_bilinear_frame_constraints_to_prog(
     constraints: ContactFrameConstraints,
     prog: MathematicalProgram,
     variable_bounds: Dict[str, Tuple[float, float]],
@@ -111,18 +133,4 @@ def add_bilinear_expressions_to_prog(
         constraints_to_use = constraints
 
     for constraint in constraints_to_use:
-        for formula in constraint.flatten():
-            expr = convert_formula_to_lhs_expression(formula)
-            expression_is_linear = sym.Polynomial(expr).TotalDegree() == 1
-            if expression_is_linear:
-                prog.AddLinearConstraint(expr == 0)
-            else:
-                (
-                    relaxed_expr,
-                    new_vars,
-                    mccormick_envelope_constraints,
-                ) = relax_bilinear_expression(expr, variable_bounds)
-                prog.AddDecisionVariables(new_vars)  # type: ignore
-                prog.AddLinearConstraint(relaxed_expr == 0)
-                for formula in mccormick_envelope_constraints:
-                    prog.AddLinearConstraint(formula)
+        add_bilinear_constraints_to_prog(constraint, prog, variable_bounds)

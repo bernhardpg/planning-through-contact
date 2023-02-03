@@ -67,9 +67,9 @@ class ContactPair2d:
             name=f"{pair_name}_{body_B.name}",
         )
 
-        cos_th = sym.Variable(f"{pair_name}_cos_th")
-        sin_th = sym.Variable(f"{pair_name}_sin_th")
-        self.R_AB = np.array([[cos_th, -sin_th], [sin_th, cos_th]])
+        self.cos_th = sym.Variable(f"{pair_name}_cos_th")
+        self.sin_th = sym.Variable(f"{pair_name}_sin_th")
+        self.R_AB = np.array([[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]])
 
         p_AB_A_x = sym.Variable(f"{pair_name}_p_AB_A_x")
         p_AB_A_y = sym.Variable(f"{pair_name}_p_AB_A_y")
@@ -84,9 +84,14 @@ class ContactPair2d:
         return (self.contact_point_A, self.contact_point_B)
 
     @property
+    def orientation_variables(self) -> NpVariableArray:
+        return np.array([self.cos_th, self.sin_th])
+
+    @property
     def variables(self) -> NpVariableArray:
         return np.concatenate(
             [
+                self.orientation_variables,
                 self.contact_point_A.variables,
                 self.contact_point_B.variables,
                 self.p_AB_A.flatten(),

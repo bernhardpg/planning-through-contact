@@ -1,9 +1,13 @@
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Union
+
+import numpy as np
+import numpy.typing as npt
+from pydrake.math import eq
 
 from geometry.two_d.contact.contact_pair_2d import ContactPair2d
 from geometry.two_d.rigid_body_2d import RigidBody2d
-from tools.types import NpExpressionArray, NpFormulaArray
-from pydrake.math import eq
+from geometry.utilities import cross_2d
+from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
 
 class StaticEquilibriumConstraints(NamedTuple):
@@ -33,6 +37,17 @@ class ContactScene2d:
         ]
         return contact_forces_on_body
 
+    def _get_contact_points_on_body(
+        self, body: RigidBody2d
+    ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
+        contact_points = [
+            point.contact_position
+            for pair in self.contact_pairs
+            for point in pair.contact_points
+            if point.body == body
+        ]
+        return contact_points
+
     def _get_transformation_to_W(self, body: RigidBody2d) -> NpExpressionArray:
         R_body_to_W = None
         for pair in self.contact_pairs:
@@ -53,28 +68,30 @@ class ContactScene2d:
         bodies = [body for body in self.rigid_bodies if not body.actuated]
         return bodies
 
-    def create_static_equilibrium_constraints(self) -> StaticEquilibriumConstraints:
-        contact_forces_on_unactuated_bodies = [
-            self._get_contact_forces_acting_on_body(body)
-            for body in self.unactuated_bodies
+    @property
+    def variables(self) -> NpVariableArray:
+        return np.concatenate([pair.variables for pair in self.contact_pairs])
+
+    def create_static_equilibrium_constraints_for_body(
+        self, body: RigidBody2d
+    ) -> StaticEquilibriumConstraints:
+        """
+        Creates the static equilibrium constraints for 'body' in the frame of 'body'
+        """
+
+        contact_forces = self._get_contact_forces_acting_on_body(body)
+        R_BW = self._get_transformation_to_W(body).T
+
+        gravity_force = R_BW.dot(body.gravity_force_in_W)
+        sum_of_forces = np.sum(contact_forces, axis=0) + gravity_force
+        force_balance_condition = eq(sum_of_forces, 0)
+
+        contact_points = self._get_contact_points_on_body(body)
+        contact_torques = [
+            cross_2d(p_ci, f_ci) for p_ci, f_ci in zip(contact_points, contact_forces)
         ]
-        transformations_from_bodies_to_W = [
-            self._get_transformation_to_W(body) for body in self.unactuated_bodies
-        ]
-        graviational_forces_in_body_frames = [
-            R_WB.dot(body.gravity_force_in_W)
-            for R_WB, body in zip(
-                transformations_from_bodies_to_W, self.unactuated_bodies
-            )
-        ]
-        sums_of_forces = [
-            sum(contact_forces) + gravity_force
-            for contact_forces, gravity_force in zip(
-                contact_forces_on_unactuated_bodies, graviational_forces_in_body_frames
-            )
-        ]
-        force_balance_conditions = {
-            body.name: eq(sum_of_forces, 0)
-            for body, sum_of_forces in zip(self.unactuated_bodies, sums_of_forces)
-        }
-        breakpoint()
+        torque_balance_condition = eq(np.sum(contact_torques, axis=0), 0)
+
+        return StaticEquilibriumConstraints(
+            force_balance_condition, torque_balance_condition
+        )
