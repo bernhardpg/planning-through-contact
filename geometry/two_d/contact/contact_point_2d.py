@@ -1,9 +1,10 @@
-from typing import Union
+from typing import Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 
+from geometry.hyperplane import Hyperplane
 from geometry.two_d.box_2d import RigidBody2d
 from geometry.two_d.contact.types import ContactLocation, ContactType
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
@@ -30,7 +31,9 @@ class ContactPoint2d:
 
         self.contact_position = self._set_contact_position()
 
-    def _set_contact_position(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
+    def _set_contact_position(
+        self,
+    ) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
         if self.contact_location.type == ContactType.FACE:
             self.lam = sym.Variable(f"{self.name}_lam")
             vertices = self.body.get_proximate_vertices_from_location(
@@ -62,3 +65,13 @@ class ContactPoint2d:
         lower_bound = -self.friction_coeff * self.normal_force <= self.friction_force
         normal_force_positive = self.normal_force >= 0
         return np.vstack([upper_bound, lower_bound, normal_force_positive])
+
+    def get_neighbouring_vertices(
+        self,
+    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        return self.body.get_neighbouring_vertices(self.contact_location)
+
+    def get_contact_hyperplane(
+        self,
+    ) -> Hyperplane:
+        return self.body.get_hyperplane_from_location(self.contact_location)

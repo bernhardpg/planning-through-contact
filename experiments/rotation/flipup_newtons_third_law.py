@@ -36,9 +36,6 @@ from visualize.visualizer_2d import (
     Visualizer2d,
 )
 
-# FIX: should not be defined here
-NUM_CTRL_POINTS = 3
-
 T = TypeVar("T")
 
 
@@ -111,9 +108,11 @@ class BoxFlipupCtrlPoint:
             c.equal_relative_positions for c in self.constraints
         ]
 
+        # FIX: Continue here. Why does this make the formulation infeasible?
         self.equal_and_opposite_forces_constraints = [
             self.constraints[0].equal_and_opposite_forces
-            # c.equal_and_opposite_forces for c in self.constraints # FIX: I must first add support for point contacts, otherwise it is impossible to satisfy friction cone constraints
+            # c.equal_and_opposite_forces
+            # for c in self.constraints  # FIX: I must first add support for point contacts, otherwise it is impossible to satisfy friction cone constraints
         ]
 
         # FIX:
@@ -158,24 +157,7 @@ class BoxFlipupCtrlPoint:
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
-        # Non-penetration constraint
-        # NOTE:! These are frame-dependent, keep in mind when generalizing these
-        # Add nonpenetration constraint in table frame
-        table_a_T = self.table.face_1.a
-        pm1_B = self.box.v1
-        pm3_B = self.box.v3
-
-        self.nonpen_1_T = table_a_T.T.dot(self.R_TB).dot(pm1_B - self.pc1_B)[0, 0] >= 0
-        self.nonpen_2_T = table_a_T.T.dot(self.R_TB).dot(pm3_B - self.pc1_B)[0, 0] >= 0
-
-        # SO2 relaxation tightening
-        # NOTE:! These are frame-dependent, keep in mind when generalizing these
-        # Add SO(2) tightening
-        cut_p1 = np.array([0, 1]).reshape((-1, 1))
-        cut_p2 = np.array([1, 0]).reshape((-1, 1))
-        a_cut, b_cut = construct_2d_plane_from_points(cut_p1, cut_p2)
-        temp = self.R_TB[:, 0:1]
-        self.so2_cut = (a_cut.T.dot(temp) - b_cut)[0, 0] >= 0
+        self.so2_cut = self.table_box.create_non_penetration_cut()
 
         # Quadratic cost on force
         self.forces_squared = (
@@ -196,12 +178,12 @@ class BoxFlipupDemo:
     use_force_balance_constraint: bool = True
     use_so2_constraint: bool = False
     use_so2_cut: bool = True
-    use_non_penetration_constraint: bool = True
     use_equal_contact_point_constraint: bool = True
     use_equal_rel_position_constraint: bool = (
         False  # NOTE: this does not make the relaxation any tighter
     )
     use_newtons_third_law_constraint: bool = True
+    num_ctrl_points: int = 3
 
     def __init__(self) -> None:
         self._setup_bodies()
@@ -252,7 +234,7 @@ class BoxFlipupDemo:
             BoxFlipupCtrlPoint(
                 self.table, self.box, self.finger, self.friction_coeff, idx
             )
-            for idx in range(NUM_CTRL_POINTS)
+            for idx in range(self.num_ctrl_points)
         ]
 
     @property
@@ -320,12 +302,7 @@ class BoxFlipupDemo:
 
             if self.use_so2_constraint:
                 for c in ctrl_point.relaxed_so_2_constraints:
-                    breakpoint()
                     self.prog.AddLorentzConeConstraint(1, c)  # type: ignore
-
-            if self.use_non_penetration_constraint:
-                self.prog.AddLinearConstraint(ctrl_point.nonpen_1_T)
-                self.prog.AddLinearConstraint(ctrl_point.nonpen_2_T)
 
             if self.use_so2_cut:
                 self.prog.AddLinearConstraint(ctrl_point.so2_cut)
@@ -354,7 +331,7 @@ class BoxFlipupDemo:
         self._constrain_orientation_at_ctrl_point_idx(th_final, -1)
 
         # Don't allow contact position to change
-        for idx in range(NUM_CTRL_POINTS - 1):
+        for idx in range(self.num_ctrl_points - 1):
             self.prog.AddLinearConstraint(
                 eq(self.ctrl_points[idx].pc2_B, self.ctrl_points[idx + 1].pc2_B)
             )
@@ -540,8 +517,8 @@ def plan_box_flip_up_newtons_third_law():
             BOX_COLOR,
         )
 
-        table_pos_ctrl_points = np.zeros((2, NUM_CTRL_POINTS))
-        table_orientation_ctrl_points = [np.eye(2)] * NUM_CTRL_POINTS
+        table_pos_ctrl_points = np.zeros((2, prog.num_ctrl_points))
+        table_orientation_ctrl_points = [np.eye(2)] * prog.num_ctrl_points
 
         viz_table = VisualizationPolygon2d.from_ctrl_points(
             table_pos_ctrl_points,

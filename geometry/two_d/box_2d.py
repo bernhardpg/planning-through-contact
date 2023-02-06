@@ -188,6 +188,31 @@ class Box2d(RigidBody2d):
                 f"Location {location.type}: {location.idx} not implemented"
             )
 
+    def get_neighbouring_vertices(
+        self, location: ContactLocation
+    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        if location.type == ContactType.FACE:
+            raise NotImplementedError(
+                f"Can't get neighbouring vertices for face contact"
+            )
+        elif location.type == ContactType.VERTEX:
+            if location.idx == 1:
+                return self.v4, self.v2
+            elif location.idx == 2:
+                return self.v1, self.v3
+            elif location.idx == 3:
+                return self.v2, self.v4
+            elif location.idx == 4:
+                return self.v3, self.v1
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
+        else:
+            raise NotImplementedError(
+                f"Location {location.type}: {location.idx} not implemented"
+            )
+
     def get_proximate_vertices_from_location(
         self, location: ContactLocation
     ) -> List[npt.NDArray[np.float64]]:
@@ -213,6 +238,27 @@ class Box2d(RigidBody2d):
                 return [self.v3]
             elif location.idx == 4:
                 return [self.v4]
+            else:
+                raise NotImplementedError(
+                    f"Location {location.type}: {location.idx} not implemented"
+                )
+        else:
+            raise NotImplementedError(
+                f"Location {location.type}: {location.idx} not implemented"
+            )
+
+    def get_hyperplane_from_location(self, location: ContactLocation) -> Hyperplane:
+        if location.type == ContactType.VERTEX:
+            raise NotImplementedError(f"Can't get hyperplane for vertex contact")
+        elif location.type == ContactType.FACE:
+            if location.idx == 1:
+                return self.face_1
+            elif location.idx == 2:
+                return self.face_2
+            elif location.idx == 3:
+                return self.face_3
+            elif location.idx == 4:
+                return self.face_4
             else:
                 raise NotImplementedError(
                     f"Location {location.type}: {location.idx} not implemented"
