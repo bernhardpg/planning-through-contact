@@ -222,3 +222,27 @@ class ContactPair2d:
             )
         else:
             raise NotImplementedError("Contact mode {contact_mode} not implemented.")
+
+    @property
+    def contact_forces(self) -> List[NpExpressionArray]:
+        return [self.contact_point_A.contact_force, self.contact_point_B.contact_force]
+
+    def create_squared_contact_forces(self) -> sym.Expression:
+        squared_forces = [f.T.dot(f) for f in self.contact_forces]
+        sum_of_squared_forces = np.sum(squared_forces, axis=0)[
+            0, 0
+        ]  # Extract scalar value with [0,0]
+        return sum_of_squared_forces
+
+    def create_squared_contact_forces_in_frame(
+        self, frame: Literal["A", "B"]
+    ) -> sym.Expression:
+        if frame == "A":
+            f = self.contact_point_A.contact_force
+        elif frame == "B":
+            f = self.contact_point_B.contact_force
+        else:
+            raise ValueError("Unsupported frame")
+
+        squared_forces = f.T.dot(f)
+        return squared_forces

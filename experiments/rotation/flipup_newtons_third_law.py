@@ -108,41 +108,35 @@ class BoxFlipupCtrlPoint:
             c.equal_relative_positions for c in self.constraints
         ]
 
-        # FIX: Continue here. Why does this make the formulation infeasible?
+        # FIX: Why does it make the formulation infeasible to add equal and opposite forces for the finger too?
+        # I must generalize this so that the finger is not a box but a point contact
         self.equal_and_opposite_forces_constraints = [
             self.constraints[0].equal_and_opposite_forces
             # c.equal_and_opposite_forces
-            # for c in self.constraints  # FIX: I must first add support for point contacts, otherwise it is impossible to satisfy friction cone constraints
+            # for c in self.constraints
         ]
 
-        # FIX:
-        # Plan:
-        #  - Fix the following:
+        self.so2_cut = self.table_box.create_non_penetration_cut()
 
-        # For each contact pair:
-        #   add so2 constraints
-        #   add nonpenetration constraints
-        #
-        #   add newtons 3rd law constraints
-        #   add eq contact point constraints
-        #
-        # for each body:
-        #   add friction cone constraints to all force
-        #   add force minimization
-        #
-        #   if unactuated:
-        #       add static eq constraints
-        #
+        self.forces_squared = np.sum(
+            np.array(
+                [
+                    self.table_box.create_squared_contact_forces_in_frame("B"),
+                    self.box_finger.create_squared_contact_forces_in_frame("A"),
+                ]
+            ),
+            axis=0,
+        )[
+            0, 0
+        ]  # extract scalar value
 
-        # - Add support for point contacts
 
+        # Define convenience variables for plotting
         self.p_TB_T = self.table_box.p_AB_A
         self.p_WB_W = self.p_TB_T
 
         self.p_BT_B = self.table_box.p_BA_B
         self.p_BW_B = self.p_BT_B
-
-        # TODO: add in finger position relative to box
 
         self.R_TB = self.table_box.R_AB
         self.R_WB = self.R_TB  # World frame is the same as table frame
@@ -157,19 +151,11 @@ class BoxFlipupCtrlPoint:
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
-        self.so2_cut = self.table_box.create_non_penetration_cut()
-
-        # Quadratic cost on force
-        self.forces_squared = (
-            self.fc1_B.T.dot(self.fc1_B)[0, 0] + self.fc2_B.T.dot(self.fc2_B)[0, 0]
-        )
-
     @property
     def variables(self) -> NpVariableArray:
         return self.contact_scene.variables
 
 
-# TODO:: Generalize this. For now I moved all of this into a class for slightly easier data handling for plotting etc
 @dataclass
 class BoxFlipupDemo:
     use_quadratic_cost: bool = True
