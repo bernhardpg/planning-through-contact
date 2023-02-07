@@ -12,7 +12,6 @@ from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
 )
-from geometry.hyperplane import construct_2d_plane_from_points
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import (
     ContactPair2d,
@@ -20,7 +19,6 @@ from geometry.two_d.contact.contact_pair_2d import (
 )
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactMode, ContactType
-from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
 from visualize.analysis import (
@@ -129,7 +127,6 @@ class BoxFlipupCtrlPoint:
         )[
             0, 0
         ]  # extract scalar value
-
 
         # Define convenience variables for plotting
         self.p_TB_T = self.table_box.p_AB_A

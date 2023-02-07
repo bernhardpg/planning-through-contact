@@ -3,20 +3,19 @@ from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
+from geometry.utilities import normalize_vec
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
 from geometry.two_d.contact.types import ContactLocation, ContactType
 from geometry.two_d.rigid_body_2d import RigidBody2d
 
 
-def _normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    return vec / np.linalg.norm(vec)
-
-
 @dataclass
 class Box2d(RigidBody2d):
     width: float = 3
     height: float = 2
+
+    # TODO: This class should be simplified similar to EquilateralPolytope2d
 
     # v1 -- v2
     # |     |
@@ -123,19 +122,19 @@ class Box2d(RigidBody2d):
 
     @property
     def nc1(self) -> npt.NDArray[np.float64]:
-        return _normalize_vec(self.n4 + self.n1)
+        return normalize_vec(self.n4 + self.n1)
 
     @property
     def nc2(self) -> npt.NDArray[np.float64]:
-        return _normalize_vec(self.n1 + self.n2)
+        return normalize_vec(self.n1 + self.n2)
 
     @property
     def nc3(self) -> npt.NDArray[np.float64]:
-        return _normalize_vec(self.n2 + self.n3)
+        return normalize_vec(self.n2 + self.n3)
 
     @property
     def nc4(self) -> npt.NDArray[np.float64]:
-        return _normalize_vec(self.n3 + self.n4)
+        return normalize_vec(self.n3 + self.n4)
 
     @property
     def tc1(self) -> npt.NDArray[np.float64]:
