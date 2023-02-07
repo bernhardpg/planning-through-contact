@@ -168,9 +168,8 @@ class ContactPair2dInstance:
         return ContactFrameConstraints(equal_and_opposite_in_A, equal_and_opposite_in_B)
 
     def create_relaxed_so2_constraint(self) -> sym.Formula:
-        relaxed_so_2_constraint = (self.R_AB.T.dot(self.R_AB))[
-            0, 0
-        ] <= 1  # cos_th^2 + sin_th^2 <= 1
+        # cos_th^2 + sin_th^2 <= 1
+        relaxed_so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] <= 1
         return relaxed_so_2_constraint
 
     def create_friction_cone_constraints(self) -> NpFormulaArray:

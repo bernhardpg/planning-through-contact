@@ -67,7 +67,7 @@ class EquilateralPolytope2d(RigidBody2d):
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if location.pos == ContactPosition.VERTEX:
-            wrap_around = lambda num: num % self.vertices
+            wrap_around = lambda num: num % self.num_vertices
             idx_prev = wrap_around(location.idx - 1)
             idx_next = wrap_around(location.idx + 1)
 

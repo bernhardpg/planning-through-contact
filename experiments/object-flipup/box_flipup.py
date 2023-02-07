@@ -98,7 +98,7 @@ class BoxFlipupDemo:
     use_moment_balance: bool = True
     use_friction_cone_constraint: bool = True
     use_force_balance_constraint: bool = True
-    use_so2_constraint: bool = False
+    use_so2_constraint: bool = True
     use_so2_cut: bool = True
     use_equal_contact_point_constraint: bool = True
     use_equal_rel_position_constraint: bool = (
@@ -245,7 +245,8 @@ class BoxFlipupDemo:
 
             if self.use_so2_constraint:
                 for c in ctrl_point.relaxed_so_2_constraints:
-                    self.prog.AddLorentzConeConstraint(1, c)  # type: ignore
+                    lhs, rhs = c.Unapply()[1]
+                    self.prog.AddLorentzConeConstraint(rhs, lhs)  # type: ignore
 
             if self.use_so2_cut:
                 self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
