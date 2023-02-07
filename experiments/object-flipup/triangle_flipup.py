@@ -1,5 +1,7 @@
 from geometry.two_d.box_2d import Box2d
+from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 
 
 def plan_triangle_flipup():
@@ -33,6 +35,7 @@ def plan_triangle_flipup():
         width=FINGER_WIDTH,
         height=FINGER_HEIGHT,
     )
+
 
 
 if __name__ == "__main__":

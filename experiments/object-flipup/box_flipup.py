@@ -14,12 +14,18 @@ from convex_relaxation.mccormick import (
 )
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import (
+    ContactFrameConstraints,
     ContactPair2d,
     EvaluatedContactFrameConstraints,
 )
-from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import PolytopeContactLocation, ContactMode, ContactPosition
-from tools.types import NpExpressionArray, NpVariableArray
+from geometry.two_d.contact.contact_scene_2d import (
+    ContactScene2d,
+    ContactSceneCtrlPoint,
+    ContactSceneInstance,
+)
+from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
 from visualize.analysis import (
     create_force_plot,
@@ -44,89 +50,16 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
     return rot_matrix
 
 
-@dataclass
-class BoxFlipupCtrlPoint:
-    table: Box2d
-    box: Box2d
-    finger: Box2d
-    friction_coeff: float
-    idx: int
+class BoxFlipupCtrlPoint(ContactSceneCtrlPoint):
+    def __init__(self, contact_scene: ContactSceneInstance):
+        self.contact_scene = contact_scene
 
-    def _create_contact_pairs(self) -> None:
-        self.table_box = ContactPair2d(
-            "contact_1",
-            self.table,
-            PolytopeContactLocation(ContactPosition.FACE, 1),
-            self.box,
-            PolytopeContactLocation(ContactPosition.VERTEX, 4),
-            self.friction_coeff,
-        )
-        self.box_finger = ContactPair2d(
-            "contact_2",
-            self.box,
-            PolytopeContactLocation(ContactPosition.FACE, 2),
-            self.finger,
-            PolytopeContactLocation(ContactPosition.VERTEX, 1),
-            self.friction_coeff,
-        )
+        self.table_box = self.contact_scene.contact_pairs[0]
+        self.box_finger = self.contact_scene.contact_pairs[1]
 
-        self.contact_pairs = [self.table_box, self.box_finger]
-
-    def __post_init__(
-        self,
-    ) -> None:
-
-        self.bodies = [self.table, self.box, self.finger]
-
-        self._create_contact_pairs()
-
-        self.contact_scene = ContactScene2d(self.bodies, self.contact_pairs, self.table)
-
-        self.static_equilibrium_constraints = (
-            self.contact_scene.create_static_equilibrium_constraints_for_body(self.box)
-        )
-
-        self.constraints = [
-            cp.create_constraints(ContactMode.ROLLING) for cp in self.contact_pairs
-        ]
-
-        self.friction_cone_constraints = np.concatenate(
-            [c.friction_cone for c in self.constraints]
-        )
-
-        self.relaxed_so_2_constraints = np.array(
-            [c.relaxed_so_2 for c in self.constraints]
-        )
-
-        self.equal_contact_point_constraints = [
-            c.equal_contact_points for c in self.constraints
-        ]
-
-        self.equal_rel_position_constraints = [
-            c.equal_relative_positions for c in self.constraints
-        ]
-
-        # FIX: Why does it make the formulation infeasible to add equal and opposite forces for the finger too?
-        # I must generalize this so that the finger is not a box but a point contact
-        self.equal_and_opposite_forces_constraints = [
-            self.constraints[0].equal_and_opposite_forces
-            # c.equal_and_opposite_forces
-            # for c in self.constraints
-        ]
-
-        self.so2_cut = self.constraints[0].non_penetration_cut
-
-        self.forces_squared = np.sum(
-            np.array(
-                [
-                    self.table_box.create_squared_contact_forces_in_frame("B"),
-                    self.box_finger.create_squared_contact_forces_in_frame("A"),
-                ]
-            ),
-            axis=0,
-        )[
-            0, 0
-        ]  # extract scalar value
+        self.table = self.contact_scene.rigid_bodies[0]
+        self.box = self.contact_scene.rigid_bodies[1]
+        self.finger = self.contact_scene.rigid_bodies[2]
 
         # Define convenience variables for plotting
         self.p_TB_T = self.table_box.p_AB_A
@@ -149,8 +82,14 @@ class BoxFlipupCtrlPoint:
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
     @property
-    def variables(self) -> NpVariableArray:
-        return self.contact_scene.variables
+    def equal_and_opposite_forces_constraints(self) -> List[ContactFrameConstraints]:
+        # FIX: Why does it make the formulation infeasible to add equal and opposite forces for the finger too?
+        # I must generalize this so that the finger is not a box but a point contact
+        return [self.constraints.pair_constraints[0].equal_and_opposite_forces]
+
+    @property
+    def non_penetration_cuts(self) -> NpFormulaArray:
+        return np.array([self.constraints.pair_constraints[0].non_penetration_cut])
 
 
 @dataclass
@@ -210,14 +149,35 @@ class BoxFlipupDemo:
             height=FINGER_HEIGHT,
         )
 
-        self.bodies = [self.box, self.table, self.finger]
+        self.table_box = ContactPair2d(
+            "contact_1",
+            self.table,
+            PolytopeContactLocation(ContactPosition.FACE, 1),
+            self.box,
+            PolytopeContactLocation(ContactPosition.VERTEX, 4),
+            ContactType.POINT_CONTACT,
+            self.friction_coeff,
+        )
+        self.box_finger = ContactPair2d(
+            "contact_2",
+            self.box,
+            PolytopeContactLocation(ContactPosition.FACE, 2),
+            self.finger,
+            PolytopeContactLocation(ContactPosition.VERTEX, 1),
+            ContactType.POINT_CONTACT,
+            self.friction_coeff,
+        )
+        self.contact_scene = ContactScene2d(
+            [self.table, self.box, self.finger],
+            [self.table_box, self.box_finger],
+            self.table,
+        )
 
     def _setup_ctrl_points(self) -> None:
+        modes = {"contact_1": ContactMode.ROLLING, "contact_2": ContactMode.ROLLING}
         self.ctrl_points = [
-            BoxFlipupCtrlPoint(
-                self.table, self.box, self.finger, self.friction_coeff, idx
-            )
-            for idx in range(self.num_ctrl_points)
+            BoxFlipupCtrlPoint(self.contact_scene.create_instance(modes))
+            for _ in range(self.num_ctrl_points)
         ]
 
     @property
@@ -254,16 +214,16 @@ class BoxFlipupDemo:
                 self.prog.AddLinearConstraint(ctrl_point.friction_cone_constraints)
 
             if self.use_force_balance_constraint:
-                self.prog.AddLinearConstraint(
-                    ctrl_point.static_equilibrium_constraints.force_balance
-                )
+                for c in ctrl_point.static_equilibrium_constraints:
+                    self.prog.AddLinearConstraint(c.force_balance)
 
             if self.use_moment_balance:
-                add_bilinear_constraints_to_prog(
-                    ctrl_point.static_equilibrium_constraints.torque_balance,
-                    self.prog,
-                    variable_bounds,
-                )
+                for c in ctrl_point.static_equilibrium_constraints:
+                    add_bilinear_constraints_to_prog(
+                        c.torque_balance,
+                        self.prog,
+                        variable_bounds,
+                    )
 
             if self.use_equal_contact_point_constraint:
                 for c in ctrl_point.equal_contact_point_constraints:
@@ -288,10 +248,10 @@ class BoxFlipupDemo:
                     self.prog.AddLorentzConeConstraint(1, c)  # type: ignore
 
             if self.use_so2_cut:
-                self.prog.AddLinearConstraint(ctrl_point.so2_cut)
+                self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
 
             if self.use_quadratic_cost:
-                self.prog.AddQuadraticCost(ctrl_point.forces_squared)
+                self.prog.AddQuadraticCost(ctrl_point.squared_forces)
 
             else:  # Absolute value cost
                 z = sym.Variable("z")

@@ -6,7 +6,8 @@ import pydrake.symbolic as sym  # type: ignore
 
 from geometry.hyperplane import Hyperplane
 from geometry.two_d.box_2d import RigidBody2d
-from geometry.two_d.contact.types import PolytopeContactLocation, ContactPosition
+from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
 

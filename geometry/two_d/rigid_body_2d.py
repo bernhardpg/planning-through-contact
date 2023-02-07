@@ -1,14 +1,19 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane
-from geometry.two_d.contact.types import PolytopeContactLocation
+from geometry.two_d.contact.types import ContactPosition
 
 GRAV_ACC = 9.81
+
+
+class PolytopeContactLocation(NamedTuple):
+    pos: ContactPosition
+    idx: int
 
 
 @dataclass
@@ -30,7 +35,9 @@ class RigidBody2d(ABC):
         pass
 
     @abstractmethod
-    def get_hyperplane_from_location(self, location: PolytopeContactLocation) -> Hyperplane:
+    def get_hyperplane_from_location(
+        self, location: PolytopeContactLocation
+    ) -> Hyperplane:
         pass
 
     @abstractmethod

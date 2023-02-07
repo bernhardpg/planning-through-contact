@@ -5,8 +5,8 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import PolytopeContactLocation, ContactPosition
-from geometry.two_d.rigid_body_2d import RigidBody2d
+from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.utilities import normalize_vec
 
 
@@ -77,7 +77,9 @@ class EquilateralPolytope2d(RigidBody2d):
                 f"Location {location.pos}: {location.idx} not implemented"
             )
 
-    def get_hyperplane_from_location(self, location: PolytopeContactLocation) -> Hyperplane:
+    def get_hyperplane_from_location(
+        self, location: PolytopeContactLocation
+    ) -> Hyperplane:
         if location.pos == ContactPosition.FACE:
             return self.faces[location.idx]
         else:

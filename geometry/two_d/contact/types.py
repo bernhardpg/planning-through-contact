@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import NamedTuple
 
 
 class ContactPosition(Enum):
@@ -12,7 +11,7 @@ class ContactMode(Enum):
     SLIDING = 2
 
 
-class PolytopeContactLocation(NamedTuple):
-    pos: ContactPosition
-    idx: int
-
+class ContactType(Enum):
+    ONE_SIDED_POINT_CONTACT = 1
+    POINT_CONTACT = 2
+    LINE_CONTACT = 3
