@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane
-from geometry.two_d.contact.types import ContactLocation
+from geometry.two_d.contact.types import PolytopeContactLocation
 
 GRAV_ACC = 9.81
 
@@ -19,23 +19,23 @@ class RigidBody2d(ABC):
 
     @abstractmethod
     def get_proximate_vertices_from_location(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
         pass
 
     @abstractmethod
     def get_neighbouring_vertices(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         pass
 
     @abstractmethod
-    def get_hyperplane_from_location(self, location: ContactLocation) -> Hyperplane:
+    def get_hyperplane_from_location(self, location: PolytopeContactLocation) -> Hyperplane:
         pass
 
     @abstractmethod
     def get_norm_and_tang_vecs_from_location(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         pass
 

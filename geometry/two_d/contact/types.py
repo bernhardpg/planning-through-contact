@@ -2,7 +2,7 @@ from enum import Enum
 from typing import NamedTuple
 
 
-class ContactType(Enum):
+class ContactPosition(Enum):
     FACE = 1
     VERTEX = 2
 
@@ -12,7 +12,7 @@ class ContactMode(Enum):
     SLIDING = 2
 
 
-class ContactLocation(NamedTuple):
-    type: ContactType
+class PolytopeContactLocation(NamedTuple):
+    pos: ContactPosition
     idx: int
 

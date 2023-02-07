@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import List, Literal, NamedTuple, Tuple, Union
 
 import numpy as np
@@ -10,7 +9,7 @@ from pydrake.solvers import MathematicalProgramResult
 from geometry.hyperplane import Hyperplane, calculate_convex_hull_cut_for_so_2
 from geometry.two_d.box_2d import RigidBody2d
 from geometry.two_d.contact.contact_point_2d import ContactPoint2d
-from geometry.two_d.contact.types import ContactLocation, ContactMode, ContactType
+from geometry.two_d.contact.types import PolytopeContactLocation, ContactMode, ContactPosition
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
 
@@ -37,7 +36,7 @@ class ContactFrameConstraints(NamedTuple):
 class ContactPairConstraints(NamedTuple):
     friction_cone: NpFormulaArray
     relaxed_so_2: sym.Formula
-    # so_2_cut: sym.Formula # FIX:
+    non_penetration_cut: sym.Formula
     equal_contact_points: ContactFrameConstraints
     equal_and_opposite_forces: ContactFrameConstraints
     equal_relative_positions: ContactFrameConstraints
@@ -48,9 +47,9 @@ class ContactPair2d:
         self,
         pair_name: str,
         body_A: RigidBody2d,
-        contact_location_A: ContactLocation,
+        contact_location_A: PolytopeContactLocation,
         body_B: RigidBody2d,
-        contact_location_B: ContactLocation,
+        contact_location_B: PolytopeContactLocation,
         friction_coeff: float,
     ) -> None:
         self.body_A = body_A
@@ -145,12 +144,12 @@ class ContactPair2d:
             ]
         )
 
-    def _get_contact_point_of_type(self, type: ContactType) -> ContactPoint2d:
+    def _get_contact_point_of_type(self, type: ContactPosition) -> ContactPoint2d:
         contact_point = next(
             (
                 contact_point
                 for contact_point in self.contact_points
-                if contact_point.contact_location.type == type
+                if contact_point.contact_location.pos == type
             )
         )  # There will only be one match, hence we use 'next'
         return contact_point
@@ -181,12 +180,12 @@ class ContactPair2d:
         return Hyperplane(a, b)
 
     def create_non_penetration_cut(self) -> sym.Formula:
-        vertex_contact = self._get_contact_point_of_type(ContactType.VERTEX)
+        vertex_contact = self._get_contact_point_of_type(ContactPosition.VERTEX)
         contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
         if not contact_point.dtype == np.float64:
             raise ValueError("dtype of contact point must be np.float64")
 
-        face_contact = self._get_contact_point_of_type(ContactType.FACE)
+        face_contact = self._get_contact_point_of_type(ContactPosition.FACE)
         contact_hyperplane = face_contact.get_contact_hyperplane()
 
         # Points we are enforcing nonpenetration for
@@ -216,6 +215,7 @@ class ContactPair2d:
             return ContactPairConstraints(
                 self.create_friction_cone_constraints(),
                 self.create_relaxed_so2_constraint(),
+                self.create_non_penetration_cut(),
                 self.create_equal_contact_point_constraints(),
                 self.create_equal_and_opposite_forces_constraint(),
                 self.create_equal_rel_position_constraints(),

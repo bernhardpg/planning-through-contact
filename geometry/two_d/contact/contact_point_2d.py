@@ -6,7 +6,7 @@ import pydrake.symbolic as sym  # type: ignore
 
 from geometry.hyperplane import Hyperplane
 from geometry.two_d.box_2d import RigidBody2d
-from geometry.two_d.contact.types import ContactLocation, ContactType
+from geometry.two_d.contact.types import PolytopeContactLocation, ContactPosition
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
 
@@ -14,7 +14,7 @@ class ContactPoint2d:
     def __init__(
         self,
         body: RigidBody2d,
-        contact_location: ContactLocation,
+        contact_location: PolytopeContactLocation,
         friction_coeff: float = 0.5,
         name: str = "unnamed",
     ) -> None:
@@ -34,7 +34,7 @@ class ContactPoint2d:
     def _set_contact_position(
         self,
     ) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
-        if self.contact_location.type == ContactType.FACE:
+        if self.contact_location.pos == ContactPosition.FACE:
             self.lam = sym.Variable(f"{self.name}_lam")
             vertices = self.body.get_proximate_vertices_from_location(
                 self.contact_location
@@ -55,7 +55,7 @@ class ContactPoint2d:
 
     @property
     def variables(self) -> NpVariableArray:
-        if self.contact_location.type == ContactType.FACE:
+        if self.contact_location.pos == ContactPosition.FACE:
             return np.array([self.normal_force, self.friction_force, self.lam])
         else:
             return np.array([self.normal_force, self.friction_force])

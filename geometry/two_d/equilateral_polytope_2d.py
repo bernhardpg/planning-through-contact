@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import ContactLocation, ContactType
+from geometry.two_d.contact.types import PolytopeContactLocation, ContactPosition
 from geometry.two_d.rigid_body_2d import RigidBody2d
 from geometry.utilities import normalize_vec
 
@@ -52,21 +52,21 @@ class EquilateralPolytope2d(RigidBody2d):
         return hyperplanes
 
     def get_proximate_vertices_from_location(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
-        if location.type == ContactType.FACE:
+        if location.pos == ContactPosition.FACE:
             return [self.vertices[location.idx], self.vertices[location.idx + 1]]
-        elif location.type == ContactType.VERTEX:
+        elif location.pos == ContactPosition.VERTEX:
             return [self.vertices[location.idx]]
         else:
             raise NotImplementedError(
-                f"Location {location.type}: {location.idx} not implemented"
+                f"Location {location.pos}: {location.idx} not implemented"
             )
 
     def get_neighbouring_vertices(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.type == ContactType.VERTEX:
+        if location.pos == ContactPosition.VERTEX:
             wrap_around = lambda num: num % self.vertices
             idx_prev = wrap_around(location.idx - 1)
             idx_next = wrap_around(location.idx + 1)
@@ -74,15 +74,15 @@ class EquilateralPolytope2d(RigidBody2d):
             return self.vertices[idx_prev], self.vertices[idx_next]
         else:
             raise NotImplementedError(
-                f"Location {location.type}: {location.idx} not implemented"
+                f"Location {location.pos}: {location.idx} not implemented"
             )
 
-    def get_hyperplane_from_location(self, location: ContactLocation) -> Hyperplane:
-        if location.type == ContactType.FACE:
+    def get_hyperplane_from_location(self, location: PolytopeContactLocation) -> Hyperplane:
+        if location.pos == ContactPosition.FACE:
             return self.faces[location.idx]
         else:
             raise NotImplementedError(
-                f"Cannot get hyperplane from location {location.type}: {location.idx}"
+                f"Cannot get hyperplane from location {location.pos}: {location.idx}"
             )
 
     @property
@@ -125,16 +125,16 @@ class EquilateralPolytope2d(RigidBody2d):
         return tangents
 
     def get_norm_and_tang_vecs_from_location(
-        self, location: ContactLocation
+        self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.type == ContactType.FACE:
+        if location.pos == ContactPosition.FACE:
             return self.normal_vecs[location.idx], self.tangent_vecs[location.idx]
-        elif location.type == ContactType.VERTEX:
+        elif location.pos == ContactPosition.VERTEX:
             return (
                 self.corner_normal_vecs[location.idx],
                 self.corner_tangent_vecs[location.idx],
             )
         else:
             raise ValueError(
-                f"Cannot get normal and tangent vecs from location {location.type}"
+                f"Cannot get normal and tangent vecs from location {location.pos}"
             )

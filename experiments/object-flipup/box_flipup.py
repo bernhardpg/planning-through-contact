@@ -18,7 +18,7 @@ from geometry.two_d.contact.contact_pair_2d import (
     EvaluatedContactFrameConstraints,
 )
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactLocation, ContactMode, ContactType
+from geometry.two_d.contact.types import PolytopeContactLocation, ContactMode, ContactPosition
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
 from visualize.analysis import (
@@ -56,17 +56,17 @@ class BoxFlipupCtrlPoint:
         self.table_box = ContactPair2d(
             "contact_1",
             self.table,
-            ContactLocation(ContactType.FACE, 1),
+            PolytopeContactLocation(ContactPosition.FACE, 1),
             self.box,
-            ContactLocation(ContactType.VERTEX, 4),
+            PolytopeContactLocation(ContactPosition.VERTEX, 4),
             self.friction_coeff,
         )
         self.box_finger = ContactPair2d(
             "contact_2",
             self.box,
-            ContactLocation(ContactType.FACE, 2),
+            PolytopeContactLocation(ContactPosition.FACE, 2),
             self.finger,
-            ContactLocation(ContactType.VERTEX, 1),
+            PolytopeContactLocation(ContactPosition.VERTEX, 1),
             self.friction_coeff,
         )
 
@@ -114,7 +114,7 @@ class BoxFlipupCtrlPoint:
             # for c in self.constraints
         ]
 
-        self.so2_cut = self.table_box.create_non_penetration_cut()
+        self.so2_cut = self.constraints[0].non_penetration_cut
 
         self.forces_squared = np.sum(
             np.array(
