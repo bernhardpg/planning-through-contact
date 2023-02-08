@@ -84,6 +84,7 @@ class ContactPair2dInstance:
         contact_mode: ContactMode,
         friction_coeff: float,
     ) -> None:
+        self.name = name
         self.contact_mode = contact_mode
         self.contact_type = contact_type
         self.body_A = body_A

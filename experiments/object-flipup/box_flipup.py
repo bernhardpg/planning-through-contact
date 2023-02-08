@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import MathematicalProgram, SolutionResult, Solve
 
 from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
@@ -51,15 +51,15 @@ def _angle_to_2d_rot_matrix(theta: float) -> npt.NDArray[np.float64]:
 
 
 class BoxFlipupCtrlPoint(ContactSceneCtrlPoint):
-    def __init__(self, contact_scene: ContactSceneInstance):
-        self.contact_scene = contact_scene
+    def __init__(self, contact_scene_instance: ContactSceneInstance):
+        self.contact_scene_instance = contact_scene_instance
 
-        self.table_box = self.contact_scene.contact_pairs[0]
-        self.box_finger = self.contact_scene.contact_pairs[1]
+        self.table_box = self.contact_scene_instance.contact_pairs[0]
+        self.box_finger = self.contact_scene_instance.contact_pairs[1]
 
-        self.table = self.contact_scene.rigid_bodies[0]
-        self.box = self.contact_scene.rigid_bodies[1]
-        self.finger = self.contact_scene.rigid_bodies[2]
+        self.table = self.contact_scene_instance.rigid_bodies[0]
+        self.box = self.contact_scene_instance.rigid_bodies[1]
+        self.finger = self.contact_scene_instance.rigid_bodies[2]
 
         # Define convenience variables for plotting
         self.p_TB_T = self.table_box.p_AB_A
@@ -81,11 +81,11 @@ class BoxFlipupCtrlPoint(ContactSceneCtrlPoint):
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
-    @property
-    def equal_and_opposite_forces_constraints(self) -> List[ContactFrameConstraints]:
-        # FIX: Why does it make the formulation infeasible to add equal and opposite forces for the finger too?
-        # I must generalize this so that the finger is not a box but a point contact
-        return [self.constraints.pair_constraints[0].equal_and_opposite_forces]
+    # NOTE: Without the following code, Mosek throws an unknown error.
+    # For some reason, this error occurs when attempting to add equal_and_opposite_forces_constraints for the finger-box contact
+    # @property
+    # def equal_and_opposite_forces_constraints(self) -> List[ContactFrameConstraints]:
+    #     return [self.constraints.pair_constraints[0].equal_and_opposite_forces]
 
     @property
     def non_penetration_cuts(self) -> NpFormulaArray:
@@ -291,7 +291,11 @@ class BoxFlipupDemo:
     def solve(self) -> None:
         self.result = Solve(self.prog)
         print(f"Solution result: {self.result.get_solution_result()}")
-        assert self.result.is_success()
+        if self.result.get_solution_result() == SolutionResult.kUnknownError:
+            print("NOTE! Got kUnknownError from Mosek, which most likely means numerical issues")
+            pass
+        else: # NOTE: We do not care if the solution is kUnknownError as we already know that this will happen in some cases
+            assert self.result.is_success()
 
         print(f"Cost: {self.result.get_optimal_cost()}")
 

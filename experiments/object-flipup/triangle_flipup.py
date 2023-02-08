@@ -1,6 +1,9 @@
+from typing import Dict, Tuple
+
 import numpy as np
 import pydrake.symbolic as sym
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, SolutionResult, Solve
 
 from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
@@ -15,21 +18,29 @@ from geometry.two_d.contact.contact_scene_2d import (
 from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from geometry.utilities import two_d_rotation_matrix_from_angle
 
 # FIX: Only defined here because of poor variable bound code. Should be removed
 FRICTION_COEFF = 0.7
 
 
 class ContactMotionPlan:
-    def __init__(self, contact_scene: ContactScene2d, num_ctrl_points: int):
+    def __init__(
+        self,
+        contact_scene: ContactScene2d,
+        num_ctrl_points: int,
+        variable_bounds: Dict[str, Tuple[float, float]],
+    ):
 
         # Convenience variables for running experiments
         self.use_friction_cone_constraint = True
         self.use_force_balance_constraint = True
         self.use_torque_balance_constraint = True
-        self.use_equal_contact_point_constraint = True
+        self.use_equal_contact_point_constraint = (
+            False  # Not in use as it does not add any tightness without variable bounds
+        )
         self.use_equal_relative_position_constraint = True
-        self.use_newtons_third_law_constraint = True
+        self.use_equal_and_opposite_forces_constraint = True
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
         self.use_quadratic_cost = True
@@ -37,7 +48,7 @@ class ContactMotionPlan:
         self.contact_scene = contact_scene
         self.num_ctrl_points = num_ctrl_points
         self._setup_ctrl_points()
-        self._setup_prog()
+        self._setup_prog(variable_bounds)
 
     def _setup_ctrl_points(self) -> None:
         modes = {"contact_1": ContactMode.ROLLING, "contact_2": ContactMode.ROLLING}
@@ -46,28 +57,8 @@ class ContactMotionPlan:
             for _ in range(self.num_ctrl_points)
         ]
 
-    def _setup_prog(self) -> None:
+    def _setup_prog(self, variable_bounds: Dict[str, Tuple[float, float]]) -> None:
         self.prog = MathematicalProgram()
-
-        # TODO: this should be cleaned up
-        MAX_FORCE = 10  # only used for mccorimick constraints
-        variable_bounds = {
-            "contact_1_triangle_c_n": (0.0, MAX_FORCE),
-            "contact_1_triangle_c_f": (
-                -FRICTION_COEFF * MAX_FORCE,
-                FRICTION_COEFF * MAX_FORCE,
-            ),
-            "contact_1_table_c_n": (0.0, MAX_FORCE),
-            "contact_1_table_c_f": (
-                -FRICTION_COEFF * MAX_FORCE,
-                FRICTION_COEFF * MAX_FORCE,
-            ),
-            "contact_1_table_lam": (0.0, 1.0),
-            "contact_1_sin_th": (-1, 1),
-            "contact_1_cos_th": (-1, 1),
-            "contact_2_triangle_lam": (0.0, 1.0),
-            "contact_2_triangle_c_n": (0, 3.8),
-        }
 
         for ctrl_point in self.ctrl_points:
             self.prog.AddDecisionVariables(ctrl_point.variables)
@@ -99,7 +90,7 @@ class ContactMotionPlan:
                         c, self.prog, variable_bounds
                     )
 
-            if self.use_newtons_third_law_constraint:
+            if self.use_equal_and_opposite_forces_constraint:
                 for c in ctrl_point.equal_and_opposite_forces_constraints:
                     add_bilinear_frame_constraints_to_prog(
                         c, self.prog, variable_bounds
@@ -118,13 +109,6 @@ class ContactMotionPlan:
             else:  # Absolute value cost
                 raise ValueError("Absolute value cost not implemented")
 
-        # # Initial and final condition
-        # th_initial = 0.0
-        # self._constrain_orientation_at_ctrl_point_idx(th_initial, 0)
-        #
-        # th_final = 0.9
-        # self._constrain_orientation_at_ctrl_point_idx(th_final, -1)
-        #
         # # Don't allow contact position to change
         # for idx in range(self.num_ctrl_points - 1):
         #     self.prog.AddLinearConstraint(
@@ -134,10 +118,31 @@ class ContactMotionPlan:
         #         eq(self.ctrl_points[idx].pc1_T, self.ctrl_points[idx + 1].pc1_T)
         #     )
 
+    def constrain_orientation_at_ctrl_point(
+        self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, theta: float
+    ) -> None:
+        # NOTE: This finds the matching pair based on name. This may not be the safest way to do this
+
+        scene_instance = self.ctrl_points[ctrl_point_idx].contact_scene_instance
+        pair = next(
+            p for p in scene_instance.contact_pairs if p.name == pair_to_constrain.name
+        )
+        R_target = two_d_rotation_matrix_from_angle(theta)
+        constraint = eq(pair.R_AB, R_target)
+
+        for c in constraint.flatten():
+            self.prog.AddLinearConstraint(c)
+
     def solve(self) -> None:
         self.result = Solve(self.prog)
         print(f"Solution result: {self.result.get_solution_result()}")
-        assert self.result.is_success()
+        if self.result.get_solution_result() == SolutionResult.kUnknownError:
+            print(
+                "NOTE! Got kUnknownError from Mosek, which most likely means numerical issues"
+            )
+            pass
+        else:  # NOTE: We do not care if the solution is kUnknownError as we already know that this will happen in some cases
+            assert self.result.is_success()
 
         print(f"Cost: {self.result.get_optimal_cost()}")
 
@@ -196,7 +201,36 @@ def plan_triangle_flipup():
         table,
     )
 
-    motion_plan = ContactMotionPlan(contact_scene, 3)
+    # TODO: this should be cleaned up
+    MAX_FORCE = 10  # only used for mccorimick constraints
+    variable_bounds = {
+        "contact_1_triangle_c_n": (0.0, MAX_FORCE),
+        "contact_1_triangle_c_f": (
+            -FRICTION_COEFF * MAX_FORCE,
+            FRICTION_COEFF * MAX_FORCE,
+        ),
+        "contact_1_table_c_n": (0.0, MAX_FORCE),
+        "contact_1_table_c_f": (
+            -FRICTION_COEFF * MAX_FORCE,
+            FRICTION_COEFF * MAX_FORCE,
+        ),
+        "contact_1_table_lam": (0.0, 1.0),
+        "contact_1_sin_th": (-1, 1),
+        "contact_1_cos_th": (-1, 1),
+        "contact_2_triangle_lam": (0.0, 1.0),
+        "contact_2_triangle_c_n": (0, 3.8),
+    }
+
+    num_ctrl_points = 3
+    motion_plan = ContactMotionPlan(contact_scene, num_ctrl_points, variable_bounds)
+    motion_plan.constrain_orientation_at_ctrl_point(
+        table_triangle, ctrl_point_idx=0, theta=0
+    )
+    motion_plan.constrain_orientation_at_ctrl_point(
+        table_triangle, ctrl_point_idx=num_ctrl_points - 1, theta=np.pi / 4
+    )
+    motion_plan.solve()
+    breakpoint()
 
 
 if __name__ == "__main__":

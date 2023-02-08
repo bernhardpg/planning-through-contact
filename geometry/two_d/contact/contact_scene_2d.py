@@ -174,8 +174,8 @@ class ContactSceneInstance:
 
 
 class ContactSceneCtrlPoint:
-    def __init__(self, contact_scene: ContactSceneInstance):
-        self.contact_scene = contact_scene
+    def __init__(self, contact_scene_instance: ContactSceneInstance):
+        self.contact_scene_instance = contact_scene_instance
 
     @property
     def static_equilibrium_constraints(self) -> List[StaticEquilibriumConstraints]:
@@ -211,12 +211,12 @@ class ContactSceneCtrlPoint:
 
     @property
     def variables(self) -> NpVariableArray:
-        return self.contact_scene.variables
+        return self.contact_scene_instance.variables
 
     @property
     def squared_forces(self) -> sym.Expression:
-        return self.contact_scene.get_squared_forces_for_unactuated_bodies()
+        return self.contact_scene_instance.get_squared_forces_for_unactuated_bodies()
 
     @property
     def constraints(self) -> ContactSceneConstraints:
-        return self.contact_scene.create_contact_scene_constraints()
+        return self.contact_scene_instance.create_contact_scene_constraints()
