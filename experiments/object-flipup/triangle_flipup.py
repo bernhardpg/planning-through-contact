@@ -109,14 +109,26 @@ class ContactMotionPlan:
             else:  # Absolute value cost
                 raise ValueError("Absolute value cost not implemented")
 
-        # # Don't allow contact position to change
-        # for idx in range(self.num_ctrl_points - 1):
-        #     self.prog.AddLinearConstraint(
-        #         eq(self.ctrl_points[idx].pc2_B, self.ctrl_points[idx + 1].pc2_B)
-        #     )
-        #     self.prog.AddLinearConstraint(
-        #         eq(self.ctrl_points[idx].pc1_T, self.ctrl_points[idx + 1].pc1_T)
-        #     )
+    def fix_contact_positions(self) -> None:
+        for pair in self.contact_scene.contact_pairs:
+            pair_at_ctrl_points = [
+                next(
+                    pair_instance
+                    for pair_instance in ctrl_point.contact_scene_instance.contact_pairs
+                    if pair_instance.name == pair.name
+                )
+                for ctrl_point in self.ctrl_points
+            ]
+            contact_pos_at_ctrl_points = [
+                pair.get_nonfixed_contact_position() for pair in pair_at_ctrl_points
+            ]
+
+            for idx in range(self.num_ctrl_points - 1):
+                constraint = eq(
+                    contact_pos_at_ctrl_points[idx], contact_pos_at_ctrl_points[idx + 1]
+                )
+                for c in constraint.flatten():
+                    self.prog.AddLinearConstraint(c)
 
     def constrain_orientation_at_ctrl_point(
         self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, theta: float
@@ -229,6 +241,7 @@ def plan_triangle_flipup():
     motion_plan.constrain_orientation_at_ctrl_point(
         table_triangle, ctrl_point_idx=num_ctrl_points - 1, theta=np.pi / 4
     )
+    motion_plan.fix_contact_positions()
     motion_plan.solve()
     breakpoint()
 
