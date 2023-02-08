@@ -12,6 +12,7 @@ from geometry.two_d.contact.contact_pair_2d import (
     ContactPair2dInstance,
     ContactPairConstraints,
 )
+from geometry.two_d.contact.contact_point_2d import ContactPoint2d
 from geometry.two_d.contact.types import ContactMode
 from geometry.two_d.rigid_body_2d import RigidBody2d
 from geometry.utilities import cross_2d
@@ -232,6 +233,13 @@ class ContactSceneInstance:
             self.static_equilibrium_constraints,
         )
 
+    @property
+    def contact_points(self) -> List[ContactPoint2d]:
+        return [point for pair in self.contact_pairs for point in pair.contact_points]
+
+    def get_contact_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
+        return [point.normal_vec for point in self.contact_points]
+
 
 class ContactSceneCtrlPoint:
     def __init__(self, contact_scene_instance: ContactSceneInstance):
@@ -260,6 +268,14 @@ class ContactSceneCtrlPoint:
         Rs = [
             self.contact_scene_instance._get_rotation_to_W(body)
             for body in self.contact_scene_instance.rigid_bodies
+        ]
+        return Rs
+
+    def get_contact_point_orientations(self) -> List[NpExpressionArray]:
+        Rs = [
+            self.contact_scene_instance._get_rotation_to_W(point.body)
+            for pair in self.contact_scene_instance.contact_pairs
+            for point in pair.contact_points
         ]
         return Rs
 

@@ -11,6 +11,7 @@ from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
 from tools.utils import evaluate_np_expressions_array
 from visualize.visualizer_2d import (
+    VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
@@ -116,15 +117,6 @@ def plan_polytope_flipup(
     motion_plan.fix_contact_positions()
     motion_plan.solve()
 
-    contact_positions_ctrl_points = [
-        evaluate_np_expressions_array(pos, motion_plan.result)
-        for pos in motion_plan.contact_positions_in_world_frame
-    ]
-    contact_forces_ctrl_points = [
-        evaluate_np_expressions_array(force, motion_plan.result)
-        for force in motion_plan.contact_forces_in_world_frame
-    ]
-
     if True:
 
         CONTACT_COLOR = "brown1"
@@ -133,6 +125,35 @@ def plan_polytope_flipup(
         TABLE_COLOR = "bisque3"
         FINGER_COLOR = "brown3"
         body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
+
+        contact_positions_ctrl_points = [
+            evaluate_np_expressions_array(pos, motion_plan.result)
+            for pos in motion_plan.contact_positions_in_world_frame
+        ]
+        contact_forces_ctrl_points = [
+            evaluate_np_expressions_array(force, motion_plan.result)
+            for force in motion_plan.contact_forces_in_world_frame
+        ]
+
+        bodies_com_ctrl_points = [
+            motion_plan.result.GetSolution(ctrl_point)
+            for ctrl_point in motion_plan.body_positions_in_world_frame
+        ]
+
+        bodies_orientation_ctrl_points = [
+            [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
+            for R in motion_plan.body_orientations
+        ]
+
+        contact_point_orientation_ctrl_points = [
+            [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
+            for R in motion_plan.contact_point_orientations
+        ]
+
+        viz_com_points = [
+            VisualizationPoint2d.from_ctrl_points(com_ctrl_points, GRAVITY_COLOR)
+            for com_ctrl_points in bodies_com_ctrl_points
+        ]
 
         viz_contact_positions = [
             VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
@@ -143,16 +164,6 @@ def plan_polytope_flipup(
             for pos, force in zip(
                 contact_positions_ctrl_points, contact_forces_ctrl_points
             )
-        ]
-
-        bodies_com_ctrl_points = [
-            motion_plan.result.GetSolution(ctrl_point)
-            for ctrl_point in motion_plan.body_positions_in_world_frame
-        ]
-
-        viz_com_points = [
-            VisualizationPoint2d.from_ctrl_points(com_ctrl_points, GRAVITY_COLOR)
-            for com_ctrl_points in bodies_com_ctrl_points
         ]
 
         box_com_ctrl_points = bodies_com_ctrl_points[1]
@@ -166,10 +177,22 @@ def plan_polytope_flipup(
             for force_ctrl_points in motion_plan.gravitational_forces_in_world_frame
         ]
 
-        bodies_orientation_ctrl_points = [
-            [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
-            for R in motion_plan.body_orientations
+        friction_cone_angle = np.arctan(FRICTION_COEFF)
+        contact_normals = motion_plan.contact_point_normals_in_local_frames
+        viz_friction_cones = [
+            VisualizationCone2d.from_ctrl_points(
+                pos,
+                orientation,
+                normal_vec,
+                friction_cone_angle,
+            )
+            for pos, orientation, normal_vec in zip(
+                contact_positions_ctrl_points,
+                contact_point_orientation_ctrl_points,
+                contact_normals,
+            )
         ]
+
         viz_polygons = [
             VisualizationPolygon2d.from_ctrl_points(
                 com,
@@ -189,7 +212,7 @@ def plan_polytope_flipup(
         viz.visualize(
             viz_contact_positions + viz_com_points,
             viz_contact_forces + viz_gravitional_forces,
-            viz_polygons,
+            viz_polygons + viz_friction_cones,
         )
 
 

@@ -197,6 +197,25 @@ class ContactModeMotionPlanner:
         return self._collect_ctrl_points(body_positions_for_each_ctrl_point)
 
     @property
+    def contact_point_orientations(
+        self,
+    ) -> List[List[Union[NpExpressionArray, NpVariableArray]]]:
+        """
+        Exactly the same as body_orientations, but returns one orientation corresponding to each contact point.
+        Useful when plotting friction cones
+        """
+        contact_orientations_for_each_ctrl_point = [
+            cp.get_contact_point_orientations() for cp in self.ctrl_points
+        ]
+        num_elements = len(contact_orientations_for_each_ctrl_point[0])
+        ctrl_points_per_element = [
+            [elements[idx] for elements in contact_orientations_for_each_ctrl_point]
+            for idx in range(num_elements)
+        ]  # [[(2,2) x num_ctrl_points] x num_bodies]
+
+        return ctrl_points_per_element
+
+    @property
     def body_orientations(
         self,
     ) -> List[List[Union[NpExpressionArray, NpVariableArray]]]:
@@ -210,3 +229,9 @@ class ContactModeMotionPlanner:
         ]  # [[(2,2) x num_ctrl_points] x num_bodies]
 
         return ctrl_points_per_element
+
+    @property
+    def contact_point_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
+        return self.ctrl_points[
+            0 # contact normals are constant, so we just pick them from the first ctrl point
+        ].contact_scene_instance.get_contact_normals_in_local_frames()
