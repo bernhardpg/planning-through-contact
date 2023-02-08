@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, TypeVar, Union
+from typing import Any, Dict, List, Tuple, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +12,7 @@ from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
 )
-from geometry.two_d.box_2d import Box2d
+from geometry.two_d.box_2d import Box2d, RigidBody2d
 from geometry.two_d.contact.contact_pair_2d import (
     ContactFrameConstraints,
     ContactPair2d,
@@ -172,48 +172,71 @@ class ContactMotionPlan:
 
         print(f"Cost: {self.result.get_optimal_cost()}")
 
+    @staticmethod
+    def _collect_ctrl_points(
+        elements_per_ctrl_point: List[List[npt.NDArray[Any]]],
+    ) -> List[npt.NDArray[Any]]:
+        """
+        Helper function for creating ctrl points.
+
+        Input: [[(num_dims, 1) x num_elements] x num_ctrl_points]
+        Output: [(num_dims, num_ctrl_points) x num_elements]
+
+        Takes in a list of lists with vectors. The outermost list has one entry per ctrl point,
+        the inner list has an entry per element.
+        The function returns a list of collected ctrl points per element.
+        """
+        num_elements = len(elements_per_ctrl_point[0])
+        ctrl_points_per_element = [
+            np.hstack([elements[idx] for elements in elements_per_ctrl_point])
+            for idx in range(num_elements)
+        ]  # [(num_dims, num_ctrl_points) x num_forces]
+        return ctrl_points_per_element
+
     @property
-    def contact_forces_in_world_frame(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
+    def contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
         contact_forces_for_each_ctrl_point = [
             cp.get_contact_forces_in_world_frame() for cp in self.ctrl_points
         ]
-        num_contact_forces = len(contact_forces_for_each_ctrl_point[0])
-        contact_forces_ctrl_points = [
-            np.hstack([forces[idx] for forces in contact_forces_for_each_ctrl_point])
-            for idx in range(num_contact_forces)
-        ]  # [(num_dims, num_ctrl_points) x num_forces]
-        return contact_forces_ctrl_points
+        return self._collect_ctrl_points(contact_forces_for_each_ctrl_point)
 
     @property
-    def contact_positions_in_W(self) -> List[NpExpressionArray]:
+    def contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
         contact_positions_for_each_ctrl_point = [
             cp.get_contact_positions_in_world_frame() for cp in self.ctrl_points
         ]
-        num_contact_positions = len(contact_positions_for_each_ctrl_point[0])
-        contact_positions_ctrl_points = [
-            np.hstack(
-                [positions[idx] for positions in contact_positions_for_each_ctrl_point]
-            )
-            for idx in range(num_contact_positions)
-        ]  # [(num_dims, num_ctrl_points) x num_positions]
-        return contact_positions_ctrl_points
+        return self._collect_ctrl_points(contact_positions_for_each_ctrl_point)
 
     @property
-    def gravitational_force_in_W(self) -> npt.NDArray[np.float64]:
-        return np.hstack([cp.box.gravity_force_in_W for cp in self.ctrl_points])
+    def gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
+        gravity_force_for_each_ctrl_point = [
+            cp.get_gravitational_forces_in_world_frame() for cp in self.ctrl_points
+        ]
+        return self._collect_ctrl_points(gravity_force_for_each_ctrl_point)
 
     @property
-    def box_com_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
-        return np.hstack([cp.p_WB_W for cp in self.ctrl_points])
+    def body_positions_in_world_frame(
+        self,
+    ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
+        body_positions_for_each_ctrl_point = [
+            cp.get_body_positions_in_world_frame() for cp in self.ctrl_points
+        ]
+        return self._collect_ctrl_points(body_positions_for_each_ctrl_point)
 
-    # FIX: Naming
     @property
-    def box_com_B_in_W(self) -> npt.NDArray[sym.Expression]:  # type: ignore
-        return np.hstack([-cp.R_WB.dot(cp.p_BW_B) for cp in self.ctrl_points])
+    def body_orientations(
+        self,
+    ) -> List[List[Union[NpExpressionArray, NpVariableArray]]]:
+        body_orientations_for_each_ctrl_point = [
+            cp.get_body_orientations() for cp in self.ctrl_points
+        ]
+        num_elements = len(body_orientations_for_each_ctrl_point[0])
+        ctrl_points_per_element = [
+            [elements[idx] for elements in body_orientations_for_each_ctrl_point]
+            for idx in range(num_elements)
+        ]  # [[(2,2) x num_ctrl_points] x num_bodies]
 
-    @property
-    def box_orientation(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
-        return [cp.R_WB for cp in self.ctrl_points]
+        return ctrl_points_per_element
 
 
 def plan_triangle_flipup():
@@ -304,12 +327,9 @@ def plan_triangle_flipup():
     motion_plan.fix_contact_positions()
     motion_plan.solve()
 
-    motion_plan.ctrl_points[0].get_contact_forces_in_world_frame()
-    breakpoint()
-
     contact_positions_ctrl_points = [
         evaluate_np_expressions_array(pos, motion_plan.result)
-        for pos in motion_plan.contact_positions_in_W
+        for pos in motion_plan.contact_positions_in_world_frame
     ]
     contact_forces_ctrl_points = [
         evaluate_np_expressions_array(force, motion_plan.result)
@@ -322,6 +342,7 @@ def plan_triangle_flipup():
         GRAVITY_COLOR = "blueviolet"
         BOX_COLOR = "aquamarine4"
         TABLE_COLOR = "bisque3"
+        body_colors = [TABLE_COLOR, BOX_COLOR]
 
         viz_contact_positions = [
             VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
@@ -334,48 +355,51 @@ def plan_triangle_flipup():
             )
         ]
 
-        box_com_ctrl_points = motion_plan.result.GetSolution(motion_plan.box_com_in_W)
-        viz_box_com = VisualizationPoint2d.from_ctrl_points(
-            box_com_ctrl_points, GRAVITY_COLOR
-        )
-        viz_gravitional_force = VisualizationForce2d.from_ctrl_points(
-            motion_plan.result.GetSolution(motion_plan.box_com_in_W),
-            motion_plan.result.GetSolution(motion_plan.gravitational_force_in_W),
-            GRAVITY_COLOR,
-        )
-
-        orientation_ctrl_points = [
-            evaluate_np_expressions_array(R, motion_plan.result)
-            for R in motion_plan.box_orientation
+        bodies_com_ctrl_points = [
+            motion_plan.result.GetSolution(ctrl_point)
+            for ctrl_point in motion_plan.body_positions_in_world_frame
         ]
-        viz_box = VisualizationPolygon2d.from_ctrl_points(
-            box_com_ctrl_points,
-            orientation_ctrl_points,
-            motion_plan.ctrl_points[0].box,
-            BOX_COLOR,
-        )
 
-        table_pos_ctrl_points = np.zeros((2, motion_plan.num_ctrl_points))
-        table_orientation_ctrl_points = [np.eye(2)] * motion_plan.num_ctrl_points
+        viz_com_points = [
+            VisualizationPoint2d.from_ctrl_points(com_ctrl_points, GRAVITY_COLOR)
+            for com_ctrl_points in bodies_com_ctrl_points
+        ]
 
-        viz_table = VisualizationPolygon2d.from_ctrl_points(
-            table_pos_ctrl_points,
-            table_orientation_ctrl_points,
-            motion_plan.ctrl_points[0].table,
-            TABLE_COLOR,
-        )
+        box_com_ctrl_points = bodies_com_ctrl_points[1]
+        # TODO: should not depend explicitly on box
+        viz_gravitional_forces = [
+            VisualizationForce2d.from_ctrl_points(
+                box_com_ctrl_points,
+                motion_plan.result.GetSolution(force_ctrl_points),
+                GRAVITY_COLOR,
+            )
+            for force_ctrl_points in motion_plan.gravitational_forces_in_world_frame
+        ]
 
-        # FIX: Naming
-        # box_com_B_ctrl_points = motion_plan.result.GetSolution(motion_plan.box_com_B_in_W)
-        # viz_box_com_B = VisualizationPoint2d.from_ctrl_points(
-        #     box_com_B_ctrl_points, "carrot"
-        # )
+        bodies_orientation_ctrl_points = [
+            [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
+            for R in motion_plan.body_orientations
+        ]
+        viz_polygons = [
+            VisualizationPolygon2d.from_ctrl_points(
+                com,
+                orientation,
+                body,
+                color,
+            )
+            for com, orientation, body, color in zip(
+                bodies_com_ctrl_points,
+                bodies_orientation_ctrl_points,
+                contact_scene.rigid_bodies,
+                body_colors,
+            )
+        ]
 
         viz = Visualizer2d()
         viz.visualize(
-            viz_contact_positions + [viz_box_com],
-            viz_contact_forces + [viz_gravitional_force],
-            [viz_box, viz_table],
+            viz_contact_positions + viz_com_points,
+            viz_contact_forces + viz_gravitional_forces,
+            viz_polygons,
         )
     breakpoint()
 

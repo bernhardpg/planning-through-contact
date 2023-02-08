@@ -47,6 +47,11 @@ class RigidBody2d(ABC):
         pass
 
     @property
+    @abstractmethod
+    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
+        pass
+
+    @property
     def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
         if self.mass is None:
             raise ValueError(

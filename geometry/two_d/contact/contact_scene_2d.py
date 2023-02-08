@@ -227,6 +227,16 @@ class ContactSceneCtrlPoint:
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
 
+    def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
+        """
+        Returns the gravitational forces for all the unactuated objects in the scene.
+        """
+        gravitational_forces = [
+            body.gravity_force_in_W
+            for body in self.contact_scene_instance.unactuated_bodies
+        ]
+        return gravitational_forces
+
     def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
         forces_W = []
         pair = self.contact_scene_instance.contact_pairs[0]
@@ -236,6 +246,15 @@ class ContactSceneCtrlPoint:
             f_cB_W = R_WB.dot(point.contact_force)
             forces_W.append(f_cB_W)
         return forces_W
+
+    def get_body_orientations(self) -> List[NpExpressionArray]:
+        # FIX: Fix this once I have code for getting orientations through multiple objects
+        temp = [
+            self.contact_scene_instance.rigid_bodies[0],
+            self.contact_scene_instance.rigid_bodies[1],
+        ]
+        Rs = [self.contact_scene_instance._get_rotation_to_W(body) for body in temp]
+        return Rs
 
     def get_contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
         pos_W = []
@@ -247,6 +266,15 @@ class ContactSceneCtrlPoint:
             p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
             p_Wc1_W = p_WB + p_Bc1_W
             pos_W.append(p_Wc1_W)
+        return pos_W
+
+    def get_body_positions_in_world_frame(self) -> List[NpExpressionArray]:
+        pos_W = []
+        pair = self.contact_scene_instance.contact_pairs[0]
+        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
+        for point in pair.contact_points:
+            p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
+            pos_W.append(p_WB)
         return pos_W
 
     @property

@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.bezier import BezierCurve
-from geometry.two_d.box_2d import Box2d
+from geometry.two_d.rigid_body_2d import RigidBody2d
 from visualize.colors import COLORS, RGB
 
 
@@ -63,7 +63,7 @@ class VisualizationPolygon2d(VisualizationPoint2d):
             np.float64
         ],  # TODO: create a struct or class for ctrl points
         ctrl_points_orientation: List[npt.NDArray[np.float64]],
-        box: Box2d,
+        polytope: RigidBody2d,
         color: str = "red1",
     ) -> "VisualizationPolygon2d":
 
@@ -73,7 +73,7 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 
         temp = np.array(
             [
-                pos.reshape((-1, 1)) + rot.dot(box.vertices_for_plotting)
+                pos.reshape((-1, 1)) + rot.dot(polytope.vertices_for_plotting)
                 for rot, pos in zip(ctrl_points_orientation, ctrl_points_position.T)
             ]
         )  # (ctrl_points, dims, num_vertices)
