@@ -92,7 +92,7 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 class Visualizer2d:
     WINDOW_WIDTH = 600
     WINDOW_HEIGHT = 450
-    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT * 3 / 4]).reshape((-1, 1))
+    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT * 7 / 8]).reshape((-1, 1))
     PLOT_SCALE = 500
     FORCE_SCALE = 0.02
     POINT_RADIUS = 0.01

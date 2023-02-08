@@ -342,7 +342,8 @@ def plan_triangle_flipup():
         GRAVITY_COLOR = "blueviolet"
         BOX_COLOR = "aquamarine4"
         TABLE_COLOR = "bisque3"
-        body_colors = [TABLE_COLOR, BOX_COLOR]
+        FINGER_COLOR = "brown3"
+        body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
 
         viz_contact_positions = [
             VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
@@ -401,7 +402,6 @@ def plan_triangle_flipup():
             viz_contact_forces + viz_gravitional_forces,
             viz_polygons,
         )
-    breakpoint()
 
 
 if __name__ == "__main__":

@@ -98,12 +98,29 @@ class ContactSceneInstance:
                 R_body_to_W = pair.R_AB.T
 
         if R_body_to_W is None:
-            raise ValueError(
-                f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
-            )
-        else:
-            # For now we don't care about the type being float when we return identity
-            return R_body_to_W  # type: ignore
+            # Search for connections to the world frame ONE layer down
+            # NOTE: Does not search deeper than one transformation
+            R_NB = None
+            next_body = None
+            for pair in self.contact_pairs:
+                if pair.body_B == body:
+                    R_NB = pair.R_AB
+                    next_body = pair.body_A
+                    break
+                elif pair.body_A == body:
+                    R_NB = pair.R_AB.T
+                    next_body = pair.body_B
+                    break
+
+            if next_body is None or R_NB is None:
+                raise ValueError(
+                    f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
+                )
+            R_WN = self._get_rotation_to_W(next_body)
+            R_body_to_W = R_WN.dot(R_NB)
+
+        # For now we don't care about the type being float when we return identity
+        return R_body_to_W  # type: ignore
 
     def _get_translation_to_W(self, body: RigidBody2d) -> NpExpressionArray:
         p_WB = None
@@ -117,12 +134,32 @@ class ContactSceneInstance:
                 p_WB = pair.p_BA_B
 
         if p_WB is None:
-            raise ValueError(
-                f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
-            )
-        else:
-            # For now we don't care about the type being float when we return identity
-            return p_WB  # type: ignore
+            # Search for connections to the world frame ONE layer down
+            # NOTE: Does not search deeper than one transformation
+            p_NB_N = None
+            next_body = None
+            for pair in self.contact_pairs:
+                if pair.body_B == body:
+                    p_NB_N = pair.p_AB_A
+                    next_body = pair.body_A
+                    break
+                elif pair.body_A == body:
+                    p_NB_N = pair.p_BA_B
+                    next_body = pair.body_B
+                    break
+
+            if next_body is None or p_NB_N is None:
+                raise ValueError(
+                    f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
+                )
+            R_WN = self._get_rotation_to_W(next_body)
+            p_NB_W = R_WN.dot(p_NB_N)
+
+            p_WN_W = self._get_translation_to_W(next_body)
+            p_WB = p_WN_W + p_NB_W
+
+        # For now we don't care about the type being float when we return identity
+        return p_WB  # type: ignore
 
     @property
     def unactuated_bodies(self) -> List[RigidBody2d]:
@@ -200,33 +237,6 @@ class ContactSceneCtrlPoint:
     def __init__(self, contact_scene_instance: ContactSceneInstance):
         self.contact_scene_instance = contact_scene_instance
 
-        self.table_box = self.contact_scene_instance.contact_pairs[0]
-        self.box_finger = self.contact_scene_instance.contact_pairs[1]
-
-        self.table = self.contact_scene_instance.rigid_bodies[0]
-        self.box = self.contact_scene_instance.rigid_bodies[1]
-        self.finger = self.contact_scene_instance.rigid_bodies[2]
-
-        # Define convenience variables for plotting
-        self.p_TB_T = self.table_box.p_AB_A
-        self.p_WB_W = self.p_TB_T
-
-        self.p_BT_B = self.table_box.p_BA_B
-        self.p_BW_B = self.p_BT_B
-
-        self.R_TB = self.table_box.R_AB
-        self.R_WB = self.R_TB  # World frame is the same as table frame
-
-        self.fc1_B = self.table_box.contact_point_B.contact_force
-        self.fc1_T = self.table_box.contact_point_A.contact_force
-        self.pc1_B = self.table_box.contact_point_B.contact_position
-        self.pc1_T = self.table_box.contact_point_A.contact_position
-
-        self.fc2_B = self.box_finger.contact_point_A.contact_force
-        self.fc2_F = self.box_finger.contact_point_B.contact_force
-        self.pc2_B = self.box_finger.contact_point_A.contact_position
-        self.pc2_F = self.box_finger.contact_point_B.contact_position
-
     def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
         """
         Returns the gravitational forces for all the unactuated objects in the scene.
@@ -239,41 +249,35 @@ class ContactSceneCtrlPoint:
 
     def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
         forces_W = []
-        pair = self.contact_scene_instance.contact_pairs[0]
-        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
-        for point in pair.contact_points:
-            R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-            f_cB_W = R_WB.dot(point.contact_force)
-            forces_W.append(f_cB_W)
+        for pair in self.contact_scene_instance.contact_pairs:
+            for point in pair.contact_points:
+                R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+                f_cB_W = R_WB.dot(point.contact_force)
+                forces_W.append(f_cB_W)
         return forces_W
 
     def get_body_orientations(self) -> List[NpExpressionArray]:
-        # FIX: Fix this once I have code for getting orientations through multiple objects
-        temp = [
-            self.contact_scene_instance.rigid_bodies[0],
-            self.contact_scene_instance.rigid_bodies[1],
+        Rs = [
+            self.contact_scene_instance._get_rotation_to_W(body)
+            for body in self.contact_scene_instance.rigid_bodies
         ]
-        Rs = [self.contact_scene_instance._get_rotation_to_W(body) for body in temp]
         return Rs
 
     def get_contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
         pos_W = []
-        pair = self.contact_scene_instance.contact_pairs[0]
-        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
-        for point in pair.contact_points:
-            R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-            p_Bc1_W = R_WB.dot(point.contact_position)
-            p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
-            p_Wc1_W = p_WB + p_Bc1_W
-            pos_W.append(p_Wc1_W)
+        for pair in self.contact_scene_instance.contact_pairs:
+            for point in pair.contact_points:
+                R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+                p_Bc1_W = R_WB.dot(point.contact_position)
+                p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
+                p_Wc1_W = p_WB + p_Bc1_W
+                pos_W.append(p_Wc1_W)
         return pos_W
 
     def get_body_positions_in_world_frame(self) -> List[NpExpressionArray]:
         pos_W = []
-        pair = self.contact_scene_instance.contact_pairs[0]
-        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
-        for point in pair.contact_points:
-            p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
+        for body in self.contact_scene_instance.rigid_bodies:
+            p_WB = self.contact_scene_instance._get_translation_to_W(body)
             pos_W.append(p_WB)
         return pos_W
 
