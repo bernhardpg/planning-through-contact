@@ -33,6 +33,14 @@ poetry run python main.py --demo box_push
 poetry run python main.py --demo box_pickup
 ```
 
+Planning for flipping up polytopes of different shapes:
+```
+poetry run python experiments/object-flipup/polytope_flipup.py --num_vertices 3
+poetry run python experiments/object-flipup/polytope_flipup.py --num_vertices 4
+poetry run python experiments/object-flipup/polytope_flipup.py --num_vertices 5
+
+```
+
 ## Running pre-commit hooks
 The repo is setup to do automatic linting and code checking on every commit through the use of pre-commits. To run all the pre-commit hooks (which will clean up all files in the repo), run the following command:
 ```
