@@ -204,7 +204,18 @@ class BoxFlipupDemo:
             "contact_1_sin_th": (-1, 1),
             "contact_1_cos_th": (-1, 1),
             "contact_2_box_lam": (0.0, 1.0),
-            "contact_2_box_c_n": (0, 3.8),
+            "contact_2_box_c_n": (0, MAX_FORCE / 2.5),
+            "contact_2_box_c_f": (
+                -self.friction_coeff * MAX_FORCE / 2.5,
+                self.friction_coeff * MAX_FORCE / 2.5,
+            ),
+            "contact_2_sin_th": (-1, 1),
+            "contact_2_cos_th": (-1, 1),
+            "contact_2_finger_c_n": (0, MAX_FORCE / 2.5),
+            "contact_2_finger_c_f": (
+                -self.friction_coeff * MAX_FORCE / 2.5,
+                self.friction_coeff * MAX_FORCE / 2.5,
+            ),
         }
 
         for ctrl_point in self.ctrl_points:
@@ -291,11 +302,7 @@ class BoxFlipupDemo:
     def solve(self) -> None:
         self.result = Solve(self.prog)
         print(f"Solution result: {self.result.get_solution_result()}")
-        if self.result.get_solution_result() == SolutionResult.kUnknownError:
-            print("NOTE! Got kUnknownError from Mosek, which most likely means numerical issues")
-            pass
-        else: # NOTE: We do not care if the solution is kUnknownError as we already know that this will happen in some cases
-            assert self.result.is_success()
+        assert self.result.is_success()
 
         print(f"Cost: {self.result.get_optimal_cost()}")
 

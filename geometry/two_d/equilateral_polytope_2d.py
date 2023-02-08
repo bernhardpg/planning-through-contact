@@ -38,6 +38,10 @@ class EquilateralPolytope2d(RigidBody2d):
         return [make_ray(th) * self.vertex_distance for th in angles]
 
     @property
+    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
+        return np.hstack([self.vertices[idx] for idx in range(self.num_vertices)])
+
+    @property
     def faces(self) -> List[Hyperplane]:
         wrap_around = lambda num: num % self.num_vertices
         pairwise_indices = [

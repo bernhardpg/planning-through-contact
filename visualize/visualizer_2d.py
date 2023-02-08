@@ -73,7 +73,7 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 
         temp = np.array(
             [
-                pos.reshape((-1, 1)) + rot.dot(box.vertices)
+                pos.reshape((-1, 1)) + rot.dot(box.vertices_for_plotting)
                 for rot, pos in zip(ctrl_points_orientation, ctrl_points_position.T)
             ]
         )  # (ctrl_points, dims, num_vertices)

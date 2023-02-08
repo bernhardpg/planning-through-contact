@@ -38,7 +38,7 @@ class Box2d(RigidBody2d):
         return np.array([[-self.width / 2], [-self.height / 2]])
 
     @property
-    def vertices(self) -> npt.NDArray[np.float64]:
+    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
         return np.hstack([self.v1, self.v2, self.v3, self.v4])
 
     # v1 - f1 - v2

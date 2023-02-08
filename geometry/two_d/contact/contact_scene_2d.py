@@ -177,6 +177,33 @@ class ContactSceneCtrlPoint:
     def __init__(self, contact_scene_instance: ContactSceneInstance):
         self.contact_scene_instance = contact_scene_instance
 
+        self.table_box = self.contact_scene_instance.contact_pairs[0]
+        self.box_finger = self.contact_scene_instance.contact_pairs[1]
+
+        self.table = self.contact_scene_instance.rigid_bodies[0]
+        self.box = self.contact_scene_instance.rigid_bodies[1]
+        self.finger = self.contact_scene_instance.rigid_bodies[2]
+
+        # Define convenience variables for plotting
+        self.p_TB_T = self.table_box.p_AB_A
+        self.p_WB_W = self.p_TB_T
+
+        self.p_BT_B = self.table_box.p_BA_B
+        self.p_BW_B = self.p_BT_B
+
+        self.R_TB = self.table_box.R_AB
+        self.R_WB = self.R_TB  # World frame is the same as table frame
+
+        self.fc1_B = self.table_box.contact_point_B.contact_force
+        self.fc1_T = self.table_box.contact_point_A.contact_force
+        self.pc1_B = self.table_box.contact_point_B.contact_position
+        self.pc1_T = self.table_box.contact_point_A.contact_position
+
+        self.fc2_B = self.box_finger.contact_point_A.contact_force
+        self.fc2_F = self.box_finger.contact_point_B.contact_force
+        self.pc2_B = self.box_finger.contact_point_A.contact_position
+        self.pc2_F = self.box_finger.contact_point_B.contact_position
+
     @property
     def static_equilibrium_constraints(self) -> List[StaticEquilibriumConstraints]:
         return self.constraints.static_equilibrium_constraints
