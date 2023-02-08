@@ -77,7 +77,7 @@ def plan_polytope_flipup(
     )
 
     # TODO: this should be cleaned up
-    MAX_FORCE = POLYTOPE_MASS * 9.81 * 2  # only used for mccorimick constraints
+    MAX_FORCE = POLYTOPE_MASS * 9.81 * 2.0  # only used for mccorimick constraints
     variable_bounds = {
         "contact_1_polytope_c_n": (0.0, MAX_FORCE),
         "contact_1_polytope_c_f": (
@@ -97,10 +97,10 @@ def plan_polytope_flipup(
         "contact_2_polytope_c_f": (0, MAX_FORCE / 2),
         "contact_2_sin_th": (-1, 1),
         "contact_2_cos_th": (-1, 1),
-        "contact_2_finger_c_n": (0.0, MAX_FORCE / 2),
+        "contact_2_finger_c_n": (0.0, MAX_FORCE / 2.5),
         "contact_2_finger_c_f": (
-            -FRICTION_COEFF * MAX_FORCE,
-            FRICTION_COEFF * MAX_FORCE,
+            -FRICTION_COEFF * MAX_FORCE / 2.5,
+            FRICTION_COEFF * MAX_FORCE / 2.5,
         ),
     }
 
@@ -113,6 +113,9 @@ def plan_polytope_flipup(
     )
     motion_plan.constrain_orientation_at_ctrl_point(
         table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
+    )
+    motion_plan.constrain_contact_position_at_ctrl_point(
+        table_polytope, ctrl_point_idx=0, lam_target=0.5
     )
     motion_plan.fix_contact_positions()
     motion_plan.solve()

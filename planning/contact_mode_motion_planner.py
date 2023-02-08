@@ -37,6 +37,7 @@ class ContactModeMotionPlanner:
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
         self.use_quadratic_cost = True
+        self.only_minimize_forces_on_unactuated_bodies = False
 
         self.contact_scene = contact_scene
         self.num_ctrl_points = num_ctrl_points
@@ -98,7 +99,11 @@ class ContactModeMotionPlanner:
                 self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
 
             if self.use_quadratic_cost:
-                self.prog.AddQuadraticCost(ctrl_point.squared_forces)
+                self.prog.AddQuadraticCost(
+                    ctrl_point.get_squared_forces(
+                        self.only_minimize_forces_on_unactuated_bodies
+                    )
+                )
             else:  # Absolute value cost
                 raise ValueError("Absolute value cost not implemented")
 
@@ -137,6 +142,23 @@ class ContactModeMotionPlanner:
 
         for c in constraint.flatten():
             self.prog.AddLinearConstraint(c)
+
+    def constrain_contact_position_at_ctrl_point(
+        self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, lam_target: float
+    ) -> None:
+        """
+        Constraints position by fixing position along contact face. lam_target should take values in the range [0,1]
+        """
+        if lam_target > 1.0 or lam_target < 0.0:
+            raise ValueError("lam_target must be in the range [0, 1]")
+
+        # NOTE: This finds the matching pair based on name. This may not be the safest way to do this
+        scene_instance = self.ctrl_points[ctrl_point_idx].contact_scene_instance
+        pair = next(
+            p for p in scene_instance.contact_pairs if p.name == pair_to_constrain.name
+        )
+        constraint = pair.get_nonfixed_contact_point_variable() == lam_target
+        self.prog.AddLinearConstraint(constraint)
 
     def solve(self) -> None:
         self.result = Solve(self.prog)
@@ -233,5 +255,5 @@ class ContactModeMotionPlanner:
     @property
     def contact_point_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
         return self.ctrl_points[
-            0 # contact normals are constant, so we just pick them from the first ctrl point
+            0  # contact normals are constant, so we just pick them from the first ctrl point
         ].contact_scene_instance.get_contact_normals_in_local_frames()

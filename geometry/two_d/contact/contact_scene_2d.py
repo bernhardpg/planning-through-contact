@@ -217,11 +217,16 @@ class ContactSceneInstance:
             for body in self.unactuated_bodies
         ]
 
-    def get_squared_forces_for_unactuated_bodies(self) -> sym.Expression:
+    def get_squared_forces_for_bodies(
+        self, only_unactuated_bodies: bool = False
+    ) -> sym.Expression:
+        bodies_to_use = (
+            self.unactuated_bodies if only_unactuated_bodies else self.rigid_bodies
+        )
         forces = [
             pair.get_squared_contact_forces_for_body(body)
             for pair in self.contact_pairs
-            for body in self.unactuated_bodies
+            for body in bodies_to_use
             if body in pair.bodies
         ]
         sum_of_forces = np.sum(forces, axis=0)[0, 0]  # type: ignore
@@ -333,9 +338,12 @@ class ContactSceneCtrlPoint:
     def variables(self) -> NpVariableArray:
         return self.contact_scene_instance.variables
 
-    @property
-    def squared_forces(self) -> sym.Expression:
-        return self.contact_scene_instance.get_squared_forces_for_unactuated_bodies()
+    def get_squared_forces(
+        self, only_unactuated_bodies: bool = False
+    ) -> sym.Expression:
+        return self.contact_scene_instance.get_squared_forces_for_bodies(
+            only_unactuated_bodies
+        )
 
     @property
     def constraints(self) -> ContactSceneConstraints:

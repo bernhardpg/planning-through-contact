@@ -129,14 +129,22 @@ class ContactPair2dInstance:
     def orientation_variables(self) -> NpVariableArray:
         return np.array([self.cos_th, self.sin_th])
 
-    def get_nonfixed_contact_position(self) -> NpExpressionArray:
+    def _get_nonfixed_contact_point(self) -> ContactPoint2d:
         point = next(
-            point.contact_position
+            point
             for point in self.contact_points
             if point.contact_location.pos == ContactPosition.FACE
         )
+        return point
+
+    def get_nonfixed_contact_point_variable(self) -> sym.Variable:
+        point = self._get_nonfixed_contact_point()
+        return point.lam
+
+    def get_nonfixed_contact_position(self) -> NpExpressionArray:
+        point = self._get_nonfixed_contact_point()
         # Ignore type for now
-        return point # type: ignore
+        return point.contact_position  # type: ignore
 
     @property
     def variables(self) -> NpVariableArray:
