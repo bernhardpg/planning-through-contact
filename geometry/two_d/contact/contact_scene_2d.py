@@ -86,8 +86,11 @@ class ContactSceneInstance:
         ]
         return contact_points
 
-    def _get_transformation_to_W(self, body: RigidBody2d) -> NpExpressionArray:
+    def _get_rotation_to_W(self, body: RigidBody2d) -> NpExpressionArray:
         R_body_to_W = None
+        if body == self.body_anchored_to_W:
+            R_body_to_W = np.eye(2)
+
         for pair in self.contact_pairs:
             if pair.body_A == self.body_anchored_to_W and pair.body_B == body:
                 R_body_to_W = pair.R_AB
@@ -96,10 +99,30 @@ class ContactSceneInstance:
 
         if R_body_to_W is None:
             raise ValueError(
-                f"No transformation found from {body} to {self.body_anchored_to_W}"
+                f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
             )
         else:
-            return R_body_to_W
+            # For now we don't care about the type being float when we return identity
+            return R_body_to_W  # type: ignore
+
+    def _get_translation_to_W(self, body: RigidBody2d) -> NpExpressionArray:
+        p_WB = None
+        if body == self.body_anchored_to_W:
+            p_WB = np.zeros((2, 1))
+
+        for pair in self.contact_pairs:
+            if pair.body_A == self.body_anchored_to_W and pair.body_B == body:
+                p_WB = pair.p_AB_A
+            elif pair.body_B == self.body_anchored_to_W and pair.body_A == body:
+                p_WB = pair.p_BA_B
+
+        if p_WB is None:
+            raise ValueError(
+                f"No transformation found from {body.name} to {self.body_anchored_to_W.name}"
+            )
+        else:
+            # For now we don't care about the type being float when we return identity
+            return p_WB  # type: ignore
 
     @property
     def unactuated_bodies(self) -> List[RigidBody2d]:
@@ -122,7 +145,7 @@ class ContactSceneInstance:
         """
 
         contact_forces = self._get_contact_forces_acting_on_body(body)
-        R_BW = self._get_transformation_to_W(body).T
+        R_BW = self._get_rotation_to_W(body).T
 
         R_BW_normalized = R_BW * (1 / sym.sqrt(R_BW[:, 0].dot(R_BW[:, 0])))  # type: ignore
 
@@ -203,6 +226,28 @@ class ContactSceneCtrlPoint:
         self.fc2_F = self.box_finger.contact_point_B.contact_force
         self.pc2_B = self.box_finger.contact_point_A.contact_position
         self.pc2_F = self.box_finger.contact_point_B.contact_position
+
+    def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
+        forces_W = []
+        pair = self.contact_scene_instance.contact_pairs[0]
+        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
+        for point in pair.contact_points:
+            R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+            f_cB_W = R_WB.dot(point.contact_force)
+            forces_W.append(f_cB_W)
+        return forces_W
+
+    def get_contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
+        pos_W = []
+        pair = self.contact_scene_instance.contact_pairs[0]
+        # for pair in self.contact_scene_instance.contact_pairs: # FIX: Comment in after I add support for one sided contacts!
+        for point in pair.contact_points:
+            R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+            p_Bc1_W = R_WB.dot(point.contact_position)
+            p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
+            p_Wc1_W = p_WB + p_Bc1_W
+            pos_W.append(p_Wc1_W)
+        return pos_W
 
     @property
     def static_equilibrium_constraints(self) -> List[StaticEquilibriumConstraints]:

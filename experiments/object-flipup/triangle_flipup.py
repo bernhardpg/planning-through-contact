@@ -173,41 +173,30 @@ class ContactMotionPlan:
         print(f"Cost: {self.result.get_optimal_cost()}")
 
     @property
-    def contact_forces_in_W(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
-        fc1_B_ctrl_points = np.hstack(
-            [cp.R_WB.dot(cp.fc1_B) for cp in self.ctrl_points]
-        )
-        fc1_T_ctrl_points = np.hstack(
-            [cp.fc1_T for cp in self.ctrl_points]
-        )  # T and W are the same frames
-
-        fc2_B_ctrl_points = np.hstack(
-            [cp.R_WB.dot(cp.fc2_B) for cp in self.ctrl_points]
-        )
-        # fc2_F_ctrl_points = np.hstack([cp.fc2_F for cp in self.ctrl_points]) # TODO: need rotation for this
-
-        return [
-            fc1_B_ctrl_points,
-            fc1_T_ctrl_points,
-            fc2_B_ctrl_points,
+    def contact_forces_in_world_frame(self) -> List[npt.NDArray[Union[sym.Expression, sym.Variable]]]:  # type: ignore
+        contact_forces_for_each_ctrl_point = [
+            cp.get_contact_forces_in_world_frame() for cp in self.ctrl_points
         ]
+        num_contact_forces = len(contact_forces_for_each_ctrl_point[0])
+        contact_forces_ctrl_points = [
+            np.hstack([forces[idx] for forces in contact_forces_for_each_ctrl_point])
+            for idx in range(num_contact_forces)
+        ]  # [(num_dims, num_ctrl_points) x num_forces]
+        return contact_forces_ctrl_points
 
     @property
     def contact_positions_in_W(self) -> List[NpExpressionArray]:
-        pc1_B_ctrl_points_in_W = np.hstack(
-            [cp.p_WB_W + cp.R_WB.dot(cp.pc1_B) for cp in self.ctrl_points]
-        )
-        pc1_T_ctrl_points_in_W = np.hstack(
-            [cp.pc1_T for cp in self.ctrl_points]
-        )  # T and W are the same frames
-
-        pc2_B_ctrl_points_in_W = np.hstack(
-            [cp.p_WB_W + cp.R_WB.dot(cp.pc2_B) for cp in self.ctrl_points]
-        )
-
-        # pc2_F_ctrl_points_in_W = np.hstack([cp.pc2_F for cp in self.ctrl_points]) # TODO: need to add rotation for this
-
-        return [pc1_B_ctrl_points_in_W, pc1_T_ctrl_points_in_W, pc2_B_ctrl_points_in_W]  # type: ignore
+        contact_positions_for_each_ctrl_point = [
+            cp.get_contact_positions_in_world_frame() for cp in self.ctrl_points
+        ]
+        num_contact_positions = len(contact_positions_for_each_ctrl_point[0])
+        contact_positions_ctrl_points = [
+            np.hstack(
+                [positions[idx] for positions in contact_positions_for_each_ctrl_point]
+            )
+            for idx in range(num_contact_positions)
+        ]  # [(num_dims, num_ctrl_points) x num_positions]
+        return contact_positions_ctrl_points
 
     @property
     def gravitational_force_in_W(self) -> npt.NDArray[np.float64]:
@@ -315,13 +304,16 @@ def plan_triangle_flipup():
     motion_plan.fix_contact_positions()
     motion_plan.solve()
 
+    motion_plan.ctrl_points[0].get_contact_forces_in_world_frame()
+    breakpoint()
+
     contact_positions_ctrl_points = [
         evaluate_np_expressions_array(pos, motion_plan.result)
         for pos in motion_plan.contact_positions_in_W
     ]
     contact_forces_ctrl_points = [
         evaluate_np_expressions_array(force, motion_plan.result)
-        for force in motion_plan.contact_forces_in_W
+        for force in motion_plan.contact_forces_in_world_frame
     ]
 
     if True:
