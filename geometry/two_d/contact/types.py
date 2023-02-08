@@ -8,7 +8,8 @@ class ContactPosition(Enum):
 
 class ContactMode(Enum):
     ROLLING = 1
-    SLIDING = 2
+    SLIDING_LEFT = 2
+    SLIDING_RIGHT = 3
 
 
 class ContactType(Enum):

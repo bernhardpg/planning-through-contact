@@ -1,12 +1,13 @@
-from typing import Tuple, Union
+from typing import Literal, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
+from pydrake.common.cpp_param import Optional
 import pydrake.symbolic as sym  # type: ignore
 
 from geometry.hyperplane import Hyperplane
 from geometry.two_d.box_2d import RigidBody2d
-from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.contact.types import ContactMode, ContactPosition
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
@@ -16,6 +17,7 @@ class ContactPoint2d:
         self,
         body: RigidBody2d,
         contact_location: PolytopeContactLocation,
+        fix_friction_cone: Optional[Literal["LEFT", "RIGHT"]] = None,
         friction_coeff: float = 0.5,
         name: str = "unnamed",
     ) -> None:
@@ -25,7 +27,20 @@ class ContactPoint2d:
         self.contact_location = contact_location
 
         self.normal_force = sym.Variable(f"{self.name}_c_n")
-        self.friction_force = sym.Variable(f"{self.name}_c_f")
+        self.fix_friction_cone = fix_friction_cone # FIX: Naming
+        if self.fix_friction_cone is None:
+            self.friction_force = sym.Variable(f"{self.name}_c_f")
+            self.force_variables = [self.normal_force, self.friction_force]
+        else:  # sliding
+            # only define a decision variable for the normal force when we are on the friction cone
+            self.force_variables = [self.normal_force]
+            if self.fix_friction_cone == "LEFT":
+                self.friction_force = -self.friction_coeff * self.normal_force
+            elif self.fix_friction_cone == "RIGHT":
+                self.friction_force = self.friction_coeff * self.normal_force
+            else:
+                raise ValueError("Friction cone not free, but direction not set!")
+
         self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
             contact_location
         )
@@ -57,15 +72,21 @@ class ContactPoint2d:
     @property
     def variables(self) -> NpVariableArray:
         if self.contact_location.pos == ContactPosition.FACE:
-            return np.array([self.normal_force, self.friction_force, self.lam])
+            return np.array(self.force_variables + [self.lam])
         else:
-            return np.array([self.normal_force, self.friction_force])
+            return np.array(self.force_variables)
 
     def create_friction_cone_constraints(self) -> NpFormulaArray:
-        upper_bound = self.friction_force <= self.friction_coeff * self.normal_force
-        lower_bound = -self.friction_coeff * self.normal_force <= self.friction_force
         normal_force_positive = self.normal_force >= 0
-        return np.vstack([upper_bound, lower_bound, normal_force_positive])
+        if self.fix_friction_cone is None:
+            upper_bound = self.friction_force <= self.friction_coeff * self.normal_force
+            lower_bound = (
+                -self.friction_coeff * self.normal_force <= self.friction_force
+            )
+            return np.vstack([upper_bound, lower_bound, normal_force_positive])
+        else:  # sliding
+            # friction cone constraint is enforced directly through variable definition, see __init__
+            return np.vstack([normal_force_positive])
 
     def get_neighbouring_vertices(
         self,

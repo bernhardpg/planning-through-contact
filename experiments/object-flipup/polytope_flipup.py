@@ -5,7 +5,7 @@ import numpy as np
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import ContactPair2d
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactPosition, ContactType
+from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
@@ -22,7 +22,7 @@ from visualize.visualizer_2d import (
 def plan_polytope_flipup(
     num_vertices: int, contact_vertex: int, th_initial: float, th_target: float
 ) -> None:
-    FRICTION_COEFF = 0.7
+    FRICTION_COEFF = 0.2
     TABLE_HEIGHT = 0.5
     TABLE_WIDTH = 2
 
@@ -77,7 +77,7 @@ def plan_polytope_flipup(
     )
 
     # TODO: this should be cleaned up
-    MAX_FORCE = POLYTOPE_MASS * 9.81 * 2.0  # only used for mccorimick constraints
+    MAX_FORCE = POLYTOPE_MASS * 9.81 * 1.5  # only used for mccorimick constraints
     variable_bounds = {
         "contact_1_polytope_c_n": (0.0, MAX_FORCE),
         "contact_1_polytope_c_f": (
@@ -105,19 +105,26 @@ def plan_polytope_flipup(
     }
 
     NUM_CTRL_POINTS = 3
+    modes = {"contact_1": ContactMode.SLIDING_RIGHT, "contact_2": ContactMode.ROLLING}
     motion_plan = ContactModeMotionPlanner(
-        contact_scene, NUM_CTRL_POINTS, variable_bounds
+        contact_scene, NUM_CTRL_POINTS, modes, variable_bounds,
     )
-    motion_plan.constrain_orientation_at_ctrl_point(
-        table_polytope, ctrl_point_idx=0, theta=th_initial
-    )
-    motion_plan.constrain_orientation_at_ctrl_point(
-        table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
-    )
+    # THETA = 0.1
+    # th_initial = THETA
+    # th_target = THETA
+    #
+    # motion_plan.constrain_orientation_at_ctrl_point(
+    #     table_polytope, ctrl_point_idx=0, theta=th_initial
+    # )
+    # motion_plan.constrain_orientation_at_ctrl_point(
+    #     table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
+    # )
     motion_plan.constrain_contact_position_at_ctrl_point(
         table_polytope, ctrl_point_idx=0, lam_target=0.5
     )
-    motion_plan.fix_contact_positions()
+    motion_plan.constrain_contact_position_at_ctrl_point(
+        table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, lam_target=0.4
+    )
     motion_plan.solve()
 
     if True:

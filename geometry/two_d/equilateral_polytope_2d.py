@@ -43,6 +43,7 @@ class EquilateralPolytope2d(RigidBody2d):
 
     @property
     def faces(self) -> List[Hyperplane]:
+        # FIX: Define this in parent class instead
         wrap_around = lambda num: num % self.num_vertices
         pairwise_indices = [
             (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
@@ -58,8 +59,9 @@ class EquilateralPolytope2d(RigidBody2d):
     def get_proximate_vertices_from_location(
         self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
+        wrap_around = lambda num: num % self.num_vertices
         if location.pos == ContactPosition.FACE:
-            return [self.vertices[location.idx], self.vertices[location.idx + 1]]
+            return [self.vertices[location.idx], self.vertices[wrap_around(location.idx + 1)]]
         elif location.pos == ContactPosition.VERTEX:
             return [self.vertices[location.idx]]
         else:

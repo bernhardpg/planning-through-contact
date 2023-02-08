@@ -88,17 +88,30 @@ class ContactPair2dInstance:
         self.contact_mode = contact_mode
         self.contact_type = contact_type
         self.body_A = body_A
+        if contact_mode == ContactMode.ROLLING:
+            fix_friction_cone_A = None
+            fix_friction_cone_B = None
+        else: # Sliding
+            if contact_mode == ContactMode.SLIDING_LEFT: # B is sliding left on A
+                fix_friction_cone_A = "LEFT"
+                fix_friction_cone_B = "LEFT"
+            if contact_mode == ContactMode.SLIDING_RIGHT: # B is sliding right on A
+                fix_friction_cone_A = "RIGHT"
+                fix_friction_cone_B = "RIGHT"
+            
         self.contact_point_A = ContactPoint2d(
             body_A,
             body_A_contact_location,
-            friction_coeff,
+            fix_friction_cone=fix_friction_cone_A,
+            friction_coeff=friction_coeff,
             name=f"{name}_{body_A.name}",
         )
         self.body_B = body_B
         self.contact_point_B = ContactPoint2d(
             body_B,
             body_B_contact_location,
-            friction_coeff,
+            fix_friction_cone=fix_friction_cone_B,
+            friction_coeff=friction_coeff,
             name=f"{name}_{body_B.name}",
         )
 
@@ -266,17 +279,14 @@ class ContactPair2dInstance:
         return nonpenetration_cut
 
     def create_constraints(self) -> ContactPairConstraints:
-        if self.contact_mode == ContactMode.ROLLING:
-            return ContactPairConstraints(
-                self.create_friction_cone_constraints(),
-                self.create_relaxed_so2_constraint(),
-                self.create_non_penetration_cut(),
-                self.create_equal_contact_point_constraints(),
-                self.create_equal_and_opposite_forces_constraint(),
-                self.create_equal_rel_position_constraints(),
-            )
-        else:
-            raise NotImplementedError("Contact mode {contact_mode} not implemented.")
+        return ContactPairConstraints(
+            self.create_friction_cone_constraints(),
+            self.create_relaxed_so2_constraint(),
+            self.create_non_penetration_cut(),
+            self.create_equal_contact_point_constraints(),
+            self.create_equal_and_opposite_forces_constraint(),
+            self.create_equal_rel_position_constraints(),
+        )
 
     @property
     def contact_forces(self) -> List[NpExpressionArray]:
