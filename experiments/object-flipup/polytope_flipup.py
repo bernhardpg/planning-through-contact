@@ -174,7 +174,7 @@ def plan_polytope_flipup(
         viz_gravitional_forces = [
             VisualizationForce2d.from_ctrl_points(
                 box_com_ctrl_points,
-                motion_plan.result.GetSolution(force_ctrl_points),
+                evaluate_np_expressions_array(force_ctrl_points, motion_plan.result),
                 GRAVITY_COLOR,
             )
             for force_ctrl_points in motion_plan.gravitational_forces_in_world_frame

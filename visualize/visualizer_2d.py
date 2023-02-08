@@ -6,6 +6,7 @@ from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.symbolic as sym
 
 from geometry.bezier import BezierCurve
 from geometry.two_d.rigid_body_2d import RigidBody2d
@@ -228,9 +229,15 @@ class Visualizer2d:
             ]
         )
         force_points = self._transform_points_for_plotting(force_endpoints)
-        self.canvas.create_line(
-            force_points, width=2, arrow=tk.LAST, fill=force.color.hex_format()
-        )
+        ARROW_HEAD_LENGTH = 0.01
+        if np.linalg.norm(force_strength) < ARROW_HEAD_LENGTH:
+            self.canvas.create_line(
+                force_points, width=2, fill=force.color.hex_format()
+            )
+        else:
+            self.canvas.create_line(
+                force_points, width=2, arrow=tk.LAST, fill=force.color.hex_format()
+            )
 
     def _draw_polygon(
         self, polygon: VisualizationPolygon2d, idx: int, plot_com: bool = False
