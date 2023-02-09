@@ -1,4 +1,5 @@
 import argparse
+from typing import Optional
 
 import numpy as np
 
@@ -20,7 +21,11 @@ from visualize.visualizer_2d import (
 
 
 def plan_polytope_flipup(
-    num_vertices: int, contact_vertex: int, th_initial: float, th_target: float
+    num_vertices: int,
+    contact_vertex: int,
+    th_initial: Optional[float],
+    th_target: Optional[float],
+    sliding: bool = False,
 ) -> None:
     FRICTION_COEFF = 0.4
     TABLE_HEIGHT = 0.5
@@ -105,21 +110,38 @@ def plan_polytope_flipup(
         ),
     }
 
-    contact_modes = {"contact_1": ContactMode.SLIDING_LEFT, "contact_2": ContactMode.ROLLING}
+    if sliding:
+        contact_modes = {
+            "contact_1": ContactMode.SLIDING_LEFT,
+            "contact_2": ContactMode.ROLLING,
+        }
+        lam_target = 0.6
+    else:
+        contact_modes = {
+            "contact_1": ContactMode.ROLLING,
+            "contact_2": ContactMode.ROLLING,
+        }
+        lam_target = None
 
     NUM_CTRL_POINTS = 3
     motion_plan = ContactModeMotionPlanner(
         contact_scene, NUM_CTRL_POINTS, contact_modes, variable_bounds
     )
-    motion_plan.constrain_orientation_at_ctrl_point(
-        table_polytope, ctrl_point_idx=0, theta=th_initial
-    )
-    motion_plan.constrain_orientation_at_ctrl_point(
-        table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
-    )
+    if th_initial is not None:
+        motion_plan.constrain_orientation_at_ctrl_point(
+            table_polytope, ctrl_point_idx=0, theta=th_initial
+        )
+    if th_target is not None:
+        motion_plan.constrain_orientation_at_ctrl_point(
+            table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
+        )
     motion_plan.constrain_contact_position_at_ctrl_point(
         table_polytope, ctrl_point_idx=0, lam_target=0.5
     )
+    if lam_target is not None:
+        motion_plan.constrain_contact_position_at_ctrl_point(
+            table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, lam_target=lam_target
+        )
     motion_plan.solve()
 
     if True:
@@ -148,11 +170,6 @@ def plan_polytope_flipup(
         bodies_orientation_ctrl_points = [
             [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
             for R in motion_plan.body_orientations
-        ]
-
-        contact_point_orientation_ctrl_points = [
-            [motion_plan.result.GetSolution(R_ctrl_point) for R_ctrl_point in R]
-            for R in motion_plan.contact_point_orientations
         ]
 
         viz_com_points = [
@@ -230,6 +247,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--sliding", help="Use sliding", action="store_true", default=False
+    )
+    parser.add_argument(
         "--num_vertices", help="Number of vertices for polytope", type=int, default=3
     )
     parser.add_argument("--th_initial", help="Initial angle", type=float, default=0.0)
@@ -237,18 +257,37 @@ if __name__ == "__main__":
         "--th_target", help="Target angle", type=float, default=np.pi / 4
     )
     args = parser.parse_args()
+
     num_vertices = args.num_vertices
     th_initial = args.th_initial
     th_target = args.th_target
+    sliding = args.sliding
 
-    # Decide contact location based on shape
-    if num_vertices == 3:
-        contact_vertex = 2
-    elif num_vertices == 4:
-        contact_vertex = 2
-    elif num_vertices == 5:
-        contact_vertex = 3
+    # Set some feasible conditions for the different polytopes
+    if sliding:
+        if num_vertices == 3:
+            contact_vertex = 2
+            th_target = np.pi / 4
+        elif num_vertices == 4:
+            contact_vertex = 2
+            th_initial = -np.pi / 4
+            th_target = 0
+        elif num_vertices == 5:
+            contact_vertex = 3
+            th_target = np.pi / 5
+        else:
+            contact_vertex = 3
     else:
-        contact_vertex = 3
+        if num_vertices == 3:
+            contact_vertex = 2
+            th_target = np.pi / 4
+        elif num_vertices == 4:
+            contact_vertex = 2
+            th_target = np.pi / 6
+        elif num_vertices == 5:
+            contact_vertex = 3
+            th_target = np.pi / 5
+        else:
+            contact_vertex = 3
 
-    plan_polytope_flipup(num_vertices, contact_vertex, th_initial, th_target)
+    plan_polytope_flipup(num_vertices, contact_vertex, th_initial, th_target, sliding)
