@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-from pydrake.math import eq
+from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import (
@@ -25,6 +25,7 @@ class ContactModeMotionPlanner:
         self,
         contact_scene: ContactScene2d,
         num_ctrl_points: int,
+        contact_modes: Dict[str, ContactMode],
         variable_bounds: Dict[str, Tuple[float, float]],
     ):
 
@@ -40,15 +41,17 @@ class ContactModeMotionPlanner:
         self.use_quadratic_cost = True
         self.only_minimize_forces_on_unactuated_bodies = False
 
+        self.contact_modes = contact_modes
         self.contact_scene = contact_scene
         self.num_ctrl_points = num_ctrl_points
         self._setup_ctrl_points()
         self._setup_prog(variable_bounds)
 
     def _setup_ctrl_points(self) -> None:
-        modes = {"contact_1": ContactMode.ROLLING, "contact_2": ContactMode.ROLLING}
         self.ctrl_points = [
-            ContactSceneCtrlPoint(self.contact_scene.create_instance(modes))
+            ContactSceneCtrlPoint(
+                self.contact_scene.create_instance(self.contact_modes)
+            )
             for _ in range(self.num_ctrl_points)
         ]
 
@@ -108,26 +111,13 @@ class ContactModeMotionPlanner:
             else:  # Absolute value cost
                 raise ValueError("Absolute value cost not implemented")
 
-    def fix_contact_positions(self) -> None:
-        for pair in self.contact_scene.contact_pairs:
-            pair_at_ctrl_points = [
-                next(
-                    pair_instance
-                    for pair_instance in ctrl_point.contact_scene_instance.contact_pairs
-                    if pair_instance.name == pair.name
-                )
-                for ctrl_point in self.ctrl_points
-            ]
-            contact_pos_at_ctrl_points = [
-                pair.get_nonfixed_contact_position() for pair in pair_at_ctrl_points
-            ]
-
-            for idx in range(self.num_ctrl_points - 1):
-                constraint = eq(
-                    contact_pos_at_ctrl_points[idx], contact_pos_at_ctrl_points[idx + 1]
-                )
-                for c in constraint.flatten():
-                    self.prog.AddLinearConstraint(c)
+        for pair, mode in self.contact_modes.items():
+            if mode == ContactMode.ROLLING:
+                self._fix_contact_positions(pair)
+            elif mode == ContactMode.SLIDING_LEFT:
+                self._constrain_contact_velocity(pair, "NEGATIVE")
+            elif mode == ContactMode.SLIDING_RIGHT:
+                self._constrain_contact_velocity(pair, "POSITIVE")
 
     def constrain_orientation_at_ctrl_point(
         self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, theta: float
@@ -160,6 +150,50 @@ class ContactModeMotionPlanner:
         )
         constraint = pair.get_nonfixed_contact_point_variable() == lam_target
         self.prog.AddLinearConstraint(constraint)
+
+    def _get_contact_pos_for_pair(self, pair_name) -> List[NpExpressionArray]:
+        pair = next(
+            pair for pair in self.contact_scene.contact_pairs if pair.name == pair_name
+        )
+        pair_at_ctrl_points = [
+            next(
+                pair_instance
+                for pair_instance in ctrl_point.contact_scene_instance.contact_pairs
+                if pair_instance.name == pair.name
+            )
+            for ctrl_point in self.ctrl_points
+        ]
+        contact_pos_at_ctrl_points = [
+            pair.get_nonfixed_contact_position() for pair in pair_at_ctrl_points
+        ]  # [(num_dims, 1) x num_ctrl_points]
+        return contact_pos_at_ctrl_points
+
+    def _fix_contact_positions(self, pair_name: str) -> None:
+        contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
+        for idx in range(self.num_ctrl_points - 1):
+            constraint = eq(
+                contact_pos_at_ctrl_points[idx], contact_pos_at_ctrl_points[idx + 1]
+            )
+            for c in constraint.flatten():
+                self.prog.AddLinearConstraint(c)
+
+    def _constrain_contact_velocity(
+        self, pair_name: str, direction: Literal["POSITIVE", "NEGATIVE"]
+    ) -> None:
+        contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
+        for idx in range(self.num_ctrl_points - 1):
+            contact_velocity = (
+                contact_pos_at_ctrl_points[idx + 1] - contact_pos_at_ctrl_points[idx]
+            )  # type: ignore
+            if direction == "POSITIVE":
+                constraint = ge(contact_velocity, 0)
+            elif direction == "NEGATIVE":
+                constraint = le(contact_velocity, 0)
+            else:
+                raise ValueError("Direction must be either positive or negative")
+
+            for c in constraint.flatten():
+                self.prog.AddLinearConstraint(c)
 
     def solve(self) -> None:
         self.result = Solve(self.prog)
@@ -256,7 +290,9 @@ class ContactModeMotionPlanner:
     def contact_point_friction_cones(
         self,
     ) -> Tuple[
-        List[npt.NDArray[np.float64]], List[NpExpressionArray], List[List[NpExpressionArray]]
+        List[npt.NDArray[np.float64]],
+        List[NpExpressionArray],
+        List[List[NpExpressionArray]],
     ]:
         friction_cone_details_per_ctrl_point = [
             cp.get_friction_cones_details_for_face_contact_points()

@@ -261,17 +261,14 @@ class ContactPair2dInstance:
         return nonpenetration_cut
 
     def create_constraints(self) -> ContactPairConstraints:
-        if self.contact_mode == ContactMode.ROLLING:
-            return ContactPairConstraints(
-                self.create_friction_cone_constraints(),
-                self.create_relaxed_so2_constraint(),
-                self.create_non_penetration_cut(),
-                self.create_equal_contact_point_constraints(),
-                self.create_equal_and_opposite_forces_constraint(),
-                self.create_equal_rel_position_constraints(),
-            )
-        else:
-            raise NotImplementedError("Contact mode {contact_mode} not implemented.")
+        return ContactPairConstraints(
+            self.create_friction_cone_constraints(),
+            self.create_relaxed_so2_constraint(),
+            self.create_non_penetration_cut(),
+            self.create_equal_contact_point_constraints(),
+            self.create_equal_and_opposite_forces_constraint(),
+            self.create_equal_rel_position_constraints(),
+        )
 
     @property
     def contact_forces(self) -> List[NpExpressionArray]:

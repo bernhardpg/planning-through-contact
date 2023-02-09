@@ -5,7 +5,7 @@ import numpy as np
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import ContactPair2d
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactPosition, ContactType
+from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
@@ -105,9 +105,11 @@ def plan_polytope_flipup(
         ),
     }
 
+    contact_modes = {"contact_1": ContactMode.SLIDING_LEFT, "contact_2": ContactMode.ROLLING}
+
     NUM_CTRL_POINTS = 3
     motion_plan = ContactModeMotionPlanner(
-        contact_scene, NUM_CTRL_POINTS, variable_bounds
+        contact_scene, NUM_CTRL_POINTS, contact_modes, variable_bounds
     )
     motion_plan.constrain_orientation_at_ctrl_point(
         table_polytope, ctrl_point_idx=0, theta=th_initial
@@ -118,7 +120,6 @@ def plan_polytope_flipup(
     motion_plan.constrain_contact_position_at_ctrl_point(
         table_polytope, ctrl_point_idx=0, lam_target=0.5
     )
-    motion_plan.fix_contact_positions()
     motion_plan.solve()
 
     if True:
