@@ -219,6 +219,20 @@ def plan_polytope_flipup(
                 fc_normals, fc_positions, fc_orientations
             )
         ]
+        viz_friction_cones_mirrored = [
+            VisualizationCone2d.from_ctrl_points(
+                evaluate_np_expressions_array(pos, motion_plan.result),
+                [
+                    motion_plan.result.GetSolution(R_ctrl_point)
+                    for R_ctrl_point in orientation
+                ],
+                -normal_vec,
+                friction_cone_angle,
+            )
+            for normal_vec, pos, orientation in zip(
+                fc_normals, fc_positions, fc_orientations
+            )
+        ]
 
         viz_polygons = [
             VisualizationPolygon2d.from_ctrl_points(
@@ -239,7 +253,7 @@ def plan_polytope_flipup(
         viz.visualize(
             viz_contact_positions + viz_com_points,
             viz_contact_forces + viz_gravitional_forces,
-            viz_polygons + viz_friction_cones,
+            viz_polygons + viz_friction_cones + viz_friction_cones_mirrored, # type: ignore
         )
 
 
