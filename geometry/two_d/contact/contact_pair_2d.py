@@ -191,13 +191,8 @@ class ContactPair2dInstance:
         return relaxed_so_2_constraint
 
     def create_friction_cone_constraints(self) -> NpFormulaArray:
-        # FIX: Remember to remove one of these for point contacts!
-        return np.concatenate(
-            [
-                self.contact_point_A.create_friction_cone_constraints(),
-                self.contact_point_B.create_friction_cone_constraints(),
-            ]
-        )
+        face_contact = self._get_nonfixed_contact_point()
+        return face_contact.create_friction_cone_constraints()
 
     def _get_contact_point_of_type(self, type: ContactPosition) -> ContactPoint2d:
         contact_point = next(

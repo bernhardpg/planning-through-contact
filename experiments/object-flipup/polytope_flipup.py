@@ -78,6 +78,7 @@ def plan_polytope_flipup(
 
     # TODO: this should be cleaned up
     MAX_FORCE = POLYTOPE_MASS * 9.81 * 2.0  # only used for mccorimick constraints
+    CONSTANT = 2
     variable_bounds = {
         "contact_1_polytope_c_n": (0.0, MAX_FORCE),
         "contact_1_polytope_c_f": (
@@ -93,14 +94,14 @@ def plan_polytope_flipup(
         "contact_1_sin_th": (-1, 1),
         "contact_1_cos_th": (-1, 1),
         "contact_2_polytope_lam": (0.0, 1.0),
-        "contact_2_polytope_c_n": (0, MAX_FORCE / 2),
-        "contact_2_polytope_c_f": (0, MAX_FORCE / 2),
+        "contact_2_polytope_c_n": (0, MAX_FORCE / CONSTANT),
+        "contact_2_polytope_c_f": (0, MAX_FORCE / CONSTANT),
         "contact_2_sin_th": (-1, 1),
         "contact_2_cos_th": (-1, 1),
-        "contact_2_finger_c_n": (0.0, MAX_FORCE / 2.5),
+        "contact_2_finger_c_n": (0.0, MAX_FORCE / CONSTANT),
         "contact_2_finger_c_f": (
-            -FRICTION_COEFF * MAX_FORCE / 2.5,
-            FRICTION_COEFF * MAX_FORCE / 2.5,
+            -FRICTION_COEFF * MAX_FORCE / CONSTANT,
+            FRICTION_COEFF * MAX_FORCE / CONSTANT,
         ),
     }
 
@@ -181,18 +182,23 @@ def plan_polytope_flipup(
         ]
 
         friction_cone_angle = np.arctan(FRICTION_COEFF)
-        contact_normals = motion_plan.contact_point_normals_in_local_frames
+        (
+            fc_normals,
+            fc_positions,
+            fc_orientations,
+        ) = motion_plan.contact_point_friction_cones
         viz_friction_cones = [
             VisualizationCone2d.from_ctrl_points(
-                pos,
-                orientation,
+                evaluate_np_expressions_array(pos, motion_plan.result),
+                [
+                    motion_plan.result.GetSolution(R_ctrl_point)
+                    for R_ctrl_point in orientation
+                ],
                 normal_vec,
                 friction_cone_angle,
             )
-            for pos, orientation, normal_vec in zip(
-                contact_positions_ctrl_points,
-                contact_point_orientation_ctrl_points,
-                contact_normals,
+            for normal_vec, pos, orientation in zip(
+                fc_normals, fc_positions, fc_orientations
             )
         ]
 

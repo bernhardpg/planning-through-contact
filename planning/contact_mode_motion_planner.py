@@ -13,6 +13,7 @@ from geometry.two_d.contact.contact_pair_2d import ContactPair2d
 from geometry.two_d.contact.contact_scene_2d import (
     ContactScene2d,
     ContactSceneCtrlPoint,
+    FrictionConeDetails,
 )
 from geometry.two_d.contact.types import ContactMode
 from geometry.utilities import two_d_rotation_matrix_from_angle
@@ -218,6 +219,17 @@ class ContactModeMotionPlanner:
         ]
         return self._collect_ctrl_points(body_positions_for_each_ctrl_point)
 
+    @staticmethod
+    def _sort_by_elements(
+        sorted_by_ctrl_points: List[List[NpExpressionArray]],
+    ) -> List[List[NpExpressionArray]]:
+        num_elements = len(sorted_by_ctrl_points[0])
+        sorted_per_element = [
+            [elements[idx] for elements in sorted_by_ctrl_points]
+            for idx in range(num_elements)
+        ]  # [[(N,M) x num_ctrl_points] x num_elements]
+        return sorted_per_element
+
     @property
     def contact_point_orientations(
         self,
@@ -229,13 +241,7 @@ class ContactModeMotionPlanner:
         contact_orientations_for_each_ctrl_point = [
             cp.get_contact_point_orientations() for cp in self.ctrl_points
         ]
-        num_elements = len(contact_orientations_for_each_ctrl_point[0])
-        ctrl_points_per_element = [
-            [elements[idx] for elements in contact_orientations_for_each_ctrl_point]
-            for idx in range(num_elements)
-        ]  # [[(2,2) x num_ctrl_points] x num_bodies]
-
-        return ctrl_points_per_element
+        return self._sort_by_elements(contact_orientations_for_each_ctrl_point)
 
     @property
     def body_orientations(
@@ -244,16 +250,31 @@ class ContactModeMotionPlanner:
         body_orientations_for_each_ctrl_point = [
             cp.get_body_orientations() for cp in self.ctrl_points
         ]
-        num_elements = len(body_orientations_for_each_ctrl_point[0])
-        ctrl_points_per_element = [
-            [elements[idx] for elements in body_orientations_for_each_ctrl_point]
-            for idx in range(num_elements)
-        ]  # [[(2,2) x num_ctrl_points] x num_bodies]
-
-        return ctrl_points_per_element
+        return self._sort_by_elements(body_orientations_for_each_ctrl_point)
 
     @property
-    def contact_point_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
-        return self.ctrl_points[
-            0  # contact normals are constant, so we just pick them from the first ctrl point
-        ].contact_scene_instance.get_contact_normals_in_local_frames()
+    def contact_point_friction_cones(
+        self,
+    ) -> Tuple[
+        List[npt.NDArray[np.float64]], List[NpExpressionArray], List[List[NpExpressionArray]]
+    ]:
+        friction_cone_details_per_ctrl_point = [
+            cp.get_friction_cones_details_for_face_contact_points()
+            for cp in self.ctrl_points
+        ]
+
+        normals = self._collect_ctrl_points(
+            [
+                [fc.normal_vec_local for fc in cp]
+                for cp in friction_cone_details_per_ctrl_point
+            ]
+        )
+        positions = self._collect_ctrl_points(
+            [[fc.p_WFc_W for fc in cp] for cp in friction_cone_details_per_ctrl_point]
+        )
+
+        orientations = self._sort_by_elements(
+            [[fc.R_WFc for fc in cp] for cp in friction_cone_details_per_ctrl_point]
+        )
+
+        return normals, positions, orientations

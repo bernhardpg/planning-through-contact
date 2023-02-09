@@ -24,11 +24,25 @@ class ContactPoint2d:
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
-        self.normal_force = sym.Variable(f"{self.name}_c_n")
-        self.friction_force = sym.Variable(f"{self.name}_c_f")
-        self.normal_vec, self.tangent_vec = body.get_norm_and_tang_vecs_from_location(
-            contact_location
-        )
+        # Use the friction cone for the face contact
+        if self.contact_location.pos == ContactPosition.FACE:
+            self.normal_force = sym.Variable(f"{self.name}_c_n")
+            self.friction_force = sym.Variable(f"{self.name}_c_f")
+            (
+                self.normal_vec,
+                self.tangent_vec,
+            ) = body.get_norm_and_tang_vecs_from_location(contact_location)
+            self.contact_force = (
+                self.normal_force * self.normal_vec
+                + self.friction_force * self.tangent_vec
+            )
+        # For vertex contacts we rely on equal and opposite forces to satisfy friction cone constraints
+        elif self.contact_location.pos == ContactPosition.VERTEX:
+            self.contact_force = np.array(
+                [sym.Variable(f"{self.name}_f_x"), sym.Variable(f"{self.name}_f_y")]
+            ).reshape((-1, 1))
+        else:
+            raise ValueError(f"Unknown contact location {contact_location.pos}")
 
         self.contact_position = self._set_contact_position()
 
@@ -49,19 +63,18 @@ class ContactPoint2d:
             return corner_vertex
 
     @property
-    def contact_force(self) -> NpExpressionArray:
-        return (
-            self.normal_force * self.normal_vec + self.friction_force * self.tangent_vec
-        )
-
-    @property
     def variables(self) -> NpVariableArray:
         if self.contact_location.pos == ContactPosition.FACE:
             return np.array([self.normal_force, self.friction_force, self.lam])
         else:
-            return np.array([self.normal_force, self.friction_force])
+            return self.contact_force.flatten()
 
     def create_friction_cone_constraints(self) -> NpFormulaArray:
+        if not self.contact_location.pos == ContactPosition.FACE:
+            raise ValueError(
+                "Can only create friction cone constraints for a point on a face."
+            )
+
         upper_bound = self.friction_force <= self.friction_coeff * self.normal_force
         lower_bound = -self.friction_coeff * self.normal_force <= self.friction_force
         normal_force_positive = self.normal_force >= 0

@@ -19,6 +19,12 @@ from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 
 
+class FrictionConeDetails(NamedTuple):
+    normal_vec_local: npt.NDArray[np.float64]
+    R_WFc: NpExpressionArray
+    p_WFc_W: NpExpressionArray
+
+
 class StaticEquilibriumConstraints(NamedTuple):
     force_balance: NpFormulaArray
     torque_balance: NpFormulaArray
@@ -238,12 +244,8 @@ class ContactSceneInstance:
             self.static_equilibrium_constraints,
         )
 
-    @property
-    def contact_points(self) -> List[ContactPoint2d]:
-        return [point for pair in self.contact_pairs for point in pair.contact_points]
-
     def get_contact_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
-        return [point.normal_vec for point in self.contact_points]
+        return [pair.get_normal_vec() for pair in self.contact_pairs]
 
 
 class ContactSceneCtrlPoint:
@@ -284,14 +286,20 @@ class ContactSceneCtrlPoint:
         ]
         return Rs
 
+    def get_contact_pos_in_world_frame(
+        self, point: ContactPoint2d
+    ) -> NpExpressionArray:
+        R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+        p_Bc1_W = R_WB.dot(point.contact_position)
+        p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
+        p_Wc1_W = p_WB + p_Bc1_W
+        return p_Wc1_W
+
     def get_contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
         pos_W = []
         for pair in self.contact_scene_instance.contact_pairs:
             for point in pair.contact_points:
-                R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-                p_Bc1_W = R_WB.dot(point.contact_position)
-                p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
-                p_Wc1_W = p_WB + p_Bc1_W
+                p_Wc1_W = self.get_contact_pos_in_world_frame(point)
                 pos_W.append(p_Wc1_W)
         return pos_W
 
@@ -301,6 +309,23 @@ class ContactSceneCtrlPoint:
             p_WB = self.contact_scene_instance._get_translation_to_W(body)
             pos_W.append(p_WB)
         return pos_W
+
+    def _get_friction_cone_details(self, point: ContactPoint2d) -> FrictionConeDetails:
+        normal_vec = point.normal_vec
+        R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
+        p_WFc_W = self.get_contact_pos_in_world_frame(point)
+        return FrictionConeDetails(normal_vec, R_WFc, p_WFc_W)
+
+    def get_friction_cones_details_for_face_contact_points(
+        self,
+    ) -> List[FrictionConeDetails]:
+        contact_points_on_faces = [
+            pair._get_nonfixed_contact_point()
+            for pair in self.contact_scene_instance.contact_pairs
+        ]
+        return [
+            self._get_friction_cone_details(point) for point in contact_points_on_faces
+        ]
 
     @property
     def static_equilibrium_constraints(self) -> List[StaticEquilibriumConstraints]:

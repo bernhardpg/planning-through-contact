@@ -96,7 +96,7 @@ class VisualizationCone2d(VisualizationPolygon2d):
         cls,
         ctrl_points_position: npt.NDArray[np.float64],
         ctrl_points_orientation: List[npt.NDArray[np.float64]],
-        normal_vec: npt.NDArray[np.float64],
+        normal_vec_ctrl_points: npt.NDArray[np.float64],
         angle: float,
         color: str = "cadetblue1",
     ) -> "VisualizationCone2d":
@@ -104,6 +104,7 @@ class VisualizationCone2d(VisualizationPolygon2d):
             ctrl_points_position
         ).eval_entire_interval()
 
+        normal_vec = normal_vec_ctrl_points[:, 0] # the normal vec is constant in the local frame. I have to clean up this code anyway
         base_angle = np.arctan2(normal_vec[1], normal_vec[0])
         ray_1 = (
             np.array([np.cos(base_angle - angle), np.sin(base_angle - angle)]).reshape(
