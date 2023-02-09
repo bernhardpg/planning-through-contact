@@ -22,7 +22,7 @@ from visualize.visualizer_2d import (
 def plan_polytope_flipup(
     num_vertices: int, contact_vertex: int, th_initial: float, th_target: float
 ) -> None:
-    FRICTION_COEFF = 0.7
+    FRICTION_COEFF = 0.4
     TABLE_HEIGHT = 0.5
     TABLE_WIDTH = 2
 

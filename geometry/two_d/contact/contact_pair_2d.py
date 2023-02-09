@@ -88,18 +88,28 @@ class ContactPair2dInstance:
         self.contact_mode = contact_mode
         self.contact_type = contact_type
         self.body_A = body_A
+        self.body_B = body_B
+
+        (
+            fix_friction_cone_A,
+            fix_friction_cone_B,
+        ) = self._calculate_friction_cone_states(
+            contact_mode, body_A_contact_location
+        )
+
         self.contact_point_A = ContactPoint2d(
-            body_A,
+            self.body_A,
             body_A_contact_location,
             friction_coeff,
-            name=f"{name}_{body_A.name}",
+            fix_friction_cone=fix_friction_cone_A,
+            name=f"{self.name}_{self.body_A.name}",
         )
-        self.body_B = body_B
         self.contact_point_B = ContactPoint2d(
-            body_B,
+            self.body_B,
             body_B_contact_location,
             friction_coeff,
-            name=f"{name}_{body_B.name}",
+            fix_friction_cone=fix_friction_cone_B,
+            name=f"{self.name}_{self.body_B.name}",
         )
 
         # Local position from A to B in A frame
@@ -116,6 +126,35 @@ class ContactPair2dInstance:
         p_BA_B_x = sym.Variable(f"{name}_p_BA_B_x")
         p_BA_B_y = sym.Variable(f"{name}_p_BA_B_y")
         self.p_BA_B = np.array([p_BA_B_x, p_BA_B_y]).reshape((-1, 1))
+
+    # TODO: this function could use some cleanup
+    def _calculate_friction_cone_states(
+        self,
+        contact_mode: ContactMode,
+        body_A_contact_location: PolytopeContactLocation,
+    ) -> Tuple[Literal["LEFT", "RIGHT"], Literal["LEFT", "RIGHT"]]:
+        moving_contact_point: Literal["A", "B"] = (
+            "A" if body_A_contact_location.pos == ContactPosition.FACE else "B"
+        )
+        if contact_mode == ContactMode.ROLLING:
+            fix_friction_cone = None
+        else:  # Sliding
+            if contact_mode == ContactMode.SLIDING_LEFT:  # B is sliding left on A
+                fix_friction_cone = "LEFT"
+            elif contact_mode == ContactMode.SLIDING_RIGHT:  # B is sliding left on A
+                fix_friction_cone = "RIGHT"
+
+        fix_friction_cone_A = None
+        fix_friction_cone_B = None
+        if fix_friction_cone is not None:
+            fix_friction_cone_A = (
+                fix_friction_cone if moving_contact_point == "A" else None
+            )
+            fix_friction_cone_B = (
+                fix_friction_cone if moving_contact_point == "B" else None
+            )
+
+        return fix_friction_cone_A, fix_friction_cone_B # type: ignore
 
     @property
     def bodies(self) -> Tuple[RigidBody2d, RigidBody2d]:

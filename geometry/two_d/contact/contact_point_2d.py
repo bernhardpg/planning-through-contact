@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +17,7 @@ class ContactPoint2d:
         body: RigidBody2d,
         contact_location: PolytopeContactLocation,
         friction_coeff: float = 0.5,
+        fix_friction_cone: Optional[Literal["LEFT", "RIGHT"]] = None,
         name: str = "unnamed",
     ) -> None:
         self.name = name
@@ -24,10 +25,13 @@ class ContactPoint2d:
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
+        self.fix_friction_cone = fix_friction_cone  # FIX: Naming
+
         # Use the friction cone for the face contact
         if self.contact_location.pos == ContactPosition.FACE:
             self.normal_force = sym.Variable(f"{self.name}_c_n")
-            self.friction_force = sym.Variable(f"{self.name}_c_f")
+            self._set_friction_force(self.fix_friction_cone)
+
             (
                 self.normal_vec,
                 self.tangent_vec,
@@ -36,6 +40,7 @@ class ContactPoint2d:
                 self.normal_force * self.normal_vec
                 + self.friction_force * self.tangent_vec
             )
+
         # For vertex contacts we rely on equal and opposite forces to satisfy friction cone constraints
         elif self.contact_location.pos == ContactPosition.VERTEX:
             self.contact_force = np.array(
@@ -45,6 +50,25 @@ class ContactPoint2d:
             raise ValueError(f"Unknown contact location {contact_location.pos}")
 
         self.contact_position = self._set_contact_position()
+
+    def _set_friction_force(
+        self, fix_friction_cone: Optional[Literal["LEFT", "RIGHT"]]
+    ) -> None:
+
+        if fix_friction_cone is None:  # Rolling
+            self.friction_force = sym.Variable(f"{self.name}_c_f")
+            self.force_variables = [self.normal_force, self.friction_force]
+
+        else:  # Sliding
+            self.force_variables = [self.normal_force]
+
+            # When we are on the friction cone, the friction force component is a linear function of the normal force
+            if self.fix_friction_cone == "LEFT":
+                self.friction_force = -self.friction_coeff * self.normal_force
+            elif self.fix_friction_cone == "RIGHT":
+                self.friction_force = self.friction_coeff * self.normal_force
+            else:
+                raise ValueError("Friction cone not free, but direction not set!")
 
     def _set_contact_position(
         self,
@@ -65,7 +89,7 @@ class ContactPoint2d:
     @property
     def variables(self) -> NpVariableArray:
         if self.contact_location.pos == ContactPosition.FACE:
-            return np.array([self.normal_force, self.friction_force, self.lam])
+            return np.array(self.force_variables + [self.lam])
         else:
             return self.contact_force.flatten()
 
