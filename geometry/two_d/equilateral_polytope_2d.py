@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.contact.types import ContactLocation, ContactLocation
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.utilities import normalize_vec
 
@@ -58,9 +58,9 @@ class EquilateralPolytope2d(RigidBody2d):
     def get_proximate_vertices_from_location(
         self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             return [self.vertices[location.idx], self.vertices[location.idx + 1]]
-        elif location.pos == ContactPosition.VERTEX:
+        elif location.pos == ContactLocation.VERTEX:
             return [self.vertices[location.idx]]
         else:
             raise NotImplementedError(
@@ -70,7 +70,7 @@ class EquilateralPolytope2d(RigidBody2d):
     def get_neighbouring_vertices(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.pos == ContactPosition.VERTEX:
+        if location.pos == ContactLocation.VERTEX:
             wrap_around = lambda num: num % self.num_vertices
             idx_prev = wrap_around(location.idx - 1)
             idx_next = wrap_around(location.idx + 1)
@@ -84,7 +84,7 @@ class EquilateralPolytope2d(RigidBody2d):
     def get_hyperplane_from_location(
         self, location: PolytopeContactLocation
     ) -> Hyperplane:
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             return self.faces[location.idx]
         else:
             raise NotImplementedError(
@@ -133,9 +133,9 @@ class EquilateralPolytope2d(RigidBody2d):
     def get_norm_and_tang_vecs_from_location(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             return self.normal_vecs[location.idx], self.tangent_vecs[location.idx]
-        elif location.pos == ContactPosition.VERTEX:
+        elif location.pos == ContactLocation.VERTEX:
             return (
                 self.corner_normal_vecs[location.idx],
                 self.corner_tangent_vecs[location.idx],

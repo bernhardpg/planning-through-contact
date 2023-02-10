@@ -6,13 +6,13 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane
-from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.contact.types import ContactLocation
 
 GRAV_ACC = 9.81
 
 
 class PolytopeContactLocation(NamedTuple):
-    pos: ContactPosition
+    pos: ContactLocation
     idx: int
 
 

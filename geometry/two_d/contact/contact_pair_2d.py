@@ -10,8 +10,11 @@ from pydrake.solvers import MathematicalProgramResult
 
 from geometry.hyperplane import Hyperplane, calculate_convex_hull_cut_for_so_2
 from geometry.two_d.box_2d import RigidBody2d
-from geometry.two_d.contact.contact_point_2d import ContactPoint2d
-from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
+from geometry.two_d.contact.contact_point_2d import (
+    ContactForceDefinition,
+    ContactPoint2d,
+)
+from geometry.two_d.contact.types import ContactLocation, ContactMode
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
@@ -56,7 +59,6 @@ class ContactPairDefinition:
     body_A_contact_location: PolytopeContactLocation
     body_B: RigidBody2d
     body_B_contact_location: PolytopeContactLocation
-    contact_type: ContactType
     friction_coeff: float = 0.7
 
     def create_instance(
@@ -78,7 +80,6 @@ class ContactPairDefinition:
                 self.body_A_contact_location,
                 self.body_B,
                 self.body_B_contact_location,
-                self.contact_type,
                 contact_mode,
                 self.friction_coeff,
             )
@@ -90,7 +91,6 @@ class ContactPairDefinition:
                 self.body_A_contact_location,
                 self.body_B,
                 self.body_B_contact_location,
-                self.contact_type,
                 contact_mode,
                 self.friction_coeff,
             )
@@ -103,7 +103,6 @@ class AbstractContactPair(ABC):
     body_A_contact_location: PolytopeContactLocation
     body_B: RigidBody2d
     body_B_contact_location: PolytopeContactLocation
-    contact_type: ContactType
     contact_mode: ContactMode
     friction_coeff: float
 
@@ -131,13 +130,15 @@ class AbstractContactPair(ABC):
     def get_nonfixed_contact_point(self) -> ContactPoint2d:
         pass
 
-    @abstractmethod
     def get_nonfixed_contact_point_variable(self) -> sym.Variable:
-        pass
+        point = self.get_nonfixed_contact_point()
+        return point.lam
 
-    @abstractmethod
-    def get_nonfixed_contact_position(self) -> NpExpressionArray:
-        pass
+    def get_nonfixed_contact_position(
+        self,
+    ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
+        point = self.get_nonfixed_contact_point()
+        return point.get_contact_positions()
 
     @property
     @abstractmethod
@@ -167,6 +168,10 @@ class AbstractContactPair(ABC):
     def bodies(self) -> Tuple[RigidBody2d, RigidBody2d]:
         return self.body_A, self.body_B
 
+    def create_friction_cone_constraints(self) -> NpFormulaArray:
+        face_contact = self.get_nonfixed_contact_point()
+        return face_contact.create_friction_cone_constraints()
+
     # TODO: this function could use some cleanup
     def _calculate_friction_cone_states(
         self,
@@ -174,7 +179,7 @@ class AbstractContactPair(ABC):
         body_A_contact_location: PolytopeContactLocation,
     ) -> Tuple[Literal["LEFT", "RIGHT"], Literal["LEFT", "RIGHT"]]:
         moving_contact_point: Literal["A", "B"] = (
-            "A" if body_A_contact_location.pos == ContactPosition.FACE else "B"
+            "A" if body_A_contact_location.pos == ContactLocation.FACE else "B"
         )
         if contact_mode == ContactMode.ROLLING:
             fix_friction_cone = None
@@ -206,12 +211,20 @@ class FaceOnFaceContact(AbstractContactPair):
         fix_friction_cone_A, _ = self._calculate_friction_cone_states(
             self.contact_mode, self.body_A_contact_location
         )
+        force_def = ContactForceDefinition(
+            f"{self.name}_{self.body_A.name}",
+            self.friction_coeff,
+            self.body_A_contact_location,
+            self.body_A,
+            fixed_to_friction_cone_boundary=fix_friction_cone_A,
+            displacement=0.2,
+        )
 
         self.contact_point_A = ContactPoint2d(
             self.body_A,
             self.body_A_contact_location,
+            [force_def],
             self.friction_coeff,
-            fix_friction_cone=fix_friction_cone_A,
             name=f"{self.name}_{self.body_A.name}",
         )
 
@@ -234,22 +247,9 @@ class FaceOnFaceContact(AbstractContactPair):
     def get_nonfixed_contact_point(self) -> ContactPoint2d:
         return self.contact_point_A
 
-    def get_nonfixed_contact_point_variable(self) -> sym.Variable:
-        point = self.get_nonfixed_contact_point()
-        return point.lam
-
-    def get_nonfixed_contact_position(self) -> NpExpressionArray:
-        point = self.get_nonfixed_contact_point()
-        # Ignore type for now
-        return point.contact_position  # type: ignore
-
     @property
     def variables(self) -> NpVariableArray:
         return self.contact_point_A.variables
-
-    def create_friction_cone_constraints(self) -> NpFormulaArray:
-        face_contact = self.get_nonfixed_contact_point()
-        return face_contact.create_friction_cone_constraints()
 
     def create_constraints(self) -> LineContactConstraints:
         return LineContactConstraints(self.create_friction_cone_constraints())
@@ -288,18 +288,34 @@ class PointOnFaceContact(AbstractContactPair):
             self.contact_mode, self.body_A_contact_location
         )
 
+        force_def_A = ContactForceDefinition(
+            f"{self.name}_{self.body_A.name}",
+            self.friction_coeff,
+            self.body_A_contact_location,
+            self.body_A,
+            fixed_to_friction_cone_boundary=fix_friction_cone_A,
+        )
+
+        force_def_B = ContactForceDefinition(
+            f"{self.name}_{self.body_B.name}",
+            self.friction_coeff,
+            self.body_B_contact_location,
+            self.body_B,
+            fixed_to_friction_cone_boundary=fix_friction_cone_B,
+        )
+
         self.contact_point_A = ContactPoint2d(
             self.body_A,
             self.body_A_contact_location,
+            [force_def_A],
             self.friction_coeff,
-            fix_friction_cone=fix_friction_cone_A,
             name=f"{self.name}_{self.body_A.name}",
         )
         self.contact_point_B = ContactPoint2d(
             self.body_B,
             self.body_B_contact_location,
+            [force_def_B],
             self.friction_coeff,
-            fix_friction_cone=fix_friction_cone_B,
             name=f"{self.name}_{self.body_B.name}",
         )
 
@@ -341,18 +357,9 @@ class PointOnFaceContact(AbstractContactPair):
         point = next(
             point
             for point in self.contact_points
-            if point.contact_location.pos == ContactPosition.FACE
+            if point.contact_location.pos == ContactLocation.FACE
         )
         return point
-
-    def get_nonfixed_contact_point_variable(self) -> sym.Variable:
-        point = self.get_nonfixed_contact_point()
-        return point.lam
-
-    def get_nonfixed_contact_position(self) -> NpExpressionArray:
-        point = self.get_nonfixed_contact_point()
-        # Ignore type for now
-        return point.contact_position  # type: ignore
 
     @property
     def variables(self) -> NpVariableArray:
@@ -367,8 +374,8 @@ class PointOnFaceContact(AbstractContactPair):
         )
 
     def create_equal_contact_point_constraints(self) -> ContactFrameConstraints:
-        p_Ac_A = self.contact_point_A.contact_position
-        p_Bc_B = self.contact_point_B.contact_position
+        p_Ac_A = self.contact_point_A._contact_position
+        p_Bc_B = self.contact_point_B._contact_position
 
         p_Bc_A = self.R_AB.dot(p_Bc_B)
         eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
@@ -398,11 +405,7 @@ class PointOnFaceContact(AbstractContactPair):
         relaxed_so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] <= 1
         return relaxed_so_2_constraint
 
-    def create_friction_cone_constraints(self) -> NpFormulaArray:
-        face_contact = self.get_nonfixed_contact_point()
-        return face_contact.create_friction_cone_constraints()
-
-    def _get_contact_point_of_type(self, type: ContactPosition) -> ContactPoint2d:
+    def _get_contact_point_of_type(self, type: ContactLocation) -> ContactPoint2d:
         contact_point = next(
             (
                 contact_point
@@ -438,12 +441,12 @@ class PointOnFaceContact(AbstractContactPair):
         return Hyperplane(a, b)
 
     def create_non_penetration_cut(self) -> sym.Formula:
-        vertex_contact = self._get_contact_point_of_type(ContactPosition.VERTEX)
-        contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
+        vertex_contact = self._get_contact_point_of_type(ContactLocation.VERTEX)
+        contact_point: npt.NDArray[np.float64] = vertex_contact._contact_position  # type: ignore
         if not contact_point.dtype == np.float64:
             raise ValueError("dtype of contact point must be np.float64")
 
-        face_contact = self._get_contact_point_of_type(ContactPosition.FACE)
+        face_contact = self._get_contact_point_of_type(ContactLocation.FACE)
         contact_hyperplane = face_contact.get_contact_hyperplane()
 
         # Points we are enforcing nonpenetration for

@@ -13,7 +13,7 @@ from geometry.two_d.contact.contact_pair_2d import (
     LineContactConstraints,
     PairContactConstraints,
 )
-from geometry.two_d.contact.contact_point_2d import ContactPoint2d
+from geometry.two_d.contact.contact_point_2d import ContactForce, ContactPoint2d
 from geometry.two_d.contact.types import ContactMode
 from geometry.two_d.rigid_body_2d import RigidBody2d
 from geometry.utilities import cross_2d
@@ -78,9 +78,10 @@ class ContactSceneInstance:
         self, body: RigidBody2d
     ) -> List[NpExpressionArray]:
         contact_forces_on_body = [
-            point.contact_force
+            force
             for pair in self.contact_pairs
             for point in pair.contact_points
+            for force in point.get_contact_forces()
             if point.body == body
         ]
         return contact_forces_on_body
@@ -89,9 +90,10 @@ class ContactSceneInstance:
         self, body: RigidBody2d
     ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
         contact_points = [
-            point.contact_position
+            pos
             for pair in self.contact_pairs
             for point in pair.contact_points
+            for pos in point.get_contact_positions()
             if point.body == body
         ]
         return contact_points
@@ -297,7 +299,7 @@ class ContactSceneCtrlPoint:
         self, point: ContactPoint2d
     ) -> NpExpressionArray:
         R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-        p_Bc1_W = R_WB.dot(point.contact_position)
+        p_Bc1_W = R_WB.dot(point._contact_position)
         p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
         p_Wc1_W = p_WB + p_Bc1_W
         return p_Wc1_W
@@ -317,8 +319,12 @@ class ContactSceneCtrlPoint:
             pos_W.append(p_WB)
         return pos_W
 
-    def _get_friction_cone_details(self, point: ContactPoint2d) -> FrictionConeDetails:
-        normal_vec = point.normal_vec
+    def _get_friction_cone_details(
+        self, point: ContactPoint2d, force: ContactForce
+    ) -> FrictionConeDetails:
+        normal_vec = force.normal_vec
+        if normal_vec is None:
+            raise ValueError("Could not get normal vector for force")
         R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
         p_WFc_W = self.get_contact_pos_in_world_frame(point)
         return FrictionConeDetails(normal_vec, R_WFc, p_WFc_W)
@@ -331,7 +337,10 @@ class ContactSceneCtrlPoint:
             for pair in self.contact_scene_instance.contact_pairs
         ]
         return [
-            self._get_friction_cone_details(point) for point in contact_points_on_faces
+            self._get_friction_cone_details(point, force)
+            for point in contact_points_on_faces
+            for force in point.contact_forces
+            if force.normal_vec is not None
         ]
 
     @property

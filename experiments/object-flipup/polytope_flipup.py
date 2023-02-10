@@ -6,7 +6,7 @@ import numpy as np
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
+from geometry.two_d.contact.types import ContactMode, ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
@@ -60,19 +60,17 @@ def plan_polytope_flipup(
     table_polytope = ContactPairDefinition(
         "contact_1",
         table,
-        PolytopeContactLocation(ContactPosition.FACE, 1),
+        PolytopeContactLocation(ContactLocation.FACE, 1),
         polytope,
-        PolytopeContactLocation(ContactPosition.VERTEX, contact_vertex),
-        ContactType.POINT_CONTACT,
+        PolytopeContactLocation(ContactLocation.VERTEX, contact_vertex),
         FRICTION_COEFF,
     )
     polytope_finger = ContactPairDefinition(
         "contact_2",
         polytope,
-        PolytopeContactLocation(ContactPosition.FACE, 0),
+        PolytopeContactLocation(ContactLocation.FACE, 0),
         finger,
-        PolytopeContactLocation(ContactPosition.FACE, 0),
-        ContactType.POINT_CONTACT,
+        PolytopeContactLocation(ContactLocation.FACE, 0),
         FRICTION_COEFF,
     )
     contact_scene = ContactScene2d(

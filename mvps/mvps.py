@@ -68,7 +68,6 @@ def test_gcs() -> None:
     x0 = np.array([0.5, 0.5]).reshape((-1, 1))
     xf = np.array([7.0, 5.5]).reshape((-1, 1))
 
-    breakpoint()
     v0 = path.add_point_vertex(x0, "source", "out")
     vf = path.add_point_vertex(xf, "target", "in")
     ctrl_points = path.calculate_path(v0, vf)

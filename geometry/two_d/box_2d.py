@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import ContactPosition
+from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.utilities import normalize_vec
 
@@ -156,7 +156,7 @@ class Box2d(RigidBody2d):
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
 
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             if location.idx == 1:
                 return self.n1, self.t1
             elif location.idx == 2:
@@ -169,7 +169,7 @@ class Box2d(RigidBody2d):
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
-        elif location.pos == ContactPosition.VERTEX:
+        elif location.pos == ContactLocation.VERTEX:
             if location.idx == 1:
                 return self.nc1, self.tc1
             elif location.idx == 2:
@@ -190,11 +190,11 @@ class Box2d(RigidBody2d):
     def get_neighbouring_vertices(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             raise NotImplementedError(
                 f"Can't get neighbouring vertices for face contact"
             )
-        elif location.pos == ContactPosition.VERTEX:
+        elif location.pos == ContactLocation.VERTEX:
             if location.idx == 1:
                 return self.v4, self.v2
             elif location.idx == 2:
@@ -215,7 +215,7 @@ class Box2d(RigidBody2d):
     def get_proximate_vertices_from_location(
         self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
-        if location.pos == ContactPosition.FACE:
+        if location.pos == ContactLocation.FACE:
             if location.idx == 1:
                 return [self.v1, self.v2]
             elif location.idx == 2:
@@ -228,7 +228,7 @@ class Box2d(RigidBody2d):
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
-        elif location.pos == ContactPosition.VERTEX:
+        elif location.pos == ContactLocation.VERTEX:
             if location.idx == 1:
                 return [self.v1]
             elif location.idx == 2:
@@ -249,9 +249,9 @@ class Box2d(RigidBody2d):
     def get_hyperplane_from_location(
         self, location: PolytopeContactLocation
     ) -> Hyperplane:
-        if location.pos == ContactPosition.VERTEX:
+        if location.pos == ContactLocation.VERTEX:
             raise NotImplementedError(f"Can't get hyperplane for vertex contact")
-        elif location.pos == ContactPosition.FACE:
+        elif location.pos == ContactLocation.FACE:
             if location.idx == 1:
                 return self.face_1
             elif location.idx == 2:
