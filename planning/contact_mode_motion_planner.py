@@ -9,7 +9,7 @@ from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
 )
-from geometry.two_d.contact.contact_pair_2d import ContactPair2d
+from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
 from geometry.two_d.contact.contact_scene_2d import (
     ContactScene2d,
     ContactSceneCtrlPoint,
@@ -49,10 +49,8 @@ class ContactModeMotionPlanner:
 
     def _setup_ctrl_points(self) -> None:
         self.ctrl_points = [
-            ContactSceneCtrlPoint(
-                self.contact_scene.create_instance(self.contact_modes)
-            )
-            for _ in range(self.num_ctrl_points)
+            ContactSceneCtrlPoint(self.contact_scene, self.contact_modes, idx)
+            for idx in range(self.num_ctrl_points)
         ]
 
     def _setup_prog(self, variable_bounds: Dict[str, Tuple[float, float]]) -> None:
@@ -120,7 +118,10 @@ class ContactModeMotionPlanner:
                 self._constrain_contact_velocity(pair, "POSITIVE")
 
     def constrain_orientation_at_ctrl_point(
-        self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, theta: float
+        self,
+        pair_to_constrain: ContactPairDefinition,
+        ctrl_point_idx: int,
+        theta: float,
     ) -> None:
         # NOTE: This finds the matching pair based on name. This may not be the safest way to do this
 
@@ -135,7 +136,10 @@ class ContactModeMotionPlanner:
             self.prog.AddLinearConstraint(c)
 
     def constrain_contact_position_at_ctrl_point(
-        self, pair_to_constrain: ContactPair2d, ctrl_point_idx: int, lam_target: float
+        self,
+        pair_to_constrain: ContactPairDefinition,
+        ctrl_point_idx: int,
+        lam_target: float,
     ) -> None:
         """
         Constraints position by fixing position along contact face. lam_target should take values in the range [0,1]

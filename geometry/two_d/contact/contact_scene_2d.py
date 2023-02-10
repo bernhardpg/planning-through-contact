@@ -7,10 +7,11 @@ import pydrake.symbolic as sym
 from pydrake.math import eq
 
 from geometry.two_d.contact.contact_pair_2d import (
+    AbstractContactPair,
     ContactFrameConstraints,
-    ContactPair2d,
-    ContactPair2dInstance,
-    ContactPairConstraints,
+    ContactPairDefinition,
+    LineContactConstraints,
+    PairContactConstraints,
 )
 from geometry.two_d.contact.contact_point_2d import ContactPoint2d
 from geometry.two_d.contact.types import ContactMode
@@ -35,24 +36,26 @@ class StaticEquilibriumConstraints(NamedTuple):
 
 
 class ContactSceneConstraints(NamedTuple):
-    pair_constraints: List[ContactPairConstraints]
+    pair_constraints: List[Union[LineContactConstraints, PairContactConstraints]]
     static_equilibrium_constraints: List[StaticEquilibriumConstraints]
 
 
 @dataclass
 class ContactScene2d:
     rigid_bodies: List[RigidBody2d]
-    contact_pairs: List[ContactPair2d]
+    contact_pairs: List[ContactPairDefinition]
     body_anchored_to_W: RigidBody2d
 
     def create_instance(
-        self, contact_pair_modes: Dict[str, ContactMode]
+        self,
+        contact_pair_modes: Dict[str, ContactMode],
+        instance_postfix: Optional[str] = None,
     ) -> "ContactSceneInstance":
         """
         Instantiates an instance of each contact pair with new sets of variables and constraints.
         """
         contact_pair_instances = [
-            pair.create_instance(contact_pair_modes[pair.name])
+            pair.create_instance(contact_pair_modes[pair.name], instance_postfix)
             for pair in self.contact_pairs
         ]
         return ContactSceneInstance(
@@ -64,7 +67,7 @@ class ContactSceneInstance:
     def __init__(
         self,
         rigid_bodies: List[RigidBody2d],
-        contact_pairs: List[ContactPair2dInstance],
+        contact_pairs: List[AbstractContactPair],
         body_anchored_to_W: RigidBody2d,
     ):
         self.rigid_bodies = rigid_bodies
@@ -178,7 +181,9 @@ class ContactSceneInstance:
         return np.concatenate([pair.variables for pair in self.contact_pairs])
 
     @property
-    def pair_constraints(self) -> List[ContactPairConstraints]:
+    def pair_constraints(
+        self,
+    ) -> List[Union[LineContactConstraints, PairContactConstraints]]:
         return [pair.create_constraints() for pair in self.contact_pairs]
 
     def create_static_equilibrium_constraints_for_body(
@@ -244,13 +249,15 @@ class ContactSceneInstance:
             self.static_equilibrium_constraints,
         )
 
-    def get_contact_normals_in_local_frames(self) -> List[npt.NDArray[np.float64]]:
-        return [pair.get_normal_vec() for pair in self.contact_pairs]
-
 
 class ContactSceneCtrlPoint:
-    def __init__(self, contact_scene_instance: ContactSceneInstance):
-        self.contact_scene_instance = contact_scene_instance
+    def __init__(
+        self,
+        contact_scene: ContactScene2d,
+        contact_modes: Dict[str, ContactMode],
+        idx: int,
+    ):
+        self.contact_scene_instance = contact_scene.create_instance(contact_modes, None)
 
     def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
         """
@@ -320,7 +327,7 @@ class ContactSceneCtrlPoint:
         self,
     ) -> List[FrictionConeDetails]:
         contact_points_on_faces = [
-            pair._get_nonfixed_contact_point()
+            pair.get_nonfixed_contact_point()
             for pair in self.contact_scene_instance.contact_pairs
         ]
         return [
@@ -339,25 +346,31 @@ class ContactSceneCtrlPoint:
 
     @property
     def relaxed_so_2_constraints(self) -> NpFormulaArray:
-        return np.array([c.relaxed_so_2 for c in self.constraints.pair_constraints])
+        return np.array(
+            [c.relaxed_so_2 for c in self.point_on_line_contact_constraints]
+        )
 
     @property
     def non_penetration_cuts(self) -> NpFormulaArray:
         return np.array(
-            [c.non_penetration_cut for c in self.constraints.pair_constraints]
+            [c.non_penetration_cut for c in self.point_on_line_contact_constraints]
         )
 
     @property
     def equal_contact_point_constraints(self) -> List[ContactFrameConstraints]:
-        return [c.equal_contact_points for c in self.constraints.pair_constraints]
+        return [c.equal_contact_points for c in self.point_on_line_contact_constraints]
 
     @property
     def equal_rel_position_constraints(self) -> List[ContactFrameConstraints]:
-        return [c.equal_relative_positions for c in self.constraints.pair_constraints]
+        return [
+            c.equal_relative_positions for c in self.point_on_line_contact_constraints
+        ]
 
     @property
     def equal_and_opposite_forces_constraints(self) -> List[ContactFrameConstraints]:
-        return [c.equal_and_opposite_forces for c in self.constraints.pair_constraints]
+        return [
+            c.equal_and_opposite_forces for c in self.point_on_line_contact_constraints
+        ]
 
     @property
     def variables(self) -> NpVariableArray:
@@ -373,3 +386,11 @@ class ContactSceneCtrlPoint:
     @property
     def constraints(self) -> ContactSceneConstraints:
         return self.contact_scene_instance.create_contact_scene_constraints()
+
+    @property
+    def point_on_line_contact_constraints(self) -> List[PairContactConstraints]:
+        return [
+            constraints
+            for constraints in self.constraints.pair_constraints
+            if isinstance(constraints, PairContactConstraints)
+        ]

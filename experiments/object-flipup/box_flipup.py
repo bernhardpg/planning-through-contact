@@ -15,7 +15,7 @@ from convex_relaxation.mccormick import (
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import (
     ContactFrameConstraints,
-    ContactPair2d,
+    ContactPairDefinition,
     EvaluatedContactFrameConstraints,
 )
 from geometry.two_d.contact.contact_scene_2d import (
@@ -149,7 +149,7 @@ class BoxFlipupDemo:
             height=FINGER_HEIGHT,
         )
 
-        self.table_box = ContactPair2d(
+        self.table_box = ContactPairDefinition(
             "contact_1",
             self.table,
             PolytopeContactLocation(ContactPosition.FACE, 1),
@@ -158,7 +158,7 @@ class BoxFlipupDemo:
             ContactType.POINT_CONTACT,
             self.friction_coeff,
         )
-        self.box_finger = ContactPair2d(
+        self.box_finger = ContactPairDefinition(
             "contact_2",
             self.box,
             PolytopeContactLocation(ContactPosition.FACE, 2),
@@ -442,21 +442,21 @@ def plan_box_flip_up_newtons_third_law():
     if show_animation:
 
         viz_contact_positions = [
-            VisualizationPoint2d.from_ctrl_points(pos, CONTACT_COLOR)
+            VisualizationPoint2d.from_fc_details(pos, CONTACT_COLOR)
             for pos in contact_positions_ctrl_points
         ]
         viz_contact_forces = [
-            VisualizationForce2d.from_ctrl_points(pos, force, CONTACT_COLOR)
+            VisualizationForce2d.from_fc_details(pos, force, CONTACT_COLOR)
             for pos, force in zip(
                 contact_positions_ctrl_points, contact_forces_ctrl_points
             )
         ]
 
         box_com_ctrl_points = prog.result.GetSolution(prog.box_com_in_W)
-        viz_box_com = VisualizationPoint2d.from_ctrl_points(
+        viz_box_com = VisualizationPoint2d.from_fc_details(
             box_com_ctrl_points, GRAVITY_COLOR
         )
-        viz_gravitional_force = VisualizationForce2d.from_ctrl_points(
+        viz_gravitional_force = VisualizationForce2d.from_fc_details(
             prog.result.GetSolution(prog.box_com_in_W),
             prog.result.GetSolution(prog.gravitational_force_in_W),
             GRAVITY_COLOR,
@@ -465,7 +465,7 @@ def plan_box_flip_up_newtons_third_law():
         orientation_ctrl_points = [
             evaluate_np_expressions_array(R, prog.result) for R in prog.box_orientation
         ]
-        viz_box = VisualizationPolygon2d.from_ctrl_points(
+        viz_box = VisualizationPolygon2d.from_fc_details(
             box_com_ctrl_points,
             orientation_ctrl_points,
             prog.ctrl_points[0].box,
@@ -475,7 +475,7 @@ def plan_box_flip_up_newtons_third_law():
         table_pos_ctrl_points = np.zeros((2, prog.num_ctrl_points))
         table_orientation_ctrl_points = [np.eye(2)] * prog.num_ctrl_points
 
-        viz_table = VisualizationPolygon2d.from_ctrl_points(
+        viz_table = VisualizationPolygon2d.from_fc_details(
             table_pos_ctrl_points,
             table_orientation_ctrl_points,
             prog.ctrl_points[0].table,

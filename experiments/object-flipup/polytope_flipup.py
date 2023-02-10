@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 
 from geometry.two_d.box_2d import Box2d
-from geometry.two_d.contact.contact_pair_2d import ContactPair2d
+from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
@@ -57,7 +57,7 @@ def plan_polytope_flipup(
         width=FINGER_WIDTH,
         height=FINGER_HEIGHT,
     )
-    table_polytope = ContactPair2d(
+    table_polytope = ContactPairDefinition(
         "contact_1",
         table,
         PolytopeContactLocation(ContactPosition.FACE, 1),
@@ -66,12 +66,12 @@ def plan_polytope_flipup(
         ContactType.POINT_CONTACT,
         FRICTION_COEFF,
     )
-    polytope_finger = ContactPair2d(
+    polytope_finger = ContactPairDefinition(
         "contact_2",
         polytope,
         PolytopeContactLocation(ContactPosition.FACE, 0),
         finger,
-        PolytopeContactLocation(ContactPosition.VERTEX, 1),
+        PolytopeContactLocation(ContactPosition.FACE, 0),
         ContactType.POINT_CONTACT,
         FRICTION_COEFF,
     )
