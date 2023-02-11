@@ -9,6 +9,11 @@ class Hyperplane(NamedTuple):
     b: npt.NDArray[np.float64]
 
 
+def get_angle_between_planes(plane_A: Hyperplane, plane_B: Hyperplane) -> float:
+    theta = np.arccos(plane_B.a.T.dot(plane_A.a))[0, 0]
+    return theta
+
+
 def construct_2d_plane_from_points(
     p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
 ) -> Hyperplane:

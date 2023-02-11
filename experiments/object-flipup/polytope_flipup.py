@@ -6,7 +6,7 @@ import numpy as np
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactMode, ContactLocation
+from geometry.two_d.contact.types import ContactLocation, ContactMode
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
@@ -32,9 +32,13 @@ def plan_polytope_flipup(
     TABLE_WIDTH = 2
 
     FINGER_HEIGHT = 0.1
-    FINGER_WIDTH = 0.1
+    FINGER_WIDTH = 0.2
 
     POLYTOPE_MASS = 1
+
+    # TODO:
+    # 1. Make sure that contact locations for both forces always stay within the polytope
+    # 2. contact force displacements should be calculated automatically
 
     polytope = EquilateralPolytope2d(
         actuated=False,
@@ -70,7 +74,7 @@ def plan_polytope_flipup(
         polytope,
         PolytopeContactLocation(ContactLocation.FACE, 0),
         finger,
-        PolytopeContactLocation(ContactLocation.FACE, 0),
+        PolytopeContactLocation(ContactLocation.FACE, 3),
         FRICTION_COEFF,
     )
     contact_scene = ContactScene2d(
@@ -121,7 +125,7 @@ def plan_polytope_flipup(
         }
         lam_target = None
 
-    NUM_CTRL_POINTS = 3
+    NUM_CTRL_POINTS = 2
     motion_plan = ContactModeMotionPlanner(
         contact_scene, NUM_CTRL_POINTS, contact_modes, variable_bounds
     )
@@ -144,11 +148,11 @@ def plan_polytope_flipup(
 
     if True:
 
-        CONTACT_COLOR = "brown1"
+        CONTACT_COLOR = "dodgerblue4"
         GRAVITY_COLOR = "blueviolet"
         BOX_COLOR = "aquamarine4"
         TABLE_COLOR = "bisque3"
-        FINGER_COLOR = "brown3"
+        FINGER_COLOR = "firebrick3"
         body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
 
         contact_positions_ctrl_points = [
@@ -251,7 +255,7 @@ def plan_polytope_flipup(
         viz.visualize(
             viz_contact_positions + viz_com_points,
             viz_contact_forces + viz_gravitional_forces,
-            viz_polygons + viz_friction_cones + viz_friction_cones_mirrored, # type: ignore
+            viz_polygons + viz_friction_cones + viz_friction_cones_mirrored,  # type: ignore
         )
 
 
@@ -292,13 +296,11 @@ if __name__ == "__main__":
     else:
         if num_vertices == 3:
             contact_vertex = 2
-            th_target = np.pi / 4
         elif num_vertices == 4:
             contact_vertex = 2
             th_target = np.pi / 6
         elif num_vertices == 5:
             contact_vertex = 3
-            th_target = np.pi / 5
         else:
             contact_vertex = 3
 

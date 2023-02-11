@@ -8,7 +8,11 @@ import pydrake.symbolic as sym  # type: ignore
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgramResult
 
-from geometry.hyperplane import Hyperplane, calculate_convex_hull_cut_for_so_2
+from geometry.hyperplane import (
+    Hyperplane,
+    calculate_convex_hull_cut_for_so_2,
+    get_angle_between_planes,
+)
 from geometry.two_d.box_2d import RigidBody2d
 from geometry.two_d.contact.contact_point_2d import (
     ContactForceDefinition,
@@ -16,6 +20,7 @@ from geometry.two_d.contact.contact_point_2d import (
 )
 from geometry.two_d.contact.types import ContactLocation, ContactMode
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from geometry.utilities import two_d_rotation_matrix_from_angle
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_formulas_array
 
@@ -217,7 +222,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=-0.1,
+            displacement=-0.1, # FIX: Should not be hardcoded
         )
 
         right_force = ContactForceDefinition(
@@ -226,7 +231,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=0.1,
+            displacement=0.1, # FIX: Should not be hardcoded
         )
 
         self.contact_point_A = ContactPoint2d(
@@ -239,15 +244,23 @@ class FaceOnFaceContact(AbstractContactPair):
 
     @property
     def R_AB(self) -> npt.NDArray[np.float64]:
-        return np.eye(2)
+        plane_A = self.body_A.get_hyperplane_from_location(self.body_A_contact_location)
+        plane_B = self.body_B.get_hyperplane_from_location(self.body_B_contact_location)
+        theta = get_angle_between_planes(plane_A, plane_B)
+        return two_d_rotation_matrix_from_angle(theta)
 
     @property
-    def p_BA_B(self) -> npt.NDArray[np.float64]:
-        return np.array([0, 0]).reshape((-1, 1))
+    def p_BA_B(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
+        return -self.R_AB.dot(self.p_AB_A)
 
     @property
-    def p_AB_A(self) -> npt.NDArray[np.float64]:
-        return np.array([0, 0]).reshape((-1, 1))
+    def p_AB_A(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
+        floating_pos = self.contact_point_A._contact_position
+        pos_to_com_B = self.body_B.get_shortest_vec_from_com_to_face(
+            self.body_B_contact_location
+        )
+        relative_position = floating_pos + self.R_AB.dot(pos_to_com_B)
+        return relative_position
 
     @property
     def contact_points(self) -> List[ContactPoint2d]:

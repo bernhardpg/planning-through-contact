@@ -16,6 +16,7 @@ class Box2d(RigidBody2d):
     height: float = 2
 
     # TODO: This class should be simplified similar to EquilateralPolytope2d
+    # NOTE: This entire class uses indices starting at 1. This should really be changed!
 
     # v1 -- v2
     # |     |
@@ -268,3 +269,4 @@ class Box2d(RigidBody2d):
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
             )
+

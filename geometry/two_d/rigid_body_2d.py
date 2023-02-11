@@ -58,3 +58,10 @@ class RigidBody2d(ABC):
                 "Rigid body must have a mass to calculate gravitational force"
             )
         return np.array([0, -self.mass * GRAV_ACC]).reshape((-1, 1))
+
+    def get_shortest_vec_from_com_to_face(
+        self, location: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        v1, v2 = self.get_proximate_vertices_from_location(location)
+        vec = (v1 + v2) / 2
+        return vec
