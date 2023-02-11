@@ -276,8 +276,9 @@ class ContactSceneCtrlPoint:
         for pair in self.contact_scene_instance.contact_pairs:
             for point in pair.contact_points:
                 R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-                f_cB_W = R_WB.dot(point.contact_force)
-                forces_W.append(f_cB_W)
+                forces = point.get_contact_forces()
+                f_cB_Ws = [R_WB.dot(f) for f in forces]
+                forces_W.extend(f_cB_Ws)
         return forces_W
 
     def get_body_orientations(self) -> List[NpExpressionArray]:
@@ -295,21 +296,24 @@ class ContactSceneCtrlPoint:
         ]
         return Rs
 
-    def get_contact_pos_in_world_frame(
+    def get_contact_positions_for_contact_point_in_world_frame(
         self, point: ContactPoint2d
-    ) -> NpExpressionArray:
+    ) -> List[NpExpressionArray]:
         R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-        p_Bc1_W = R_WB.dot(point._contact_position)
+        contact_positions = point.get_contact_positions()
+        p_Bc1_Ws = [R_WB.dot(pos) for pos in contact_positions]
         p_WB = self.contact_scene_instance._get_translation_to_W(point.body)
-        p_Wc1_W = p_WB + p_Bc1_W
-        return p_Wc1_W
+        p_Wc1_Ws = [p_WB + p_Bc1_W for p_Bc1_W in p_Bc1_Ws]
+        return p_Wc1_Ws
 
     def get_contact_positions_in_world_frame(self) -> List[NpExpressionArray]:
         pos_W = []
         for pair in self.contact_scene_instance.contact_pairs:
             for point in pair.contact_points:
-                p_Wc1_W = self.get_contact_pos_in_world_frame(point)
-                pos_W.append(p_Wc1_W)
+                p_Wc1_Ws = self.get_contact_positions_for_contact_point_in_world_frame(
+                    point
+                )
+                pos_W.extend(p_Wc1_Ws)
         return pos_W
 
     def get_body_positions_in_world_frame(self) -> List[NpExpressionArray]:
@@ -321,13 +325,16 @@ class ContactSceneCtrlPoint:
 
     def _get_friction_cone_details(
         self, point: ContactPoint2d, force: ContactForce
-    ) -> FrictionConeDetails:
+    ) -> List[FrictionConeDetails]:
         normal_vec = force.normal_vec
         if normal_vec is None:
             raise ValueError("Could not get normal vector for force")
         R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
-        p_WFc_W = self.get_contact_pos_in_world_frame(point)
-        return FrictionConeDetails(normal_vec, R_WFc, p_WFc_W)
+        p_WFc_Ws = self.get_contact_positions_for_contact_point_in_world_frame(point)
+        friction_cone_details = [
+            FrictionConeDetails(normal_vec, R_WFc, p_WFc_W) for p_WFc_W in p_WFc_Ws
+        ]
+        return friction_cone_details
 
     def get_friction_cones_details_for_face_contact_points(
         self,
@@ -337,9 +344,10 @@ class ContactSceneCtrlPoint:
             for pair in self.contact_scene_instance.contact_pairs
         ]
         return [
-            self._get_friction_cone_details(point, force)
+            details
             for point in contact_points_on_faces
             for force in point.contact_forces
+            for details in self._get_friction_cone_details(point, force)
             if force.normal_vec is not None
         ]
 

@@ -211,19 +211,28 @@ class FaceOnFaceContact(AbstractContactPair):
         fix_friction_cone_A, _ = self._calculate_friction_cone_states(
             self.contact_mode, self.body_A_contact_location
         )
-        force_def = ContactForceDefinition(
+        left_force = ContactForceDefinition(
             f"{self.name}_{self.body_A.name}",
             self.friction_coeff,
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=0.2,
+            displacement=-0.1,
+        )
+
+        right_force = ContactForceDefinition(
+            f"{self.name}_{self.body_A.name}",
+            self.friction_coeff,
+            self.body_A_contact_location,
+            self.body_A,
+            fixed_to_friction_cone_boundary=fix_friction_cone_A,
+            displacement=0.1,
         )
 
         self.contact_point_A = ContactPoint2d(
             self.body_A,
             self.body_A_contact_location,
-            [force_def],
+            [left_force, right_force],
             self.friction_coeff,
             name=f"{self.name}_{self.body_A.name}",
         )
@@ -267,14 +276,15 @@ class FaceOnFaceContact(AbstractContactPair):
 
     def get_squared_contact_forces_for_body(self, body: RigidBody2d) -> sym.Expression:
         if body == self.body_A:
-            f = self.contact_point_A.contact_force
+            forces = self.contact_point_A.get_contact_forces()
         elif body == self.body_B:
             raise ValueError("Cannot get contact force for body B in a line contact")
             # f = -self.contact_point_A.contact_force
         else:
             raise ValueError("Body not a part of contact pair")
 
-        squared_forces = f.T.dot(f)
+        squared_forces = np.sum([f.T.dot(f) for f in forces], axis=0)
+
         return squared_forces
 
 
