@@ -187,7 +187,7 @@ class ContactModeMotionPlanner:
         contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
         for idx in range(self.num_ctrl_points - 1):
             contact_velocity = (
-                contact_pos_at_ctrl_points[idx + 1] - contact_pos_at_ctrl_points[idx]
+                contact_pos_at_ctrl_points[idx + 1][0] - contact_pos_at_ctrl_points[idx][0]
             )  # type: ignore
             if direction == "POSITIVE":
                 constraint = ge(contact_velocity, 0)

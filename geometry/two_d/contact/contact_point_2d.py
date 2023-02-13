@@ -34,13 +34,17 @@ class ContactForce(NamedTuple):
             raise ValueError(
                 "Can only create friction cone constraints for a contact force on a face. For contact forces on vertices you must rely on Newton's third law."
             )
-
-        normal_force, friction_force = self.variables[0], self.variables[1]
-        upper_bound = friction_force <= self.friction_coeff * normal_force
-        lower_bound = -self.friction_coeff * normal_force <= friction_force
+        normal_force = self.variables[0]
         normal_force_positive = normal_force >= 0
+        # FIX: This is a quick fix for the case where the friction cone is fixed. Should be cleaned up!
+        if len(self.variables) == 1:
+            return np.array([normal_force_positive]).reshape([-1, 1])
+        else:
+            friction_force = self.variables[1]
+            upper_bound = friction_force <= self.friction_coeff * normal_force
+            lower_bound = -self.friction_coeff * normal_force <= friction_force
 
-        return np.vstack([upper_bound, lower_bound, normal_force_positive])
+            return np.vstack([upper_bound, lower_bound, normal_force_positive])
 
     @classmethod
     def from_definition(

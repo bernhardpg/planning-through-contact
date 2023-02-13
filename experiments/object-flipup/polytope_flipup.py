@@ -125,7 +125,7 @@ def plan_polytope_flipup(
         }
         lam_target = None
 
-    NUM_CTRL_POINTS = 2
+    NUM_CTRL_POINTS = 3
     motion_plan = ContactModeMotionPlanner(
         contact_scene, NUM_CTRL_POINTS, contact_modes, variable_bounds
     )
@@ -138,7 +138,7 @@ def plan_polytope_flipup(
             table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
         )
     motion_plan.constrain_contact_position_at_ctrl_point(
-        table_polytope, ctrl_point_idx=0, lam_target=0.5
+        table_polytope, ctrl_point_idx=0, lam_target=0.4
     )
     if lam_target is not None:
         motion_plan.constrain_contact_position_at_ctrl_point(
