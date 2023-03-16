@@ -14,7 +14,10 @@ def main():
     z = sym.Variable("z")
     prog.AddDecisionVariables([x, y, z])  # type: ignore
     prog.AddLinearConstraint(2 * x == 2)
-    prog.AddLinearConstraint(3 * y == x)
+    prog.AddLinearConstraint(3 * y == x + 1)
+    prog.AddLinearConstraint(2 <= x + 2 * y)
+    prog.AddConstraint(x * y == 2)
+    # prog.AddConstraint(x**2 + y**2 <= 1)
     vars = prog.decision_variables()
 
     relaxed_prog = create_sdp_relaxation(prog)
