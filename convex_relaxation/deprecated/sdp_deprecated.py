@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.solvers import MathematicalProgram, Solve
+# TODO: Deprecated. this code should be removed
 
 class SdpRelaxation:
     def __init__(self, vars: npt.NDArray[sym.Variable]):
@@ -89,4 +90,3 @@ class SdpRelaxation:
         upper_triangular[np.triu_indices(n)] = coeffs
         Q = self._construct_symmetric_matrix_from_triang(upper_triangular)
         return Q * 0.5
-

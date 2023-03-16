@@ -4,7 +4,7 @@ import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.sdp import SdpRelaxation
+from convex_relaxation.deprecated.sdp_deprecated import SdpRelaxation
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
 
