@@ -3,7 +3,7 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.sdp import SdpRelaxation, create_sdp_relaxation
+from convex_relaxation.sdp import create_sdp_relaxation
 from tools.types import NpVariableArray
 
 
