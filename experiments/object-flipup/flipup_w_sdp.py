@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
+from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.sdp import create_sdp_relaxation
@@ -19,9 +20,22 @@ def main():
     prog = MathematicalProgram()
     c = sym.Variable("c")
     s = sym.Variable("s")
+
+    R = np.array([[c, -s], [s, c]])
+
+    f = np.array([sym.Variable("f_x"), sym.Variable("f_y")]).reshape((-1, 1))
+
+    mg = 1 * 9.81 * np.array([0, -1]).reshape((-1, 1))
+    sum_of_forces = R.dot(mg) + f
+
     prog.AddDecisionVariables(np.array([c, s]))
-    prog.AddLinearConstraint(c + s >= 1)
-    prog.AddConstraint(c**2 + s**2 == 1)
+    prog.AddDecisionVariables(f)
+
+    prog.AddLinearConstraint(c + s >= 1)  # non penetration
+    prog.AddConstraint(c**2 + s**2 == 1)  # so 2
+    prog.AddConstraint(eq(sum_of_forces, 0))
+
+    prog.AddCost(f.T.dot(f).item())
 
     vars = prog.decision_variables()
 

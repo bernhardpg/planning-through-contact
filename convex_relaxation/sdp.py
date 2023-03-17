@@ -82,12 +82,12 @@ def _linear_bindings_to_homogenuous_form(
     else:
         raise ValueError(f"Invalid linear binding type: {binding_type}")
 
-    A, b = sym.DecomposeAffineExpressions(linear_formulas, vars)
+    A, b = sym.DecomposeAffineExpressions(linear_formulas.flatten(), vars)
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
     return A_homogenous
 
 
-def _generic_binding_to_polynomial(
+def _generic_constraint_binding_to_polynomial(
     binding: Binding, bound: BoundType
 ) -> sym.Polynomial:
     poly = sym.Polynomial(binding.evaluator().Eval(binding.variables())[0])
@@ -99,6 +99,18 @@ def _generic_binding_to_polynomial(
         return poly - b
     else:
         raise ValueError("Unsupported bound type")
+
+
+def _quadratic_cost_binding_to_homogenuous_form(
+    binding: Binding, basis: NpMonomialArray, num_vars: int
+) -> sym.Polynomial:
+    Q = binding.evaluator().Q()
+    b = binding.evaluator().b()
+    c = binding.evaluator().c()
+    x = binding.variables()
+    poly = sym.Polynomial(x.T.dot(Q.dot(x)) + b.T.dot(x) + c)
+    Q_hom = _quadratic_polynomial_to_homoenuous_form(poly, basis, num_vars)
+    return Q_hom
 
 
 def _get_monomial_coeffs(
@@ -125,7 +137,7 @@ def _quadratic_polynomial_to_homoenuous_form(
     return Q * 0.5
 
 
-def _generic_bindings_to_polynomials(
+def _generic_constraint_bindings_to_polynomials(
     generic_bindings: List[Binding],
 ) -> Tuple[NpPolynomialArray, NpPolynomialArray]:
     generic_eq_bindings = [
@@ -133,7 +145,7 @@ def _generic_bindings_to_polynomials(
     ]
     generic_eq_constraints_as_polynomials = np.array(
         [
-            _generic_binding_to_polynomial(
+            _generic_constraint_binding_to_polynomial(
                 b, BoundType.UPPER
             )  # Bounds are equal for eq constraints
             for b in generic_eq_bindings
@@ -148,7 +160,7 @@ def _generic_bindings_to_polynomials(
     ]
     polys_lower = np.array(
         [
-            _generic_binding_to_polynomial(b, BoundType.UPPER)
+            _generic_constraint_binding_to_polynomial(b, BoundType.UPPER)
             for b in lower_bounded_bindings
         ]
     ).flatten()
@@ -157,7 +169,7 @@ def _generic_bindings_to_polynomials(
     ]
     polys_upper = np.array(
         [
-            _generic_binding_to_polynomial(b, BoundType.UPPER)
+            _generic_constraint_binding_to_polynomial(b, BoundType.UPPER)
             for b in upper_bounded_bindings
         ]
     ).flatten()
@@ -199,6 +211,20 @@ def create_sdp_relaxation(
 
     relaxed_prog.AddLinearConstraint(X[0, 0] == 1)  # First variable is 1
 
+    has_linear_costs = len(prog.linear_costs()) > 0
+    if has_linear_costs:
+        raise NotImplementedError("Linear costs not yet implemented!")
+
+    has_quadratic_costs = len(prog.quadratic_costs()) > 0
+    if has_quadratic_costs:
+        quadratic_costs = prog.quadratic_costs()
+        Q_cost = [
+            _quadratic_cost_binding_to_homogenuous_form(c, basis, num_vars)
+            for c in quadratic_costs
+        ]
+        for Q in Q_cost:
+            relaxed_prog.AddCost(np.trace(Q.dot(X)))
+
     has_linear_eq_constraints = len(prog.linear_equality_constraints()) > 0
     if has_linear_eq_constraints:
         A_eq = _linear_bindings_to_homogenuous_form(
@@ -229,7 +255,7 @@ def create_sdp_relaxation(
         (
             generic_eq_constraints_as_polynomials,
             generic_ineq_constraints_as_polynomials,
-        ) = _generic_bindings_to_polynomials(prog.generic_constraints())
+        ) = _generic_constraint_bindings_to_polynomials(prog.generic_constraints())
 
         generic_constraints_as_polynomials = np.concatenate(
             (
