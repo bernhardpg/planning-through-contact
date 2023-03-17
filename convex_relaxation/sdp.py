@@ -14,7 +14,12 @@ from pydrake.solvers import (
 )
 
 from geometry.utilities import unit_vector
-from tools.types import NpMonomialArray, NpPolynomialArray, NpVariableArray
+from tools.types import (
+    NpFormulaArray,
+    NpMonomialArray,
+    NpPolynomialArray,
+    NpVariableArray,
+)
 
 
 class BoundType(Enum):
@@ -23,9 +28,7 @@ class BoundType(Enum):
 
 
 # TODO there is definitely a much more efficient way of doing this
-def _linear_binding_to_formula(
-    binding: Binding, bound: BoundType = BoundType.UPPER
-) -> sym.Formula:
+def _linear_binding_to_formulas(binding: Binding) -> NpFormulaArray:
     """
     Takes in a binding and returns a polynomial p that should satisfy\
     p(x) = 0 for equality constraints, p(x) >= for inequality constraints
@@ -35,14 +38,20 @@ def _linear_binding_to_formula(
     # here, because it ignores the constant term for linear constraints! Is this a bug?
     A = binding.evaluator().GetDenseA()
     x = binding.variables()
-    if bound == BoundType.UPPER:
-        b = binding.evaluator().upper_bound()
-        return b - A.dot(x)
-    elif bound == BoundType.LOWER:
-        b = binding.evaluator().lower_bound()
-        return A.dot(x) - b
-    else:
-        raise ValueError("Boundtype must be either lower or upper")
+    A_x = A.dot(x)
+    b_upper = binding.evaluator().upper_bound()
+    b_lower = binding.evaluator().lower_bound()
+
+    formulas = []
+    for a_i_x, b_i_upper, b_i_lower in zip(A_x, b_upper, b_lower):
+        if b_i_upper == b_i_lower:  # eq constraint
+            formulas.append(b_i_upper - a_i_x)
+        elif not np.isinf(b_i_upper):
+            formulas.append(b_i_upper - a_i_x)
+        elif not np.isinf(b_i_lower):
+            formulas.append(a_i_x - b_i_lower)
+
+    return np.array(formulas)
 
 
 def _linear_bindings_to_homogenuous_form(
@@ -52,35 +61,9 @@ def _linear_bindings_to_homogenuous_form(
     if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
         raise ValueError("All bindings must be either ineqs or eqs.")
 
-    if binding_type == LinearEqualityConstraint:
-        # For eq constraints, the bounds are the same, so WLOG we use UPPER
-        linear_formulas = np.array(
-            [_linear_binding_to_formula(b, BoundType.UPPER) for b in linear_bindings]
-        )
-    elif binding_type == LinearConstraint:  # ineqs
-        upper_bounded_bindings = [
-            b for b in linear_bindings if not np.isinf(b.evaluator().upper_bound())
-        ]
-        linear_formulas_upper_bounded = np.array(
-            [
-                _linear_binding_to_formula(b, BoundType.UPPER)
-                for b in upper_bounded_bindings
-            ]
-        ).flatten()
-        lower_bounded_bindings = [
-            b for b in linear_bindings if not np.isinf(b.evaluator().lower_bound())
-        ]
-        linear_formulas_lower_bounded = np.array(
-            [
-                _linear_binding_to_formula(b, BoundType.LOWER)
-                for b in lower_bounded_bindings
-            ]
-        ).flatten()
-        linear_formulas = np.concatenate(
-            [linear_formulas_lower_bounded, linear_formulas_upper_bounded]
-        )
-    else:
-        raise ValueError(f"Invalid linear binding type: {binding_type}")
+    linear_formulas = np.concatenate(
+        [_linear_binding_to_formulas(b) for b in linear_bindings]  # type: ignore
+    )
 
     A, b = sym.DecomposeAffineExpressions(linear_formulas.flatten(), vars)
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
@@ -103,7 +86,7 @@ def _generic_constraint_binding_to_polynomial(
 
 def _quadratic_cost_binding_to_homogenuous_form(
     binding: Binding, basis: NpMonomialArray, num_vars: int
-) -> sym.Polynomial:
+) -> npt.NDArray[np.float64]:
     Q = binding.evaluator().Q()
     b = binding.evaluator().b()
     c = binding.evaluator().c()
@@ -210,6 +193,9 @@ def create_sdp_relaxation(
     relaxed_prog.AddPositiveSemidefiniteConstraint(X)
 
     relaxed_prog.AddLinearConstraint(X[0, 0] == 1)  # First variable is 1
+
+    if len(prog.bounding_box_constraints()) > 0:
+        raise NotImplementedError("Bounding box constraints are not implemented!")
 
     has_linear_costs = len(prog.linear_costs()) > 0
     if has_linear_costs:

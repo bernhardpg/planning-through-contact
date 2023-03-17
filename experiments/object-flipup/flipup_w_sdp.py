@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
-from pydrake.math import eq
+from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.sdp import create_sdp_relaxation
@@ -34,6 +34,10 @@ def main():
     prog.AddLinearConstraint(c + s >= 1)  # non penetration
     prog.AddConstraint(c**2 + s**2 == 1)  # so 2
     prog.AddConstraint(eq(sum_of_forces, 0))
+
+    constraint = le(np.array([f[0, 0] + c, -f[1, 0] + c]), np.array([10, -10]))
+    # test constraint with two sided bound
+    prog.AddLinearConstraint(constraint)
 
     prog.AddCost(f.T.dot(f).item())
 
