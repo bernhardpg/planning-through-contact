@@ -13,12 +13,14 @@ def main():
     y = sym.Variable("y")
     z = sym.Variable("z")
     prog.AddDecisionVariables([x, y, z])  # type: ignore
-    #    prog.AddLinearConstraint(2 * x == 2)
-    #    prog.AddLinearConstraint(3 * y == x + 1)
+    prog.AddLinearConstraint(2 * x == 2)
+    prog.AddLinearConstraint(3 * y == x + 1)
     prog.AddLinearConstraint(-2 <= x + 2 * y)
     prog.AddLinearConstraint(x + 2 * y <= 2)
     prog.AddConstraint(x * y == 2)
-    # prog.AddConstraint(x**2 + y**2 <= 1)
+    prog.AddConstraint(x**2 + y**2 <= 1)
+    prog.AddConstraint(-2 <= x * z)
+    prog.AddConstraint(x * z <= 2)
     vars = prog.decision_variables()
 
     relaxed_prog, X = create_sdp_relaxation(prog)

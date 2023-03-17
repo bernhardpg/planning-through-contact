@@ -13,7 +13,7 @@ from pydrake.solvers import (
     Solve,
 )
 
-from tools.types import NpMonomialArray, NpVariableArray
+from tools.types import NpMonomialArray, NpPolynomialArray, NpVariableArray
 
 
 class BoundType(Enum):
@@ -86,9 +86,18 @@ def _linear_bindings_to_homogenuous_form(
     return A_homogenous
 
 
-def _generic_binding_to_polynomial(binding: Binding) -> sym.Polynomial:
+def _generic_binding_to_polynomial(
+    binding: Binding, bound: BoundType
+) -> sym.Polynomial:
     poly = sym.Polynomial(binding.evaluator().Eval(binding.variables())[0])
-    return poly
+    if bound == BoundType.UPPER:
+        b = binding.evaluator().upper_bound().item()
+        return b - poly
+    elif bound == BoundType.LOWER:
+        b = binding.evaluator().lower_bound().item()
+        return poly - b
+    else:
+        raise ValueError("Unsupported bound type")
 
 
 def _get_monomial_coeffs(
@@ -113,6 +122,63 @@ def _quadratic_polynomial_to_homoenuous_form(
     upper_triangular[np.triu_indices(num_vars)] = coeffs
     Q = _construct_symmetric_matrix_from_triang(upper_triangular)
     return Q * 0.5
+
+
+def _generic_bindings_to_polynomials(
+    generic_bindings: List[Binding],
+) -> Tuple[NpPolynomialArray, NpPolynomialArray]:
+    generic_eq_bindings = [
+        b for b in generic_bindings if _equal_lower_and_upper_bounds(b)
+    ]
+    generic_eq_constraints_as_polynomials = np.array(
+        [
+            _generic_binding_to_polynomial(
+                b, BoundType.UPPER
+            )  # Bounds are equal for eq constraints
+            for b in generic_eq_bindings
+        ]
+    )
+
+    generic_ineq_bindings = [
+        b for b in generic_bindings if not _equal_lower_and_upper_bounds(b)
+    ]
+    lower_bounded_bindings = [
+        b for b in generic_ineq_bindings if not np.isinf(b.evaluator().lower_bound())
+    ]
+    polys_lower = np.array(
+        [
+            _generic_binding_to_polynomial(b, BoundType.UPPER)
+            for b in lower_bounded_bindings
+        ]
+    ).flatten()
+    upper_bounded_bindings = [
+        b for b in generic_ineq_bindings if not np.isinf(b.evaluator().upper_bound())
+    ]
+    polys_upper = np.array(
+        [
+            _generic_binding_to_polynomial(b, BoundType.UPPER)
+            for b in upper_bounded_bindings
+        ]
+    ).flatten()
+    generic_ineq_constraints_as_polynomials = np.concatenate([polys_lower, polys_upper])
+
+    return (
+        generic_eq_constraints_as_polynomials,
+        generic_ineq_constraints_as_polynomials,
+    )
+
+
+def _equal_lower_and_upper_bounds(b: Binding) -> bool:
+    return b.evaluator().lower_bound() == b.evaluator().upper_bound()
+
+
+def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
+    max_degree = max([p.TotalDegree() for p in polys])
+    min_degree = min([p.TotalDegree() for p in polys])
+    if max_degree > degree or min_degree < degree:
+        raise ValueError(
+            "Can only create SDP relaxation for (possibly non-convex) Quadratically Constrainted Quadratic Programs (QCQP)"
+        )  # TODO for now we don't allow lower degree or higher degree
 
 
 def create_sdp_relaxation(
@@ -147,25 +213,37 @@ def create_sdp_relaxation(
         relaxed_prog.AddLinearConstraint(ge(A_ineq.dot(X).dot(A_ineq.T), 0))
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
+    # TODO: I can use Hongkai's PR once that is merged
     if has_generic_constaints:
         # TODO differentiate between eq and ineq
-        generic_constraints_as_polynomials = [
-            _generic_binding_to_polynomial(b) for b in prog.generic_constraints()
-        ]
+        (
+            generic_eq_constraints_as_polynomials,
+            generic_ineq_constraints_as_polynomials,
+        ) = _generic_bindings_to_polynomials(prog.generic_constraints())
 
-        max_degree = max([p.TotalDegree() for p in generic_constraints_as_polynomials])
-        min_degree = min([p.TotalDegree() for p in generic_constraints_as_polynomials])
-        if max_degree > DEGREE_QUADRATIC or min_degree < DEGREE_QUADRATIC:
-            raise ValueError(
-                "Can only create SDP relaxation for (possibly non-convex) Quadratically Constrainted Quadratic Programs (QCQP)"
-            )  # TODO for now we don't allow lower degree or higher degree
+        generic_constraints_as_polynomials = np.concatenate(
+            (
+                generic_eq_constraints_as_polynomials.flatten(),
+                generic_ineq_constraints_as_polynomials.flatten(),
+            )
+        )
+        _assert_max_degree(generic_constraints_as_polynomials, DEGREE_QUADRATIC)
 
         Q_eqs = [
             _quadratic_polynomial_to_homoenuous_form(p, basis, num_vars)
-            for p in generic_constraints_as_polynomials
+            for p in generic_eq_constraints_as_polynomials
         ]
         for Q in Q_eqs:
             constraints = eq(np.trace(X.dot(Q)), 0).flatten()
+            for c in constraints:  # Drake requires us to add one constraint at the time
+                relaxed_prog.AddLinearConstraint(c)
+
+        Q_ineqs = [
+            _quadratic_polynomial_to_homoenuous_form(p, basis, num_vars)
+            for p in generic_ineq_constraints_as_polynomials
+        ]
+        for Q in Q_eqs:
+            constraints = ge(np.trace(X.dot(Q)), 0).flatten()
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
 

@@ -9,3 +9,4 @@ NpFormulaArray = npt.NDArray[sym.Formula]  # type: ignore
 NpExpressionArray = npt.NDArray[sym.Expression]  # type: ignore
 NpVariableArray = npt.NDArray[sym.Expression]  # type: ignore
 NpMonomialArray = npt.NDArray[sym.Monomial]  # type: ignore
+NpPolynomialArray = npt.NDArray[sym.Polynomial]  # type: ignore
