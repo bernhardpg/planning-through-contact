@@ -27,8 +27,8 @@ class ContactModeMotionPlanner:
         num_ctrl_points: int,
         contact_modes: Dict[str, ContactMode],
         variable_bounds: Dict[str, Tuple[float, float]],
+        use_mccormick_relaxation: bool = False,
     ):
-
         # Convenience variables for running experiments
         self.use_friction_cone_constraint = True
         self.use_force_balance_constraint = True
@@ -40,6 +40,7 @@ class ContactModeMotionPlanner:
         self.use_non_penetration_cut = True
         self.use_quadratic_cost = True
         self.only_minimize_forces_on_unactuated_bodies = True
+        self.use_mccormick_relaxation = use_mccormick_relaxation
 
         self.contact_modes = contact_modes
         self.contact_scene = contact_scene
@@ -68,29 +69,48 @@ class ContactModeMotionPlanner:
 
             if self.use_torque_balance_constraint:
                 for c in ctrl_point.static_equilibrium_constraints:
-                    add_bilinear_constraints_to_prog(
-                        c.torque_balance,
-                        self.prog,
-                        variable_bounds,
-                    )
+                    # TODO remove
+                    if self.use_mccormick_relaxation:
+                        add_bilinear_constraints_to_prog(
+                            c.torque_balance,
+                            self.prog,
+                            variable_bounds,
+                        )
+                    else:
+                        self.prog.AddConstraint(c.torque_balance)
 
             if self.use_equal_contact_point_constraint:
                 for c in ctrl_point.equal_contact_point_constraints:
-                    add_bilinear_frame_constraints_to_prog(
-                        c, self.prog, variable_bounds
-                    )
+                    # TODO remove
+                    if self.use_mccormick_relaxation:
+                        add_bilinear_frame_constraints_to_prog(
+                            c, self.prog, variable_bounds
+                        )
+                    else:
+                        self.prog.AddConstraint(c.in_frame_A)
+                        self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_equal_relative_position_constraint:
                 for c in ctrl_point.equal_rel_position_constraints:
-                    add_bilinear_frame_constraints_to_prog(
-                        c, self.prog, variable_bounds
-                    )
+                    # TODO remove
+                    if self.use_mccormick_relaxation:
+                        add_bilinear_frame_constraints_to_prog(
+                            c, self.prog, variable_bounds
+                        )
+                    else:
+                        self.prog.AddConstraint(c.in_frame_A)
+                        self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_equal_and_opposite_forces_constraint:
                 for c in ctrl_point.equal_and_opposite_forces_constraints:
-                    add_bilinear_frame_constraints_to_prog(
-                        c, self.prog, variable_bounds
-                    )
+                    # TODO remove
+                    if self.use_mccormick_relaxation:
+                        add_bilinear_frame_constraints_to_prog(
+                            c, self.prog, variable_bounds
+                        )
+                    else:
+                        self.prog.AddConstraint(c.in_frame_A)
+                        self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_so2_constraint:
                 for c in ctrl_point.relaxed_so_2_constraints:
@@ -187,7 +207,8 @@ class ContactModeMotionPlanner:
         contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
         for idx in range(self.num_ctrl_points - 1):
             contact_velocity = (
-                contact_pos_at_ctrl_points[idx + 1][0] - contact_pos_at_ctrl_points[idx][0]
+                contact_pos_at_ctrl_points[idx + 1][0]
+                - contact_pos_at_ctrl_points[idx][0]
             )  # type: ignore
             if direction == "POSITIVE":
                 constraint = ge(contact_velocity, 0)

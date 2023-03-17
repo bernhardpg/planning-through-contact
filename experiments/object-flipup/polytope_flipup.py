@@ -127,7 +127,11 @@ def plan_polytope_flipup(
 
     NUM_CTRL_POINTS = 3
     motion_plan = ContactModeMotionPlanner(
-        contact_scene, NUM_CTRL_POINTS, contact_modes, variable_bounds
+        contact_scene,
+        NUM_CTRL_POINTS,
+        contact_modes,
+        variable_bounds,
+        use_mccormick_relaxation=True,
     )
     if th_initial is not None:
         motion_plan.constrain_orientation_at_ctrl_point(
@@ -147,7 +151,6 @@ def plan_polytope_flipup(
     motion_plan.solve()
 
     if True:
-
         CONTACT_COLOR = "dodgerblue4"
         GRAVITY_COLOR = "blueviolet"
         BOX_COLOR = "aquamarine4"
@@ -260,7 +263,6 @@ def plan_polytope_flipup(
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--sliding", help="Use sliding", action="store_true", default=False
