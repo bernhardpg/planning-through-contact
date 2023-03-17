@@ -13,6 +13,7 @@ from pydrake.solvers import (
     Solve,
 )
 
+from geometry.utilities import unit_vector
 from tools.types import NpMonomialArray, NpPolynomialArray, NpVariableArray
 
 
@@ -203,19 +204,28 @@ def create_sdp_relaxation(
         A_eq = _linear_bindings_to_homogenuous_form(
             prog.linear_equality_constraints(), decision_vars
         )
-        relaxed_prog.AddLinearConstraint(eq(A_eq.dot(X).dot(A_eq.T), 0))
+        multiplied_constraints = eq(A_eq.dot(X).dot(A_eq.T), 0)
+        relaxed_prog.AddLinearConstraint(multiplied_constraints)
+
+        e_1 = unit_vector(0, X.shape[0])
+        linear_constraints = eq(A_eq.dot(X).dot(e_1), 0)
+        relaxed_prog.AddLinearConstraint(linear_constraints)
 
     has_linear_ineq_constraints = len(prog.linear_constraints()) > 0
     if has_linear_ineq_constraints:
         A_ineq = _linear_bindings_to_homogenuous_form(
             prog.linear_constraints(), decision_vars
         )
-        relaxed_prog.AddLinearConstraint(ge(A_ineq.dot(X).dot(A_ineq.T), 0))
+        multiplied_constraints = ge(A_ineq.dot(X).dot(A_ineq.T), 0)
+        relaxed_prog.AddLinearConstraint(multiplied_constraints)
+
+        e_1 = unit_vector(0, X.shape[0])
+        linear_constraints = ge(A_ineq.dot(X).dot(e_1), 0)
+        relaxed_prog.AddLinearConstraint(linear_constraints)
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     # TODO: I can use Hongkai's PR once that is merged
     if has_generic_constaints:
-        # TODO differentiate between eq and ineq
         (
             generic_eq_constraints_as_polynomials,
             generic_ineq_constraints_as_polynomials,
@@ -247,5 +257,4 @@ def create_sdp_relaxation(
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
 
-    breakpoint()
     return relaxed_prog, X
