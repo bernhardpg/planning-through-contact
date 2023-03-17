@@ -1,34 +1,86 @@
+from enum import Enum
 from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge
-from pydrake.solvers import Binding, MathematicalProgram, Solve
+from pydrake.solvers import (
+    Binding,
+    LinearConstraint,
+    LinearEqualityConstraint,
+    MathematicalProgram,
+    Solve,
+)
 
 from tools.types import NpMonomialArray, NpVariableArray
 
 
+class BoundType(Enum):
+    UPPER = 0
+    LOWER = 1
+
+
 # TODO there is definitely a much more efficient way of doing this
-def _linear_binding_to_formula(binding: Binding) -> sym.Formula:
+def _linear_binding_to_formula(
+    binding: Binding, bound: BoundType = BoundType.UPPER
+) -> sym.Formula:
     """
-    Takes in a binding and returns a polynomial p that should satisfy p(x) = 0
+    Takes in a binding and returns a polynomial p that should satisfy\
+    p(x) = 0 for equality constraints, p(x) >= for inequality constraints
+    
     """
     # NOTE: I cannot use binding.evaluator().Eval(binding.variables())
     # here, because it ignores the constant term for linear constraints! Is this a bug?
     A = binding.evaluator().GetDenseA()
-    b_upper = (
-        binding.evaluator().upper_bound()
-    )  # TODO for equalities, these seem to be the same!
     x = binding.variables()
-    formula = A.dot(x) - b_upper
-    return formula
+    if bound == BoundType.UPPER:
+        b = binding.evaluator().upper_bound()
+        return b - A.dot(x)
+    elif bound == BoundType.LOWER:
+        b = binding.evaluator().lower_bound()
+        return A.dot(x) - b
+    else:
+        raise ValueError("Boundtype must be either lower or upper")
 
 
 def _linear_bindings_to_homogenuous_form(
     linear_bindings: List[Binding], vars: NpVariableArray
 ) -> npt.NDArray[np.float64]:
-    linear_formulas = np.array([_linear_binding_to_formula(b) for b in linear_bindings])
+    binding_type = type(linear_bindings[0].evaluator())
+    if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
+        raise ValueError("All bindings must be either ineqs or eqs.")
+
+    if binding_type == LinearEqualityConstraint:
+        # For eq constraints, the bounds are the same, so WLOG we use UPPER
+        linear_formulas = np.array(
+            [_linear_binding_to_formula(b, BoundType.UPPER) for b in linear_bindings]
+        )
+    elif binding_type == LinearConstraint:  # ineqs
+        upper_bounded_bindings = [
+            b for b in linear_bindings if not np.isinf(b.evaluator().upper_bound())
+        ]
+        linear_formulas_upper_bounded = np.array(
+            [
+                _linear_binding_to_formula(b, BoundType.UPPER)
+                for b in upper_bounded_bindings
+            ]
+        ).flatten()
+        lower_bounded_bindings = [
+            b for b in linear_bindings if not np.isinf(b.evaluator().lower_bound())
+        ]
+        linear_formulas_lower_bounded = np.array(
+            [
+                _linear_binding_to_formula(b, BoundType.LOWER)
+                for b in lower_bounded_bindings
+            ]
+        ).flatten()
+        linear_formulas = np.concatenate(
+            [linear_formulas_lower_bounded, linear_formulas_upper_bounded]
+        )
+    else:
+        raise ValueError(f"Invalid linear binding type: {binding_type}")
+
     A, b = sym.DecomposeAffineExpressions(linear_formulas, vars)
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
     return A_homogenous
@@ -63,7 +115,9 @@ def _quadratic_polynomial_to_homoenuous_form(
     return Q * 0.5
 
 
-def create_sdp_relaxation(prog: MathematicalProgram) -> MathematicalProgram:
+def create_sdp_relaxation(
+    prog: MathematicalProgram,
+) -> Tuple[MathematicalProgram, NpVariableArray]:
     DEGREE_QUADRATIC = 2  # We are only relaxing (non-convex) quadratic programs
 
     decision_vars = prog.decision_variables()
@@ -76,7 +130,7 @@ def create_sdp_relaxation(prog: MathematicalProgram) -> MathematicalProgram:
     X = relaxed_prog.NewSymmetricContinuousVariables(num_vars, "X")
     relaxed_prog.AddPositiveSemidefiniteConstraint(X)
 
-    relaxed_prog.AddConstraint(X[0, 0] == 1)  # First variable is 1
+    relaxed_prog.AddLinearConstraint(X[0, 0] == 1)  # First variable is 1
 
     has_linear_eq_constraints = len(prog.linear_equality_constraints()) > 0
     if has_linear_eq_constraints:
@@ -90,9 +144,7 @@ def create_sdp_relaxation(prog: MathematicalProgram) -> MathematicalProgram:
         A_ineq = _linear_bindings_to_homogenuous_form(
             prog.linear_constraints(), decision_vars
         )
-        relaxed_prog.AddLinearConstraint(
-            ge(A_ineq.dot(X).dot(A_ineq.T), 0)
-        )  # TODO handle upper bounds too!
+        relaxed_prog.AddLinearConstraint(ge(A_ineq.dot(X).dot(A_ineq.T), 0))
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
@@ -117,9 +169,7 @@ def create_sdp_relaxation(prog: MathematicalProgram) -> MathematicalProgram:
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
 
-    breakpoint()
-
-    return relaxed_prog
+    return relaxed_prog, X
 
 
 def add_constraint(self, formula: sym.Formula, bp: bool = False) -> None:
