@@ -2,7 +2,7 @@ import time
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import Canvas
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 import numpy.typing as npt
@@ -18,6 +18,7 @@ class VisualizationPoint2d:
     position_curve: npt.NDArray[np.float64]  # (N, dims)
     color: RGB
 
+    # TODO remove
     @classmethod
     def from_ctrl_points(
         cls, ctrl_points: npt.NDArray[np.float64], color: str = "red1"
@@ -32,6 +33,7 @@ class VisualizationPoint2d:
 class VisualizationForce2d(VisualizationPoint2d):
     force_curve: npt.NDArray[np.float64]  # (N, dims)
 
+    # TODO remove
     @classmethod
     def from_ctrl_points(
         cls,
@@ -39,7 +41,6 @@ class VisualizationForce2d(VisualizationPoint2d):
         ctrl_points_force: npt.NDArray[np.float64],
         color: str = "red1",
     ) -> "VisualizationForce2d":
-
         position_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_position
         ).eval_entire_interval()
@@ -56,6 +57,31 @@ class VisualizationPolygon2d(VisualizationPoint2d):
     vertices_curves: List[npt.NDArray[np.float64]]  # [(N, dims), (N,dims), ...]
 
     @classmethod
+    def from_trajs(
+        cls,
+        com_position: npt.NDArray[np.float64],  # (num_steps, n)
+        rotation: npt.NDArray[np.float64],  # (num_steps, n ** 2)
+        polytope: RigidBody2d,
+        color: RGB,
+    ) -> "VisualizationPolygon2d":
+        # Transform points into world frame
+        # (some intermediate steps here to get the points in the right format)
+        num_dims = 2  # TODO replace
+        temp = np.array(
+            [
+                pos.reshape((-1, 1))
+                + rot.reshape(num_dims, num_dims).dot(polytope.vertices_for_plotting)
+                for rot, pos in zip(rotation, com_position)
+            ]
+        )  # (num_steps, dims, num_vertices)
+        temp2 = np.transpose(temp, axes=[1, 0, 2])  # (dims, num_steps, num_vertices)
+        num_vertices = temp2.shape[2]
+        corner_curves = [temp2[:, :, idx].T for idx in range(num_vertices)]
+
+        return cls(com_position, color, corner_curves)
+
+    # TODO remove
+    @classmethod
     def from_ctrl_points(
         cls,
         ctrl_points_com_position: npt.NDArray[np.float64],
@@ -63,7 +89,6 @@ class VisualizationPolygon2d(VisualizationPoint2d):
         polytope: RigidBody2d,
         color: str = "red1",
     ) -> "VisualizationPolygon2d":
-
         com_position_curve = BezierCurve.create_from_ctrl_points(
             ctrl_points_com_position
         ).eval_entire_interval()
@@ -91,6 +116,7 @@ class VisualizationPolygon2d(VisualizationPoint2d):
 class VisualizationCone2d(VisualizationPolygon2d):
     RAY_LENGTH: float = 0.05
 
+    # TODO remove
     @classmethod
     def from_ctrl_points(
         cls,
@@ -104,7 +130,9 @@ class VisualizationCone2d(VisualizationPolygon2d):
             ctrl_points_position
         ).eval_entire_interval()
 
-        normal_vec = normal_vec_ctrl_points[:, 0] # the normal vec is constant in the local frame. I have to clean up this code anyway
+        normal_vec = normal_vec_ctrl_points[
+            :, 0
+        ]  # the normal vec is constant in the local frame. I have to clean up this code anyway
         base_angle = np.arctan2(normal_vec[1], normal_vec[0])
         ray_1 = (
             np.array([np.cos(base_angle - angle), np.sin(base_angle - angle)]).reshape(

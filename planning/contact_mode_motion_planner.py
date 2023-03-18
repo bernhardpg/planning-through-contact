@@ -31,6 +31,7 @@ class ContactModeMotionPlanner:
     ):
         # Convenience variables for running experiments
         self.use_friction_cone_constraint = False
+        # TODO turn back on the constraints I need
         self.use_force_balance_constraint = True
         self.use_torque_balance_constraint = True
         self.use_equal_contact_point_constraint = True
@@ -231,6 +232,15 @@ class ContactModeMotionPlanner:
         assert self.result.is_success()
 
         print(f"Cost: {self.result.get_optimal_cost()}")
+
+    def get_ctrl_points_for_all_decision_variables(self) -> NpVariableArray:
+        ctrl_points = np.vstack(
+            [c.variables for c in self.ctrl_points]
+        ).T  # (N_vars, N_ctrl_points)
+        return ctrl_points
+
+    # TODO: Remove all of these functions from here and down:
+    ##########
 
     @staticmethod
     def _collect_ctrl_points(

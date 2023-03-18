@@ -282,8 +282,11 @@ class ContactSceneCtrlPoint:
         return forces_W
 
     def get_body_orientations(self) -> List[NpExpressionArray]:
+        _convert_to_expr = np.vectorize(
+            lambda x: sym.Expression(x) if not isinstance(x, sym.Expression) else x
+        )  # make sure we only return expressions
         Rs = [
-            self.contact_scene_instance._get_rotation_to_W(body)
+            _convert_to_expr(self.contact_scene_instance._get_rotation_to_W(body))
             for body in self.contact_scene_instance.rigid_bodies
         ]
         return Rs
@@ -320,7 +323,10 @@ class ContactSceneCtrlPoint:
         pos_W = []
         for body in self.contact_scene_instance.rigid_bodies:
             p_WB = self.contact_scene_instance._get_translation_to_W(body)
-            pos_W.append(p_WB)
+            _convert_to_expr = np.vectorize(
+                lambda x: sym.Expression(x) if not isinstance(x, sym.Expression) else x
+            )  # make sure we only return expressions
+            pos_W.append(_convert_to_expr(p_WB))
         return pos_W
 
     def _get_friction_cone_details(
