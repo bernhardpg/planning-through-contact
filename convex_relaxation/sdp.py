@@ -15,6 +15,7 @@ from pydrake.solvers import (
 
 from geometry.utilities import unit_vector
 from tools.types import (
+    NpExpressionArray,
     NpFormulaArray,
     NpMonomialArray,
     NpPolynomialArray,

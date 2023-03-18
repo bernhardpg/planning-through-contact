@@ -156,7 +156,6 @@ class Box2d(RigidBody2d):
     def get_norm_and_tang_vecs_from_location(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-
         if location.pos == ContactLocation.FACE:
             if location.idx == 1:
                 return self.n1, self.t1
@@ -269,4 +268,3 @@ class Box2d(RigidBody2d):
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
             )
-
