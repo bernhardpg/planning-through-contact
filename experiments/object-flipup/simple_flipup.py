@@ -56,6 +56,9 @@ class ContactPoint:
 
 # TODO: This is code for a quick experiment that should be removed long term
 def plan_box_flip_up():
+    USE_MCCORMICK_RELAXATION = False
+    USE_SDP_RELAXATION = False
+
     USE_QUADRATIC_COST = True
     USE_MOMENT_BALANCE = True
     USE_FRICTION_CONE_CONSTRAINT = True
@@ -104,13 +107,12 @@ def plan_box_flip_up():
     prog.AddBoundingBoxConstraint(0, np.inf, c_n_1s)
     prog.AddBoundingBoxConstraint(0, np.inf, c_n_2s)
 
-    # TODO clean up
-    # variable_bounds = {"lam": (0.0, 1.0), "c_n_2": (0, 10)}
+    if USE_MCCORMICK_RELAXATION:
+        variable_bounds = {"lam": (0.0, 1.0), "c_n_2": (0, 10)}
 
     fixed_corner = ContactPoint(box.nc4, box.tc4, mu)
     finger_pos = ContactPoint(box.n2, box.t2, mu)
 
-    # aux_vars = []  # TODO clean up
     moment_balances = []
     # Add constraints to each knot point
     for ctrl_point_idx in range(0, NUM_CTRL_POINTS):
@@ -137,25 +139,30 @@ def plan_box_flip_up():
         prog.AddLinearConstraint(eq(sum_of_forces, 0))
 
         if USE_MOMENT_BALANCE:
-            # Add moment balance using a linear relaxation
             sum_of_moments = cross_2d(pm4_B, fc1_B) + cross_2d(pc_B, fc2_B)
-            # (
-            #     relaxed_sum_of_moments,
-            #     new_vars,
-            #     mccormick_envelope_constraints,
-            # ) = relax_bilinear_expression(sum_of_moments, variable_bounds)
-            # prog.AddDecisionVariables(new_vars)
-            # prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
-            prog.AddConstraint(sum_of_moments == 0)
-            # for c in mccormick_envelope_constraints:
-            #     prog.AddLinearConstraint(c)
+            if USE_MCCORMICK_RELAXATION:
+                # Add moment balance using a linear relaxation
+                (
+                    relaxed_sum_of_moments,
+                    new_vars,
+                    mccormick_envelope_constraints,
+                ) = relax_bilinear_expression(
+                    sum_of_moments, variable_bounds
+                )  # type: ignore
+                prog.AddDecisionVariables(new_vars)  # type: ignore
+                prog.AddLinearConstraint(relaxed_sum_of_moments == 0)
+                for c in mccormick_envelope_constraints:
+                    prog.AddLinearConstraint(c)
+            else:
+                prog.AddConstraint(sum_of_moments == 0)
 
-            # aux_vars.extend(new_vars)
             moment_balances.append(sum_of_moments)
 
-        # Relaxed SO(2) constraint
-        # prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])
-        prog.AddConstraint((R_WB.T.dot(R_WB))[0, 0] == 1)
+        if USE_MCCORMICK_RELAXATION:
+            # Relaxed SO(2) constraint
+            prog.AddLorentzConeConstraint(1, (R_WB.T.dot(R_WB))[0, 0])  # type: ignore
+        else:
+            prog.AddConstraint((R_WB.T.dot(R_WB))[0, 0] == 1)
 
         # Add nonpenetration constraint
         table_a = table.face_1[0]
@@ -208,45 +215,62 @@ def plan_box_flip_up():
     prog.AddLinearConstraint(sin_ths[0, -1] == np.sin(th_final))
 
     # Solve
-    # result = Solve(prog)
-    # assert result.is_success()
-    relaxed_prog, X = create_sdp_relaxation(prog)
-    result = Solve(relaxed_prog)
-    assert result.is_success()
-    x_val = result.GetSolution(X[1:, 0])
-    lam_val = x_val[0]
-    cos_th_vals = x_val[1:4].reshape((-1, 3))
-    sin_th_vals = x_val[4:7].reshape((-1, 3))
-    c_n_1_vals = x_val[7:10].reshape((-1, 3))
-    c_n_2_vals = x_val[10:13].reshape((-1, 3))
-    c_f_1_vals = x_val[13:16].reshape((-1, 3))
-    c_f_2_vals = x_val[16:19].reshape((-1, 3))
+    if USE_MCCORMICK_RELAXATION:
+        result = Solve(prog)
+        assert result.is_success()
 
+        # Reconstruct ctrl_points
+        cos_th_vals = result.GetSolution(cos_ths)
+        sin_th_vals = result.GetSolution(sin_ths)
+
+        c_n_1_vals = result.GetSolution(c_n_1s)
+        c_n_2_vals = result.GetSolution(c_n_2s)
+        c_f_1_vals = result.GetSolution(c_f_1s)
+        c_f_2_vals = result.GetSolution(c_f_2s)
+
+        lam_val = result.GetSolution(lam)
+    elif USE_SDP_RELAXATION:
+        relaxed_prog, X = create_sdp_relaxation(prog)
+        result = Solve(relaxed_prog)
+        assert result.is_success()
+
+        x_val = result.GetSolution(X[1:, 0])
+        lam_val = x_val[0]
+        cos_th_vals = x_val[1:4].reshape((-1, 3))
+        sin_th_vals = x_val[4:7].reshape((-1, 3))
+        c_n_1_vals = x_val[7:10].reshape((-1, 3))
+        c_n_2_vals = x_val[10:13].reshape((-1, 3))
+        c_f_1_vals = x_val[13:16].reshape((-1, 3))
+        c_f_2_vals = x_val[16:19].reshape((-1, 3))
+    else:
+        result = Solve(prog)
+        assert result.is_success()
+
+        # Reconstruct ctrl_points
+        cos_th_vals = result.GetSolution(cos_ths)
+        sin_th_vals = result.GetSolution(sin_ths)
+
+        c_n_1_vals = result.GetSolution(c_n_1s)
+        c_n_2_vals = result.GetSolution(c_n_2s)
+        c_f_1_vals = result.GetSolution(c_f_1s)
+        c_f_2_vals = result.GetSolution(c_f_2s)
+
+        lam_val = result.GetSolution(lam)
+
+    print(f"Solver details: {result.get_solver_details()}")
     print(f"Cost: {result.get_optimal_cost()}")
 
-    # Reconstruct ctrl_points
-    # cos_th_vals = result.GetSolution(cos_ths)
-    # sin_th_vals = result.GetSolution(sin_ths)
+    # if USE_MOMENT_BALANCE:
+    # relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
+    # print("Solved with relaxation errors:")
+    # # print(relaxation_errors)
     #
-    # c_n_1_vals = result.GetSolution(c_n_1s)
-    # c_n_2_vals = result.GetSolution(c_n_2s)
-    # c_f_1_vals = result.GetSolution(c_f_1s)
-    # c_f_2_vals = result.GetSolution(c_f_2s)
+    # moment_balance_violations = [result.GetSolution(mb) for mb in moment_balances]
+    # for idx, val in enumerate(moment_balance_violations):
+    #     print(f"Violation for keypoint {idx}: {val}")
 
-    # aux_var_vals = result.GetSolution(aux_vars)
-    # lam_val = result.GetSolution(lam)
-
-    if USE_MOMENT_BALANCE:
-        # relaxation_errors = np.abs(lam_val * c_n_2_vals - aux_var_vals)
-        print("Solved with relaxation errors:")
-        # print(relaxation_errors)
-
-        moment_balance_violations = [result.GetSolution(mb) for mb in moment_balances]
-        for idx, val in enumerate(moment_balance_violations):
-            print(f"Violation for keypoint {idx}: {val}")
-
-    corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)
-    finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)
+    corner_forces = fixed_corner.force_vec_from_values(c_n_1_vals, c_f_1_vals)  # type: ignore
+    finger_forces = finger_pos.force_vec_from_values(c_n_2_vals, c_f_2_vals)  # type: ignore
 
     sin_curve = BezierCurve.create_from_ctrl_points(sin_th_vals).eval_entire_interval()
     cos_curve = BezierCurve.create_from_ctrl_points(cos_th_vals).eval_entire_interval()
