@@ -29,7 +29,7 @@ def plan_polytope_flipup(
     th_target: Optional[float],
     sliding: bool = False,
 ) -> None:
-    FRICTION_COEFF = 0.4
+    FRICTION_COEFF = 1.0
     TABLE_HEIGHT = 0.5
     TABLE_WIDTH = 2
 
@@ -156,15 +156,13 @@ def plan_polytope_flipup(
     print("Starting to create SDP relaxation...")
     relaxed_prog, X = create_sdp_relaxation(motion_plan.prog)
     end = time.time()
-    print(end - start)
     print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
 
     print("Solving...")
     start = time.time()
     result = Solve(relaxed_prog)
-    print(f"Solved in {end - start} seconds")
     end = time.time()
-    print(end - start)
+    print(f"Solved in {end - start} seconds")
     assert result.is_success()
     print("Success!")
     breakpoint()

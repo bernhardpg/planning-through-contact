@@ -5,6 +5,7 @@ from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.sdp import create_sdp_relaxation
+from geometry.utilities import cross_2d
 from tools.types import NpVariableArray
 
 
@@ -23,21 +24,30 @@ def main():
 
     R = np.array([[c, -s], [s, c]])
 
-    f = np.array([sym.Variable("f_x"), sym.Variable("f_y")]).reshape((-1, 1))
+    f_1 = np.array([sym.Variable("f_1_x"), sym.Variable("f_1_y")]).reshape((-1, 1))
+    f_2 = np.array([sym.Variable("f_2_x"), sym.Variable("f_2_y")]).reshape((-1, 1))
+    f = np.concatenate((f_1, f_2))
+    p_1 = np.array([sym.Variable("p_x"), sym.Variable("p_y")]).reshape((-1, 1))
+    p_2 = np.array([-2, -2])  # corner
 
     mg = 1 * 9.81 * np.array([0, -1]).reshape((-1, 1))
-    sum_of_forces = R.dot(mg) + f
+    sum_of_forces = R.dot(mg) + f_1 + f_2
+    sum_of_torques = cross_2d(p_1, f_1) + cross_2d(p_2, f_2)
 
     prog.AddDecisionVariables(np.array([c, s]))
-    prog.AddDecisionVariables(f)
+    prog.AddDecisionVariables(f_1)
+    prog.AddDecisionVariables(f_2)
+    prog.AddDecisionVariables(p_1)
 
     prog.AddLinearConstraint(c + s >= 1)  # non penetration
     prog.AddConstraint(c**2 + s**2 == 1)  # so 2
     prog.AddConstraint(eq(sum_of_forces, 0))
+    for c in eq(sum_of_torques, 0).flatten():
+        prog.AddConstraint(c)
 
-    constraint = le(np.array([f[0, 0] + c, -f[1, 0] + c]), np.array([10, -10]))
+    # constraint = le(np.array([f[0, 0] + c, -f[1, 0] + c]), np.array([10, -10]))
     # test constraint with two sided bound
-    prog.AddLinearConstraint(constraint)
+    # prog.AddLinearConstraint(constraint)
 
     prog.AddCost(f.T.dot(f).item())
 
@@ -47,6 +57,7 @@ def main():
     result = Solve(relaxed_prog)
     assert result.is_success()
     X_val = result.GetSolution(X)
+    x_val = X_val[:, 0]
     rounded_sols = _get_sol_from_svd(X_val)
 
     # TODO: Also implement cost for SDP!
