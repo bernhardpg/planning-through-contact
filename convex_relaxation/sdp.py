@@ -29,7 +29,7 @@ class BoundType(Enum):
 
 
 # TODO there is definitely a much more efficient way of doing this
-def _linear_binding_to_formulas(binding: Binding) -> NpFormulaArray:
+def _linear_binding_to_expressions(binding: Binding) -> NpExpressionArray:
     """
     Takes in a binding and returns a polynomial p that should satisfy\
     p(x) = 0 for equality constraints, p(x) >= for inequality constraints
@@ -56,30 +56,33 @@ def _linear_binding_to_formulas(binding: Binding) -> NpFormulaArray:
 
 
 def _linear_bindings_to_homogenuous_form(
-    linear_bindings: List[Binding], vars: NpVariableArray
+    linear_bindings: List[Binding],
+    bounding_box_expressions: NpExpressionArray,
+    vars: NpVariableArray,
 ) -> npt.NDArray[np.float64]:
     binding_type = type(linear_bindings[0].evaluator())
     if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
         raise ValueError("All bindings must be either ineqs or eqs.")
 
-    linear_formulas = np.concatenate(
-        [_linear_binding_to_formulas(b) for b in linear_bindings]  # type: ignore
+    linear_exprs = np.concatenate(
+        [_linear_binding_to_expressions(b) for b in linear_bindings]  # type: ignore
     )
+    all_linear_exprs = np.concatenate([linear_exprs, bounding_box_expressions])
 
-    A, b = sym.DecomposeAffineExpressions(linear_formulas.flatten(), vars)
+    A, b = sym.DecomposeAffineExpressions(all_linear_exprs.flatten(), vars)
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
     return A_homogenous
 
 
 # TODO temporary
-class QuadraticConstraintType(Enum):
+class ConstraintType(Enum):
     EQ = 0
     INEQ = 1
 
 
 def _generic_constraint_binding_to_polynomials(
     binding: Binding,
-) -> List[Tuple[sym.Polynomial, QuadraticConstraintType]]:
+) -> List[Tuple[sym.Polynomial, ConstraintType]]:
     # TODO replace with QuadraticConstraint
     poly = sym.Polynomial(binding.evaluator().Eval(binding.variables())[0])
     b_upper = binding.evaluator().upper_bound()
@@ -88,12 +91,12 @@ def _generic_constraint_binding_to_polynomials(
     polys = []
     for b_u, b_l in zip(b_upper, b_lower):
         if b_u == b_u:  # eq constraint
-            polys.append((b_u - poly, QuadraticConstraintType.EQ))
+            polys.append((b_u - poly, ConstraintType.EQ))
         else:
             if not np.isinf(b_l):
-                polys.append((poly - b_l, QuadraticConstraintType.INEQ))
+                polys.append((poly - b_l, ConstraintType.INEQ))
             if not np.isinf(b_u):
-                polys.append((b_u - poly, QuadraticConstraintType.INEQ))
+                polys.append((b_u - poly, ConstraintType.INEQ))
     return polys
 
 
@@ -140,28 +143,13 @@ def _generic_constraint_bindings_to_polynomials(
         [_generic_constraint_binding_to_polynomials(b) for b in generic_bindings], []
     )
     eq_polynomials = np.array(
-        [
-            p
-            for p, t in generic_constraints_as_polynomials
-            if t == QuadraticConstraintType.EQ
-        ]
+        [p for p, t in generic_constraints_as_polynomials if t == ConstraintType.EQ]
     )
     ineq_polynomials = np.array(
-        [
-            p
-            for p, t in generic_constraints_as_polynomials
-            if t == QuadraticConstraintType.INEQ
-        ]
+        [p for p, t in generic_constraints_as_polynomials if t == ConstraintType.INEQ]
     )
 
     return (eq_polynomials, ineq_polynomials)
-
-
-def _equal_lower_and_upper_bounds(b: Binding) -> bool:
-    if b.evaluator().lower_bound().size > 1:
-        breakpoint()
-        raise NotImplementedError("Bounds of size more than 1 not implemented")
-    return (b.evaluator().lower_bound() == b.evaluator().upper_bound()).item()
 
 
 def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
@@ -171,6 +159,34 @@ def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
         raise ValueError(
             "Can only create SDP relaxation for (possibly non-convex) Quadratically Constrainted Quadratic Programs (QCQP)"
         )  # TODO for now we don't allow lower degree or higher degree
+
+
+def _collect_bounding_box_constraints(
+    bounding_box_bindings: List[Binding],
+) -> Tuple[NpExpressionArray, NpExpressionArray]:
+    bounding_box_constraints = []
+    for b in bounding_box_bindings:
+        x = b.variables()
+        b_upper = b.evaluator().upper_bound()
+        b_lower = b.evaluator().lower_bound()
+
+        for x_i, b_u, b_l in zip(x, b_upper, b_lower):
+            if b_u == b_l:  # eq constraint
+                bounding_box_constraints.append((x_i - b_u, ConstraintType.EQ))
+            else:
+                if not np.isinf(b_u):
+                    bounding_box_constraints.append((b_u - x_i, ConstraintType.INEQ))
+                if not np.isinf(b_l):
+                    bounding_box_constraints.append((x_i - b_l, ConstraintType.INEQ))
+
+    bounding_box_eqs = np.array(
+        [c for c, t in bounding_box_constraints if t == ConstraintType.EQ]
+    )
+    bounding_box_ineqs = np.array(
+        [c for c, t in bounding_box_constraints if t == ConstraintType.INEQ]
+    )
+
+    return bounding_box_eqs, bounding_box_ineqs
 
 
 def create_sdp_relaxation(
@@ -190,8 +206,9 @@ def create_sdp_relaxation(
 
     relaxed_prog.AddLinearConstraint(X[0, 0] == 1)  # First variable is 1
 
-    if len(prog.bounding_box_constraints()) > 0:
-        raise NotImplementedError("Bounding box constraints are not implemented!")
+    bounding_box_eqs, bounding_box_ineqs = _collect_bounding_box_constraints(
+        prog.bounding_box_constraints()
+    )
 
     has_linear_costs = len(prog.linear_costs()) > 0
     if has_linear_costs:
@@ -207,10 +224,12 @@ def create_sdp_relaxation(
         for Q in Q_cost:
             relaxed_prog.AddCost(np.trace(Q.dot(X)))
 
-    has_linear_eq_constraints = len(prog.linear_equality_constraints()) > 0
+    has_linear_eq_constraints = (
+        len(prog.linear_equality_constraints()) > 0 or len(bounding_box_eqs) > 0
+    )
     if has_linear_eq_constraints:
         A_eq = _linear_bindings_to_homogenuous_form(
-            prog.linear_equality_constraints(), decision_vars
+            prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
         )
         multiplied_constraints = eq(A_eq.dot(X).dot(A_eq.T), 0)
         relaxed_prog.AddLinearConstraint(multiplied_constraints)
@@ -219,10 +238,12 @@ def create_sdp_relaxation(
         linear_constraints = eq(A_eq.dot(X).dot(e_1), 0)
         relaxed_prog.AddLinearConstraint(linear_constraints)
 
-    has_linear_ineq_constraints = len(prog.linear_constraints()) > 0
+    has_linear_ineq_constraints = (
+        len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
+    )
     if has_linear_ineq_constraints:
         A_ineq = _linear_bindings_to_homogenuous_form(
-            prog.linear_constraints(), decision_vars
+            prog.linear_constraints(), bounding_box_ineqs, decision_vars
         )
         multiplied_constraints = ge(A_ineq.dot(X).dot(A_ineq.T), 0)
         relaxed_prog.AddLinearConstraint(multiplied_constraints)
