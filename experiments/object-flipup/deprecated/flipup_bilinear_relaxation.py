@@ -10,8 +10,7 @@ from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.mccormick import relax_bilinear_expression
 from geometry.bezier import BezierCurve
-from geometry.box import Box2d, construct_2d_plane_from_points
-from geometry.contact_point import ContactPoint
+from geometry.two_d.box_2d import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
 
 T = TypeVar("T")
@@ -61,13 +60,14 @@ def plan_box_flip_up():
 
     NUM_CTRL_POINTS = 3
 
-    BOX_WIDTH = 3
-    BOX_HEIGHT = 2
-    box = Box2d(BOX_WIDTH, BOX_HEIGHT)
+    BOX_WIDTH = 3.0
+    BOX_HEIGHT = 2.0
+    BOX_MASS = 1.0
+    box = Box2d(True, "box", BOX_MASS, BOX_WIDTH, BOX_HEIGHT)
 
-    TABLE_HEIGHT = 2
-    TABLE_WIDTH = 10
-    table = Box2d(TABLE_WIDTH, TABLE_HEIGHT)
+    TABLE_HEIGHT = 2.0
+    TABLE_WIDTH = 10.0
+    table = Box2d(False, "table", BOX_MASS, TABLE_WIDTH, TABLE_HEIGHT)
 
     BOX_MASS = 1
     GRAV_ACC = 9.81
@@ -271,7 +271,6 @@ def plan_box_flip_up():
     # TODO clean up this code!
     f_Wg_val = fg_W * FORCE_SCALE
     for idx in range(len(cos_curve)):
-
         canvas.delete("all")
         R_WB_val = R_curve[idx]
         det_R = np.linalg.det(R_WB_val)
@@ -284,8 +283,8 @@ def plan_box_flip_up():
         if any(np.abs(sum_of_forces) > 1e-8):
             breakpoint()
 
-        points_box = make_plotable(p_WB + R_WB_val.dot(box.vertices))
-        points_table = make_plotable(table.vertices)
+        points_box = make_plotable(p_WB + R_WB_val.dot(box.vertices_for_plotting))
+        points_table = make_plotable(table.vertices_for_plotting)
 
         canvas.create_polygon(points_box, fill="#88f")
         canvas.create_polygon(points_table, fill="#2f2f2f")
