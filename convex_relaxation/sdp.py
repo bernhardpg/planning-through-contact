@@ -70,18 +70,30 @@ def _linear_bindings_to_homogenuous_form(
     return A_homogenous
 
 
-def _generic_constraint_binding_to_polynomial(
-    binding: Binding, bound: BoundType
-) -> sym.Polynomial:
+# TODO temporary
+class QuadraticConstraintType(Enum):
+    EQ = 0
+    INEQ = 1
+
+
+def _generic_constraint_binding_to_polynomials(
+    binding: Binding,
+) -> List[Tuple[sym.Polynomial, QuadraticConstraintType]]:
+    # TODO replace with QuadraticConstraint
     poly = sym.Polynomial(binding.evaluator().Eval(binding.variables())[0])
-    if bound == BoundType.UPPER:
-        b = binding.evaluator().upper_bound().item()
-        return b - poly
-    elif bound == BoundType.LOWER:
-        b = binding.evaluator().lower_bound().item()
-        return poly - b
-    else:
-        raise ValueError("Unsupported bound type")
+    b_upper = binding.evaluator().upper_bound()
+    b_lower = binding.evaluator().lower_bound()
+
+    polys = []
+    for b_u, b_l in zip(b_upper, b_lower):
+        if b_u == b_u:  # eq constraint
+            polys.append((b_u - poly, QuadraticConstraintType.EQ))
+        else:
+            if not np.isinf(b_l):
+                polys.append((poly - b_l, QuadraticConstraintType.INEQ))
+            if not np.isinf(b_u):
+                polys.append((b_u - poly, QuadraticConstraintType.INEQ))
+    return polys
 
 
 def _quadratic_cost_binding_to_homogenuous_form(
@@ -123,49 +135,32 @@ def _quadratic_polynomial_to_homoenuous_form(
 def _generic_constraint_bindings_to_polynomials(
     generic_bindings: List[Binding],
 ) -> Tuple[NpPolynomialArray, NpPolynomialArray]:
-    generic_eq_bindings = [
-        b for b in generic_bindings if _equal_lower_and_upper_bounds(b)
-    ]
-    generic_eq_constraints_as_polynomials = np.array(
+    generic_constraints_as_polynomials = sum(
+        [_generic_constraint_binding_to_polynomials(b) for b in generic_bindings], []
+    )
+    eq_polynomials = np.array(
         [
-            _generic_constraint_binding_to_polynomial(
-                b, BoundType.UPPER
-            )  # Bounds are equal for eq constraints
-            for b in generic_eq_bindings
+            p
+            for p, t in generic_constraints_as_polynomials
+            if t == QuadraticConstraintType.EQ
+        ]
+    )
+    ineq_polynomials = np.array(
+        [
+            p
+            for p, t in generic_constraints_as_polynomials
+            if t == QuadraticConstraintType.INEQ
         ]
     )
 
-    generic_ineq_bindings = [
-        b for b in generic_bindings if not _equal_lower_and_upper_bounds(b)
-    ]
-    lower_bounded_bindings = [
-        b for b in generic_ineq_bindings if not np.isinf(b.evaluator().lower_bound())
-    ]
-    polys_lower = np.array(
-        [
-            _generic_constraint_binding_to_polynomial(b, BoundType.UPPER)
-            for b in lower_bounded_bindings
-        ]
-    ).flatten()
-    upper_bounded_bindings = [
-        b for b in generic_ineq_bindings if not np.isinf(b.evaluator().upper_bound())
-    ]
-    polys_upper = np.array(
-        [
-            _generic_constraint_binding_to_polynomial(b, BoundType.UPPER)
-            for b in upper_bounded_bindings
-        ]
-    ).flatten()
-    generic_ineq_constraints_as_polynomials = np.concatenate([polys_lower, polys_upper])
-
-    return (
-        generic_eq_constraints_as_polynomials,
-        generic_ineq_constraints_as_polynomials,
-    )
+    return (eq_polynomials, ineq_polynomials)
 
 
 def _equal_lower_and_upper_bounds(b: Binding) -> bool:
-    return b.evaluator().lower_bound() == b.evaluator().upper_bound()
+    if b.evaluator().lower_bound().size > 1:
+        breakpoint()
+        raise NotImplementedError("Bounds of size more than 1 not implemented")
+    return (b.evaluator().lower_bound() == b.evaluator().upper_bound()).item()
 
 
 def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
@@ -259,12 +254,11 @@ def create_sdp_relaxation(
             constraints = eq(np.trace(X.dot(Q)), 0).flatten()
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
-
         Q_ineqs = [
             _quadratic_polynomial_to_homoenuous_form(p, basis, num_vars)
             for p in generic_ineq_constraints_as_polynomials
         ]
-        for Q in Q_eqs:
+        for Q in Q_ineqs:
             constraints = ge(np.trace(X.dot(Q)), 0).flatten()
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
