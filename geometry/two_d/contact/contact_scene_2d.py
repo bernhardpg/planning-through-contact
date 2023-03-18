@@ -362,6 +362,10 @@ class ContactSceneCtrlPoint:
         )
 
     @property
+    def so_2_constraints(self) -> NpFormulaArray:
+        return np.array([c.so_2 for c in self.point_on_line_contact_constraints])
+
+    @property
     def relaxed_so_2_constraints(self) -> NpFormulaArray:
         return np.array(
             [c.relaxed_so_2 for c in self.point_on_line_contact_constraints]

@@ -46,6 +46,7 @@ class ContactFrameConstraints(NamedTuple):
 
 class PairContactConstraints(NamedTuple):
     friction_cone: NpFormulaArray
+    so_2: sym.Formula
     relaxed_so_2: sym.Formula
     non_penetration_cut: sym.Formula
     equal_contact_points: ContactFrameConstraints
@@ -212,7 +213,6 @@ class FaceOnFaceContact(AbstractContactPair):
     def __post_init__(
         self,
     ) -> None:
-
         fix_friction_cone_A, _ = self._calculate_friction_cone_states(
             self.contact_mode, self.body_A_contact_location
         )
@@ -222,7 +222,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=-0.1, # FIX: Should not be hardcoded
+            displacement=-0.1,  # FIX: Should not be hardcoded
         )
 
         right_force = ContactForceDefinition(
@@ -231,7 +231,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=0.1, # FIX: Should not be hardcoded
+            displacement=0.1,  # FIX: Should not be hardcoded
         )
 
         self.contact_point_A = ContactPoint2d(
@@ -423,6 +423,11 @@ class PointOnFaceContact(AbstractContactPair):
 
         return ContactFrameConstraints(equal_and_opposite_in_A, equal_and_opposite_in_B)
 
+    def create_so2_constraint(self) -> sym.Formula:
+        # cos_th^2 + sin_th^2 == 1
+        so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] == 1
+        return so_2_constraint
+
     def create_relaxed_so2_constraint(self) -> sym.Formula:
         # cos_th^2 + sin_th^2 <= 1
         relaxed_so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] <= 1
@@ -497,6 +502,7 @@ class PointOnFaceContact(AbstractContactPair):
     def create_constraints(self) -> PairContactConstraints:
         return PairContactConstraints(
             self.create_friction_cone_constraints(),
+            self.create_so2_constraint(),
             self.create_relaxed_so2_constraint(),
             self.create_non_penetration_cut(),
             self.create_equal_contact_point_constraints(),

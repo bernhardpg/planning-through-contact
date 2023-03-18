@@ -113,9 +113,14 @@ class ContactModeMotionPlanner:
                         self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_so2_constraint:
-                for c in ctrl_point.relaxed_so_2_constraints:
-                    lhs, rhs = c.Unapply()[1]
-                    self.prog.AddLorentzConeConstraint(rhs, lhs)  # type: ignore
+                if self.use_mccormick_relaxation:
+                    for c in ctrl_point.relaxed_so_2_constraints:
+                        lhs, rhs = c.Unapply()[1]
+                        self.prog.AddLorentzConeConstraint(rhs, lhs)  # type: ignore
+                else:
+                    for c in ctrl_point.so_2_constraints:
+                        lhs, rhs = c.Unapply()[1]
+                        self.prog.AddLorentzConeConstraint(rhs, lhs)  # type: ignore
 
             if self.use_non_penetration_cut:
                 self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
