@@ -92,7 +92,6 @@ class ContactForce(NamedTuple):
         force_def: ContactForceDefinition,
     ) -> Tuple[NpExpressionArray, NpVariableArray]:
         if force_def.location.pos == ContactLocation.FACE:
-
             # We are a face contact, hence we use the normal vector from the polytope face
             normal_force = sym.Variable(f"{force_def.name}_c_n")
             (

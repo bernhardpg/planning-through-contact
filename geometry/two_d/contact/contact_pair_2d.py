@@ -5,7 +5,7 @@ from typing import List, Literal, NamedTuple, Optional, Tuple, Union
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
-from pydrake.math import eq
+from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgramResult
 
 from geometry.hyperplane import (
@@ -52,6 +52,8 @@ class PairContactConstraints(NamedTuple):
     equal_contact_points: ContactFrameConstraints
     equal_and_opposite_forces: ContactFrameConstraints
     equal_relative_positions: ContactFrameConstraints
+    rotation_bounds: NpFormulaArray
+    lam_bounds: NpFormulaArray
 
 
 class LineContactConstraints(NamedTuple):
@@ -428,6 +430,22 @@ class PointOnFaceContact(AbstractContactPair):
         so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] == 1
         return so_2_constraint
 
+    def create_rotation_bounds(self) -> NpFormulaArray:
+        ones = np.ones(self.orientation_variables.size)
+        rotation_bounds = np.concatenate(
+            [
+                le(self.orientation_variables, ones),
+                le(-ones, self.orientation_variables),
+            ]
+        )
+        return rotation_bounds
+
+    def create_lam_bounds(self) -> NpFormulaArray:
+        lam = self.get_nonfixed_contact_point_variable()
+        # TODO remmeber to do this for line contact too!
+        bounds = np.array([lam <= 1, 0 <= lam])
+        return bounds
+
     def create_relaxed_so2_constraint(self) -> sym.Formula:
         # cos_th^2 + sin_th^2 <= 1
         relaxed_so_2_constraint = (self.R_AB.T.dot(self.R_AB))[0, 0] <= 1
@@ -508,6 +526,8 @@ class PointOnFaceContact(AbstractContactPair):
             self.create_equal_contact_point_constraints(),
             self.create_equal_and_opposite_forces_constraint(),
             self.create_equal_rel_position_constraints(),
+            self.create_rotation_bounds(),
+            self.create_lam_bounds(),
         )
 
     @property

@@ -60,13 +60,16 @@ def _linear_bindings_to_homogenuous_form(
     bounding_box_expressions: NpExpressionArray,
     vars: NpVariableArray,
 ) -> npt.NDArray[np.float64]:
-    binding_type = type(linear_bindings[0].evaluator())
-    if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
-        raise ValueError("All bindings must be either ineqs or eqs.")
+    if len(linear_bindings) > 0:
+        binding_type = type(linear_bindings[0].evaluator())
+        if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
+            raise ValueError("All bindings must be either ineqs or eqs.")
 
-    linear_exprs = np.concatenate(
-        [_linear_binding_to_expressions(b) for b in linear_bindings]  # type: ignore
-    )
+        linear_exprs = np.concatenate(
+            [_linear_binding_to_expressions(b) for b in linear_bindings]  # type: ignore
+        )
+    else:
+        linear_exprs = []
     all_linear_exprs = np.concatenate([linear_exprs, bounding_box_expressions])
 
     A, b = sym.DecomposeAffineExpressions(all_linear_exprs.flatten(), vars)
@@ -194,12 +197,15 @@ def create_sdp_relaxation(
 ) -> Tuple[MathematicalProgram, NpVariableArray]:
     DEGREE_QUADRATIC = 2  # We are only relaxing (non-convex) quadratic programs
 
-    decision_vars = prog.decision_variables()
+    decision_vars = np.array(
+        sorted(prog.decision_variables(), key=lambda x: x.get_id())
+    )
     num_vars = (
         len(decision_vars) + 1
     )  # 1 will also be a decision variable in the relaxation
 
     basis = np.flip(sym.MonomialBasis(decision_vars, DEGREE_QUADRATIC))
+
     relaxed_prog = MathematicalProgram()
     X = relaxed_prog.NewSymmetricContinuousVariables(num_vars, "X")
     relaxed_prog.AddPositiveSemidefiniteConstraint(X)
@@ -222,7 +228,8 @@ def create_sdp_relaxation(
             for c in quadratic_costs
         ]
         for Q in Q_cost:
-            relaxed_prog.AddCost(np.trace(Q.dot(X)))
+            c = np.trace(Q.dot(X))
+            relaxed_prog.AddCost(c)
 
     has_linear_eq_constraints = (
         len(prog.linear_equality_constraints()) > 0 or len(bounding_box_eqs) > 0
@@ -285,4 +292,4 @@ def create_sdp_relaxation(
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
 
-    return relaxed_prog, X
+    return relaxed_prog, X, basis

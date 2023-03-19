@@ -157,7 +157,7 @@ def plan_polytope_flipup(
 
     start = time.time()
     print("Starting to create SDP relaxation...")
-    relaxed_prog, X = create_sdp_relaxation(motion_plan.prog)
+    relaxed_prog, X, basis = create_sdp_relaxation(motion_plan.prog)
     end = time.time()
     print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
 
@@ -178,9 +178,10 @@ def plan_polytope_flipup(
         decision_var_ctrl_points_vals
     ).eval_entire_interval()  # (num_steps, num_variables)
 
-    decision_vars = motion_plan.ctrl_points[
-        0
-    ].variables  # we use the first ctrl point to evaluate all expressions
+    # we use the first ctrl point to evaluate all expressions
+    decision_vars = sorted(
+        motion_plan.ctrl_points[0].variables, key=lambda x: x.get_id()
+    )
 
     # TODO move
     import numpy.typing as npt

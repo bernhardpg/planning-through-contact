@@ -57,7 +57,7 @@ class ContactPoint:
 # TODO: This is code for a quick experiment that should be removed long term
 def plan_box_flip_up():
     USE_MCCORMICK_RELAXATION = False
-    USE_SDP_RELAXATION = False
+    USE_SDP_RELAXATION = True
 
     USE_QUADRATIC_COST = True
     USE_MOMENT_BALANCE = True
@@ -236,11 +236,12 @@ def plan_box_flip_up():
 
         x_val = result.GetSolution(X[1:, 0])
         lam_val = x_val[0]
+
         cos_th_vals = x_val[1:4].reshape((-1, 3))
         sin_th_vals = x_val[4:7].reshape((-1, 3))
         c_n_1_vals = x_val[7:10].reshape((-1, 3))
-        c_n_2_vals = x_val[10:13].reshape((-1, 3))
-        c_f_1_vals = x_val[13:16].reshape((-1, 3))
+        c_f_1_vals = x_val[10:13].reshape((-1, 3))
+        c_n_2_vals = x_val[13:16].reshape((-1, 3))
         c_f_2_vals = x_val[16:19].reshape((-1, 3))
     else:
         result = Solve(prog)

@@ -30,7 +30,7 @@ class ContactModeMotionPlanner:
         use_mccormick_relaxation: bool = False,
     ):
         # Convenience variables for running experiments
-        self.use_friction_cone_constraint = False
+        self.use_friction_cone_constraint = True
         # TODO turn back on the constraints I need
         self.use_force_balance_constraint = True
         self.use_torque_balance_constraint = True
@@ -40,7 +40,7 @@ class ContactModeMotionPlanner:
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
         self.use_quadratic_cost = True
-        self.only_minimize_forces_on_unactuated_bodies = True
+        self.only_minimize_forces_on_unactuated_bodies = False
         self.use_mccormick_relaxation = use_mccormick_relaxation
 
         self.contact_modes = contact_modes
@@ -61,8 +61,14 @@ class ContactModeMotionPlanner:
         for ctrl_point in self.ctrl_points:
             self.prog.AddDecisionVariables(ctrl_point.variables)
 
+            # TODO clean up
+            # lambda bounds
+            for c in ctrl_point.lambda_bounds:
+                self.prog.AddLinearConstraint(c)
+
             if self.use_friction_cone_constraint:
-                self.prog.AddLinearConstraint(ctrl_point.friction_cone_constraints)
+                for c in ctrl_point.friction_cone_constraints:
+                    self.prog.AddLinearConstraint(c)
 
             if self.use_force_balance_constraint:
                 for c in ctrl_point.static_equilibrium_constraints:
@@ -122,16 +128,17 @@ class ContactModeMotionPlanner:
                 else:
                     for c in ctrl_point.so_2_constraints:
                         self.prog.AddConstraint(c)
+                    for c in ctrl_point.rotation_bounds:
+                        self.prog.AddConstraint(c)
 
             if self.use_non_penetration_cut:
                 self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
 
             if self.use_quadratic_cost:
-                self.prog.AddQuadraticCost(
-                    ctrl_point.get_squared_forces(
-                        self.only_minimize_forces_on_unactuated_bodies
-                    )
+                cost = ctrl_point.get_squared_forces(
+                    self.only_minimize_forces_on_unactuated_bodies
                 )
+                self.prog.AddQuadraticCost(cost)
             else:  # Absolute value cost
                 raise ValueError("Absolute value cost not implemented")
 
@@ -234,10 +241,11 @@ class ContactModeMotionPlanner:
         print(f"Cost: {self.result.get_optimal_cost()}")
 
     def get_ctrl_points_for_all_decision_variables(self) -> NpVariableArray:
-        ctrl_points = np.vstack(
-            [c.variables for c in self.ctrl_points]
-        ).T  # (N_vars, N_ctrl_points)
-        return ctrl_points
+        # Make sure this matches the mon basis. Clean up!
+        all_vars = np.array(
+            sorted(self.prog.decision_variables(), key=lambda x: x.get_id())
+        )
+        return all_vars.reshape((-1, self.num_ctrl_points), order="F")
 
     # TODO: Remove all of these functions from here and down:
     ##########
