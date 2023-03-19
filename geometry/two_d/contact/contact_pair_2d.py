@@ -58,6 +58,7 @@ class PairContactConstraints(NamedTuple):
 
 class LineContactConstraints(NamedTuple):
     friction_cone: NpFormulaArray
+    convex_hull_bounds: NpFormulaArray
 
 
 @dataclass
@@ -218,13 +219,16 @@ class FaceOnFaceContact(AbstractContactPair):
         fix_friction_cone_A, _ = self._calculate_friction_cone_states(
             self.contact_mode, self.body_A_contact_location
         )
+
+        self.BOX_WIDTH = 0.2  # FIX: This should be fixed!
+
         left_force = ContactForceDefinition(
             f"{self.name}_{self.body_A.name}",
             self.friction_coeff,
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=-0.1,  # FIX: Should not be hardcoded
+            displacement=-self.BOX_WIDTH / 2,  # FIX: Should not be hardcoded!
         )
 
         right_force = ContactForceDefinition(
@@ -233,7 +237,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=0.1,  # FIX: Should not be hardcoded
+            displacement=self.BOX_WIDTH / 2,  # FIX: Should not be hardcoded
         )
 
         self.contact_point_A = ContactPoint2d(
@@ -275,8 +279,19 @@ class FaceOnFaceContact(AbstractContactPair):
     def variables(self) -> NpVariableArray:
         return self.contact_point_A.variables
 
+    def create_convex_hull_bounds(self) -> NpFormulaArray:
+        lam = self.get_nonfixed_contact_point_variable()
+        OFFSET = (
+            self.BOX_WIDTH * 1.5
+        )  # TODO: Approx number. This is easy to calculate from face length and etc, and will be fixed soon!
+        # NOTE: We need to scale offset because lam is not in any specific unit
+        bounds = np.array([lam + OFFSET <= 1, 0 <= lam - OFFSET])
+        return bounds
+
     def create_constraints(self) -> LineContactConstraints:
-        return LineContactConstraints(self.create_friction_cone_constraints())
+        return LineContactConstraints(
+            self.create_friction_cone_constraints(), self.create_convex_hull_bounds()
+        )
 
     @property
     def contact_forces(self) -> List[NpExpressionArray]:
@@ -293,8 +308,8 @@ class FaceOnFaceContact(AbstractContactPair):
         if body == self.body_A:
             forces = self.contact_point_A.get_contact_forces()
         elif body == self.body_B:
-            raise ValueError("Cannot get contact force for body B in a line contact")
-            # f = -self.contact_point_A.contact_force
+            # NOTE: In a line contact, we only define one-sided forces. Hence we return the same forces here
+            forces = self.contact_point_A.get_contact_forces()
         else:
             raise ValueError("Body not a part of contact pair")
 
@@ -442,7 +457,6 @@ class PointOnFaceContact(AbstractContactPair):
 
     def create_convex_hull_bounds(self) -> NpFormulaArray:
         lam = self.get_nonfixed_contact_point_variable()
-        # TODO remmeber to do this for line contact too!
         bounds = np.array([lam <= 1, 0 <= lam])
         return bounds
 

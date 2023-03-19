@@ -380,7 +380,7 @@ class ContactSceneCtrlPoint:
     @property
     def convex_hull_bounds(self) -> NpFormulaArray:
         return np.array(
-            [c.convex_hull_bounds for c in self.point_on_line_contact_constraints]
+            [c.convex_hull_bounds for c in self.constraints.pair_constraints]
         )
 
     @property

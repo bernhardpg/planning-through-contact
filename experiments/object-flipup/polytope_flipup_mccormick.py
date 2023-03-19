@@ -74,7 +74,7 @@ def plan_polytope_flipup(
         polytope,
         PolytopeContactLocation(ContactLocation.FACE, 0),
         finger,
-        PolytopeContactLocation(ContactLocation.VERTEX, 1),
+        PolytopeContactLocation(ContactLocation.FACE, 3),
         FRICTION_COEFF,
     )
     contact_scene = ContactScene2d(
