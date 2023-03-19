@@ -32,7 +32,7 @@ def plan_polytope_flipup(
     th_target: Optional[float],
     sliding: bool = False,
 ) -> None:
-    FRICTION_COEFF = 1.0
+    FRICTION_COEFF = 0.4
     TABLE_HEIGHT = 0.5
     TABLE_WIDTH = 2
 

@@ -282,7 +282,7 @@ class FaceOnFaceContact(AbstractContactPair):
     def create_convex_hull_bounds(self) -> NpFormulaArray:
         lam = self.get_nonfixed_contact_point_variable()
         OFFSET = (
-            self.BOX_WIDTH * 1.5
+            self.BOX_WIDTH * 2.2
         )  # TODO: Approx number. This is easy to calculate from face length and etc, and will be fixed soon!
         # NOTE: We need to scale offset because lam is not in any specific unit
         bounds = np.array([lam + OFFSET <= 1, 0 <= lam - OFFSET])
