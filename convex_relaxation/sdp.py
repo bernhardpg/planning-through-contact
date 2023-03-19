@@ -236,6 +236,7 @@ def create_sdp_relaxation(
     has_linear_eq_constraints = (
         len(prog.linear_equality_constraints()) > 0 or len(bounding_box_eqs) > 0
     )
+    A_eq = None
     if has_linear_eq_constraints:
         A_eq = _linear_bindings_to_homogenuous_form(
             prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
@@ -250,6 +251,7 @@ def create_sdp_relaxation(
     has_linear_ineq_constraints = (
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
     )
+    A_ineq = None
     if has_linear_ineq_constraints:
         A_ineq = _linear_bindings_to_homogenuous_form(
             prog.linear_constraints(), bounding_box_ineqs, decision_vars
@@ -260,6 +262,18 @@ def create_sdp_relaxation(
         e_1 = unit_vector(0, X.shape[0])
         linear_constraints = ge(A_ineq.dot(X).dot(e_1), 0)
         relaxed_prog.AddLinearConstraint(linear_constraints)
+
+    # Multiply equality and inequality constraints together.
+    # In theory, this should help, but it doesn't seem to make a
+    # difference. Commented out for now as it is very slow, and
+    # I will not need it once I implement null-space projections
+
+    # if A_ineq is not None and A_eq is not None:
+    #     for a_i in A_ineq:
+    #         for a_j in A_eq:
+    #             outer_product = np.outer(a_j, a_i)
+    #             c = np.trace(outer_product.dot(X))
+    #             relaxed_prog.AddLinearConstraint(c == 0)
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     # TODO: I can use Hongkai's PR once that is merged
