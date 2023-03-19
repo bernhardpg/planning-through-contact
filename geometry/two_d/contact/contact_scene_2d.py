@@ -378,8 +378,10 @@ class ContactSceneCtrlPoint:
         )
 
     @property
-    def lambda_bounds(self) -> NpFormulaArray:
-        return np.array([c.lam_bounds for c in self.point_on_line_contact_constraints])
+    def convex_hull_bounds(self) -> NpFormulaArray:
+        return np.array(
+            [c.convex_hull_bounds for c in self.point_on_line_contact_constraints]
+        )
 
     @property
     def relaxed_so_2_constraints(self) -> NpFormulaArray:

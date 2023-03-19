@@ -61,9 +61,7 @@ class ContactModeMotionPlanner:
         for ctrl_point in self.ctrl_points:
             self.prog.AddDecisionVariables(ctrl_point.variables)
 
-            # TODO clean up
-            # lambda bounds
-            for c in ctrl_point.lambda_bounds:
+            for c in ctrl_point.convex_hull_bounds:
                 self.prog.AddLinearConstraint(c)
 
             if self.use_friction_cone_constraint:

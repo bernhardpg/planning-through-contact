@@ -53,7 +53,7 @@ class PairContactConstraints(NamedTuple):
     equal_and_opposite_forces: ContactFrameConstraints
     equal_relative_positions: ContactFrameConstraints
     rotation_bounds: NpFormulaArray
-    lam_bounds: NpFormulaArray
+    convex_hull_bounds: NpFormulaArray
 
 
 class LineContactConstraints(NamedTuple):
@@ -440,7 +440,7 @@ class PointOnFaceContact(AbstractContactPair):
         )
         return rotation_bounds
 
-    def create_lam_bounds(self) -> NpFormulaArray:
+    def create_convex_hull_bounds(self) -> NpFormulaArray:
         lam = self.get_nonfixed_contact_point_variable()
         # TODO remmeber to do this for line contact too!
         bounds = np.array([lam <= 1, 0 <= lam])
@@ -527,7 +527,7 @@ class PointOnFaceContact(AbstractContactPair):
             self.create_equal_and_opposite_forces_constraint(),
             self.create_equal_rel_position_constraints(),
             self.create_rotation_bounds(),
-            self.create_lam_bounds(),
+            self.create_convex_hull_bounds(),
         )
 
     @property
