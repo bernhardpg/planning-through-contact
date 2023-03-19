@@ -248,17 +248,22 @@ def plan_polytope_flipup(
             )
         ]
 
-        # box_com_ctrl_points = bodies_com_ctrl_points[1]
-        # # TODO: should not depend explicitly on box
-        # viz_gravitional_forces = [
-        #     VisualizationForce2d
-        #         box_com_ctrl_points,
-        #         evaluate_np_expressions_array(force_ctrl_points, motion_plan.result),
-        #         GRAVITY_COLOR,
-        #     )
-        #     for force_ctrl_points in motion_plan.gravitational_forces_in_world_frame
-        # ]
-        #
+        # TODO: A bit hacky visualization of gravity
+        box_com = bodies_com_in_world_frame[1]
+        grav_vec = motion_plan.ctrl_points[0].get_gravitational_forces_in_world_frame()[
+            0
+        ]  # I know there is only one gravity vec for this problem
+        grav_force_traj = np.ones(box_com.shape) * grav_vec.T
+        viz_gravitional_forces = [
+            VisualizationForce2d(
+                box_com,
+                GRAVITY_COLOR,
+                grav_force_traj,
+            )
+        ]
+
+        # TODO: Bring back friction cones in visuzliation
+
         # friction_cone_angle = np.arctan(FRICTION_COEFF)
         # (
         #     fc_normals,
@@ -313,7 +318,7 @@ def plan_polytope_flipup(
         viz = Visualizer2d()
         viz.visualize(
             viz_contact_positions + viz_com_points,
-            viz_contact_forces,
+            viz_contact_forces + viz_gravitional_forces,
             viz_polygons,
         )
 
