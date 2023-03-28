@@ -79,7 +79,8 @@ def plan_polytope_flipup(
         polytope,
         PolytopeContactLocation(ContactLocation.FACE, 0),
         finger,
-        PolytopeContactLocation(ContactLocation.FACE, 3),
+        PolytopeContactLocation(ContactLocation.FACE, 3),  # for line contact
+        # PolytopeContactLocation(ContactLocation.VERTEX, 1),  # for vertex contact
         FRICTION_COEFF,
     )
     contact_scene = ContactScene2d(
@@ -119,7 +120,7 @@ def plan_polytope_flipup(
 
     if sliding:
         contact_modes = {
-            "contact_1": ContactMode.ROLLING,
+            "contact_1": ContactMode.SLIDING_LEFT,
             "contact_2": ContactMode.ROLLING,
         }
         lam_target = 0.6
@@ -146,7 +147,7 @@ def plan_polytope_flipup(
             table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
         )
     motion_plan.constrain_contact_position_at_ctrl_point(
-        table_polytope, ctrl_point_idx=0, lam_target=0.5
+        table_polytope, ctrl_point_idx=0, lam_target=0.4
     )
     if lam_target is not None:
         motion_plan.constrain_contact_position_at_ctrl_point(

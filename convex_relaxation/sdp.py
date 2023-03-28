@@ -68,7 +68,12 @@ def _linear_bindings_to_homogenuous_form(
             )
 
         linear_exprs = np.concatenate(
-            [_linear_binding_to_expressions(b) for b in linear_bindings]  # type: ignore
+            [
+                _linear_binding_to_expressions(b)
+                for b in linear_bindings
+                if b.variables().size
+                > 0  # some bindings are empty? This fixes it. I will have to rewrite this whole thing either way
+            ]
         )
     else:
         linear_exprs = []
@@ -241,7 +246,7 @@ def create_sdp_relaxation(
         A_eq = _linear_bindings_to_homogenuous_form(
             prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
         )
-        multiplied_constraints = eq(A_eq.dot(X).dot(A_eq.T), 0)
+        multiplied_constraints = eq(A_eq.dot(X).flatten(), 0)
         relaxed_prog.AddLinearConstraint(multiplied_constraints)
 
         e_1 = unit_vector(0, X.shape[0])
