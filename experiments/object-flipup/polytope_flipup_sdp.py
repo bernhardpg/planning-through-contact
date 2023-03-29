@@ -37,10 +37,12 @@ def _plot_from_sdp_relaxation(
         decision_var_trajs = BezierCurve.create_from_ctrl_points(
             decision_var_ctrl_points_vals
         ).ctrl_points.T  # (num_ctrl_points, num_variables)
+        frames_per_sec = 0.3
     else:
         decision_var_trajs = BezierCurve.create_from_ctrl_points(
             decision_var_ctrl_points_vals
         ).eval_entire_interval()  # (num_ctrl_points, num_variables)
+        frames_per_sec = 20
 
     # we use the first ctrl point to evaluate all expressions
     # must sort this similarly to SDP monomial basis created in relaxation
@@ -179,7 +181,7 @@ def _plot_from_sdp_relaxation(
         viz_contact_positions + viz_com_points,
         viz_contact_forces + viz_gravitional_forces,
         viz_polygons,
-        1.0,
+        frames_per_sec,
     )
 
 
@@ -327,6 +329,7 @@ def plan_polytope_flipup(
     print(f"Solved in {end - start} seconds")
     assert result.is_success()
     print("Success!")
+    breakpoint()
 
     X_sol = result.GetSolution(X)
     x_sol = X_sol[1:, 0]

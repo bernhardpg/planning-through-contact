@@ -62,6 +62,12 @@ class ContactScene2d:
             self.rigid_bodies, contact_pair_instances, self.body_anchored_to_W
         )
 
+    # TODO duplicated code
+    @property
+    def unactuated_bodies(self) -> List[RigidBody2d]:
+        bodies = [body for body in self.rigid_bodies if not body.actuated]
+        return bodies
+
 
 class ContactSceneInstance:
     def __init__(

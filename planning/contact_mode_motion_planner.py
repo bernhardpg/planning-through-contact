@@ -39,7 +39,8 @@ class ContactModeMotionPlanner:
         self.use_equal_and_opposite_forces_constraint = True
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
-        self.use_quadratic_cost = True
+        self.minimize_squared_forces = False
+        self.minimize_velocities = True
         self.only_minimize_forces_on_unactuated_bodies = False
         self.use_mccormick_relaxation = use_mccormick_relaxation
 
@@ -132,13 +133,11 @@ class ContactModeMotionPlanner:
             if self.use_non_penetration_cut:
                 self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
 
-            if self.use_quadratic_cost:
+            if self.minimize_squared_forces:
                 cost = ctrl_point.get_squared_forces(
                     self.only_minimize_forces_on_unactuated_bodies
                 )
                 self.prog.AddQuadraticCost(cost)
-            else:
-                raise NotImplementedError("Cost type not implemented")
 
         for pair, mode in self.contact_modes.items():
             if mode == ContactMode.ROLLING:
@@ -147,6 +146,45 @@ class ContactModeMotionPlanner:
                 self._constrain_contact_velocity(pair, "NEGATIVE")
             elif mode == ContactMode.SLIDING_RIGHT:
                 self._constrain_contact_velocity(pair, "POSITIVE")
+
+        # TODO: this section should be cleaned up
+        if self.minimize_velocities:
+            if len(self.contact_scene.unactuated_bodies) > 1:
+                raise NotImplementedError("Only support for one unactuated body.")
+
+            unactuated_body = self.contact_scene.unactuated_bodies[0]
+            for i in range(1, self.num_ctrl_points):
+                r_curr = (
+                    self.ctrl_points[i]
+                    .contact_scene_instance._get_rotation_to_W(unactuated_body)
+                    .flatten()
+                )
+                r_prev = (
+                    self.ctrl_points[i - 1]
+                    .contact_scene_instance._get_rotation_to_W(unactuated_body)
+                    .flatten()
+                )
+                # This uses the derivative property of the bezier curve,
+                # but neglects the scaling by d (the scalar degree)
+                r_dot = r_curr - r_prev
+                r_dot_cost = r_dot.T.dot(r_dot)
+
+                p_curr = (
+                    self.ctrl_points[i]
+                    .contact_scene_instance._get_translation_to_W(unactuated_body)
+                    .flatten()
+                )
+                p_prev = (
+                    self.ctrl_points[i - 1]
+                    .contact_scene_instance._get_translation_to_W(unactuated_body)
+                    .flatten()
+                )
+                # This uses the derivative property of the bezier curve,
+                # but neglects the scaling by d (the scalar degree)
+                p_dot = p_curr - p_prev
+                p_dot_cost = p_dot.T.dot(p_dot)
+
+                self.prog.AddQuadraticCost(p_dot_cost + r_dot_cost)
 
     def constrain_orientation_at_ctrl_point(
         self,
