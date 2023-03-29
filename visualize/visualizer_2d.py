@@ -181,6 +181,7 @@ class Visualizer2d:
         points: List[VisualizationPoint2d],
         forces: List[VisualizationForce2d],
         polygons: List[VisualizationPolygon2d],
+        frames_per_sec: float = 20.0,
     ) -> None:
         curve_lengths = np.array(
             [len(p.position_curve) for p in points]
@@ -189,6 +190,7 @@ class Visualizer2d:
         if not np.all(curve_lengths == curve_lengths[0]):
             raise ValueError("Curve lengths for plotting must match!")
         num_frames = curve_lengths[0]
+        pause_between_frames = 1 / frames_per_sec
 
         self.app = tk.Tk()
         self.app.title("box")
@@ -211,7 +213,7 @@ class Visualizer2d:
                 self._draw_force(force, frame_idx)
 
             self.canvas.update()
-            time.sleep(0.05)
+            time.sleep(pause_between_frames)
             if frame_idx == 0:
                 time.sleep(2)
 

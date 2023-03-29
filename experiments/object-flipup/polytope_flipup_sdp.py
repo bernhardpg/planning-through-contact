@@ -26,16 +26,24 @@ from visualize.visualizer_2d import (
 )
 
 
-def _plot_from_sdp_relaxation(x_sol, planner, contact_scene, num_ctrl_points):
+def _plot_from_sdp_relaxation(
+    x_sol, planner, contact_scene, num_ctrl_points, plot_ctrl_points: bool = False
+):
     decision_var_ctrl_points = planner.get_ctrl_points_for_all_decision_variables()
     # Need this order for the reshaping to be equivalent to the above expression
     decision_var_ctrl_points_vals = x_sol.reshape((-1, num_ctrl_points), order="F")
 
-    decision_var_trajs = BezierCurve.create_from_ctrl_points(
-        decision_var_ctrl_points_vals
-    ).eval_entire_interval()  # (num_steps, num_variables)
+    if plot_ctrl_points:
+        decision_var_trajs = BezierCurve.create_from_ctrl_points(
+            decision_var_ctrl_points_vals
+        ).ctrl_points.T  # (num_ctrl_points, num_variables)
+    else:
+        decision_var_trajs = BezierCurve.create_from_ctrl_points(
+            decision_var_ctrl_points_vals
+        ).eval_entire_interval()  # (num_ctrl_points, num_variables)
 
     # we use the first ctrl point to evaluate all expressions
+    # must sort this similarly to SDP monomial basis created in relaxation
     decision_vars = sorted(planner.ctrl_points[0].variables, key=lambda x: x.get_id())
 
     def eval_expressions_at_traj(
@@ -171,6 +179,7 @@ def _plot_from_sdp_relaxation(x_sol, planner, contact_scene, num_ctrl_points):
         viz_contact_positions + viz_com_points,
         viz_contact_forces + viz_gravitional_forces,
         viz_polygons,
+        1.0,
     )
 
 
@@ -322,7 +331,9 @@ def plan_polytope_flipup(
     X_sol = result.GetSolution(X)
     x_sol = X_sol[1:, 0]
 
-    _plot_from_sdp_relaxation(x_sol, planner, contact_scene, NUM_CTRL_POINTS)
+    _plot_from_sdp_relaxation(
+        x_sol, planner, contact_scene, NUM_CTRL_POINTS, plot_ctrl_points=True
+    )
 
 
 if __name__ == "__main__":
