@@ -39,7 +39,7 @@ class ContactModeMotionPlanner:
         self.use_equal_and_opposite_forces_constraint = True
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
-        self.use_quadratic_cost = True
+        self.use_quadratic_cost = False
         self.only_minimize_forces_on_unactuated_bodies = False
         self.use_mccormick_relaxation = use_mccormick_relaxation
 
@@ -137,8 +137,8 @@ class ContactModeMotionPlanner:
                     self.only_minimize_forces_on_unactuated_bodies
                 )
                 self.prog.AddQuadraticCost(cost)
-            else:  # Absolute value cost
-                raise ValueError("Absolute value cost not implemented")
+            else:
+                raise NotImplementedError("Cost type not implemented")
 
         for pair, mode in self.contact_modes.items():
             if mode == ContactMode.ROLLING:

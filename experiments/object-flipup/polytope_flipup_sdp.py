@@ -2,6 +2,7 @@ import argparse
 from typing import Optional
 
 import numpy as np
+import numpy.typing as npt
 from pydrake.solvers import Solve
 
 from convex_relaxation.sdp import create_sdp_relaxation
@@ -23,6 +24,154 @@ from visualize.visualizer_2d import (
     VisualizationPolygon2d,
     Visualizer2d,
 )
+
+
+def _plot_from_sdp_relaxation(x_sol, planner, contact_scene, num_ctrl_points):
+    decision_var_ctrl_points = planner.get_ctrl_points_for_all_decision_variables()
+    # Need this order for the reshaping to be equivalent to the above expression
+    decision_var_ctrl_points_vals = x_sol.reshape((-1, num_ctrl_points), order="F")
+
+    decision_var_trajs = BezierCurve.create_from_ctrl_points(
+        decision_var_ctrl_points_vals
+    ).eval_entire_interval()  # (num_steps, num_variables)
+
+    # we use the first ctrl point to evaluate all expressions
+    decision_vars = sorted(planner.ctrl_points[0].variables, key=lambda x: x.get_id())
+
+    def eval_expressions_at_traj(
+        exprs: NpExpressionArray,
+        vars: NpVariableArray,
+        trajs: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        # NOTE! Likely very slow
+        envs = [
+            {var: val for var, val in zip(vars, vals)} for vals in trajs
+        ]  # one env per timestep
+        expr_traj = np.vstack(
+            [np.array([e.item().Evaluate(env) for e in exprs]) for env in envs]
+        )
+        return expr_traj
+
+    CONTACT_COLOR = COLORS["dodgerblue4"]
+    GRAVITY_COLOR = COLORS["blueviolet"]
+    BOX_COLOR = COLORS["aquamarine4"]
+    TABLE_COLOR = COLORS["bisque3"]
+    FINGER_COLOR = COLORS["firebrick3"]
+    body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
+
+    contact_forces_in_world_frame = [
+        eval_expressions_at_traj(force, decision_vars, decision_var_trajs)
+        for force in planner.ctrl_points[0].get_contact_forces_in_world_frame()
+    ]  # List[(N_steps, N_dims)]
+
+    contact_positions_in_world_frame = [
+        eval_expressions_at_traj(pos, decision_vars, decision_var_trajs)
+        for pos in planner.ctrl_points[0].get_contact_positions_in_world_frame()
+    ]  # List[(N_steps, N_dims)]
+
+    bodies_com_in_world_frame = [
+        eval_expressions_at_traj(com, decision_vars, decision_var_trajs)
+        for com in planner.ctrl_points[0].get_body_positions_in_world_frame()
+    ]  # List[(N_steps, N_dims)]
+
+    # TODO clean up
+    flattened_body_rotations = [
+        rot.flatten().reshape((-1, 1))
+        for rot in planner.ctrl_points[0].get_body_orientations()
+    ]
+    bodies_rot_in_world_frame = [
+        eval_expressions_at_traj(rot, decision_vars, decision_var_trajs)
+        for rot in flattened_body_rotations
+    ]  # List[(N_steps, N_dims)]
+
+    viz_com_points = [
+        VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
+        for com in bodies_com_in_world_frame
+    ]
+
+    viz_contact_positions = [
+        VisualizationPoint2d(pos, CONTACT_COLOR)  # type: ignore
+        for pos in contact_positions_in_world_frame
+    ]
+    viz_contact_forces = [
+        VisualizationForce2d(pos, CONTACT_COLOR, force)  # type: ignore
+        for pos, force in zip(
+            contact_positions_in_world_frame, contact_forces_in_world_frame
+        )
+    ]
+
+    # TODO: A bit hacky visualization of gravity
+    box_com = bodies_com_in_world_frame[1]
+    grav_vec = planner.ctrl_points[0].get_gravitational_forces_in_world_frame()[
+        0
+    ]  # I know there is only one gravity vec for this problem
+    grav_force_traj = np.ones(box_com.shape) * grav_vec.T
+    viz_gravitional_forces = [
+        VisualizationForce2d(
+            box_com,
+            GRAVITY_COLOR,
+            grav_force_traj,
+        )
+    ]
+
+    # TODO: Bring back friction cones in visuzliation
+
+    # friction_cone_angle = np.arctan(FRICTION_COEFF)
+    # (
+    #     fc_normals,
+    #     fc_positions,
+    #     fc_orientations,
+    # ) = motion_plan.contact_point_friction_cones
+    # viz_friction_cones = [
+    #     VisualizationCone2d.from_ctrl_points(
+    #         evaluate_np_expressions_array(pos, motion_plan.result),
+    #         [
+    #             motion_plan.result.GetSolution(R_ctrl_point)
+    #             for R_ctrl_point in orientation
+    #         ],
+    #         normal_vec,
+    #         friction_cone_angle,
+    #     )
+    #     for normal_vec, pos, orientation in zip(
+    #         fc_normals, fc_positions, fc_orientations
+    #     )
+    # ]
+    # viz_friction_cones_mirrored = [
+    #     VisualizationCone2d.from_ctrl_points(
+    #         evaluate_np_expressions_array(pos, motion_plan.result),
+    #         [
+    #             motion_plan.result.GetSolution(R_ctrl_point)
+    #             for R_ctrl_point in orientation
+    #         ],
+    #         -normal_vec,
+    #         friction_cone_angle,
+    #     )
+    #     for normal_vec, pos, orientation in zip(
+    #         fc_normals, fc_positions, fc_orientations
+    #     )
+    # ]
+
+    viz_polygons = [
+        VisualizationPolygon2d.from_trajs(
+            com,
+            rotation,
+            body,
+            color,
+        )
+        for com, rotation, body, color in zip(
+            bodies_com_in_world_frame,
+            bodies_rot_in_world_frame,
+            contact_scene.rigid_bodies,
+            body_colors,
+        )
+    ]
+
+    viz = Visualizer2d()
+    viz.visualize(
+        viz_contact_positions + viz_com_points,
+        viz_contact_forces + viz_gravitional_forces,
+        viz_polygons,
+    )
 
 
 def plan_polytope_flipup(
@@ -132,25 +281,25 @@ def plan_polytope_flipup(
         lam_target = None
 
     NUM_CTRL_POINTS = 3
-    motion_plan = ContactModeMotionPlanner(
+    planner = ContactModeMotionPlanner(
         contact_scene,
         NUM_CTRL_POINTS,
         contact_modes,
         variable_bounds,
     )
     if th_initial is not None:
-        motion_plan.constrain_orientation_at_ctrl_point(
+        planner.constrain_orientation_at_ctrl_point(
             table_polytope, ctrl_point_idx=0, theta=th_initial
         )
     if th_target is not None:
-        motion_plan.constrain_orientation_at_ctrl_point(
+        planner.constrain_orientation_at_ctrl_point(
             table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, theta=th_target
         )
-    motion_plan.constrain_contact_position_at_ctrl_point(
+    planner.constrain_contact_position_at_ctrl_point(
         table_polytope, ctrl_point_idx=0, lam_target=0.4
     )
     if lam_target is not None:
-        motion_plan.constrain_contact_position_at_ctrl_point(
+        planner.constrain_contact_position_at_ctrl_point(
             table_polytope, ctrl_point_idx=NUM_CTRL_POINTS - 1, lam_target=lam_target
         )
 
@@ -158,7 +307,7 @@ def plan_polytope_flipup(
 
     start = time.time()
     print("Starting to create SDP relaxation...")
-    relaxed_prog, X, basis = create_sdp_relaxation(motion_plan.prog)
+    relaxed_prog, X, basis = create_sdp_relaxation(planner.prog)
     end = time.time()
     print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
 
@@ -172,156 +321,8 @@ def plan_polytope_flipup(
 
     X_sol = result.GetSolution(X)
     x_sol = X_sol[1:, 0]
-    decision_var_ctrl_points = motion_plan.get_ctrl_points_for_all_decision_variables()
-    # Need this order for the reshaping to be equivalent to the above expression
-    decision_var_ctrl_points_vals = x_sol.reshape((-1, NUM_CTRL_POINTS), order="F")
-    decision_var_trajs = BezierCurve.create_from_ctrl_points(
-        decision_var_ctrl_points_vals
-    ).eval_entire_interval()  # (num_steps, num_variables)
 
-    # we use the first ctrl point to evaluate all expressions
-    decision_vars = sorted(
-        motion_plan.ctrl_points[0].variables, key=lambda x: x.get_id()
-    )
-
-    # TODO move
-    import numpy.typing as npt
-    import pydrake.symbolic as sym
-
-    def eval_expressions_at_traj(
-        exprs: NpExpressionArray, vars: NpVariableArray, trajs: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
-        # NOTE! Likely very slow
-        envs = [
-            {var: val for var, val in zip(vars, vals)} for vals in trajs
-        ]  # one env per timestep
-        expr_traj = np.vstack(
-            [np.array([e.item().Evaluate(env) for e in exprs]) for env in envs]
-        )
-        return expr_traj
-
-    if True:
-        CONTACT_COLOR = COLORS["dodgerblue4"]
-        GRAVITY_COLOR = COLORS["blueviolet"]
-        BOX_COLOR = COLORS["aquamarine4"]
-        TABLE_COLOR = COLORS["bisque3"]
-        FINGER_COLOR = COLORS["firebrick3"]
-        body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
-
-        contact_forces_in_world_frame = [
-            eval_expressions_at_traj(force, decision_vars, decision_var_trajs)
-            for force in motion_plan.ctrl_points[0].get_contact_forces_in_world_frame()
-        ]  # List[(N_steps, N_dims)]
-
-        contact_positions_in_world_frame = [
-            eval_expressions_at_traj(pos, decision_vars, decision_var_trajs)
-            for pos in motion_plan.ctrl_points[0].get_contact_positions_in_world_frame()
-        ]  # List[(N_steps, N_dims)]
-
-        bodies_com_in_world_frame = [
-            eval_expressions_at_traj(com, decision_vars, decision_var_trajs)
-            for com in motion_plan.ctrl_points[0].get_body_positions_in_world_frame()
-        ]  # List[(N_steps, N_dims)]
-
-        # TODO clean up
-        flattened_body_rotations = [
-            rot.flatten().reshape((-1, 1))
-            for rot in motion_plan.ctrl_points[0].get_body_orientations()
-        ]
-        bodies_rot_in_world_frame = [
-            eval_expressions_at_traj(rot, decision_vars, decision_var_trajs)
-            for rot in flattened_body_rotations
-        ]  # List[(N_steps, N_dims)]
-
-        viz_com_points = [
-            VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
-            for com in bodies_com_in_world_frame
-        ]
-
-        viz_contact_positions = [
-            VisualizationPoint2d(pos, CONTACT_COLOR)  # type: ignore
-            for pos in contact_positions_in_world_frame
-        ]
-        viz_contact_forces = [
-            VisualizationForce2d(pos, CONTACT_COLOR, force)  # type: ignore
-            for pos, force in zip(
-                contact_positions_in_world_frame, contact_forces_in_world_frame
-            )
-        ]
-
-        # TODO: A bit hacky visualization of gravity
-        box_com = bodies_com_in_world_frame[1]
-        grav_vec = motion_plan.ctrl_points[0].get_gravitational_forces_in_world_frame()[
-            0
-        ]  # I know there is only one gravity vec for this problem
-        grav_force_traj = np.ones(box_com.shape) * grav_vec.T
-        viz_gravitional_forces = [
-            VisualizationForce2d(
-                box_com,
-                GRAVITY_COLOR,
-                grav_force_traj,
-            )
-        ]
-
-        # TODO: Bring back friction cones in visuzliation
-
-        # friction_cone_angle = np.arctan(FRICTION_COEFF)
-        # (
-        #     fc_normals,
-        #     fc_positions,
-        #     fc_orientations,
-        # ) = motion_plan.contact_point_friction_cones
-        # viz_friction_cones = [
-        #     VisualizationCone2d.from_ctrl_points(
-        #         evaluate_np_expressions_array(pos, motion_plan.result),
-        #         [
-        #             motion_plan.result.GetSolution(R_ctrl_point)
-        #             for R_ctrl_point in orientation
-        #         ],
-        #         normal_vec,
-        #         friction_cone_angle,
-        #     )
-        #     for normal_vec, pos, orientation in zip(
-        #         fc_normals, fc_positions, fc_orientations
-        #     )
-        # ]
-        # viz_friction_cones_mirrored = [
-        #     VisualizationCone2d.from_ctrl_points(
-        #         evaluate_np_expressions_array(pos, motion_plan.result),
-        #         [
-        #             motion_plan.result.GetSolution(R_ctrl_point)
-        #             for R_ctrl_point in orientation
-        #         ],
-        #         -normal_vec,
-        #         friction_cone_angle,
-        #     )
-        #     for normal_vec, pos, orientation in zip(
-        #         fc_normals, fc_positions, fc_orientations
-        #     )
-        # ]
-
-        viz_polygons = [
-            VisualizationPolygon2d.from_trajs(
-                com,
-                rotation,
-                body,
-                color,
-            )
-            for com, rotation, body, color in zip(
-                bodies_com_in_world_frame,
-                bodies_rot_in_world_frame,
-                contact_scene.rigid_bodies,
-                body_colors,
-            )
-        ]
-
-        breakpoint()
-        viz = Visualizer2d()
-        viz.visualize(
-            viz_contact_positions + viz_com_points,
-            viz_contact_forces + viz_gravitional_forces,
-            viz_polygons,
-        )
+    _plot_from_sdp_relaxation(x_sol, planner, contact_scene, NUM_CTRL_POINTS)
 
 
 if __name__ == "__main__":
