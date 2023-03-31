@@ -54,6 +54,12 @@ class ContactForce(NamedTuple):
     ) -> "ContactForce":
         contact_force, symbolic_vars = cls._create_contact_force(force_def)
         if force_def.location.pos == ContactLocation.FACE:
+            # NOTE: For face contacts, we will have multiple contact points.
+            # Currently, this is modelled as having one decision variable for the position
+            # of both contact points, and then displacing each contact pose by a suitable amount
+            # (based on geometry of the objects) from this location.
+            # TODO: In the future, to allow for face contacts which are not fully overlapping,
+            # we will have one variable for each contact point.
             force_position = cls._create_force_position(
                 force_def, contact_point_position
             )

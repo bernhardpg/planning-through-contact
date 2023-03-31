@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import ContactLocation, ContactLocation
+from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.utilities import normalize_vec
 
