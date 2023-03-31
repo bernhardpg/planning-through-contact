@@ -144,3 +144,12 @@ class EquilateralPolytope2d(RigidBody2d):
             raise ValueError(
                 f"Cannot get normal and tangent vecs from location {location.pos}"
             )
+
+    def get_face_length(self, location: PolytopeContactLocation) -> float:
+        if not location.pos == ContactLocation.FACE:
+            raise ValueError("Can only get face length for a face")
+
+        face_length = (
+            self.vertex_distance * np.cos(np.pi / 2 - self.corner_angle / 2) * 2
+        )
+        return face_length

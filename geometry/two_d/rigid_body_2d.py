@@ -65,3 +65,7 @@ class RigidBody2d(ABC):
         v1, v2 = self.get_proximate_vertices_from_location(location)
         vec = (v1 + v2) / 2
         return vec
+
+    @abstractmethod
+    def get_face_length(self, location: PolytopeContactLocation) -> float:
+        pass

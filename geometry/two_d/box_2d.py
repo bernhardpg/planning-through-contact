@@ -268,3 +268,14 @@ class Box2d(RigidBody2d):
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
             )
+
+    def get_face_length(self, location: PolytopeContactLocation) -> float:
+        if not location.pos == ContactLocation.FACE:
+            raise ValueError("Can only get face length for a face")
+
+        if location.idx == 1 or location.idx == 3:
+            return self.width
+        elif location.idx == 2 or location.idx == 4:
+            return self.height
+        else:
+            raise ValueError(f"Can not get length for face {location.idx} for a box")
