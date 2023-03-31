@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -26,7 +26,7 @@ class ContactModeMotionPlanner:
         contact_scene: ContactScene2d,
         num_ctrl_points: int,
         contact_modes: Dict[str, ContactMode],
-        variable_bounds: Dict[str, Tuple[float, float]],
+        variable_bounds: Optional[Dict[str, Tuple[float, float]]] = None,
         use_mccormick_relaxation: bool = False,
     ):
         # Convenience variables for running experiments
@@ -56,7 +56,9 @@ class ContactModeMotionPlanner:
             for idx in range(self.num_ctrl_points)
         ]
 
-    def _setup_prog(self, variable_bounds: Dict[str, Tuple[float, float]]) -> None:
+    def _setup_prog(
+        self, variable_bounds: Optional[Dict[str, Tuple[float, float]]] = None
+    ) -> None:
         self.prog = MathematicalProgram()
 
         for ctrl_point in self.ctrl_points:
@@ -77,6 +79,7 @@ class ContactModeMotionPlanner:
                 for c in ctrl_point.static_equilibrium_constraints:
                     # TODO remove
                     if self.use_mccormick_relaxation:
+                        assert variable_bounds is not None
                         add_bilinear_constraints_to_prog(
                             c.torque_balance,
                             self.prog,
@@ -89,6 +92,7 @@ class ContactModeMotionPlanner:
                 for c in ctrl_point.equal_contact_point_constraints:
                     # TODO remove
                     if self.use_mccormick_relaxation:
+                        assert variable_bounds is not None
                         add_bilinear_frame_constraints_to_prog(
                             c, self.prog, variable_bounds
                         )
@@ -100,6 +104,7 @@ class ContactModeMotionPlanner:
                 for c in ctrl_point.equal_rel_position_constraints:
                     # TODO remove
                     if self.use_mccormick_relaxation:
+                        assert variable_bounds is not None
                         add_bilinear_frame_constraints_to_prog(
                             c, self.prog, variable_bounds
                         )

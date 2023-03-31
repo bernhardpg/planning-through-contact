@@ -281,35 +281,6 @@ def plan_polytope_flipup(
         table,
     )
 
-    # TODO: this should be cleaned up
-    MAX_FORCE = POLYTOPE_MASS * 9.81 * 2.0  # only used for mccorimick constraints
-    CONSTANT = 2
-    variable_bounds = {
-        "contact_1_polytope_c_n": (0.0, MAX_FORCE),
-        "contact_1_polytope_c_f": (
-            -FRICTION_COEFF * MAX_FORCE,
-            FRICTION_COEFF * MAX_FORCE,
-        ),
-        "contact_1_table_c_n": (0.0, MAX_FORCE),
-        "contact_1_table_c_f": (
-            -FRICTION_COEFF * MAX_FORCE,
-            FRICTION_COEFF * MAX_FORCE,
-        ),
-        "contact_1_table_lam": (0.0, 1.0),
-        "contact_1_sin_th": (-1, 1),
-        "contact_1_cos_th": (-1, 1),
-        "contact_2_polytope_lam": (0.0, 1.0),
-        "contact_2_polytope_c_n": (0, MAX_FORCE / CONSTANT),
-        "contact_2_polytope_c_f": (0, MAX_FORCE / CONSTANT),
-        "contact_2_sin_th": (-1, 1),
-        "contact_2_cos_th": (-1, 1),
-        "contact_2_finger_c_n": (0.0, MAX_FORCE / CONSTANT),
-        "contact_2_finger_c_f": (
-            -FRICTION_COEFF * MAX_FORCE / CONSTANT,
-            FRICTION_COEFF * MAX_FORCE / CONSTANT,
-        ),
-    }
-
     if sliding:
         contact_modes = {
             "contact_1": ContactMode.SLIDING_LEFT,
@@ -328,7 +299,6 @@ def plan_polytope_flipup(
         contact_scene,
         NUM_CTRL_POINTS,
         contact_modes,
-        variable_bounds,
     )
     if th_initial is not None:
         planner.constrain_orientation_at_ctrl_point(

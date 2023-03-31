@@ -201,7 +201,7 @@ def _collect_bounding_box_constraints(
 
 def create_sdp_relaxation(
     prog: MathematicalProgram,
-) -> Tuple[MathematicalProgram, NpVariableArray]:
+) -> Tuple[MathematicalProgram, NpVariableArray, NpMonomialArray]:
     DEGREE_QUADRATIC = 2  # We are only relaxing (non-convex) quadratic programs
 
     decision_vars = np.array(
