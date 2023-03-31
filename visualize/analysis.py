@@ -15,6 +15,34 @@ FORCE_REF = 10  # Current max force
 TORQUE_REF = FORCE_REF * DISTANCE_REF  # Almost max torque
 
 
+def plot_cos_sine_trajs(rot_trajs: npt.NDArray[np.float64]):  # (num_steps, 2)
+    # For some reason pyright complains about the typing being wrong with ax
+    _, ax = plt.subplots(1, 1)
+
+    # Plot unit circle
+    t = np.linspace(0, np.pi * 2, 100)
+    ax.plot(np.cos(t), np.sin(t), color="grey", alpha=0.5)  # type: ignore
+
+    ax.plot(  # type: ignore
+        rot_trajs[:, 0],
+        rot_trajs[:, 1],
+        linestyle="--",
+        marker="o",
+        label="Ctrl points",
+    )
+    ax.set_aspect("equal", "box")  # type: ignore
+    ax.set_title("Effect of relaxing SO(2) constraints")  # type: ignore
+    ax.set_xlabel(r"$\cos{\theta}$")  # type: ignore
+    ax.set_ylabel(r"$\sin{\theta}$")  # type: ignore
+    ax.legend()  # type: ignore
+
+    OFFSET = 0.1
+    for i in range(rot_trajs.shape[0]):
+        ax.annotate(str(i), (rot_trajs[i, 0] + OFFSET, rot_trajs[i, 1]))  # type: ignore
+
+    plt.show()
+
+
 def show_plots() -> None:
     plt.show()
 
@@ -25,11 +53,11 @@ def _create_curve_norm(
     return np.apply_along_axis(np.linalg.norm, 1, curve).reshape((-1, 1))
 
 
+# TODO: These are likely outdated and should be updated
 def create_static_equilibrium_analysis(
     fb_violation_ctrl_points: npt.NDArray[np.float64],
     mb_violation_ctrl_points: npt.NDArray[np.float64],
 ):
-
     num_ctrl_points = fb_violation_ctrl_points.shape[1]
 
     fb_violation = BezierCurve.create_from_ctrl_points(
@@ -72,7 +100,6 @@ def create_newtons_third_law_analysis(
     equal_rel_position_ctrl_points: List[ContactFrameConstraints],
     newtons_third_law_ctrl_points: List[ContactFrameConstraints],
 ):
-
     # Local helper functions
     def _extract_ctrl_points_as_np(
         constraints: List[ContactFrameConstraints],
@@ -166,7 +193,6 @@ def create_newtons_third_law_analysis(
 def create_force_plot(
     force_ctrl_points: List[npt.NDArray[np.float64]], force_names: List[str]
 ) -> None:
-
     MIN_Y_AXIS_NEWTON = -1
     MAX_Y_AXIS_NEWTON = 10
 

@@ -15,7 +15,7 @@ from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
 from tools.types import NpExpressionArray, NpVariableArray
-from tools.utils import evaluate_np_expressions_array
+from visualize.analysis import plot_cos_sine_trajs
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
     VisualizationCone2d,
@@ -52,6 +52,7 @@ def _plot_from_sdp_relaxation(
     contact_scene,
     num_ctrl_points,
     plot_ctrl_points: bool = False,
+    show_animation: bool = True,
     plot_rotation_curves: bool = False,
 ):
     decision_var_ctrl_points = planner.get_ctrl_points_for_all_decision_variables()
@@ -82,122 +83,138 @@ def _plot_from_sdp_relaxation(
     FINGER_COLOR = COLORS["firebrick3"]
     body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
 
-    contact_forces_in_world_frame = [
-        eval_expression_vector_with_traj_values(
-            force, decision_vars, decision_var_trajs
+    if plot_rotation_curves:
+        names_of_rotation_vars = ["contact_1_cos_th", "contact_1_sin_th"]
+        get_names = np.vectorize(lambda var: var.get_name())
+        (idxs_of_rot_vars,) = np.where(
+            np.isin(get_names(decision_vars), names_of_rotation_vars)
         )
-        for force in planner.ctrl_points[0].get_contact_forces_in_world_frame()
-    ]  # List[(N_steps, N_dims)]
+        rot_trajs = decision_var_trajs[:, idxs_of_rot_vars]
+        plot_cos_sine_trajs(rot_trajs)
 
-    contact_positions_in_world_frame = [
-        eval_expression_vector_with_traj_values(pos, decision_vars, decision_var_trajs)
-        for pos in planner.ctrl_points[0].get_contact_positions_in_world_frame()
-    ]  # List[(N_steps, N_dims)]
+    if show_animation:
+        contact_forces_in_world_frame = [
+            eval_expression_vector_with_traj_values(
+                force, decision_vars, decision_var_trajs
+            )
+            for force in planner.ctrl_points[0].get_contact_forces_in_world_frame()
+        ]  # List[(N_steps, N_dims)]
 
-    bodies_com_in_world_frame = [
-        eval_expression_vector_with_traj_values(com, decision_vars, decision_var_trajs)
-        for com in planner.ctrl_points[0].get_body_positions_in_world_frame()
-    ]  # List[(N_steps, N_dims)]
+        contact_positions_in_world_frame = [
+            eval_expression_vector_with_traj_values(
+                pos, decision_vars, decision_var_trajs
+            )
+            for pos in planner.ctrl_points[0].get_contact_positions_in_world_frame()
+        ]  # List[(N_steps, N_dims)]
 
-    # TODO clean up
-    flattened_body_rotations = [
-        rot.flatten().reshape((-1, 1))
-        for rot in planner.ctrl_points[0].get_body_orientations()
-    ]
-    bodies_rot_in_world_frame = [
-        eval_expression_vector_with_traj_values(rot, decision_vars, decision_var_trajs)
-        for rot in flattened_body_rotations
-    ]  # List[(N_steps, N_dims)]
+        bodies_com_in_world_frame = [
+            eval_expression_vector_with_traj_values(
+                com, decision_vars, decision_var_trajs
+            )
+            for com in planner.ctrl_points[0].get_body_positions_in_world_frame()
+        ]  # List[(N_steps, N_dims)]
 
-    viz_com_points = [
-        VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
-        for com in bodies_com_in_world_frame
-    ]
+        # TODO clean up
+        flattened_body_rotations = [
+            rot.flatten().reshape((-1, 1))
+            for rot in planner.ctrl_points[0].get_body_orientations()
+        ]
+        bodies_rot_in_world_frame = [
+            eval_expression_vector_with_traj_values(
+                rot, decision_vars, decision_var_trajs
+            )
+            for rot in flattened_body_rotations
+        ]  # List[(N_steps, N_dims)]
 
-    viz_contact_positions = [
-        VisualizationPoint2d(pos, CONTACT_COLOR)  # type: ignore
-        for pos in contact_positions_in_world_frame
-    ]
-    viz_contact_forces = [
-        VisualizationForce2d(pos, CONTACT_COLOR, force)  # type: ignore
-        for pos, force in zip(
-            contact_positions_in_world_frame, contact_forces_in_world_frame
+        viz_com_points = [
+            VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
+            for com in bodies_com_in_world_frame
+        ]
+
+        viz_contact_positions = [
+            VisualizationPoint2d(pos, CONTACT_COLOR)  # type: ignore
+            for pos in contact_positions_in_world_frame
+        ]
+        viz_contact_forces = [
+            VisualizationForce2d(pos, CONTACT_COLOR, force)  # type: ignore
+            for pos, force in zip(
+                contact_positions_in_world_frame, contact_forces_in_world_frame
+            )
+        ]
+
+        # TODO: A bit hacky visualization of gravity
+        box_com = bodies_com_in_world_frame[1]
+        grav_vec = planner.ctrl_points[0].get_gravitational_forces_in_world_frame()[
+            0
+        ]  # I know there is only one gravity vec for this problem
+        grav_force_traj = np.ones(box_com.shape) * grav_vec.T
+        viz_gravitional_forces = [
+            VisualizationForce2d(
+                box_com,
+                GRAVITY_COLOR,
+                grav_force_traj,
+            )
+        ]
+
+        # TODO: Bring back friction cones in visuzliation
+
+        # friction_cone_angle = np.arctan(FRICTION_COEFF)
+        # (
+        #     fc_normals,
+        #     fc_positions,
+        #     fc_orientations,
+        # ) = motion_plan.contact_point_friction_cones
+        # viz_friction_cones = [
+        #     VisualizationCone2d.from_ctrl_points(
+        #         evaluate_np_expressions_array(pos, motion_plan.result),
+        #         [
+        #             motion_plan.result.GetSolution(R_ctrl_point)
+        #             for R_ctrl_point in orientation
+        #         ],
+        #         normal_vec,
+        #         friction_cone_angle,
+        #     )
+        #     for normal_vec, pos, orientation in zip(
+        #         fc_normals, fc_positions, fc_orientations
+        #     )
+        # ]
+        # viz_friction_cones_mirrored = [
+        #     VisualizationCone2d.from_ctrl_points(
+        #         evaluate_np_expressions_array(pos, motion_plan.result),
+        #         [
+        #             motion_plan.result.GetSolution(R_ctrl_point)
+        #             for R_ctrl_point in orientation
+        #         ],
+        #         -normal_vec,
+        #         friction_cone_angle,
+        #     )
+        #     for normal_vec, pos, orientation in zip(
+        #         fc_normals, fc_positions, fc_orientations
+        #     )
+        # ]
+
+        viz_polygons = [
+            VisualizationPolygon2d.from_trajs(
+                com,
+                rotation,
+                body,
+                color,
+            )
+            for com, rotation, body, color in zip(
+                bodies_com_in_world_frame,
+                bodies_rot_in_world_frame,
+                contact_scene.rigid_bodies,
+                body_colors,
+            )
+        ]
+
+        viz = Visualizer2d()
+        viz.visualize(
+            viz_contact_positions + viz_com_points,
+            viz_contact_forces + viz_gravitional_forces,
+            viz_polygons,
+            frames_per_sec,
         )
-    ]
-
-    # TODO: A bit hacky visualization of gravity
-    box_com = bodies_com_in_world_frame[1]
-    grav_vec = planner.ctrl_points[0].get_gravitational_forces_in_world_frame()[
-        0
-    ]  # I know there is only one gravity vec for this problem
-    grav_force_traj = np.ones(box_com.shape) * grav_vec.T
-    viz_gravitional_forces = [
-        VisualizationForce2d(
-            box_com,
-            GRAVITY_COLOR,
-            grav_force_traj,
-        )
-    ]
-
-    # TODO: Bring back friction cones in visuzliation
-
-    # friction_cone_angle = np.arctan(FRICTION_COEFF)
-    # (
-    #     fc_normals,
-    #     fc_positions,
-    #     fc_orientations,
-    # ) = motion_plan.contact_point_friction_cones
-    # viz_friction_cones = [
-    #     VisualizationCone2d.from_ctrl_points(
-    #         evaluate_np_expressions_array(pos, motion_plan.result),
-    #         [
-    #             motion_plan.result.GetSolution(R_ctrl_point)
-    #             for R_ctrl_point in orientation
-    #         ],
-    #         normal_vec,
-    #         friction_cone_angle,
-    #     )
-    #     for normal_vec, pos, orientation in zip(
-    #         fc_normals, fc_positions, fc_orientations
-    #     )
-    # ]
-    # viz_friction_cones_mirrored = [
-    #     VisualizationCone2d.from_ctrl_points(
-    #         evaluate_np_expressions_array(pos, motion_plan.result),
-    #         [
-    #             motion_plan.result.GetSolution(R_ctrl_point)
-    #             for R_ctrl_point in orientation
-    #         ],
-    #         -normal_vec,
-    #         friction_cone_angle,
-    #     )
-    #     for normal_vec, pos, orientation in zip(
-    #         fc_normals, fc_positions, fc_orientations
-    #     )
-    # ]
-
-    viz_polygons = [
-        VisualizationPolygon2d.from_trajs(
-            com,
-            rotation,
-            body,
-            color,
-        )
-        for com, rotation, body, color in zip(
-            bodies_com_in_world_frame,
-            bodies_rot_in_world_frame,
-            contact_scene.rigid_bodies,
-            body_colors,
-        )
-    ]
-
-    viz = Visualizer2d()
-    viz.visualize(
-        viz_contact_positions + viz_com_points,
-        viz_contact_forces + viz_gravitional_forces,
-        viz_polygons,
-        frames_per_sec,
-    )
 
 
 def plan_polytope_flipup(
@@ -350,7 +367,13 @@ def plan_polytope_flipup(
     x_sol = X_sol[1:, 0]
 
     _plot_from_sdp_relaxation(
-        x_sol, planner, contact_scene, NUM_CTRL_POINTS, plot_ctrl_points=True
+        x_sol,
+        planner,
+        contact_scene,
+        NUM_CTRL_POINTS,
+        plot_ctrl_points=True,
+        show_animation=False,
+        plot_rotation_curves=True,
     )
 
 
