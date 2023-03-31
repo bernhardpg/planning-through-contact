@@ -39,8 +39,8 @@ class ContactModeMotionPlanner:
         self.use_equal_and_opposite_forces_constraint = True
         self.use_so2_constraint = True
         self.use_non_penetration_cut = True
-        self.minimize_squared_forces = True
-        self.minimize_velocities = False
+        self.minimize_squared_forces = False
+        self.minimize_velocities = True
         self.only_minimize_forces_on_unactuated_bodies = False
         self.use_mccormick_relaxation = use_mccormick_relaxation
 

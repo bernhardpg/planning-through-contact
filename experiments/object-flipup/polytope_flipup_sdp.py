@@ -26,8 +26,33 @@ from visualize.visualizer_2d import (
 )
 
 
+def eval_expression_vector_with_traj_values(
+    expressions: NpExpressionArray,  # (num_dims, 1)
+    all_variables: NpVariableArray,  # (num_variables, )
+    all_variable_trajs: npt.NDArray[np.float64],  # (num_timesteps, num_variables)
+) -> npt.NDArray[np.float64]:
+    # We create one env with all the variable values per timestep
+    # NOTE: This is possibly a slow way of doing things
+    variable_values_at_each_timestep = [
+        {var: val for var, val in zip(all_variables, vals)}
+        for vals in all_variable_trajs
+    ]
+    expr_traj = np.vstack(
+        [
+            np.array([e.item().Evaluate(variable_values_at_t) for e in expressions])
+            for variable_values_at_t in variable_values_at_each_timestep
+        ]
+    )
+    return expr_traj
+
+
 def _plot_from_sdp_relaxation(
-    x_sol, planner, contact_scene, num_ctrl_points, plot_ctrl_points: bool = False
+    x_sol,
+    planner,
+    contact_scene,
+    num_ctrl_points,
+    plot_ctrl_points: bool = False,
+    plot_rotation_curves: bool = False,
 ):
     decision_var_ctrl_points = planner.get_ctrl_points_for_all_decision_variables()
     # Need this order for the reshaping to be equivalent to the above expression
@@ -46,21 +71,9 @@ def _plot_from_sdp_relaxation(
 
     # we use the first ctrl point to evaluate all expressions
     # must sort this similarly to SDP monomial basis created in relaxation
-    decision_vars = sorted(planner.ctrl_points[0].variables, key=lambda x: x.get_id())
-
-    def eval_expressions_at_traj(
-        exprs: NpExpressionArray,
-        vars: NpVariableArray,
-        trajs: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
-        # NOTE! Likely very slow
-        envs = [
-            {var: val for var, val in zip(vars, vals)} for vals in trajs
-        ]  # one env per timestep
-        expr_traj = np.vstack(
-            [np.array([e.item().Evaluate(env) for e in exprs]) for env in envs]
-        )
-        return expr_traj
+    decision_vars = np.array(
+        sorted(planner.ctrl_points[0].variables, key=lambda x: x.get_id())
+    )
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
@@ -70,17 +83,19 @@ def _plot_from_sdp_relaxation(
     body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
 
     contact_forces_in_world_frame = [
-        eval_expressions_at_traj(force, decision_vars, decision_var_trajs)
+        eval_expression_vector_with_traj_values(
+            force, decision_vars, decision_var_trajs
+        )
         for force in planner.ctrl_points[0].get_contact_forces_in_world_frame()
     ]  # List[(N_steps, N_dims)]
 
     contact_positions_in_world_frame = [
-        eval_expressions_at_traj(pos, decision_vars, decision_var_trajs)
+        eval_expression_vector_with_traj_values(pos, decision_vars, decision_var_trajs)
         for pos in planner.ctrl_points[0].get_contact_positions_in_world_frame()
     ]  # List[(N_steps, N_dims)]
 
     bodies_com_in_world_frame = [
-        eval_expressions_at_traj(com, decision_vars, decision_var_trajs)
+        eval_expression_vector_with_traj_values(com, decision_vars, decision_var_trajs)
         for com in planner.ctrl_points[0].get_body_positions_in_world_frame()
     ]  # List[(N_steps, N_dims)]
 
@@ -90,7 +105,7 @@ def _plot_from_sdp_relaxation(
         for rot in planner.ctrl_points[0].get_body_orientations()
     ]
     bodies_rot_in_world_frame = [
-        eval_expressions_at_traj(rot, decision_vars, decision_var_trajs)
+        eval_expression_vector_with_traj_values(rot, decision_vars, decision_var_trajs)
         for rot in flattened_body_rotations
     ]  # List[(N_steps, N_dims)]
 
