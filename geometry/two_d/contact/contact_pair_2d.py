@@ -220,6 +220,16 @@ class FaceOnFaceContact(AbstractContactPair):
             self.contact_mode, self.body_A_contact_location
         )
 
+        # Plan:
+        # Find the length of both faces
+        # Pick the smallest face, and constrain it to lie within the largest face
+
+        body_A_face_length = self.body_A.get_face_length(self.body_A_contact_location)
+        body_B_face_length = self.body_B.get_face_length(self.body_B_contact_location)
+
+        self.shortest_face_length = min(body_A_face_length, body_B_face_length)
+        self.longest_face_length = max(body_A_face_length, body_B_face_length)
+
         self.BOX_WIDTH = 0.2  # FIX: This should be fixed!
 
         left_force = ContactForceDefinition(
@@ -228,7 +238,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=-self.BOX_WIDTH / 2,  # FIX: Should not be hardcoded!
+            displacement=-self.shortest_face_length / 2,
         )
 
         right_force = ContactForceDefinition(
@@ -237,7 +247,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_A_contact_location,
             self.body_A,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
-            displacement=self.BOX_WIDTH / 2,  # FIX: Should not be hardcoded
+            displacement=self.shortest_face_length / 2,
         )
 
         self.contact_point_A = ContactPoint2d(
@@ -281,11 +291,16 @@ class FaceOnFaceContact(AbstractContactPair):
 
     def create_convex_hull_bounds(self) -> NpFormulaArray:
         lam = self.get_nonfixed_contact_point_variable()
-        OFFSET = (
-            self.BOX_WIDTH * 2.2
-        )  # TODO: Approx number. This is easy to calculate from face length and etc, and will be fixed soon!
-        # NOTE: We need to scale offset because lam is not in any specific unit
-        bounds = np.array([lam + OFFSET <= 1, 0 <= lam - OFFSET])
+        # Make sure we stay inside the largest face
+        normalized_distance_from_point_to_edge = (
+            self.shortest_face_length / 2
+        ) / self.longest_face_length
+        bounds = np.array(
+            [
+                lam + normalized_distance_from_point_to_edge <= 1,
+                0 <= lam - normalized_distance_from_point_to_edge,
+            ]
+        )
         return bounds
 
     def create_constraints(self) -> LineContactConstraints:
