@@ -1,3 +1,5 @@
+# NOTE: All of this will be refactored in the not too distant future.
+
 import numpy as np
 from pydrake.math import eq
 

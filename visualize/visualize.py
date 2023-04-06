@@ -9,6 +9,7 @@ from geometry.rigid_body import RigidBody
 
 # WARNING: This will be deprecated soon in favor of Visualizer2d
 
+
 def plot_positions_and_forces(
     positions: Dict[str, npt.NDArray[np.float64]],
     normal_forces: Dict[str, npt.NDArray[np.float64]],

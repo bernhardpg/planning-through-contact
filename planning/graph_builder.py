@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from itertools import permutations
 from queue import PriorityQueue
@@ -87,6 +88,9 @@ class GraphBuilder:
 
     def build_graph(self, prune: bool = False) -> Graph:
         if prune:
+            warnings.warn(
+                "The prune functionality is very experimental and should not be used."
+            )
             graph = self.prioritized_search_from_source(
                 self.collision_pair_handler,
                 self.source_config,
@@ -123,7 +127,7 @@ class GraphBuilder:
         frontier = PriorityQueue()
         new_mode_cfgs = ContactModeConfig.create_all_adjacent_modes(u.config)
         priorities = [m.calculate_match(target_config) for m in new_mode_cfgs]
-        for (pri, m) in zip(priorities, new_mode_cfgs):
+        for pri, m in zip(priorities, new_mode_cfgs):
             frontier.put(PrioritizedContactModeConfig(pri, m))
 
         TIMEOUT_LIMIT = 100
@@ -148,7 +152,7 @@ class GraphBuilder:
 
                 new_mode_cfgs = ContactModeConfig.create_all_adjacent_modes(v.config)
                 priorities = [m.calculate_match(target_config) for m in new_mode_cfgs]
-                for (pri, m) in zip(priorities, new_mode_cfgs):
+                for pri, m in zip(priorities, new_mode_cfgs):
                     frontier.put(PrioritizedContactModeConfig(pri, m))
 
                 found_target = v.convex_set.IntersectsWith(target.convex_set)
