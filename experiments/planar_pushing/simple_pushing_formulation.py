@@ -78,18 +78,7 @@ def plan_planar_pushing():
     # Contact torques
     tau_c_Bs = [cross_2d(p_c_B, f_c_B) for p_c_B, f_c_B in zip(p_c_Bs, f_c_Bs)]
 
-    # TODO: remove
-    #    # Box rotation relative to world frame
-    #    cos_ths = prog.NewContinuousVariables(NUM_KNOT_POINTS, "cos_th")
-    #    sin_ths = prog.NewContinuousVariables(NUM_KNOT_POINTS, "sin_th")
-    #    r_WBs = [np.array([c, s]) for c, s in zip(cos_ths, sin_ths)]
-
-    # r_WB_dots = forward_differences(r_WBs, dt)
-
-    #    sq_angular_vels = sum(
-    #        [r_WB.T.dot(r_WB) for r_WB in r_WBs]
-    #    )  # See paper for derivation of why this is equal to squared ang vels
-
+    # Rotations
     theta_WBs = prog.NewContinuousVariables(NUM_KNOT_POINTS, "theta")
 
     # Box position relative to world frame
