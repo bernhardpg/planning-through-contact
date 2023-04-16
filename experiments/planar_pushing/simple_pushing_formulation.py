@@ -11,6 +11,12 @@ from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray
+from visualize.colors import COLORS
+from visualize.visualizer_2d import (
+    VisualizationPoint2d,
+    VisualizationPolygon2d,
+    Visualizer2d,
+)
 
 T = TypeVar("T")
 
@@ -26,13 +32,16 @@ def forward_differences(
 
 
 def plan_planar_pushing():
-    NUM_KNOT_POINTS = 4
+    NUM_KNOT_POINTS = 12
     END_TIME = 1
     CONTACT_FACE_IDX = 0
     FRICTION_COEFF = 0.5
 
-    TH_INITIAL = 0.0
-    TH_TARGET = 0.2
+    TH_INITIAL = np.pi / 4
+    TH_TARGET = np.pi / 4 - 0.2
+
+    POS_INITIAL = np.array([[0.0, 0.5]])
+    POS_TARGET = np.array([[0.0, 0.2]])
 
     A = np.diag([1.0, 1.0, 1.0])  # TODO: change
 
@@ -122,10 +131,44 @@ def plan_planar_pushing():
     prog.AddConstraint(theta_WBs[0] == TH_INITIAL)
     prog.AddConstraint(theta_WBs[-1] == TH_TARGET)
 
+    prog.AddConstraint(eq(p_WBs[0], POS_INITIAL))
+    prog.AddConstraint(eq(p_WBs[-1], POS_TARGET))
+
     result = Solve(prog)
     assert result.is_success()
 
-    breakpoint()
+    com = result.GetSolution(p_WBs)
+    rotation = np.vstack(
+        [
+            np.array(
+                [[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]
+            ).flatten()  # NOTE: This is the expected format by the visualizer
+            for th in result.GetSolution(theta_WBs)
+        ]
+    )
+
+    CONTACT_COLOR = COLORS["dodgerblue4"]
+    GRAVITY_COLOR = COLORS["blueviolet"]
+    BOX_COLOR = COLORS["aquamarine4"]
+    TABLE_COLOR = COLORS["bisque3"]
+    FINGER_COLOR = COLORS["firebrick3"]
+
+    box_viz = VisualizationPolygon2d.from_trajs(
+        com,
+        rotation,
+        box,
+        BOX_COLOR,
+    )
+
+    com_points_viz = VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
+
+    viz = Visualizer2d()
+    viz.visualize(
+        [com_points_viz],
+        [],
+        [box_viz],
+        2,
+    )
 
 
 if __name__ == "__main__":
