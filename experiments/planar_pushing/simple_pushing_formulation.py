@@ -89,6 +89,7 @@ def plan_planar_pushing():
     # Compute velocities
     v_WBs = forward_differences(p_WBs, dt)
     omega_WBs = forward_differences(theta_WBs, dt)
+    v_c_Bs = forward_differences(p_c_Bs, dt)
 
     # # Friction cone constraints
     for c_n in normal_forces:
@@ -109,6 +110,10 @@ def plan_planar_pushing():
         quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench))
         for row in quasi_static_dynamic_constraint:
             prog.AddConstraint(row)
+
+    # Ensure sticking on the contact point
+    for v_c_B in v_c_Bs:
+        prog.AddLinearConstraint(eq(v_c_B, 0))
 
     # Minimize kinetic energy through squared velocities
     sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in v_WBs])
