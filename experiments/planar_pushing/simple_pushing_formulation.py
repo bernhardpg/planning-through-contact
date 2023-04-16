@@ -13,6 +13,7 @@ from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
+    VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
     Visualizer2d,
@@ -36,14 +37,23 @@ def plan_planar_pushing():
     END_TIME = 1
     CONTACT_FACE_IDX = 0
     FRICTION_COEFF = 0.5
+    NUM_DIMS = 2
+    G = 9.81
+    MASS = 1.0
+    DIST_TO_CORNERS = 0.2
 
     TH_INITIAL = np.pi / 4
-    TH_TARGET = np.pi / 4 - 0.2
+    TH_TARGET = np.pi / 4
 
     POS_INITIAL = np.array([[0.0, 0.5]])
     POS_TARGET = np.array([[0.0, 0.2]])
 
-    A = np.diag([1.0, 1.0, 1.0])  # TODO: change
+    f_max = FRICTION_COEFF * G * MASS
+    tau_max = f_max * DIST_TO_CORNERS
+
+    A = np.diag(
+        [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+    )  # Ellipsoidal Limit surface approximation
 
     dt = END_TIME / NUM_KNOT_POINTS
 
@@ -52,8 +62,8 @@ def plan_planar_pushing():
     box = EquilateralPolytope2d(
         actuated=False,
         name="Slider",
-        mass=1.0,
-        vertex_distance=0.2,
+        mass=MASS,
+        vertex_distance=DIST_TO_CORNERS,
         num_vertices=4,
     )
 
@@ -63,6 +73,10 @@ def plan_planar_pushing():
 
     # Contact positions
     lams = prog.NewContinuousVariables(NUM_KNOT_POINTS, "lam")
+    for lam in lams:
+        prog.AddLinearConstraint(lam >= 0)
+        prog.AddLinearConstraint(lam <= 1)
+
     pv1, pv2 = box.get_proximate_vertices_from_location(contact_face)
     p_c_Bs = [lam * pv1 + (1 - lam) * pv2 for lam in lams]
 
@@ -141,6 +155,24 @@ def plan_planar_pushing():
         ]
     )
 
+    to_float = np.vectorize(lambda x: x.Evaluate())
+    p_c_B_vals = to_float(np.vstack([result.GetSolution(p).T for p in p_c_Bs]))
+    f_c_B_vals = to_float(np.vstack([result.GetSolution(f).T for f in f_c_Bs]))
+
+    contact_pos_in_W = np.vstack(
+        [
+            p_WB + R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_c_B)
+            for p_WB, R_WB, p_c_B in zip(com, rotation, p_c_B_vals)
+        ]
+    )
+
+    contact_force_in_W = np.vstack(
+        [
+            R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(f_c_B)
+            for R_WB, f_c_B in zip(rotation, f_c_B_vals)
+        ]
+    )
+
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
@@ -155,11 +187,12 @@ def plan_planar_pushing():
     )
 
     com_points_viz = VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
+    contact_force_viz = VisualizationForce2d(contact_pos_in_W, CONTACT_COLOR, contact_force_in_W)  # type: ignore
 
     viz = Visualizer2d()
     viz.visualize(
         [com_points_viz],
-        [],
+        [contact_force_viz],
         [box_viz],
         2,
     )
