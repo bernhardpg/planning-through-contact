@@ -33,8 +33,8 @@ def forward_differences(
 
 
 def plan_planar_pushing():
-    NUM_KNOT_POINTS = 12
-    END_TIME = 1
+    NUM_KNOT_POINTS = 30
+    END_TIME = 3
     CONTACT_FACE_IDX = 0
     FRICTION_COEFF = 0.5
     NUM_DIMS = 2
@@ -43,10 +43,10 @@ def plan_planar_pushing():
     DIST_TO_CORNERS = 0.2
 
     TH_INITIAL = np.pi / 4
-    TH_TARGET = np.pi / 4
+    TH_TARGET = np.pi / 4 + 0.7
 
     POS_INITIAL = np.array([[0.0, 0.5]])
-    POS_TARGET = np.array([[0.0, 0.2]])
+    POS_TARGET = np.array([[0.1, 0.2]])
 
     f_max = FRICTION_COEFF * G * MASS
     tau_max = f_max * DIST_TO_CORNERS
@@ -98,7 +98,7 @@ def plan_planar_pushing():
     # Box position relative to world frame
     p_WB_xs = prog.NewContinuousVariables(NUM_KNOT_POINTS, "p_WB_x")
     p_WB_ys = prog.NewContinuousVariables(NUM_KNOT_POINTS, "p_WB_y")
-    p_WBs = [np.array([x, y]) for x, y in zip(p_WB_xs, p_WB_ys)]
+    p_WBs = [np.array([x, y]) for x, y in zip(p_WB_xs, p_WB_ys)]  # TODO: rename!
 
     # Compute velocities
     v_WBs = forward_differences(p_WBs, dt)
@@ -108,9 +108,9 @@ def plan_planar_pushing():
     # # Friction cone constraints
     for c_n in normal_forces:
         prog.AddLinearConstraint(c_n >= 0)
-    # for c_n, c_f in zip(normal_forces, friction_forces):
-    #     prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-    #     prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+    for c_n, c_f in zip(normal_forces, friction_forces):
+        prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
+        prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
     # Quasi-static dynamics
     for v_WB, omega_WB, f_c_B, tau_c_B in zip(
@@ -139,19 +139,33 @@ def plan_planar_pushing():
     prog.AddConstraint(theta_WBs[0] == TH_INITIAL)
     prog.AddConstraint(theta_WBs[-1] == TH_TARGET)
 
-    prog.AddConstraint(eq(p_WBs[0], POS_INITIAL))
-    prog.AddConstraint(eq(p_WBs[-1], POS_TARGET))
+    def create_R(th: float) -> npt.NDArray[np.float64]:
+        return np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+
+    R_WB_I = create_R(TH_INITIAL)
+    R_WB_T = create_R(TH_TARGET)
+    p_WB_I = R_WB_I.dot(p_WBs[0])
+    p_WB_T = R_WB_T.dot(p_WBs[-1])
+    prog.AddLinearConstraint(eq(p_WB_I, POS_INITIAL))
+    prog.AddLinearConstraint(eq(p_WB_T, POS_TARGET))
 
     result = Solve(prog)
     assert result.is_success()
 
-    com = result.GetSolution(p_WBs)
+    com_in_body = result.GetSolution(p_WBs)
     rotation = np.vstack(
         [
             np.array(
                 [[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]
             ).flatten()  # NOTE: This is the expected format by the visualizer
             for th in result.GetSolution(theta_WBs)
+        ]
+    )
+
+    com = np.vstack(
+        [
+            R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_body)
+            for R_WB, p_body in zip(rotation, com_in_body)
         ]
     )
 
@@ -187,14 +201,16 @@ def plan_planar_pushing():
     )
 
     com_points_viz = VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
+    contact_point_viz = VisualizationPoint2d(contact_pos_in_W, FINGER_COLOR)  # type: ignore
     contact_force_viz = VisualizationForce2d(contact_pos_in_W, CONTACT_COLOR, contact_force_in_W)  # type: ignore
 
     viz = Visualizer2d()
+    FRAMES_PER_SEC = NUM_KNOT_POINTS / END_TIME
     viz.visualize(
-        [com_points_viz],
+        [com_points_viz, contact_point_viz],
         [contact_force_viz],
         [box_viz],
-        2,
+        FRAMES_PER_SEC,
     )
 
 

@@ -28,6 +28,12 @@ class VisualizationPoint2d:
         ).eval_entire_interval()
         return cls(position_curve, COLORS[color])
 
+    def __post_init__(self):
+        self.radius = 1.0
+
+    def change_radius(self, new_radius: float) -> None:
+        self.radius = new_radius
+
 
 @dataclass
 class VisualizationForce2d(VisualizationPoint2d):
@@ -232,9 +238,8 @@ class Visualizer2d:
     def _flatten_points(points: npt.NDArray[np.float64]) -> List[float]:
         return list(points.flatten(order="F"))
 
-    def _draw_point(
-        self, point: VisualizationPoint2d, idx: int, radius: float = POINT_RADIUS
-    ) -> None:
+    def _draw_point(self, point: VisualizationPoint2d, idx: int) -> None:
+        radius = self.POINT_RADIUS * point.radius
         pos = point.position_curve[idx].reshape((-1, 1))
 
         lower_left = pos - radius
