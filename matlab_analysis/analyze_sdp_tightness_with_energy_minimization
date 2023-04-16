@@ -15,15 +15,21 @@ n = NUM_CTRL_POINTS * NUM_DIMS + 1 # we also include 1
 
 # Cost
 function create_Q_i(i)
-    Q_i = zeros(n, n)
-    temp = 2 * [I(NUM_DIMS) -I(NUM_DIMS);
-               -I(NUM_DIMS) I(NUM_DIMS)];
-    start_index = i * NUM_DIMS
-    Q_i[start_index:start_index+NUM_DIMS*2-1, start_index:start_index+NUM_DIMS*2-1] .= temp
+    Q_i = zeros(n, n);
+    temp =  [I(NUM_DIMS) -I(NUM_DIMS);
+             -I(NUM_DIMS) I(NUM_DIMS)];
+    start_index = i * NUM_DIMS;
+    Q_i[start_index:start_index+NUM_DIMS*2-1, start_index:start_index+NUM_DIMS*2-1] .= temp;
     return Q_i
 end
 
-Q = sum([create_Q_i(i) for i ∈ 1:NUM_CTRL_POINTS-1])
+Q = sum([create_Q_i(i) for i ∈ 1:NUM_CTRL_POINTS-1]);
+
+temp = Q[2:end,2:end]
+λs = eigvals(temp)
+print("Number of zero eigenvalues:")
+@show(sum(isapprox.(λs, 0, atol=1e-5)))
+
 
 @objective(model, Min, tr(Q * X'))
 
@@ -36,44 +42,65 @@ end
 
 ## SO(2) constraints 
 for i ∈ 1:2:n-1
-    Q_eq = -e_i(i+1) * e_i(i+1)' - e_i(i+2) * e_i(i+2)'
-    Q_eq[1,1] = 1
-    @show(Q_eq)
+    Q_eq = -e_i(i+1) * e_i(i+1)' - e_i(i+2) * e_i(i+2)';
+    Q_eq[1,1] = 1;
     @constraint(model, tr(Q_eq * X') == 0)
 end
 
 # Initial and final condition
 x = X[:,1]
 
-θ_0 = 0;
-θ_T = π / 2;
+θ_0 = 1;
+ϵ = 1e-2
+#θ_T = π - ϵ;
+#θ_T = π / 2;
+θ_T = π;
 
 r_0 = [cos(θ_0); sin(θ_0)];
 r_T = [cos(θ_T); sin(θ_T)];
+# r_0 = [0.9; 0];
+# r_T = [0; 0.9];
 
-A_0 = zeros(NUM_DIMS,n-1)
+
+A_0 = zeros(NUM_DIMS,n-1);
 A_0[1,1] = 1
 A_0[2,2] = 1
 
-A_T = zeros(NUM_DIMS,n-1)
+A_T = zeros(NUM_DIMS,n-1);
 A_T[1,end-1] = 1
 A_T[2,end] = 1
 
 A_eq = [-r_0 A_0;
-        -r_T A_T]
+        -r_T A_T];
 
 @constraint(model, A_eq * X .== 0)
-@constraint(model, A_eq * X * e_i(1) .== 0)
 
 # Solve the problem
 optimize!(model)
 
+if termination_status(model) != MOI.OPTIMAL
+    print("No solution found")
+    return
+end
+
 x_val = value.(x)[2:end]
 
-points = reshape(x_val, (NUM_DIMS, NUM_CTRL_POINTS))'
+pts = reshape(x_val, (NUM_DIMS, NUM_CTRL_POINTS))'
 
 using Plots
-plot(points[:,1], points[:,2], label="", ylims=(-1.5, 1.5), xlims=(-1.5, 1.5))
-scatter!(points[:,1], points[:,2], label="Ctrl points")
-#ϵ = 0.1
-#annotate!(points[:,1] + ϵ , points[:,2] + ϵ, string.(1:NUM_CTRL_POINTS))
+# Plot the trajectory
+plot(pts[:,1], pts[:,2], label="", ylims=(-1.5, 1.5), xlims=(-1.5, 1.5), aspect_ratio=1)
+scatter!(pts[:,1], pts[:,2], label="Ctrl points")
+
+ϵ = 0.1
+for i ∈ 1:NUM_CTRL_POINTS
+    annotate!.(
+        pts[i,1] + ϵ , pts[i,2] + ϵ,
+        string(i)
+    )
+end
+
+# Plot the unit circle
+θs = 0:0.01:2*π
+plot!(cos.(θs), sin.(θs), color=:grey, label="")
+
