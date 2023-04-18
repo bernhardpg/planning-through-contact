@@ -2,7 +2,7 @@ import time
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import Canvas
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -188,6 +188,7 @@ class Visualizer2d:
         forces: List[VisualizationForce2d],
         polygons: List[VisualizationPolygon2d],
         frames_per_sec: float = 20.0,
+        target: Optional[VisualizationPolygon2d] = None,
     ) -> None:
         curve_lengths = np.array(
             [len(p.position_curve) for p in points]
@@ -208,6 +209,9 @@ class Visualizer2d:
 
         for frame_idx in range(num_frames):
             self.canvas.delete("all")
+
+            if target is not None:
+                self._draw_target_polygon(target)
 
             for polygon in polygons:
                 self._draw_polygon(polygon, frame_idx)
@@ -294,3 +298,13 @@ class Visualizer2d:
             self._draw_point(
                 viz_com, idx, radius=self.POINT_RADIUS * 1.2
             )  # make com points a bit bigger
+
+    def _draw_target_polygon(self, target: VisualizationPolygon2d) -> None:
+        LAST_IDX = -1  # we always use the last idx for target
+        vertices = np.hstack(
+            [c[LAST_IDX].reshape((-1, 1)) for c in target.vertices_curves]
+        )
+        polygon_points = self._transform_points_for_plotting(vertices)
+        self.canvas.create_polygon(
+            polygon_points, outline=target.color.hex_format(), dash=(10, 5), width=3
+        )

@@ -1,3 +1,4 @@
+import argparse
 from typing import List, TypeVar
 
 import numpy as np
@@ -91,21 +92,19 @@ def interpolate_w_first_order_hold(
     return traj
 
 
-def plan_planar_pushing():
-    NUM_KNOT_POINTS = 10
-    END_TIME = 3
-    CONTACT_FACE_IDX = 0
+def plan_planar_pushing(
+    contact_face_idx,
+    th_initial,
+    th_target,
+    pos_initial,
+    pos_target,
+    num_knot_points,
+    num_vertices,
+):
     FRICTION_COEFF = 0.5
-    NUM_DIMS = 2
     G = 9.81
     MASS = 1.0
     DIST_TO_CORNERS = 0.2
-
-    TH_INITIAL = np.pi / 4
-    TH_TARGET = np.pi / 4 - 0.5
-
-    POS_INITIAL = np.array([[0.0, 0.5]])
-    POS_TARGET = np.array([[-0.1, 0.2]])
 
     f_max = FRICTION_COEFF * G * MASS
     tau_max = f_max * DIST_TO_CORNERS
@@ -114,49 +113,48 @@ def plan_planar_pushing():
         [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
     )  # Ellipsoidal Limit surface approximation
 
-    dt = END_TIME / NUM_KNOT_POINTS
+    dt = end_time / num_knot_points
 
     prog = MathematicalProgram()
 
-    box = EquilateralPolytope2d(
+    polytope = EquilateralPolytope2d(
         actuated=False,
         name="Slider",
         mass=MASS,
         vertex_distance=DIST_TO_CORNERS,
-        num_vertices=4,
+        num_vertices=num_vertices,
     )
 
     contact_face = PolytopeContactLocation(
-        pos=ContactLocation.FACE, idx=CONTACT_FACE_IDX
+        pos=ContactLocation.FACE, idx=contact_face_idx
     )
 
     # Contact positions
-    lams = prog.NewContinuousVariables(NUM_KNOT_POINTS, "lam")
+    lams = prog.NewContinuousVariables(num_knot_points, "lam")
     for lam in lams:
         prog.AddLinearConstraint(lam >= 0)
         prog.AddLinearConstraint(lam <= 1)
 
-    pv1, pv2 = box.get_proximate_vertices_from_location(contact_face)
+    pv1, pv2 = polytope.get_proximate_vertices_from_location(contact_face)
     p_c_Bs = [lam * pv1 + (1 - lam) * pv2 for lam in lams]
 
     # Contact forces
-    normal_forces = prog.NewContinuousVariables(NUM_KNOT_POINTS, "c_n")
-    friction_forces = prog.NewContinuousVariables(NUM_KNOT_POINTS, "c_f")
-    normal_vec, tangent_vec = box.get_norm_and_tang_vecs_from_location(contact_face)
+    normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
+    friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
+    normal_vec, tangent_vec = polytope.get_norm_and_tang_vecs_from_location(
+        contact_face
+    )
     f_c_Bs = [
         c_n * normal_vec + c_f * tangent_vec
         for c_n, c_f in zip(normal_forces, friction_forces)
     ]
 
-    # Contact torques
-    tau_c_Bs = [cross_2d(p_c_B, f_c_B) for p_c_B, f_c_B in zip(p_c_Bs, f_c_Bs)]
-
     # Rotations
-    theta_WBs = prog.NewContinuousVariables(NUM_KNOT_POINTS, "theta")
+    theta_WBs = prog.NewContinuousVariables(num_knot_points, "theta")
 
     # Box position relative to world frame
-    p_WB_xs = prog.NewContinuousVariables(NUM_KNOT_POINTS, "p_WB_x")
-    p_WB_ys = prog.NewContinuousVariables(NUM_KNOT_POINTS, "p_WB_y")
+    p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
+    p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
     p_WBs = [np.array([x, y]) for x, y in zip(p_WB_xs, p_WB_ys)]  # TODO: rename!
 
     # Compute velocities
@@ -172,9 +170,15 @@ def plan_planar_pushing():
         prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
     # Quasi-static dynamics
-    for v_WB, omega_WB, f_c_B, tau_c_B in zip(
-        v_WBs, omega_WBs, f_c_Bs, tau_c_Bs
-    ):  # NOTE: This will not add any dynamic constraints to the final forces and torques!
+    for k in range(num_knot_points - 1):
+        v_WB = v_WBs[k]
+        omega_WB = omega_WBs[k]
+        f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
+        p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
+
+        # Contact torques
+        tau_c_B = cross_2d(p_c_B, f_c_B)
+
         x_dot = np.concatenate([v_WB, [omega_WB]])
         wrench = np.concatenate(
             [f_c_B.flatten(), [tau_c_B]]
@@ -195,18 +199,18 @@ def plan_planar_pushing():
     prog.AddQuadraticCost(sq_angular_vels)
 
     # Initial conditions
-    prog.AddConstraint(theta_WBs[0] == TH_INITIAL)
-    prog.AddConstraint(theta_WBs[-1] == TH_TARGET)
+    prog.AddConstraint(theta_WBs[0] == th_initial)
+    prog.AddConstraint(theta_WBs[-1] == th_target)
 
     def create_R(th: float) -> npt.NDArray[np.float64]:
         return np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
 
-    R_WB_I = create_R(TH_INITIAL)
-    R_WB_T = create_R(TH_TARGET)
+    R_WB_I = create_R(th_initial)
+    R_WB_T = create_R(th_target)
     p_WB_I = R_WB_I.dot(p_WBs[0])
     p_WB_T = R_WB_T.dot(p_WBs[-1])
-    prog.AddLinearConstraint(eq(p_WB_I, POS_INITIAL))
-    prog.AddLinearConstraint(eq(p_WB_T, POS_TARGET))
+    prog.AddLinearConstraint(eq(p_WB_I, pos_initial))
+    prog.AddLinearConstraint(eq(p_WB_T, pos_target))
 
     import time
 
@@ -226,12 +230,12 @@ def plan_planar_pushing():
 
     # Extract valus
     x_val = result.GetSolution(X[1:, 0])
-    lam_vals = x_val[0:NUM_KNOT_POINTS]
-    normal_forces_vals = x_val[NUM_KNOT_POINTS : 2 * NUM_KNOT_POINTS]
-    friction_forces_vals = x_val[2 * NUM_KNOT_POINTS : 3 * NUM_KNOT_POINTS]
-    theta_vals = x_val[3 * NUM_KNOT_POINTS : 4 * NUM_KNOT_POINTS]
-    p_WB_xs_vals = x_val[4 * NUM_KNOT_POINTS : 5 * NUM_KNOT_POINTS]
-    p_WB_ys_vals = x_val[5 * NUM_KNOT_POINTS : 6 * NUM_KNOT_POINTS]
+    lam_vals = x_val[0:num_knot_points]
+    normal_forces_vals = x_val[num_knot_points : 2 * num_knot_points]
+    friction_forces_vals = x_val[2 * num_knot_points : 3 * num_knot_points]
+    theta_vals = x_val[3 * num_knot_points : 4 * num_knot_points]
+    p_WB_xs_vals = x_val[4 * num_knot_points : 5 * num_knot_points]
+    p_WB_ys_vals = x_val[5 * num_knot_points : 6 * num_knot_points]
 
     # Reconstruct quantities
     p_c_Bs_vals = np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lam_vals]).T
@@ -268,23 +272,32 @@ def plan_planar_pushing():
     DT = 0.01
 
     # Interpolate quantities
-    R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, END_TIME, DT)
-    com_traj = interpolate_w_first_order_hold(box_com_traj, 0, END_TIME, DT)
-    force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, END_TIME, DT)
-    contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, END_TIME, DT)
+    R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, end_time, DT)
+    com_traj = interpolate_w_first_order_hold(box_com_traj, 0, end_time, DT)
+    force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
+    contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, end_time, DT)
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
     TABLE_COLOR = COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
+    TARGET_COLOR = COLORS["firebrick1"]
 
     flattened_rotation = np.vstack([R.flatten() for R in R_traj])
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        box,
+        polytope,
         BOX_COLOR,
+    )
+
+    # NOTE: I don't really need the entire trajectory here, but leave for now
+    target_viz = VisualizationPolygon2d.from_trajs(
+        com_traj,
+        flattened_rotation,
+        polytope,
+        TARGET_COLOR,
     )
 
     com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
@@ -292,14 +305,65 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / END_TIME
+    FRAMES_PER_SEC = len(R_traj) / end_time
     viz.visualize(
         [com_points_viz, contact_point_viz],
         [contact_force_viz],
         [box_viz],
         FRAMES_PER_SEC,
+        target_viz,
     )
 
 
 if __name__ == "__main__":
-    plan_planar_pushing()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--exp",
+        help="Which experiment to run",
+        type=int,
+        default=0,
+    )
+    args = parser.parse_args()
+    experiment_number = args.exp
+
+    if experiment_number == 0:
+        contact_face_idx = 0
+        num_knot_points = 10
+        end_time = 3
+        num_vertices = 4
+
+        th_initial = np.pi / 4
+        th_target = np.pi / 4 - 0.5
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[-0.1, 0.2]])
+    elif experiment_number == 1:
+        num_vertices = 3
+        contact_face_idx = 0
+        num_knot_points = 10
+        end_time = 3
+
+        th_initial = np.pi / 4
+        th_target = np.pi / 4 + 0.5
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[-0.1, 0.2]])
+
+    elif experiment_number == 2:
+        num_vertices = 5
+        contact_face_idx = 0
+        num_knot_points = 10
+        end_time = 3
+
+        th_initial = np.pi / 4 + np.pi / 2 - 0.7
+        th_target = np.pi / 4 + np.pi / 2
+        pos_initial = np.array([[-0.2, 0.3]])
+        pos_target = np.array([[0.3, 0.5]])
+
+    plan_planar_pushing(
+        contact_face_idx,
+        th_initial,
+        th_target,
+        pos_initial,
+        pos_target,
+        num_knot_points,
+        num_vertices,
+    )
