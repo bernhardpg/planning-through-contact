@@ -33,7 +33,7 @@ def forward_differences(
 
 
 def plan_planar_pushing():
-    NUM_KNOT_POINTS = 30
+    NUM_KNOT_POINTS = 10
     END_TIME = 3
     CONTACT_FACE_IDX = 0
     FRICTION_COEFF = 0.5
@@ -43,10 +43,10 @@ def plan_planar_pushing():
     DIST_TO_CORNERS = 0.2
 
     TH_INITIAL = np.pi / 4
-    TH_TARGET = np.pi / 4 + 0.7
+    TH_TARGET = np.pi / 4 - 0.5
 
     POS_INITIAL = np.array([[0.0, 0.5]])
-    POS_TARGET = np.array([[0.1, 0.2]])
+    POS_TARGET = np.array([[-0.1, 0.2]])
 
     f_max = FRICTION_COEFF * G * MASS
     tau_max = f_max * DIST_TO_CORNERS
@@ -149,41 +149,70 @@ def plan_planar_pushing():
     prog.AddLinearConstraint(eq(p_WB_I, POS_INITIAL))
     prog.AddLinearConstraint(eq(p_WB_T, POS_TARGET))
 
-    result = Solve(prog)
-    assert result.is_success()
+    import time
 
-    com_in_body = result.GetSolution(p_WBs)
+    start = time.time()
+    print("Starting to create SDP relaxation...")
+    relaxed_prog, X, basis = create_sdp_relaxation(prog)
+    end = time.time()
+    print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
+
+    print("Solving...")
+    start = time.time()
+    result = Solve(relaxed_prog)
+    end = time.time()
+    print(f"Solved in {end - start} seconds")
+    assert result.is_success()
+    print("Success!")
+
+    # Extract valus
+    x_val = result.GetSolution(X[1:, 0])
+    lam_vals = x_val[0:NUM_KNOT_POINTS]
+    normal_forces_vals = x_val[NUM_KNOT_POINTS : 2 * NUM_KNOT_POINTS]
+    friction_forces_vals = x_val[2 * NUM_KNOT_POINTS : 3 * NUM_KNOT_POINTS]
+    theta_vals = x_val[3 * NUM_KNOT_POINTS : 4 * NUM_KNOT_POINTS]
+    p_WB_xs_vals = x_val[4 * NUM_KNOT_POINTS : 5 * NUM_KNOT_POINTS]
+    p_WB_ys_vals = x_val[5 * NUM_KNOT_POINTS : 6 * NUM_KNOT_POINTS]
+
+    # Reconstruct quantities
+    p_c_Bs_vals = np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lam_vals]).T
+    f_c_Bs_vals = np.hstack(
+        [
+            c_n * normal_vec + c_f * tangent_vec
+            for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
+        ]
+    ).T
+    p_WBs_vals = np.vstack(
+        [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
+    )  # TODO: rename!
+
     rotation = np.vstack(
         [
             np.array(
                 [[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]
             ).flatten()  # NOTE: This is the expected format by the visualizer
-            for th in result.GetSolution(theta_WBs)
+            for th in theta_vals
         ]
     )
 
     com = np.vstack(
         [
             R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_body)
-            for R_WB, p_body in zip(rotation, com_in_body)
+            for R_WB, p_body in zip(rotation, p_WBs_vals)
         ]
     )
-
-    to_float = np.vectorize(lambda x: x.Evaluate())
-    p_c_B_vals = to_float(np.vstack([result.GetSolution(p).T for p in p_c_Bs]))
-    f_c_B_vals = to_float(np.vstack([result.GetSolution(f).T for f in f_c_Bs]))
 
     contact_pos_in_W = np.vstack(
         [
             p_WB + R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(com, rotation, p_c_B_vals)
+            for p_WB, R_WB, p_c_B in zip(com, rotation, p_c_Bs_vals)
         ]
     )
 
     contact_force_in_W = np.vstack(
         [
             R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(f_c_B)
-            for R_WB, f_c_B in zip(rotation, f_c_B_vals)
+            for R_WB, f_c_B in zip(rotation, f_c_Bs_vals)
         ]
     )
 
