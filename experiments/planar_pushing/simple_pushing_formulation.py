@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.two_d.contact.types import ContactLocation
@@ -30,6 +31,64 @@ def forward_differences(
         (var_next - var_curr) / dt for var_curr, var_next in zip(vars[0:-1], vars[1:])
     ]
     return forward_diffs
+
+
+def make_so3(R: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """
+    Takes a SO(2) rotation matrix and returns a rotation matrix in SO(3), where the original matrix
+    is treated as a rotation about the z-axis.
+    """
+    R_in_SO3 = np.eye(3)
+    R_in_SO3[0:2, 0:2] = R
+    return R_in_SO3
+
+
+def interpolate_so2_using_slerp(
+    Rs: List[npt.NDArray[np.float64]],
+    start_time: float,
+    end_time: float,
+    dt: float,
+) -> List[npt.NDArray[np.float64]]:
+    """
+    Assumes evenly spaced knot points R_matrices.
+
+    @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
+    """
+
+    Rs_in_SO3 = [make_so3(R) for R in Rs]
+    knot_point_times = np.linspace(start_time, end_time, len(Rs))
+    quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)
+
+    traj_times = np.arange(start_time, end_time, dt)
+    R_traj_in_SO2 = [
+        quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
+    ]
+
+    return R_traj_in_SO2
+
+
+def interpolate_w_first_order_hold(
+    values: npt.NDArray[np.float64],  # (NUM_SAMPLES, NUM_DIMS)
+    start_time: float,
+    end_time: float,
+    dt: float,
+) -> npt.NDArray[np.float64]:  # (NUM_POINTS, NUM_DIMS)
+    """
+    Assumes evenly spaced knot points.
+
+    @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
+    """
+
+    knot_point_times = np.linspace(start_time, end_time, len(values))
+
+    # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
+    first_order_hold = PiecewisePolynomial.FirstOrderHold(knot_point_times, values.T)
+    traj_times = np.arange(start_time, end_time, dt)
+    traj = np.hstack(
+        [first_order_hold.value(t) for t in traj_times]
+    ).T  # transpose to match format in rest of project
+
+    return traj
 
 
 def plan_planar_pushing():
@@ -186,35 +245,33 @@ def plan_planar_pushing():
         [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
     )  # TODO: rename!
 
-    rotation = np.vstack(
-        [
-            np.array(
-                [[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]
-            ).flatten()  # NOTE: This is the expected format by the visualizer
-            for th in theta_vals
-        ]
-    )
+    R_WBs_vals = [
+        np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+        for th in theta_vals
+    ]
 
-    com = np.vstack(
-        [
-            R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_body)
-            for R_WB, p_body in zip(rotation, p_WBs_vals)
-        ]
+    box_com_traj = np.vstack(
+        [R_WB.dot(p_body) for R_WB, p_body in zip(R_WBs_vals, p_WBs_vals)]
     )
 
     contact_pos_in_W = np.vstack(
         [
-            p_WB + R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(com, rotation, p_c_Bs_vals)
+            p_WB + R_WB.dot(p_c_B)
+            for p_WB, R_WB, p_c_B in zip(box_com_traj, R_WBs_vals, p_c_Bs_vals)
         ]
     )
 
     contact_force_in_W = np.vstack(
-        [
-            R_WB.reshape((NUM_DIMS, NUM_DIMS)).dot(f_c_B)
-            for R_WB, f_c_B in zip(rotation, f_c_Bs_vals)
-        ]
+        [R_WB.dot(f_c_B) for R_WB, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
     )
+
+    DT = 0.01
+
+    # Interpolate quantities
+    R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, END_TIME, DT)
+    com_traj = interpolate_w_first_order_hold(box_com_traj, 0, END_TIME, DT)
+    force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, END_TIME, DT)
+    contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, END_TIME, DT)
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
@@ -222,19 +279,20 @@ def plan_planar_pushing():
     TABLE_COLOR = COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
 
+    flattened_rotation = np.vstack([R.flatten() for R in R_traj])
     box_viz = VisualizationPolygon2d.from_trajs(
-        com,
-        rotation,
+        com_traj,
+        flattened_rotation,
         box,
         BOX_COLOR,
     )
 
-    com_points_viz = VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
-    contact_point_viz = VisualizationPoint2d(contact_pos_in_W, FINGER_COLOR)  # type: ignore
-    contact_force_viz = VisualizationForce2d(contact_pos_in_W, CONTACT_COLOR, contact_force_in_W)  # type: ignore
+    com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
+    contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
+    contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = NUM_KNOT_POINTS / END_TIME
+    FRAMES_PER_SEC = len(R_traj) / END_TIME
     viz.visualize(
         [com_points_viz, contact_point_viz],
         [contact_force_viz],
