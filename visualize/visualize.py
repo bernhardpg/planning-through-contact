@@ -124,7 +124,6 @@ def animate_positions(
     }
 
     def init():
-        breakpoint()
         for box in boxes.values():
             box.set_data([], [])
         for finger in points.values():
@@ -145,7 +144,7 @@ def animate_positions(
 
         return (*(boxes.values()), *(points.values()))
 
-    animation.FuncAnimation(
+    ani = animation.FuncAnimation(
         fig, animate, init_func=init, frames=n_frames, interval=20, blit=True
     )
 

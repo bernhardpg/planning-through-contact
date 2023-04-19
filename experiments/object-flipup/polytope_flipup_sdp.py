@@ -1,9 +1,10 @@
 import argparse
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.solvers import Solve
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.bezier import BezierCurve
@@ -24,6 +25,64 @@ from visualize.visualizer_2d import (
     VisualizationPolygon2d,
     Visualizer2d,
 )
+
+
+def make_so3(R: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """
+    Takes a SO(2) rotation matrix and returns a rotation matrix in SO(3), where the original matrix
+    is treated as a rotation about the z-axis.
+    """
+    R_in_SO3 = np.eye(3)
+    R_in_SO3[0:2, 0:2] = R
+    return R_in_SO3
+
+
+def interpolate_so2_using_slerp(
+    Rs: List[npt.NDArray[np.float64]],
+    start_time: float,
+    end_time: float,
+    dt: float,
+) -> List[npt.NDArray[np.float64]]:
+    """
+    Assumes evenly spaced knot points R_matrices.
+
+    @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
+    """
+
+    Rs_in_SO3 = [make_so3(R) for R in Rs]
+    knot_point_times = np.linspace(start_time, end_time, len(Rs))
+    quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)
+
+    traj_times = np.arange(start_time, end_time, dt)
+    R_traj_in_SO2 = [
+        quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
+    ]
+
+    return R_traj_in_SO2
+
+
+def interpolate_w_first_order_hold(
+    values: npt.NDArray[np.float64],  # (NUM_SAMPLES, NUM_DIMS)
+    start_time: float,
+    end_time: float,
+    dt: float,
+) -> npt.NDArray[np.float64]:  # (NUM_POINTS, NUM_DIMS)
+    """
+    Assumes evenly spaced knot points.
+
+    @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
+    """
+
+    knot_point_times = np.linspace(start_time, end_time, len(values))
+
+    # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
+    first_order_hold = PiecewisePolynomial.FirstOrderHold(knot_point_times, values.T)
+    traj_times = np.arange(start_time, end_time, dt)
+    traj = np.hstack(
+        [first_order_hold.value(t) for t in traj_times]
+    ).T  # transpose to match format in rest of project
+
+    return traj
 
 
 def eval_expression_vector_with_traj_values(
@@ -126,6 +185,45 @@ def _plot_from_sdp_relaxation(
             for rot in flattened_body_rotations
         ]  # List[(N_steps, N_dims)]
 
+        # Reshape to (2, 2) for interpolation
+        bodies_rot_in_world_frame = [
+            [row.reshape(2, 2) for row in body_traj]
+            for body_traj in bodies_rot_in_world_frame
+        ]
+
+        # Interpolation
+        START_TIME = 1.0
+        END_TIME = 3.0
+        DT = 0.01
+
+        frames_per_sec = 1 / DT
+
+        bodies_com_in_world_frame = [
+            interpolate_w_first_order_hold(traj, START_TIME, END_TIME, DT)
+            for traj in bodies_com_in_world_frame
+        ]
+
+        contact_positions_in_world_frame = [
+            interpolate_w_first_order_hold(traj, START_TIME, END_TIME, DT)
+            for traj in contact_positions_in_world_frame
+        ]
+
+        contact_forces_in_world_frame = [
+            interpolate_w_first_order_hold(traj, START_TIME, END_TIME, DT)
+            for traj in contact_forces_in_world_frame
+        ]
+
+        bodies_rot_in_world_frame = [
+            interpolate_so2_using_slerp(traj, START_TIME, END_TIME, DT)
+            for traj in bodies_rot_in_world_frame
+        ]
+
+        # Flatten bodies rot
+        bodies_rot_in_world_frame = [
+            np.vstack([R.flatten() for R in body_traj])
+            for body_traj in bodies_rot_in_world_frame
+        ]
+
         viz_com_points = [
             VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
             for com in bodies_com_in_world_frame
@@ -208,12 +306,22 @@ def _plot_from_sdp_relaxation(
             )
         ]
 
+        TARGET_POLYGON_IDX = 1
+        TARGET_COLOR = COLORS["firebrick1"]
+        target_polygon = VisualizationPolygon2d.from_trajs(
+            bodies_com_in_world_frame[TARGET_POLYGON_IDX],
+            bodies_rot_in_world_frame[TARGET_POLYGON_IDX],
+            contact_scene.rigid_bodies[TARGET_POLYGON_IDX],
+            TARGET_COLOR,
+        )
+
         viz = Visualizer2d()
         viz.visualize(
             viz_contact_positions + viz_com_points,
             viz_contact_forces + viz_gravitional_forces,
             viz_polygons,
             frames_per_sec,
+            target_polygon,
         )
 
 
@@ -331,10 +439,10 @@ def plan_polytope_flipup(
     print(f"Solved in {end - start} seconds")
     assert result.is_success()
     print("Success!")
-    breakpoint()
 
     X_sol = result.GetSolution(X)
     x_sol = X_sol[1:, 0]
+    breakpoint()
 
     _plot_from_sdp_relaxation(
         x_sol,
@@ -342,8 +450,8 @@ def plan_polytope_flipup(
         contact_scene,
         NUM_CTRL_POINTS,
         plot_ctrl_points=True,
-        show_animation=False,
-        plot_rotation_curves=True,
+        show_animation=True,
+        plot_rotation_curves=False,
     )
 
 
@@ -370,22 +478,27 @@ if __name__ == "__main__":
     if sliding:
         if num_vertices == 3:
             contact_vertex = 2
+            th_initial = np.pi / 4 - 0.3
             th_target = np.pi / 4
         elif num_vertices == 4:
             contact_vertex = 2
-            th_initial = -np.pi / 4
-            th_target = 0
+            th_initial = -0.6
+            th_target = -0.4
         elif num_vertices == 5:
             contact_vertex = 3
-            th_target = np.pi / 5
+            th_initial = 0.1
+            th_target = 0.2
         else:
             contact_vertex = 3
     else:
         if num_vertices == 3:
             contact_vertex = 2
+            th_initial = 0.2
+            th_target = np.pi / 4 + 0.4
         elif num_vertices == 4:
             contact_vertex = 2
-            th_target = np.pi / 6
+            th_initial = -0.6
+            th_target = np.pi / 6 - 0.6
         elif num_vertices == 5:
             contact_vertex = 3
             th_target = np.pi / 6
