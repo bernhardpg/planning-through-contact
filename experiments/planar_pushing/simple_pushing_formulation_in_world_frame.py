@@ -174,6 +174,10 @@ def plan_planar_pushing(
     # In 2D, omega_z = theta_dot will be at position (0,1) in R_dot * R'
     omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WB_dots)]
 
+    # SO(2) constraints
+    for c, s in zip(cos_ths, sin_ths):
+        prog.AddConstraint(c**2 + s**2 == 1)
+
     # # Friction cone constraints
     for c_n in normal_forces:
         prog.AddLinearConstraint(c_n >= 0)
@@ -202,13 +206,15 @@ def plan_planar_pushing(
             [f_c_B.flatten(), [tau_c_B]]
         )  # NOTE: Should fix not nice vector dimensions
 
-        quasi_static_dynamic_constraint = eq(x_dot, R.dot(A).dot(wrench))
+        quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench))
         for row in quasi_static_dynamic_constraint:
             prog.AddConstraint(row)
 
     # Ensure sticking on the contact point
     for v_c_B in v_c_Bs:
-        prog.AddLinearConstraint(eq(v_c_B, 0))
+        prog.AddLinearConstraint(
+            eq(v_c_B, 0)
+        )  # no velocity on contact points in body frame
 
     # Minimize kinetic energy through squared velocities
     sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in v_WBs])
@@ -230,6 +236,9 @@ def plan_planar_pushing(
     # Initial conditions
     prog.AddLinearConstraint(eq(R_WBs[0], R_WB_I))
     prog.AddLinearConstraint(eq(R_WBs[-1], R_WB_T))
+
+    # prog.AddLinearConstraint(eq(p_WBs[0], R_WBs[0].T.dot(pos_initial.T)))
+    # prog.AddLinearConstraint(eq(p_WBs[-1], R_WBs[-1].T.dot(pos_target.T)))
 
     prog.AddLinearConstraint(eq(p_WBs[0], pos_initial))
     prog.AddLinearConstraint(eq(p_WBs[-1], pos_target))
@@ -390,8 +399,8 @@ if __name__ == "__main__":
         end_time = 3
         num_vertices = 4
 
-        th_initial = np.pi / 4
-        th_target = np.pi / 4 - 0.5
+        th_initial = 0
+        th_target = 0.5
         pos_initial = np.array([[0.0, 0.5]])
         pos_target = np.array([[-0.1, 0.2]])
     elif experiment_number == 1:
