@@ -5,7 +5,7 @@ from pydrake.solvers import MathematicalProgram, Solve
 from convex_relaxation.sdp import create_sdp_relaxation
 from visualize.analysis import plot_cos_sine_trajs
 
-NUM_CTRL_POINTS = 5
+NUM_CTRL_POINTS = 8
 NUM_DIMS = 2
 
 prog = MathematicalProgram()
@@ -18,7 +18,7 @@ for i in range(NUM_CTRL_POINTS):
     so_2_constraint = r_i.T.dot(r_i) == 1
     prog.AddConstraint(so_2_constraint)
 
-# Minimize energy
+# Minimize squared euclidean distances in rotaion parameters
 for i in range(NUM_CTRL_POINTS - 1):
     r_i = r[:, i]
     r_next = r[:, i + 1]
@@ -27,9 +27,15 @@ for i in range(NUM_CTRL_POINTS - 1):
     rot_cost_i = r_dot_i.T.dot(r_dot_i)
     prog.AddCost(rot_cost_i)
 
+minimize_squares = False
+if minimize_squares:
+    for i in range(NUM_CTRL_POINTS):
+        r_i = r[:, i]
+        prog.AddCost(r_i.T.dot(r_i))
+
 # Initial conditions
 th_initial = 0
-th_final = np.pi / 2
+th_final = np.pi - 0.2
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -46,9 +52,16 @@ for c in final_cond:
 relaxed_prog, X, mon_basis = create_sdp_relaxation(prog)
 result = Solve(relaxed_prog)
 assert result.is_success()
-breakpoint()
+print(f"Cost: {result.get_optimal_cost()}")
 
 X_val = result.GetSolution(X)
+
+tol = 1e-4
+num_nonzero_eigvals = len(
+    [val for val in np.linalg.eigvals(X_val) if np.abs(val) >= tol]
+)
+print(f"Rank of X: {num_nonzero_eigvals}")
+
 x_val = X_val[:, 0]
 
 r_val = x_val[1 : NUM_CTRL_POINTS * NUM_DIMS + 1]

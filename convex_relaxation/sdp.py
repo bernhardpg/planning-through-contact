@@ -202,7 +202,7 @@ def _collect_bounding_box_constraints(
 
 
 def create_sdp_relaxation(
-    prog: MathematicalProgram,
+    prog: MathematicalProgram, use_linear_relaxation: bool = False
 ) -> Tuple[MathematicalProgram, NpVariableArray, NpMonomialArray]:
     DEGREE_QUADRATIC = 2  # We are only relaxing (non-convex) quadratic programs
 
@@ -217,7 +217,8 @@ def create_sdp_relaxation(
 
     relaxed_prog = MathematicalProgram()
     X = relaxed_prog.NewSymmetricContinuousVariables(num_vars, "X")
-    relaxed_prog.AddPositiveSemidefiniteConstraint(X)
+    if use_linear_relaxation == False:
+        relaxed_prog.AddPositiveSemidefiniteConstraint(X)
 
     relaxed_prog.AddLinearConstraint(X[0, 0] == 1)  # First variable is 1
 

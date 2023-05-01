@@ -4,7 +4,7 @@ using GraphPlot, Compose
 using LinearAlgebra
 
 model = Model(Mosek.Optimizer)
-NUM_CTRL_POINTS = 4
+NUM_CTRL_POINTS = 8
 NUM_DIMS = 2
 
 n = NUM_CTRL_POINTS * NUM_DIMS + 1 # we also include 1
@@ -50,11 +50,11 @@ end
 # Initial and final condition
 x = X[:,1]
 
-θ_0 = 1;
-ϵ = 1e-2
+θ_0 = 0;
+ϵ = 1e-7
 #θ_T = π - ϵ;
 #θ_T = π / 2;
-θ_T = π;
+θ_T = π + ϵ;
 
 r_0 = [cos(θ_0); sin(θ_0)];
 r_T = [cos(θ_T); sin(θ_T)];
