@@ -1,6 +1,7 @@
 import argparse
 from typing import List, TypeVar
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq
@@ -13,6 +14,7 @@ from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray
+from visualize.analysis import create_quasistatic_pushing_analysis
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -276,6 +278,42 @@ def plan_planar_pushing(
     com_traj = interpolate_w_first_order_hold(box_com_traj, 0, end_time, DT)
     force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
     contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, end_time, DT)
+    theta_traj = interpolate_w_first_order_hold(
+        theta_vals.reshape((-1, 1)), 0, end_time, DT
+    )
+
+    traj_length = len(R_traj)
+
+    # NOTE: SHOULD BE MOVED!
+    # compute quasi-static dynamic violation
+    def _cross_2d(v1, v2):
+        return (
+            v1[0] * v2[1] - v1[1] * v2[0]
+        )  # copied because the other one assumes the result is a np array, here it is just a scalar. clean up!
+
+    quasi_static_violation = []
+    for k in range(traj_length - 1):
+        v_WB = (com_traj[k + 1] - com_traj[k]) / DT
+        omega_WB = (theta_traj[k + 1] - theta_traj[k]) / DT
+        f_c_B = force_traj[k]
+        p_c_B = contact_pos_traj[k]
+        com = com_traj[k]
+        # omega_WB = ((R_traj[k + 1] - R_traj[k]) / DT) * R_traj[k].T
+
+        # Contact torques
+        tau_c_B = _cross_2d(p_c_B - com, f_c_B)
+
+        x_dot = np.concatenate([v_WB, omega_WB])
+        wrench = np.concatenate(
+            [f_c_B.flatten(), [tau_c_B]]
+        )  # NOTE: Should fix not nice vector dimensions
+
+        violation = x_dot - A.dot(wrench)
+        quasi_static_violation.append(violation)
+
+    quasi_static_violation = np.vstack(quasi_static_violation)
+    create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
+    plt.show()
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]

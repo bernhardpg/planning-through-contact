@@ -1,6 +1,7 @@
 import argparse
 from typing import List, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.solvers import Solve
@@ -14,9 +15,14 @@ from geometry.two_d.contact.contact_scene_2d import ContactScene2d
 from geometry.two_d.contact.types import ContactLocation, ContactMode
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from geometry.utilities import cross_2d
 from planning.contact_mode_motion_planner import ContactModeMotionPlanner
 from tools.types import NpExpressionArray, NpVariableArray
-from visualize.analysis import plot_cos_sine_trajs
+from visualize.analysis import (
+    create_forces_eq_and_opposite_analysis,
+    create_static_equilibrium_analysis,
+    plot_cos_sine_trajs,
+)
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
     VisualizationCone2d,
@@ -202,6 +208,7 @@ def _plot_from_sdp_relaxation(
             interpolate_w_first_order_hold(traj, START_TIME, END_TIME, DT)
             for traj in bodies_com_in_world_frame
         ]
+        num_frames = len(bodies_com_in_world_frame[0])  # TODO change
 
         contact_positions_in_world_frame = [
             interpolate_w_first_order_hold(traj, START_TIME, END_TIME, DT)
@@ -217,6 +224,62 @@ def _plot_from_sdp_relaxation(
             interpolate_so2_using_slerp(traj, START_TIME, END_TIME, DT)
             for traj in bodies_rot_in_world_frame
         ]
+
+        #######
+        # Create relaxation error analysis
+        #######
+
+        eq_and_opposite_forces = contact_forces_in_world_frame[0:2]
+        force_discrepancy = np.array(
+            [
+                sum([force[k] for force in eq_and_opposite_forces])
+                for k in range(num_frames)
+            ]
+        )
+        create_forces_eq_and_opposite_analysis(force_discrepancy, num_ctrl_points)
+        plt.show()
+
+        forces_acting_on_object = contact_forces_in_world_frame[
+            1:
+        ]  # TODO: Generalize this. This is just specific to this setup!
+        GRAV_VEC = np.array([0, -9.81])
+        sum_of_forces = np.vstack(
+            [
+                sum([force[k] for force in forces_acting_on_object]) + GRAV_VEC
+                for k in range(num_frames)
+            ]
+        )
+
+        contact_points_in_object_frame = contact_positions_in_world_frame[
+            1:
+        ]  # TODO: Generalize this. This is just specific to this setup!
+
+        def _cross_2d(v1, v2):
+            return (
+                v1[0] * v2[1] - v1[1] * v2[0]
+            )  # copied because the other one assumes the result is a np array, here it is just a scalar. Clean up!
+
+        object_com = bodies_com_in_world_frame[1]
+        sum_of_torques = np.vstack(
+            [
+                sum(
+                    [
+                        _cross_2d(pos[k] - object_com[k], force[k])
+                        for pos, force in zip(
+                            contact_points_in_object_frame, forces_acting_on_object
+                        )
+                    ]
+                )
+                for k in range(num_frames)
+            ]
+        )
+
+        create_static_equilibrium_analysis(
+            sum_of_forces, sum_of_torques, num_ctrl_points  # type: ignore
+        )
+        plt.show()
+
+        ########
 
         # Flatten bodies rot
         bodies_rot_in_world_frame = [

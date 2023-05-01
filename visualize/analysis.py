@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,25 +53,23 @@ def _create_curve_norm(
     return np.apply_along_axis(np.linalg.norm, 1, curve).reshape((-1, 1))
 
 
-# TODO: These are likely outdated and should be updated
 def create_static_equilibrium_analysis(
-    fb_violation_ctrl_points: npt.NDArray[np.float64],
-    mb_violation_ctrl_points: npt.NDArray[np.float64],
+    fb_violation_traj: npt.NDArray[np.float64],  # (N, dims)
+    tb_violation_traj: npt.NDArray[np.float64],  # (N, 1)
+    num_ctrl_points: int,
+    mass: Optional[float] = None,  # reference values used for scaling
+    width: Optional[float] = None,
 ):
-    num_ctrl_points = fb_violation_ctrl_points.shape[1]
+    if mass is None or width is None:
+        force_ref = 1
+        torque_ref = 1
+    else:
+        force_ref = mass * 9.81
+        torque_ref = force_ref * width / 2
 
-    fb_violation = BezierCurve.create_from_ctrl_points(
-        fb_violation_ctrl_points
-    ).eval_entire_interval()
-    mb_violation = np.abs(
-        BezierCurve.create_from_ctrl_points(
-            mb_violation_ctrl_points
-        ).eval_entire_interval()
-    )
+    fb_norm_violation = _create_curve_norm(fb_violation_traj)
 
-    fb_norm_violation = _create_curve_norm(fb_violation)
-
-    N = fb_violation.shape[0]
+    N = fb_violation_traj.shape[0]
     x_axis = np.linspace(0, num_ctrl_points, N)
 
     fig, axs = plt.subplots(2, sharex=True)
@@ -80,19 +78,102 @@ def create_static_equilibrium_analysis(
     axs[0].plot(x_axis, fb_norm_violation)
     axs[0].set_title("Norm of force balance violation")
     axs[0].set(ylabel="[N]")
-    axs[0].set_ylim(-1, FORCE_REF)
+    axs[0].set_ylim(-force_ref, force_ref)
 
-    axs[1].plot(x_axis, mb_violation)
+    axs[1].plot(x_axis, tb_violation_traj)
     axs[1].set_title("Torque balance violation")
-    axs[1].set(xlabel="Control point", ylabel="[Nm]")
+    axs[1].set(xlabel="Time [s]", ylabel="[Nm]")
     axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
-    axs[1].set_ylim(-1, TORQUE_REF)
+    axs[1].set_ylim(-torque_ref, torque_ref)
 
     for ax in axs:
         ax.grid()
 
     fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
     fig.tight_layout()  # type: ignore
+
+
+def create_forces_eq_and_opposite_analysis(
+    sum_of_forces_traj: npt.NDArray[np.float64],  # (N, dims)
+    num_ctrl_points: int,
+    mass: Optional[float] = None,  # reference values used for scaling
+    width: Optional[float] = None,
+):
+    if mass is None or width is None:
+        force_ref = 1
+        torque_ref = 1
+    else:
+        force_ref = mass * 9.81
+        torque_ref = force_ref * width / 2
+
+    N = sum_of_forces_traj.shape[0]
+    x_axis = np.linspace(0, num_ctrl_points, N)
+
+    fig, axs = plt.subplots(2, sharex=True)
+    fig.suptitle("Violation of Newton's Third Law")
+
+    axs[0].plot(x_axis, sum_of_forces_traj[:, 0])
+    axs[0].set_title("Violation in x-direction")
+    axs[0].set(ylabel="[N]")
+    axs[0].set_ylim(-force_ref, force_ref)
+
+    axs[1].plot(x_axis, sum_of_forces_traj[:, 1])
+    axs[1].set_title("Violation in y-direction")
+    axs[1].set(xlabel="Time [s]", ylabel="[N]")
+    axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
+    axs[1].set_ylim(-torque_ref, torque_ref)
+
+    for ax in axs:
+        ax.grid()
+
+    fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
+    fig.tight_layout()  # type: ignore
+
+
+def create_quasistatic_pushing_analysis(
+    dynamics_violation: npt.NDArray[np.float64],  # (N, dims)
+    num_ctrl_points: int,
+    mass: Optional[float] = None,  # reference values used for scaling
+    width: Optional[float] = None,
+):
+    if mass is None or width is None:
+        force_ref = 1
+        torque_ref = 1
+    else:
+        force_ref = mass * 9.81
+        torque_ref = force_ref * width / 2
+
+    N = dynamics_violation.shape[0]
+    x_axis = np.linspace(0, num_ctrl_points, N)
+
+    fig, axs = plt.subplots(3, sharex=True)
+    fig.suptitle("Violation of quasi-static dynamics with ellipsoidal limit surface")
+
+    axs[0].plot(x_axis, dynamics_violation[:, 0])
+    axs[0].set_title("Violation in $\dot x$")
+    axs[0].set(ylabel="[m/s]")
+    axs[0].set_ylim(-force_ref, force_ref)
+
+    axs[1].plot(x_axis, dynamics_violation[:, 1])
+    axs[1].set_title("Violation in $\dot y$")
+    axs[1].set(xlabel="Time [s]", ylabel="[m/s]")
+    axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
+    axs[1].set_ylim(-torque_ref, torque_ref)
+
+    axs[2].plot(x_axis, dynamics_violation[:, 2])
+    axs[2].set_title("Violation in $\omega$")
+    axs[2].set(xlabel="Time [s]", ylabel="[rad/s]")
+    axs[2].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
+    axs[2].set_ylim(-torque_ref, torque_ref)
+
+    for ax in axs:
+        ax.grid()
+
+    fig.set_size_inches(PLOT_WIDTH_INCH, PLOT_HEIGHT_INCH)  # type: ignore
+    fig.tight_layout()  # type: ignore
+
+
+# TODO: These are likely outdated and should be updated
 
 
 def create_newtons_third_law_analysis(
