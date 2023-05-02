@@ -375,6 +375,43 @@ def get_vals(result: MathematicalProgramResult, mode_vars: List[ModeVars]) -> Mo
     )
 
 
+def _create_obj_config(
+    pos: npt.NDArray[np.float64], th: float
+) -> npt.NDArray[np.float64]:
+    """
+    Concatenates unactauted object config for source and target vertex
+    """
+    obj_pose = np.concatenate([pos.flatten(), [np.cos(th), np.sin(th)]])
+    return obj_pose
+
+
+def add_edge_with_continuity_constraint(
+    u: opt.GraphOfConvexSets.Vertex,
+    v: opt.GraphOfConvexSets.Vertex,
+    u_mode: PlanarPushingContactMode,
+    v_mode: PlanarPushingContactMode,
+    gcs: opt.GraphOfConvexSets,
+) -> opt.GraphOfConvexSets.Edge:
+    edge = gcs.AddEdge(u, v)
+
+    u_vars = u_mode.get_vars_from_gcs_vertex(u)
+    v_vars = v_mode.get_vars_from_gcs_vertex(v)
+
+    continuity_constraints = eq(u_vars.p_WBs[-1], v_vars.p_WBs[0])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    continuity_constraints = eq(u_vars.cos_th[-1], v_vars.cos_th[0])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    continuity_constraints = eq(u_vars.sin_th[-1], v_vars.sin_th[0])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    return edge
+
+
 def plan_planar_pushing():
     th_initial = 0
     th_target = 0.5
@@ -382,16 +419,22 @@ def plan_planar_pushing():
     pos_target = np.array([[-0.4, 0.2]])
     end_time = 3
 
-    initial_mode = PlanarPushingContactMode(
-        num_knot_points=6,
+    initial_config = _create_obj_config(pos_initial, th_initial)
+    target_config = _create_obj_config(pos_target, th_target)
+
+    source = opt.Point(initial_config)
+    target = opt.Point(target_config)
+
+    face_0_contact = PlanarPushingContactMode(
+        # num_knot_points=6,
         contact_face_idx=0,
         end_time=end_time,
         th_initial=th_initial,
         pos_initial=pos_initial,
     )
 
-    target_mode = PlanarPushingContactMode(
-        num_knot_points=6,
+    face_1_contact = PlanarPushingContactMode(
+        # num_knot_points=6,
         contact_face_idx=1,
         end_time=end_time,
         th_target=th_target,
@@ -399,11 +442,13 @@ def plan_planar_pushing():
     )
 
     gcs = opt.GraphOfConvexSets()
-    start_vertex = gcs.AddVertex(initial_mode.get_spectrahedron())
-    end_vertex = gcs.AddVertex(target_mode.get_spectrahedron())
+    source_vertex = gcs.AddVertex(source)
+    target_vertex = gcs.AddVertex(target)
+    face_0_vertex = gcs.AddVertex(face_0_contact.get_spectrahedron())
+    face_1_vertex = gcs.AddVertex(face_1_contact.get_spectrahedron())
 
-    modes = [initial_mode, target_mode]
-    vertices = [start_vertex, end_vertex]
+    modes = [face_0_contact, face_1_contact]
+    vertices = [face_0_vertex, face_1_vertex]
     for mode, vertex in zip(modes, vertices):
         prog = mode.relaxed_prog
         for cost in prog.linear_costs():
@@ -411,38 +456,27 @@ def plan_planar_pushing():
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
 
-    edge = gcs.AddEdge(start_vertex, end_vertex)
+    # edge = gcs.AddEdge(source_vertex, face_0_vertex)
+    # edge = gcs.AddEdge(source_vertex, face_1_vertex)
+    # edge = gcs.AddEdge(face_1_vertex, target_vertex)
+    # edge = gcs.AddEdge(face_0_vertex, target_vertex)
 
-    initial_mode_vars = initial_mode.get_vars_from_gcs_vertex(start_vertex)
-    target_mode_vars = target_mode.get_vars_from_gcs_vertex(end_vertex)
-
-    continuity_constraints = eq(initial_mode_vars.p_WBs[-1], target_mode_vars.p_WBs[0])
-    for c in continuity_constraints.flatten():
-        edge.AddConstraint(c)
-
-    continuity_constraints = eq(
-        initial_mode_vars.cos_th[-1], target_mode_vars.cos_th[0]
+    edge = add_edge_with_continuity_constraint(
+        face_0_vertex, face_1_vertex, face_0_contact, face_1_contact, gcs
     )
-    for c in continuity_constraints.flatten():
-        edge.AddConstraint(c)
-
-    continuity_constraints = eq(
-        initial_mode_vars.sin_th[-1], target_mode_vars.sin_th[0]
-    )
-    for c in continuity_constraints.flatten():
-        edge.AddConstraint(c)
 
     options = opt.GraphOfConvexSetsOptions()
-    # options.solver = MixedIntegerBranchAndBound
     options.convex_relaxation = True
     if options.convex_relaxation is True:
         options.preprocessing = True  # TODO Do I need to deal with this?
         options.max_rounded_paths = 10
-    result = gcs.SolveShortestPath(start_vertex, end_vertex, options)
+    result = gcs.SolveShortestPath(face_0_vertex, face_1_vertex, options)
     assert result.is_success()
 
     # TODO: Pick this sequence from optimal path
-    all_mode_vars = [initial_mode_vars, target_mode_vars]
+    all_mode_vars = [
+        mode.get_vars_from_gcs_vertex(vertex) for mode, vertex in zip(modes, vertices)
+    ]
     vals = get_vals(result, all_mode_vars)
     lam_vals = vals.lam
     normal_forces_vals = vals.normal_forces
@@ -456,7 +490,7 @@ def plan_planar_pushing():
     pv1s = [mode.pv1 for mode in modes]
     pv2s = [mode.pv2 for mode in modes]
 
-    polytope = initial_mode.polytope
+    polytope = face_0_contact.polytope
 
     # Reconstruct quantities
     p_c_Bs_vals = np.concatenate(
