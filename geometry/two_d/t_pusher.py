@@ -11,31 +11,29 @@ from geometry.utilities import normalize_vec
 
 
 @dataclass
-class EquilateralPolytope2d(RigidBody2d):
-    vertex_distance: float  # distance from COM to vertices
-    num_vertices: int
+class TPusher(RigidBody2d):
+    scale: float = 0.05
 
-    # First vertex starts at pi / 2, i.e. along the positive y-axis
-    # The vertices and faces are ordered similarly to the Box2d class, i.e. counter-clockwise
-
-    @property
-    def corner_angle(self) -> float:
-        return 2 * np.pi / self.num_vertices
-
-    @property
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
-        make_ray = lambda th: np.array([[np.cos(th)], [np.sin(th)]])
-        wrap_around = lambda th: th % (np.pi * 2)
-
-        # First vertex starts at pi / 2, i.e. along the positive y-axis
-        start_angle = np.pi / 2
-        angles = [
-            wrap_around(
-                start_angle - self.corner_angle * idx
-            )  # NOTE: minus because of counter-clockwise ordering
-            for idx in range(self.num_vertices)
+    def __post_init__(self):
+        self.vertices = [
+            np.expand_dims(np.array(v), 1) * self.scale
+            for v in reversed(
+                [
+                    [1, -4],
+                    [1, 0],
+                    [3, 0],
+                    [3, 2],
+                    [-3, 2],
+                    [-3, 0],
+                    [-1, 0],
+                    [-1, -4],
+                ]
+            )
         ]
-        return [make_ray(th) * self.vertex_distance for th in angles]
+
+        self.num_vertices = len(self.vertices)
+
+    # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
     @property
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
@@ -139,7 +137,6 @@ class EquilateralPolytope2d(RigidBody2d):
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
-            breakpoint()
             return self.normal_vecs[location.idx], self.tangent_vecs[location.idx]
         elif location.pos == ContactLocation.VERTEX:
             return (
@@ -152,10 +149,4 @@ class EquilateralPolytope2d(RigidBody2d):
             )
 
     def get_face_length(self, location: PolytopeContactLocation) -> float:
-        if not location.pos == ContactLocation.FACE:
-            raise ValueError("Can only get face length for a face")
-
-        face_length = (
-            self.vertex_distance * np.cos(np.pi / 2 - self.corner_angle / 2) * 2
-        )
-        return face_length
+        raise NotImplementedError("Face length not yet implemented for the TPusher.")

@@ -18,7 +18,8 @@ from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
-from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
+from geometry.two_d.t_pusher import TPusher
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from visualize.analysis import create_quasistatic_pushing_analysis
@@ -115,6 +116,7 @@ class ModeVars(NamedTuple):
 class PlanarPushingContactMode:
     def __init__(
         self,
+        object: RigidBody2d,
         contact_face_idx: int,
         num_knot_points: int = 4,
         end_time: float = 3,
@@ -124,15 +126,13 @@ class PlanarPushingContactMode:
         pos_target: Optional[npt.NDArray[np.float64]] = None,
     ):
         self.num_knot_points = num_knot_points
-        num_vertices = 4
+        self.object = object
 
         FRICTION_COEFF = 0.5
         G = 9.81
-        MASS = 1.0
-        DIST_TO_CORNERS = 0.2
 
-        f_max = FRICTION_COEFF * G * MASS
-        tau_max = f_max * DIST_TO_CORNERS
+        f_max = FRICTION_COEFF * G * object.mass
+        tau_max = f_max * 0.2  # TODO change this!
 
         A = np.diag(
             [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
@@ -142,14 +142,6 @@ class PlanarPushingContactMode:
         self.dt = dt
 
         prog = MathematicalProgram()
-
-        self.polytope = EquilateralPolytope2d(
-            actuated=False,
-            name="Slider",
-            mass=MASS,
-            vertex_distance=DIST_TO_CORNERS,
-            num_vertices=num_vertices,
-        )
 
         contact_face = PolytopeContactLocation(
             pos=ContactLocation.FACE, idx=contact_face_idx
@@ -161,7 +153,7 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        self.pv1, self.pv2 = self.polytope.get_proximate_vertices_from_location(
+        self.pv1, self.pv2 = self.object.get_proximate_vertices_from_location(
             contact_face
         )
         p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in lams]
@@ -172,7 +164,7 @@ class PlanarPushingContactMode:
         (
             self.normal_vec,
             self.tangent_vec,
-        ) = self.polytope.get_norm_and_tang_vecs_from_location(contact_face)
+        ) = self.object.get_norm_and_tang_vecs_from_location(contact_face)
         f_c_Bs = [
             c_n * self.normal_vec + c_f * self.tangent_vec
             for c_n, c_f in zip(normal_forces, friction_forces)
@@ -451,8 +443,28 @@ def plan_planar_pushing():
     th_initial = 0
     th_target = 0.5
     pos_initial = np.array([[0.0, 0.5]])
-    pos_target = np.array([[-0.4, 0.2]])
+    pos_target = np.array([[0.2, 0.2]])
     end_time = 3
+
+    MASS = 1.0
+    DIST_TO_CORNERS = 0.2
+    num_vertices = 6
+
+    use_polytope = False
+    if use_polytope:
+        object = EquilateralPolytope2d(
+            actuated=False,
+            name="Slider",
+            mass=MASS,
+            vertex_distance=DIST_TO_CORNERS,
+            num_vertices=num_vertices,
+        )
+    else:
+        object = TPusher(
+            actuated=False,
+            name="Slider",
+            mass=MASS,
+        )
 
     initial_config = _create_obj_config(pos_initial, th_initial)
     target_config = _create_obj_config(pos_target, th_target)
@@ -461,14 +473,16 @@ def plan_planar_pushing():
     target = opt.Point(target_config)
 
     face_0_contact = PlanarPushingContactMode(
+        object,
         # num_knot_points=6,
         contact_face_idx=0,
         end_time=end_time,
     )
 
     face_1_contact = PlanarPushingContactMode(
+        object,
         # num_knot_points=6,
-        contact_face_idx=1,
+        contact_face_idx=3,
         end_time=end_time,
     )
 
@@ -539,6 +553,7 @@ def plan_planar_pushing():
         options.max_rounded_paths = 10
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     assert result.is_success()
+    print("Success!")
 
     # TODO: Pick this sequence from optimal path
     all_mode_vars = [
@@ -556,8 +571,6 @@ def plan_planar_pushing():
     tangent_vecs = [mode.tangent_vec for mode in modes]
     pv1s = [mode.pv1 for mode in modes]
     pv2s = [mode.pv2 for mode in modes]
-
-    polytope = face_0_contact.polytope
 
     # Reconstruct quantities
     p_c_Bs_vals = np.concatenate(
@@ -660,7 +673,7 @@ def plan_planar_pushing():
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        polytope,
+        object,
         BOX_COLOR,
     )
 
@@ -668,7 +681,7 @@ def plan_planar_pushing():
     target_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        polytope,
+        object,
         TARGET_COLOR,
     )
 
@@ -803,7 +816,7 @@ def plan_planar_pushing_one_mode():
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        mode.polytope,
+        mode.object,
         BOX_COLOR,
     )
 
@@ -811,7 +824,7 @@ def plan_planar_pushing_one_mode():
     target_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        mode.polytope,
+        mode.object,
         TARGET_COLOR,
     )
 
