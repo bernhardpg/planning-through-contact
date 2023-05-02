@@ -366,12 +366,12 @@ def get_vals(result: MathematicalProgramResult, mode_vars: List[ModeVars]) -> Mo
         [result.GetSolution(p_WB) for p_WB in mode.p_WBs] for mode in mode_vars
     ]
     return ModeVars(
-        np.concatenate(lam_vals),
-        np.concatenate(normal_force_vals),
-        np.concatenate(friction_forces_vals),
-        np.concatenate(cos_th_vals),
-        np.concatenate(sin_th_vals),
-        np.concatenate(p_WB_vals),
+        lam_vals,
+        normal_force_vals,
+        friction_forces_vals,
+        cos_th_vals,
+        sin_th_vals,
+        p_WB_vals,
     )
 
 
@@ -383,6 +383,7 @@ def plan_planar_pushing():
     end_time = 3
 
     initial_mode = PlanarPushingContactMode(
+        num_knot_points=6,
         contact_face_idx=0,
         end_time=end_time,
         th_initial=th_initial,
@@ -390,6 +391,7 @@ def plan_planar_pushing():
     )
 
     target_mode = PlanarPushingContactMode(
+        num_knot_points=6,
         contact_face_idx=1,
         end_time=end_time,
         th_target=th_target,
@@ -445,25 +447,35 @@ def plan_planar_pushing():
     lam_vals = vals.lam
     normal_forces_vals = vals.normal_forces
     friction_forces_vals = vals.friction_forces
-    cos_th_vals = vals.cos_th
-    sin_th_vals = vals.sin_th
-    p_WBs_vals = vals.p_WBs
-    breakpoint()
+    cos_th_vals = np.concatenate(vals.cos_th)
+    sin_th_vals = np.concatenate(vals.sin_th)
+    p_WBs_vals = np.concatenate(vals.p_WBs)
 
-    normal_vec = initial_mode.normal_vec
-    tangent_vec = initial_mode.tangent_vec
-    pv1 = initial_mode.pv1
-    pv2 = initial_mode.pv2
+    normal_vecs = [mode.normal_vec for mode in modes]
+    tangent_vecs = [mode.tangent_vec for mode in modes]
+    pv1s = [mode.pv1 for mode in modes]
+    pv2s = [mode.pv2 for mode in modes]
+
     polytope = initial_mode.polytope
 
     # Reconstruct quantities
-    p_c_Bs_vals = np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lam_vals]).T
-    f_c_Bs_vals = np.hstack(
+    p_c_Bs_vals = np.concatenate(
         [
-            c_n * normal_vec + c_f * tangent_vec
-            for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
+            np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lams]).T
+            for (pv1, pv2), lams in zip(zip(pv1s, pv2s), lam_vals)
         ]
-    ).T
+    )
+    f_c_Bs_vals = np.concatenate(
+        [
+            np.hstack(
+                [c_n * normal_vec + c_f * tangent_vec for c_n, c_f in zip(c_ns, c_fs)]
+            ).T
+            for (normal_vec, tangent_vec), (c_ns, c_fs) in zip(
+                zip(normal_vecs, tangent_vecs),
+                zip(normal_forces_vals, friction_forces_vals),
+            )
+        ]
+    )
     R_WBs_vals = [
         np.array([[cos, -sin], [sin, cos]])
         for cos, sin in zip(cos_th_vals, sin_th_vals)
