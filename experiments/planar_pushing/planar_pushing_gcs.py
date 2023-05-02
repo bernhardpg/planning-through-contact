@@ -461,13 +461,13 @@ def plan_planar_pushing():
     target = opt.Point(target_config)
 
     face_0_contact = PlanarPushingContactMode(
-        num_knot_points=6,
+        # num_knot_points=6,
         contact_face_idx=0,
         end_time=end_time,
     )
 
     face_1_contact = PlanarPushingContactMode(
-        num_knot_points=6,
+        # num_knot_points=6,
         contact_face_idx=1,
         end_time=end_time,
     )
@@ -491,6 +491,11 @@ def plan_planar_pushing():
         face_0_vertex, face_1_vertex, face_0_contact, face_1_contact, gcs
     )
 
+    # cycles don't work yet
+    # add_edge_with_continuity_constraint(
+    #     face_1_vertex, face_0_vertex, face_1_contact, face_0_contact, gcs
+    # )
+
     add_source_or_target_edge(
         face_0_vertex,
         source_vertex,
@@ -498,6 +503,24 @@ def plan_planar_pushing():
         initial_config,
         gcs,
         source_or_target="source",
+    )
+
+    add_source_or_target_edge(
+        face_1_vertex,
+        source_vertex,
+        face_1_contact,
+        initial_config,
+        gcs,
+        source_or_target="source",
+    )
+
+    add_source_or_target_edge(
+        face_0_vertex,
+        target_vertex,
+        face_0_contact,
+        target_config,
+        gcs,
+        source_or_target="target",
     )
 
     add_source_or_target_edge(
