@@ -379,9 +379,7 @@ def plan_planar_pushing():
     th_initial = 0
     th_target = 0.5
     pos_initial = np.array([[0.0, 0.5]])
-    pos_target = np.array([[-0.1, 0.2]])
-    th_interm = (th_target - th_initial) / 2
-    pos_interm = (pos_target - pos_initial) / 2
+    pos_target = np.array([[-0.4, 0.2]])
     end_time = 3
 
     initial_mode = PlanarPushingContactMode(
@@ -389,15 +387,11 @@ def plan_planar_pushing():
         end_time=end_time,
         th_initial=th_initial,
         pos_initial=pos_initial,
-        # th_target=th_interm,
-        # pos_target=pos_interm,
     )
 
     target_mode = PlanarPushingContactMode(
         contact_face_idx=1,
         end_time=end_time,
-        # th_initial=th_interm,
-        # pos_initial=pos_interm,
         th_target=th_target,
         pos_target=pos_target,
     )
@@ -405,6 +399,15 @@ def plan_planar_pushing():
     gcs = opt.GraphOfConvexSets()
     start_vertex = gcs.AddVertex(initial_mode.get_spectrahedron())
     end_vertex = gcs.AddVertex(target_mode.get_spectrahedron())
+
+    modes = [initial_mode, target_mode]
+    vertices = [start_vertex, end_vertex]
+    for mode, vertex in zip(modes, vertices):
+        prog = mode.relaxed_prog
+        for cost in prog.linear_costs():
+            vars = vertex.x()[prog.FindDecisionVariableIndices(cost.variables())]
+            a = cost.evaluator().a()
+            vertex.AddCost(a.T.dot(vars))
 
     edge = gcs.AddEdge(start_vertex, end_vertex)
 
