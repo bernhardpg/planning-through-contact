@@ -472,79 +472,65 @@ def plan_planar_pushing():
     source = opt.Point(initial_config)
     target = opt.Point(target_config)
 
-    face_0_contact = PlanarPushingContactMode(
-        object,
-        # num_knot_points=6,
-        contact_face_idx=0,
-        end_time=end_time,
-    )
-
-    face_1_contact = PlanarPushingContactMode(
-        object,
-        # num_knot_points=6,
-        contact_face_idx=3,
-        end_time=end_time,
-    )
-
     gcs = opt.GraphOfConvexSets()
     source_vertex = gcs.AddVertex(source)
     target_vertex = gcs.AddVertex(target)
-    face_0_vertex = gcs.AddVertex(face_0_contact.get_spectrahedron())
-    face_1_vertex = gcs.AddVertex(face_1_contact.get_spectrahedron())
 
-    modes = [face_0_contact, face_1_contact]
-    vertices = [face_0_vertex, face_1_vertex]
-    for mode, vertex in zip(modes, vertices):
+    faces_to_consider = [0, 3]  # TODO we want to use a datatype here
+    modes = {
+        face_idx: PlanarPushingContactMode(
+            object, contact_face_idx=face_idx, end_time=end_time
+        )
+        for face_idx in faces_to_consider
+    }
+    spectrahedrons = {key: mode.get_spectrahedron() for key, mode in modes.items()}
+    vertices = {key: gcs.AddVertex(s) for key, s in spectrahedrons.items()}
+
+    # Add costs
+    for mode, vertex in zip(modes.values(), vertices.values()):
         prog = mode.relaxed_prog
         for cost in prog.linear_costs():
             vars = vertex.x()[prog.FindDecisionVariableIndices(cost.variables())]
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
 
-    add_edge_with_continuity_constraint(
-        face_0_vertex, face_1_vertex, face_0_contact, face_1_contact, gcs
-    )
+    connected_faces = [(0, 3)]
+    for u, v in connected_faces:
+        u_vertex = vertices[u]
+        v_vertex = vertices[v]
+        u_mode = modes[u]
+        v_mode = modes[v]
 
-    # cycles don't work yet
-    # add_edge_with_continuity_constraint(
-    #     face_1_vertex, face_0_vertex, face_1_contact, face_0_contact, gcs
-    # )
+        add_edge_with_continuity_constraint(u_vertex, v_vertex, u_mode, v_mode, gcs)
 
-    add_source_or_target_edge(
-        face_0_vertex,
-        source_vertex,
-        face_0_contact,
-        initial_config,
-        gcs,
-        source_or_target="source",
-    )
+    source_connections = [0, 3]
+    target_connections = [0, 3]
 
-    add_source_or_target_edge(
-        face_1_vertex,
-        source_vertex,
-        face_1_contact,
-        initial_config,
-        gcs,
-        source_or_target="source",
-    )
+    for v in source_connections:
+        vertex = vertices[v]
+        mode = modes[v]
 
-    add_source_or_target_edge(
-        face_0_vertex,
-        target_vertex,
-        face_0_contact,
-        target_config,
-        gcs,
-        source_or_target="target",
-    )
+        add_source_or_target_edge(
+            vertex,
+            source_vertex,
+            mode,
+            initial_config,
+            gcs,
+            source_or_target="source",
+        )
 
-    add_source_or_target_edge(
-        face_1_vertex,
-        target_vertex,
-        face_1_contact,
-        target_config,
-        gcs,
-        source_or_target="target",
-    )
+    for v in target_connections:
+        vertex = vertices[v]
+        mode = modes[v]
+
+        add_source_or_target_edge(
+            vertex,
+            target_vertex,
+            mode,
+            target_config,
+            gcs,
+            source_or_target="target",
+        )
 
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
@@ -557,7 +543,8 @@ def plan_planar_pushing():
 
     # TODO: Pick this sequence from optimal path
     all_mode_vars = [
-        mode.get_vars_from_gcs_vertex(vertex) for mode, vertex in zip(modes, vertices)
+        mode.get_vars_from_gcs_vertex(vertex)
+        for mode, vertex in zip(modes.values(), vertices.values())
     ]
     vals = get_vals(result, all_mode_vars)
     lam_vals = vals.lam
@@ -567,10 +554,10 @@ def plan_planar_pushing():
     sin_th_vals = np.concatenate(vals.sin_th)
     p_WBs_vals = np.concatenate(vals.p_WBs)
 
-    normal_vecs = [mode.normal_vec for mode in modes]
-    tangent_vecs = [mode.tangent_vec for mode in modes]
-    pv1s = [mode.pv1 for mode in modes]
-    pv2s = [mode.pv2 for mode in modes]
+    normal_vecs = [mode.normal_vec for mode in modes.values()]
+    tangent_vecs = [mode.tangent_vec for mode in modes.values()]
+    pv1s = [mode.pv1 for mode in modes.values()]
+    pv2s = [mode.pv2 for mode in modes.values()]
 
     # Reconstruct quantities
     p_c_Bs_vals = np.concatenate(
