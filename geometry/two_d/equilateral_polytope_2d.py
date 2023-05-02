@@ -59,7 +59,11 @@ class EquilateralPolytope2d(RigidBody2d):
         self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
-            return [self.vertices[location.idx], self.vertices[location.idx + 1]]
+            wrap_around = lambda num: num % self.num_vertices
+            return [
+                self.vertices[location.idx],
+                self.vertices[wrap_around(location.idx + 1)],
+            ]
         elif location.pos == ContactLocation.VERTEX:
             return [self.vertices[location.idx]]
         else:
