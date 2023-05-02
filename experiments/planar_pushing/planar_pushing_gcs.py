@@ -7,7 +7,12 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import (
+    MathematicalProgram,
+    MathematicalProgramResult,
+    MixedIntegerBranchAndBound,
+    Solve,
+)
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from convex_relaxation.sdp import create_sdp_relaxation
@@ -61,6 +66,7 @@ def interpolate_so2_using_slerp(
     """
 
     Rs_in_SO3 = [make_so3(R) for R in Rs]
+    breakpoint()
     knot_point_times = np.linspace(start_time, end_time, len(Rs))
     quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)
 
@@ -297,7 +303,7 @@ class PlanarPushingContactMode:
         return spectrahedron
 
     def get_vars_from_gcs_vertex(self, gcs_vertex: opt.GraphOfConvexSets.Vertex):
-        x = gcs_vertex.x()[0 : self.num_variables + 1]
+        x = gcs_vertex.x()[1 : self.num_variables + 2]
 
         lam = x[0 : self.num_knot_points]
         normal_forces = x[self.num_knot_points : 2 * self.num_knot_points]
@@ -347,11 +353,34 @@ class PlanarPushingContactMode:
         )
 
 
+def get_vals(result: MathematicalProgramResult, mode_vars: List[ModeVars]) -> ModeVars:
+    lam_vals = [result.GetSolution(mode.lam) for mode in mode_vars]
+    normal_force_vals = [result.GetSolution(mode.normal_forces) for mode in mode_vars]
+    friction_forces_vals = [
+        result.GetSolution(mode.friction_forces) for mode in mode_vars
+    ]
+    cos_th_vals = [result.GetSolution(mode.cos_th) for mode in mode_vars]
+    sin_th_vals = [result.GetSolution(mode.sin_th) for mode in mode_vars]
+    p_WB_vals = [
+        [result.GetSolution(p_WB) for p_WB in mode.p_WBs] for mode in mode_vars
+    ]
+    return ModeVars(
+        np.concatenate(lam_vals),
+        np.concatenate(normal_force_vals),
+        np.concatenate(friction_forces_vals),
+        np.concatenate(cos_th_vals),
+        np.concatenate(sin_th_vals),
+        np.concatenate(p_WB_vals),
+    )
+
+
 def plan_planar_pushing():
     th_initial = 0
     th_target = 0.5
     pos_initial = np.array([[0.0, 0.5]])
     pos_target = np.array([[-0.1, 0.2]])
+    th_interm = (th_target - th_initial) / 2
+    pos_interm = (pos_target - pos_initial) / 2
     end_time = 3
 
     initial_mode = PlanarPushingContactMode(
@@ -359,11 +388,15 @@ def plan_planar_pushing():
         end_time=end_time,
         th_initial=th_initial,
         pos_initial=pos_initial,
+        # th_target=th_interm,
+        # pos_target=pos_interm,
     )
 
     target_mode = PlanarPushingContactMode(
-        contact_face_idx=1,
+        contact_face_idx=0,
         end_time=end_time,
+        # th_initial=th_interm,
+        # pos_initial=pos_interm,
         th_target=th_target,
         pos_target=pos_target,
     )
@@ -377,21 +410,41 @@ def plan_planar_pushing():
     initial_mode_vars = initial_mode.get_vars_from_gcs_vertex(start_vertex)
     target_mode_vars = target_mode.get_vars_from_gcs_vertex(end_vertex)
 
-    result = gcs.SolveShortestPath(start_vertex, end_vertex)
-
     continuity_constraints = eq(initial_mode_vars.p_WBs[-1], target_mode_vars.p_WBs[0])
     for c in continuity_constraints.flatten():
         edge.AddConstraint(c)
 
+    options = opt.GraphOfConvexSetsOptions()
+    # options.solver = MixedIntegerBranchAndBound
+    options.convex_relaxation = True
+    if options.convex_relaxation is True:
+        options.preprocessing = True  # TODO Do I need to deal with this?
+        options.max_rounded_paths = 10
+    result = gcs.SolveShortestPath(start_vertex, end_vertex, options)
+    assert result.is_success()
+
+    # TODO: Pick this sequence from optimal path
+    all_mode_vars = [initial_mode_vars, target_mode_vars]
+    vals = get_vals(result, all_mode_vars)
+    lam_vals = vals.lam
+    normal_forces_vals = vals.normal_forces
+    friction_forces_vals = vals.friction_forces
+    cos_th_vals = vals.cos_th
+    sin_th_vals = vals.sin_th
+    p_WBs_vals = vals.p_WBs
     breakpoint()
 
+    normal_vec = initial_mode.normal_vec
+    tangent_vec = initial_mode.tangent_vec
+    pv1 = initial_mode.pv1
+    pv2 = initial_mode.pv2
+    polytope = initial_mode.polytope
+
     # Reconstruct quantities
-    p_c_Bs_vals = np.hstack(
-        [lam * mode.pv1 + (1 - lam) * mode.pv2 for lam in lam_vals]
-    ).T
+    p_c_Bs_vals = np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lam_vals]).T
     f_c_Bs_vals = np.hstack(
         [
-            c_n * mode.normal_vec + c_f * mode.tangent_vec
+            c_n * normal_vec + c_f * tangent_vec
             for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
         ]
     ).T
@@ -399,10 +452,6 @@ def plan_planar_pushing():
         np.array([[cos, -sin], [sin, cos]])
         for cos, sin in zip(cos_th_vals, sin_th_vals)
     ]
-
-    p_WBs_vals = np.vstack(
-        [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
-    )  # TODO: rename!
 
     contact_pos_in_W = np.vstack(
         [
@@ -414,15 +463,23 @@ def plan_planar_pushing():
     contact_force_in_W = np.vstack(
         [R_WB.dot(f_c_B) for R_WB, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
     )
-    breakpoint()
 
     DT = 0.01
 
-    # Interpolate quantities
-    R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, end_time, DT)
-    com_traj = interpolate_w_first_order_hold(p_WBs_vals, 0, end_time, DT)
-    force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
-    contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, end_time, DT)
+    interpolate = False
+    if interpolate:
+        # Interpolate quantities
+        R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, end_time, DT)
+        com_traj = interpolate_w_first_order_hold(p_WBs_vals, 0, end_time, DT)
+        force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
+        contact_pos_traj = interpolate_w_first_order_hold(
+            contact_pos_in_W, 0, end_time, DT
+        )
+    else:
+        R_traj = R_WBs_vals
+        com_traj = p_WBs_vals
+        force_traj = contact_force_in_W
+        contact_pos_traj = contact_pos_in_W
 
     traj_length = len(R_traj)
 
@@ -474,7 +531,7 @@ def plan_planar_pushing():
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        mode.polytope,
+        polytope,
         BOX_COLOR,
     )
 
@@ -482,7 +539,7 @@ def plan_planar_pushing():
     target_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        mode.polytope,
+        polytope,
         TARGET_COLOR,
     )
 
