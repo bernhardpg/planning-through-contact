@@ -139,6 +139,7 @@ class PlanarPushingContactMode:
         )  # Ellipsoidal Limit surface approximation
 
         dt = end_time / num_knot_points
+        self.dt = dt
 
         prog = MathematicalProgram()
 
@@ -393,7 +394,7 @@ def plan_planar_pushing():
     )
 
     target_mode = PlanarPushingContactMode(
-        contact_face_idx=0,
+        contact_face_idx=1,
         end_time=end_time,
         # th_initial=th_interm,
         # pos_initial=pos_interm,
@@ -411,6 +412,18 @@ def plan_planar_pushing():
     target_mode_vars = target_mode.get_vars_from_gcs_vertex(end_vertex)
 
     continuity_constraints = eq(initial_mode_vars.p_WBs[-1], target_mode_vars.p_WBs[0])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    continuity_constraints = eq(
+        initial_mode_vars.cos_th[-1], target_mode_vars.cos_th[0]
+    )
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    continuity_constraints = eq(
+        initial_mode_vars.sin_th[-1], target_mode_vars.sin_th[0]
+    )
     for c in continuity_constraints.flatten():
         edge.AddConstraint(c)
 
