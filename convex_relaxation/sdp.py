@@ -250,11 +250,13 @@ def create_sdp_relaxation(
             prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
         )
         multiplied_constraints = eq(A_eq.dot(X).flatten(), 0)
-        relaxed_prog.AddLinearConstraint(multiplied_constraints)
+        for c in multiplied_constraints:
+            relaxed_prog.AddLinearConstraint(c)
 
         e_1 = unit_vector(0, X.shape[0])
         linear_constraints = eq(A_eq.dot(X).dot(e_1), 0)
-        relaxed_prog.AddLinearConstraint(linear_constraints)
+        for c in linear_constraints:
+            relaxed_prog.AddLinearConstraint(c)
 
     has_linear_ineq_constraints = (
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
@@ -265,11 +267,13 @@ def create_sdp_relaxation(
             prog.linear_constraints(), bounding_box_ineqs, decision_vars
         )
         multiplied_constraints = ge(A_ineq.dot(X).dot(A_ineq.T), 0)
-        relaxed_prog.AddLinearConstraint(multiplied_constraints)
+        for c in multiplied_constraints.flatten():
+            relaxed_prog.AddLinearConstraint(c)
 
         e_1 = unit_vector(0, X.shape[0])
         linear_constraints = ge(A_ineq.dot(X).dot(e_1), 0)
-        relaxed_prog.AddLinearConstraint(linear_constraints)
+        for c in linear_constraints:
+            relaxed_prog.AddLinearConstraint(c)
 
     # Multiply equality and inequality constraints together.
     # In theory, this should help, but it doesn't seem to make a

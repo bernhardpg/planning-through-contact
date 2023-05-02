@@ -134,8 +134,6 @@ class PlanarPushingContactMode:
 
         dt = end_time / num_knot_points
 
-        contact_faces = [0, 1]
-
         prog = MathematicalProgram()
 
         self.polytope = EquilateralPolytope2d(
