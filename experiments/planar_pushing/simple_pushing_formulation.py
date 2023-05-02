@@ -312,8 +312,8 @@ def plan_planar_pushing(
         quasi_static_violation.append(violation)
 
     quasi_static_violation = np.vstack(quasi_static_violation)
-    create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
-    plt.show()
+    # create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
+    # plt.show()
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]

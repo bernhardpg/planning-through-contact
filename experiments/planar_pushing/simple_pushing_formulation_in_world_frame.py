@@ -248,6 +248,7 @@ def plan_planar_pushing(
     start = time.time()
     print("Starting to create SDP relaxation...")
     relaxed_prog, X, basis = create_sdp_relaxation(prog)
+    breakpoint()
     end = time.time()
     print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
 
@@ -277,14 +278,14 @@ def plan_planar_pushing(
             for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
         ]
     ).T
-    p_WBs_vals = np.vstack(
-        [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
-    )  # TODO: rename!
-
     R_WBs_vals = [
         np.array([[cos, -sin], [sin, cos]])
         for cos, sin in zip(cos_th_vals, sin_th_vals)
     ]
+
+    p_WBs_vals = np.vstack(
+        [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
+    )  # TODO: rename!
 
     contact_pos_in_W = np.vstack(
         [
@@ -296,6 +297,7 @@ def plan_planar_pushing(
     contact_force_in_W = np.vstack(
         [R_WB.dot(f_c_B) for R_WB, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
     )
+    breakpoint()
 
     DT = 0.01
 
