@@ -1,10 +1,11 @@
 import argparse
 import time
-from typing import List, Optional, TypeVar
+from typing import List, NamedTuple, Optional, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import pydrake.geometry.optimization as opt
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
@@ -14,7 +15,7 @@ from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from geometry.utilities import cross_2d
-from tools.types import NpExpressionArray
+from tools.types import NpExpressionArray, NpVariableArray
 from visualize.analysis import create_quasistatic_pushing_analysis
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
@@ -95,6 +96,16 @@ def interpolate_w_first_order_hold(
     return traj
 
 
+# TODO: should probably have a better name
+class ModeVars(NamedTuple):
+    lam: NpVariableArray
+    normal_forces: NpVariableArray
+    friction_forces: NpVariableArray
+    cos_th: NpVariableArray
+    sin_th: NpVariableArray
+    p_WBs: List[NpVariableArray]
+
+
 class PlanarPushingContactMode:
     def __init__(
         self,
@@ -106,6 +117,7 @@ class PlanarPushingContactMode:
         pos_initial: Optional[npt.NDArray[np.float64]] = None,
         pos_target: Optional[npt.NDArray[np.float64]] = None,
     ):
+        self.num_knot_points = num_knot_points
         num_vertices = 4
 
         FRICTION_COEFF = 0.5
@@ -263,6 +275,11 @@ class PlanarPushingContactMode:
         )
 
         # Retrieve original variables from X
+        # We have n = 7*num_knot_points variables
+        # This gives X dimensions (n+1,n+1)
+        # where the 1 is added because the first element of x is 1.
+        # This gives ((n+1)^2 - (n+1))/2 + (n+1) decision variables
+        # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
         x = self.X[1:, 0]
         self.lam = x[0:num_knot_points]
         self.normal_forces = x[num_knot_points : 2 * num_knot_points]
@@ -272,7 +289,36 @@ class PlanarPushingContactMode:
         self.p_WB_xs = x[5 * num_knot_points : 6 * num_knot_points]
         self.p_WB_ys = x[6 * num_knot_points : 7 * num_knot_points]
 
-        # Make spectrahedron
+        self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
+
+    def get_spectrahedron(self) -> opt.Spectrahedron:
+        # Variables should be the stacked columns of the lower
+        # triangular part of the symmetric matrix from relaxed_prog, see
+        # https://robotlocomotion.github.io/doxygen_cxx/classdrake_1_1solvers_1_1_mathematical_program.html#a8f718351922bc149cb6e7fa6d82288a5
+        spectrahedron = opt.Spectrahedron(self.relaxed_prog)
+        return spectrahedron
+
+    def get_vars_from_gcs_vertex(self, gcs_vertex: opt.GraphOfConvexSets.Vertex):
+        x = gcs_vertex.x()[0 : self.num_variables + 1]
+
+        lam = x[0 : self.num_knot_points]
+        normal_forces = x[self.num_knot_points : 2 * self.num_knot_points]
+        friction_forces = x[2 * self.num_knot_points : 3 * self.num_knot_points]
+        cos_th = x[3 * self.num_knot_points : 4 * self.num_knot_points]
+        sin_th = x[4 * self.num_knot_points : 5 * self.num_knot_points]
+        p_WB_xs = x[5 * self.num_knot_points : 6 * self.num_knot_points]
+        p_WB_ys = x[6 * self.num_knot_points : 7 * self.num_knot_points]
+
+        p_WBs = [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
+
+        return ModeVars(
+            lam,
+            normal_forces,
+            friction_forces,
+            cos_th,
+            sin_th,
+            p_WBs,
+        )
 
     def solve(self):
         print("Solving...")
@@ -304,6 +350,160 @@ class PlanarPushingContactMode:
 
 
 def plan_planar_pushing():
+    th_initial = 0
+    th_target = 0.5
+    pos_initial = np.array([[0.0, 0.5]])
+    pos_target = np.array([[-0.1, 0.2]])
+    end_time = 3
+
+    initial_mode = PlanarPushingContactMode(
+        contact_face_idx=0,
+        end_time=end_time,
+        th_initial=th_initial,
+        pos_initial=pos_initial,
+    )
+
+    target_mode = PlanarPushingContactMode(
+        contact_face_idx=1,
+        end_time=end_time,
+        th_target=th_target,
+        pos_target=pos_target,
+    )
+
+    gcs = opt.GraphOfConvexSets()
+    start_vertex = gcs.AddVertex(initial_mode.get_spectrahedron())
+    end_vertex = gcs.AddVertex(target_mode.get_spectrahedron())
+
+    edge = gcs.AddEdge(start_vertex, end_vertex)
+
+    initial_mode_vars = initial_mode.get_vars_from_gcs_vertex(start_vertex)
+    target_mode_vars = target_mode.get_vars_from_gcs_vertex(end_vertex)
+
+    result = gcs.SolveShortestPath(start_vertex, end_vertex)
+
+    continuity_constraints = eq(initial_mode_vars.p_WBs[-1], target_mode_vars.p_WBs[0])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    breakpoint()
+
+    # Reconstruct quantities
+    p_c_Bs_vals = np.hstack(
+        [lam * mode.pv1 + (1 - lam) * mode.pv2 for lam in lam_vals]
+    ).T
+    f_c_Bs_vals = np.hstack(
+        [
+            c_n * mode.normal_vec + c_f * mode.tangent_vec
+            for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
+        ]
+    ).T
+    R_WBs_vals = [
+        np.array([[cos, -sin], [sin, cos]])
+        for cos, sin in zip(cos_th_vals, sin_th_vals)
+    ]
+
+    p_WBs_vals = np.vstack(
+        [np.array([x, y]) for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)]
+    )  # TODO: rename!
+
+    contact_pos_in_W = np.vstack(
+        [
+            p_WB + R_WB.dot(p_c_B)
+            for p_WB, R_WB, p_c_B in zip(p_WBs_vals, R_WBs_vals, p_c_Bs_vals)
+        ]
+    )
+
+    contact_force_in_W = np.vstack(
+        [R_WB.dot(f_c_B) for R_WB, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
+    )
+    breakpoint()
+
+    DT = 0.01
+
+    # Interpolate quantities
+    R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, end_time, DT)
+    com_traj = interpolate_w_first_order_hold(p_WBs_vals, 0, end_time, DT)
+    force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
+    contact_pos_traj = interpolate_w_first_order_hold(contact_pos_in_W, 0, end_time, DT)
+
+    traj_length = len(R_traj)
+
+    compute_violation = False
+    if compute_violation:
+        # NOTE: SHOULD BE MOVED!
+        # compute quasi-static dynamic violation
+        def _cross_2d(v1, v2):
+            return (
+                v1[0] * v2[1] - v1[1] * v2[0]
+            )  # copied because the other one assumes the result is a np array, here it is just a scalar. clean up!
+
+        quasi_static_violation = []
+        for k in range(traj_length - 1):
+            v_WB = (com_traj[k + 1] - com_traj[k]) / DT
+            R_dot = (R_traj[k + 1] - R_traj[k]) / DT
+            R = R_traj[k]
+            omega_WB = R_dot.dot(R.T)[1, 0]
+            f_c_B = force_traj[k]
+            p_c_B = contact_pos_traj[k]
+            com = com_traj[k]
+
+            # Contact torques
+            tau_c_B = _cross_2d(p_c_B - com, f_c_B)
+
+            x_dot = np.concatenate([v_WB, [omega_WB]])
+            wrench = np.concatenate(
+                [f_c_B.flatten(), [tau_c_B]]
+            )  # NOTE: Should fix not nice vector dimensions
+
+            R_padded = np.zeros((3, 3))
+            R_padded[2, 2] = 1
+            R_padded[0:2, 0:2] = R
+            violation = x_dot - R_padded.dot(A).dot(wrench)
+            quasi_static_violation.append(violation)
+
+        quasi_static_violation = np.vstack(quasi_static_violation)
+        create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
+        plt.show()
+
+    CONTACT_COLOR = COLORS["dodgerblue4"]
+    GRAVITY_COLOR = COLORS["blueviolet"]
+    BOX_COLOR = COLORS["aquamarine4"]
+    TABLE_COLOR = COLORS["bisque3"]
+    FINGER_COLOR = COLORS["firebrick3"]
+    TARGET_COLOR = COLORS["firebrick1"]
+
+    flattened_rotation = np.vstack([R.flatten() for R in R_traj])
+    box_viz = VisualizationPolygon2d.from_trajs(
+        com_traj,
+        flattened_rotation,
+        mode.polytope,
+        BOX_COLOR,
+    )
+
+    # NOTE: I don't really need the entire trajectory here, but leave for now
+    target_viz = VisualizationPolygon2d.from_trajs(
+        com_traj,
+        flattened_rotation,
+        mode.polytope,
+        TARGET_COLOR,
+    )
+
+    com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
+    contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
+    contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
+
+    viz = Visualizer2d()
+    FRAMES_PER_SEC = len(R_traj) / end_time
+    viz.visualize(
+        [com_points_viz, contact_point_viz],
+        [contact_force_viz],
+        [box_viz],
+        FRAMES_PER_SEC,
+        target_viz,
+    )
+
+
+def plan_planar_pushing_one_mode():
     th_initial = 0
     th_target = 0.5
     pos_initial = np.array([[0.0, 0.5]])
