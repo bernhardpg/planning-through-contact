@@ -454,11 +454,30 @@ def _find_path_to_target(
 
 
 def plan_planar_pushing():
-    th_initial = 0
-    th_target = 0.5
-    pos_initial = np.array([[0.0, 0.5]])
-    pos_target = np.array([[0.2, 0.2]])
-    end_time = 3
+    experiment_number = 3
+    if experiment_number == 0:
+        th_initial = 0
+        th_target = 0.5
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[0.2, 0.2]])
+    elif experiment_number == 1:
+        th_initial = 0
+        th_target = -0.8
+        pos_initial = np.array([[-0.2, 0.1]])
+        pos_target = np.array([[0.2, 0.5]])
+    elif experiment_number == 2:
+        th_initial = 0
+        th_target = 1.2
+        pos_initial = np.array([[0.4, 0.5]])
+        pos_target = np.array([[-0.2, 0.2]])
+    elif experiment_number == 3:
+        th_initial = 0
+        th_target = 1.2
+        pos_initial = np.array([[0.4, 0.5]])
+        pos_target = np.array([[-0.3, 0.2]])
+
+    num_knot_points = 4
+    end_time = 1
 
     MASS = 1.0
     DIST_TO_CORNERS = 0.2
@@ -493,7 +512,10 @@ def plan_planar_pushing():
     faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
     modes = {
         face_idx: PlanarPushingContactMode(
-            object, contact_face_idx=face_idx, end_time=end_time
+            object,
+            num_knot_points=num_knot_points,
+            contact_face_idx=face_idx,
+            end_time=end_time,
         )
         for face_idx in faces_to_consider
     }
@@ -621,7 +643,8 @@ def plan_planar_pushing():
     )
 
     contact_force_in_W = np.vstack(
-        [R_WB.dot(f_c_B) for R_WB, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
+        # Rotating by R messes things up. TODO: Look more into this!
+        [f_c_B for _, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
     )
 
     DT = 0.01
@@ -642,6 +665,7 @@ def plan_planar_pushing():
         contact_pos_traj = contact_pos_in_W
 
     traj_length = len(R_traj)
+    num_modes_in_solution = len(modes_on_path)
 
     compute_violation = False
     if compute_violation:
@@ -708,7 +732,7 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / end_time
+    FRAMES_PER_SEC = len(R_traj) / (end_time * num_modes_in_solution)
     viz.visualize(
         [com_points_viz, contact_point_viz],
         [contact_force_viz],
@@ -723,7 +747,7 @@ def plan_planar_pushing_one_mode():
     th_target = 0.5
     pos_initial = np.array([[0.0, 0.5]])
     pos_target = np.array([[-0.1, 0.2]])
-    end_time = 3
+    end_time = 5
 
     mode = PlanarPushingContactMode(
         contact_face_idx=0,
