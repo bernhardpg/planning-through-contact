@@ -490,7 +490,7 @@ def plan_planar_pushing():
     source_vertex = gcs.AddVertex(source_point, name="source")
     target_vertex = gcs.AddVertex(target_point, name="target")
 
-    faces_to_consider = [0, 1, 2, 3]  # TODO we want to use a datatype here
+    faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
     modes = {
         face_idx: PlanarPushingContactMode(
             object, contact_face_idx=face_idx, end_time=end_time
@@ -510,7 +510,9 @@ def plan_planar_pushing():
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
 
-    connected_faces = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+    # TODO: For now we need to avoid cycles
+    connected_faces = [(i, j) for i in range(8) for j in range(8) if i < j]
+
     for u, v in connected_faces:
         u_vertex = vertices[u]
         v_vertex = vertices[v]
@@ -519,8 +521,8 @@ def plan_planar_pushing():
 
         add_edge_with_continuity_constraint(u_vertex, v_vertex, u_mode, v_mode, gcs)
 
-    source_connections = [0, 1, 2, 3]
-    target_connections = [0, 1, 2, 3]
+    source_connections = faces_to_consider
+    target_connections = faces_to_consider
 
     for v in source_connections:
         vertex = vertices[v]
