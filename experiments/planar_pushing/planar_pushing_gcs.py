@@ -1,6 +1,6 @@
 import argparse
 import time
-from typing import List, NamedTuple, Optional, TypeVar
+from typing import List, Literal, NamedTuple, Optional, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -303,7 +303,9 @@ class PlanarPushingContactMode:
         spectrahedron = opt.Spectrahedron(self.relaxed_prog)
         return spectrahedron
 
-    def get_vars_from_gcs_vertex(self, gcs_vertex: opt.GraphOfConvexSets.Vertex):
+    def get_vars_from_gcs_vertex(
+        self, gcs_vertex: opt.GraphOfConvexSets.Vertex
+    ) -> ModeVars:
         x = gcs_vertex.x()[1 : self.num_variables + 2]
 
         lam = x[0 : self.num_knot_points]
@@ -385,6 +387,39 @@ def _create_obj_config(
     return obj_pose
 
 
+def add_source_or_target_edge(
+    vertex: opt.GraphOfConvexSets.Vertex,
+    point_vertex: opt.GraphOfConvexSets.Vertex,
+    vertex_mode: PlanarPushingContactMode,
+    obj_config: npt.NDArray[np.float64],
+    gcs: opt.GraphOfConvexSets,
+    source_or_target: Literal["source", "target"],
+) -> opt.GraphOfConvexSets.Edge:
+    vars = vertex_mode.get_vars_from_gcs_vertex(vertex)
+    if source_or_target == "source":
+        edge = gcs.AddEdge(point_vertex, vertex)
+        pos_vars = vars.p_WBs[0]
+        cos_var = vars.cos_th[0]
+        sin_var = vars.sin_th[0]
+    else:  # target
+        edge = gcs.AddEdge(vertex, point_vertex)
+        pos_vars = vars.p_WBs[-1]
+        cos_var = vars.cos_th[-1]
+        sin_var = vars.sin_th[-1]
+
+    continuity_constraints = eq(pos_vars.flatten(), obj_config[0:2])
+    for c in continuity_constraints.flatten():
+        edge.AddConstraint(c)
+
+    continuity_constraint = cos_var == obj_config[2]
+    edge.AddConstraint(continuity_constraint)
+
+    continuity_constraint = sin_var == obj_config[3]
+    edge.AddConstraint(continuity_constraint)
+
+    return edge
+
+
 def add_edge_with_continuity_constraint(
     u: opt.GraphOfConvexSets.Vertex,
     v: opt.GraphOfConvexSets.Vertex,
@@ -426,19 +461,15 @@ def plan_planar_pushing():
     target = opt.Point(target_config)
 
     face_0_contact = PlanarPushingContactMode(
-        # num_knot_points=6,
+        num_knot_points=6,
         contact_face_idx=0,
         end_time=end_time,
-        th_initial=th_initial,
-        pos_initial=pos_initial,
     )
 
     face_1_contact = PlanarPushingContactMode(
-        # num_knot_points=6,
+        num_knot_points=6,
         contact_face_idx=1,
         end_time=end_time,
-        th_target=th_target,
-        pos_target=pos_target,
     )
 
     gcs = opt.GraphOfConvexSets()
@@ -456,13 +487,26 @@ def plan_planar_pushing():
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
 
-    # edge = gcs.AddEdge(source_vertex, face_0_vertex)
-    # edge = gcs.AddEdge(source_vertex, face_1_vertex)
-    # edge = gcs.AddEdge(face_1_vertex, target_vertex)
-    # edge = gcs.AddEdge(face_0_vertex, target_vertex)
-
-    edge = add_edge_with_continuity_constraint(
+    add_edge_with_continuity_constraint(
         face_0_vertex, face_1_vertex, face_0_contact, face_1_contact, gcs
+    )
+
+    add_source_or_target_edge(
+        face_0_vertex,
+        source_vertex,
+        face_0_contact,
+        initial_config,
+        gcs,
+        source_or_target="source",
+    )
+
+    add_source_or_target_edge(
+        face_1_vertex,
+        target_vertex,
+        face_1_contact,
+        target_config,
+        gcs,
+        source_or_target="target",
     )
 
     options = opt.GraphOfConvexSetsOptions()
@@ -470,7 +514,7 @@ def plan_planar_pushing():
     if options.convex_relaxation is True:
         options.preprocessing = True  # TODO Do I need to deal with this?
         options.max_rounded_paths = 10
-    result = gcs.SolveShortestPath(face_0_vertex, face_1_vertex, options)
+    result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     assert result.is_success()
 
     # TODO: Pick this sequence from optimal path
