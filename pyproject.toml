@@ -6,14 +6,14 @@ authors = ["Bernhard Paus Græsdal <bernhardpg@gmail.com>"]
 license = "MIT License"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "~3.11"
 matplotlib = "^3.6.1"
 numpy = "^1.23.3"
-drake = [
-    {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_12_0_x86_64.whl", markers = "sys_platform == 'darwin' and platform_machine == 'x86_64'"},
-    {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_12_0_arm64.whl", markers = "sys_platform == 'darwin' and platform_machine == 'arm64'"},
-    {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-manylinux_2_31_x86_64.whl", markers="sys_platform == 'linux'"}
-]
+# drake = [
+#     {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_12_0_x86_64.whl", markers = "sys_platform == 'darwin' and platform_machine == 'x86_64'"},
+#     {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-macosx_12_0_arm64.whl", markers = "sys_platform == 'darwin' and platform_machine == 'arm64'"},
+#     {url="https://drake-packages.csail.mit.edu/drake/nightly/drake-latest-cp310-cp310-manylinux_2_31_x86_64.whl", markers="sys_platform == 'linux'"}
+# ]
 pre-commit = "^2.20.0"
 pdbpp = "^0.10.3"
 tqdm = "^4.64.1"

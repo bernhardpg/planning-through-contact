@@ -24,6 +24,14 @@ Now everything needed to run the project should be installed. To run any files i
 poetry run python main.py
 ```
 
+## Installing Drake
+Drake must be built from source and added to the pythonpath, after activating the virtual environment (TODO: @bernhardpg fix this, only a short term solution). See the "Building the python bindings" section in https://robotlocomotion.github.io/from_source.html.
+Then run something like:
+```
+cd drake-build
+export PYTHONPATH=${PWD}/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
+
 ## Running demos
 ```
 poetry run python main.py --demo box_push
