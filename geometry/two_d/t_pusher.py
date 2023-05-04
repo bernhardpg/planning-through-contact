@@ -36,6 +36,10 @@ class TPusher(RigidBody2d):
     def get_faces_for_collision_free_set(
         self, location: PolytopeContactLocation
     ) -> List[Hyperplane]:
+        """
+        Gets the faces that defines the collision free sets outside of each face.
+        This function is hand designed for the object geometry!
+        """
         if not location.pos == ContactLocation.FACE:
             raise NotImplementedError(
                 "Can only find faces for collisionfree regions for faces."
@@ -44,6 +48,12 @@ class TPusher(RigidBody2d):
             face_idx = location.idx
             if face_idx == 0:
                 return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 1:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 2:
+                return [self.faces[2]]
+            elif face_idx == 3:
+                return [self.faces[3]]
             else:
                 raise NotImplementedError("Currently only face 0 is supported")
 
