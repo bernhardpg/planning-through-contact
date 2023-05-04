@@ -1,6 +1,7 @@
 import argparse
 import time
-from typing import List, Literal, NamedTuple, Optional, TypeVar
+from dataclasses import dataclass
+from typing import List, Literal, NamedTuple, Optional, TypeVar, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -465,12 +466,13 @@ class NonCollisionMode:
     def __init__(
         self,
         object: TPusher,  # TODO: replace with RigidBody2D
+        name: str,
         non_collision_face_idx: int,
         num_knot_points: int = 3,
         end_time: float = 3,
     ):
         self.num_knot_points = num_knot_points
-        self.name = non_collision_name(non_collision_face_idx)
+        self.name = name
 
         faces = object.get_faces_for_collision_free_set(
             PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
@@ -585,26 +587,6 @@ def add_source_or_target_edge(
     return edge
 
 
-# TODO should be a static method for PlanarPushingContactMode or something
-def add_edge_with_continuity_constraint(
-    u: opt.GraphOfConvexSets.Vertex,
-    v: opt.GraphOfConvexSets.Vertex,
-    u_mode: PlanarPushingContactMode,
-    v_mode: PlanarPushingContactMode,
-    gcs: opt.GraphOfConvexSets,
-) -> opt.GraphOfConvexSets.Edge:
-    edge = gcs.AddEdge(u, v, f"{u_mode.name}_to_{v_mode.name}")
-
-    u_vars = u_mode.get_vars_from_gcs_vertex(u)
-    v_vars = v_mode.get_vars_from_gcs_vertex(v)
-
-    cont_constraints = create_continuity_constraints(u_vars, v_vars)
-    for c in cont_constraints:
-        edge.AddConstraint(c)
-
-    return edge
-
-
 def _find_path_to_target(
     edges: List[opt.GraphOfConvexSets.Edge],
     target: opt.GraphOfConvexSets.Vertex,
@@ -617,6 +599,26 @@ def _find_path_to_target(
         return [u] + [v]
     else:
         return [u] + _find_path_to_target(edges, target, v)
+
+
+# TODO should be a static method for PlanarPushingContactMode or something
+def add_edge_with_continuity_constraint(
+    u_vertex: opt.GraphOfConvexSets.Vertex,
+    v_vertex: opt.GraphOfConvexSets.Vertex,
+    u_mode: Union[PlanarPushingContactMode, NonCollisionMode],
+    v_mode: Union[PlanarPushingContactMode, NonCollisionMode],
+    gcs: opt.GraphOfConvexSets,
+) -> opt.GraphOfConvexSets.Edge:
+    edge = gcs.AddEdge(u_vertex, v_vertex, f"{u_mode.name}_to_{v_mode.name}")
+
+    u_vars = u_mode.get_vars_from_gcs_vertex(u_vertex)
+    v_vars = v_mode.get_vars_from_gcs_vertex(v_vertex)
+
+    cont_constraints = create_continuity_constraints(u_vars, v_vars)
+    for c in cont_constraints:
+        edge.AddConstraint(c)
+
+    return edge
 
 
 def create_continuity_constraints(
@@ -638,8 +640,83 @@ def create_continuity_constraints(
     return np.concatenate(constraints)
 
 
+@dataclass
+class GraphChain:
+    start_contact_idx: int
+    end_contact_idx: int
+    non_collision_chain: List[int]
+    paths = {
+        (0, 1): [0],
+        (0, 2): [0, 2],
+        (0, 3): [0, 2, 3],
+        (1, 2): [0],
+        (1, 3): [0, 2, 3],
+        (2, 3): [2, 3],
+    }
+
+    @classmethod
+    def from_contact_connection(cls, incoming: int, outgoing: int) -> "GraphChain":
+        non_collision_idx_on_chain = cls.paths[(incoming, outgoing)]  # type: ignore
+
+        return cls(incoming, outgoing, non_collision_idx_on_chain)
+
+    def create_contact_modes(
+        self, object: TPusher, num_knot_points: int, time_in_each_mode: float
+    ) -> None:
+        self.non_collision_modes = [
+            NonCollisionMode(
+                object,
+                f"from_{self.start_contact_idx}_to_{self.end_contact_idx}_at_{idx}",
+                idx,
+                num_knot_points,
+                time_in_each_mode,
+            )
+            for idx in self.non_collision_chain
+        ]
+
+    def create_edges(
+        self,
+        start_contact_vertex: opt.GraphOfConvexSets.Vertex,
+        end_contact_vertex: opt.GraphOfConvexSets.Vertex,
+        start_contact_mode: PlanarPushingContactMode,
+        end_contact_mode: PlanarPushingContactMode,
+        gcs: opt.GraphOfConvexSets,
+    ) -> None:
+        self.non_collision_vertices = [
+            gcs.AddVertex(mode.get_polyhedron(), name=mode.name)
+            for mode in self.non_collision_modes
+        ]
+
+        # Connect contact mode to first position mode
+        add_edge_with_continuity_constraint(
+            start_contact_vertex,
+            self.non_collision_vertices[0],
+            start_contact_mode,
+            self.non_collision_modes[0],
+            gcs,
+        )
+
+        # Connect last position mode to last contact mode
+        add_edge_with_continuity_constraint(
+            self.non_collision_vertices[-1],
+            end_contact_vertex,
+            self.non_collision_modes[-1],
+            end_contact_mode,
+            gcs,
+        )
+
+        for i in range(len(self.non_collision_chain) - 1):
+            curr_vertex = self.non_collision_vertices[i]
+            curr_mode = self.non_collision_modes[i]
+            next_vertex = self.non_collision_vertices[i + 1]
+            next_mode = self.non_collision_modes[i + 1]
+            add_edge_with_continuity_constraint(
+                curr_vertex, next_vertex, curr_mode, next_mode, gcs
+            )
+
+
 def plan_planar_pushing():
-    experiment_number = 0
+    experiment_number = 1
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5
@@ -659,51 +736,16 @@ def plan_planar_pushing():
 
     elif experiment_number == 1:
         th_initial = 0
-        # th_target = -0.8
         th_target = 0
         pos_initial = np.array([[-0.2, 0.1]])
-        pos_target = np.array([[0.2, 0.5]])
+        pos_target = np.array([[-0.2, 0.1]])
 
-        source_connections = [0]
-        target_connections = [7]
-        faces_to_consider = [0, 1, 2, 3, 4, 6, 7]
-        non_collision_faces = [0, 1, 2, 3, 4, 5, 6, 7]
+        source_connections = [0, 1, 2, 3]
+        target_connections = [0, 1, 2, 3]
+        faces_to_consider = [0, 1, 2, 3]
 
-        connections = [
-            (face_name(0), non_collision_name(0)),
-            (non_collision_name(0), face_name(1)),
-            (face_name(1), non_collision_name(1)),
-            (non_collision_name(1), face_name(2)),
-            (face_name(2), non_collision_name(3)),
-            (face_name(2), non_collision_name(2)),
-            (non_collision_name(2), non_collision_name(3)),
-            (non_collision_name(3), face_name(3)),
-            (face_name(3), non_collision_name(4)),
-            (non_collision_name(4), face_name(4)),
-            (face_name(4), non_collision_name(5)),
-            (non_collision_name(5), face_name(6)),
-            (face_name(6), non_collision_name(6)),
-            (non_collision_name(6), face_name(7)),
-            # # (non_collision_name(0), non_collision_name(1)),
-            # # (non_collision_name(1), non_collision_name(2)),
-            # # (non_collision_name(2), non_collision_name(3)),
-            # # (non_collision_name(3), non_collision_name(4)),
-            # # (non_collision_name(4), non_collision_name(5)),
-            # # (non_collision_name(5), non_collision_name(6)),
-            # (face_name(0), non_collision_name(0)),
-            # (non_collision_name(0), face_name(1)),
-            # (face_name(1), non_collision_name(1)),
-            # (non_collision_name(1), face_name(2)),
-            # (face_name(2), non_collision_name(3)),
-            # (face_name(2), non_collision_name(2)),
-            # (non_collision_name(3), face_name(3)),
-            # (face_name(3), non_collision_name(4)),
-            # (non_collision_name(4), face_name(4)),
-            # (face_name(4), non_collision_name(5)),
-            # (non_collision_name(5), face_name(6)),
-            # (face_name(6), non_collision_name(6)),
-            # (non_collision_name(6), face_name(7)),
-        ]
+        face_connections = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+
     elif experiment_number == 2:
         th_initial = 0
         th_target = 1.2
@@ -749,7 +791,7 @@ def plan_planar_pushing():
     source_vertex = gcs.AddVertex(source_point, name="source")
     target_vertex = gcs.AddVertex(target_point, name="target")
 
-    modes = {
+    contact_modes = {
         face_name(face_idx): PlanarPushingContactMode(
             object,
             num_knot_points=num_knot_points,
@@ -758,13 +800,15 @@ def plan_planar_pushing():
         )
         for face_idx in faces_to_consider
     }
-    spectrahedrons = {key: mode.get_spectrahedron() for key, mode in modes.items()}
-    vertices = {
+    spectrahedrons = {
+        key: mode.get_spectrahedron() for key, mode in contact_modes.items()
+    }
+    contact_vertices = {
         key: gcs.AddVertex(s, name=str(key)) for key, s in spectrahedrons.items()
     }
 
     # Add costs
-    for mode, vertex in zip(modes.values(), vertices.values()):
+    for mode, vertex in zip(contact_modes.values(), contact_vertices.values()):
         prog = mode.relaxed_prog
         for cost in prog.linear_costs():
             vars = vertex.x()[prog.FindDecisionVariableIndices(cost.variables())]
@@ -772,8 +816,8 @@ def plan_planar_pushing():
             vertex.AddCost(a.T.dot(vars))
 
     for v in source_connections:
-        vertex = vertices[face_name(v)]
-        mode = modes[face_name(v)]
+        vertex = contact_vertices[face_name(v)]
+        mode = contact_modes[face_name(v)]
 
         add_source_or_target_edge(
             vertex,
@@ -785,8 +829,8 @@ def plan_planar_pushing():
         )
 
     for v in target_connections:
-        vertex = vertices[face_name(v)]
-        mode = modes[face_name(v)]
+        vertex = contact_vertices[face_name(v)]
+        mode = contact_modes[face_name(v)]
 
         add_source_or_target_edge(
             vertex,
@@ -799,42 +843,33 @@ def plan_planar_pushing():
 
     num_knot_points_for_non_collision = 2
 
-    non_collision_modes = [
-        NonCollisionMode(
-            object, idx, num_knot_points_for_non_collision, time_in_each_mode
+    chains = [
+        GraphChain.from_contact_connection(incoming_idx, outgoing_idx)
+        for incoming_idx, outgoing_idx in face_connections
+    ]
+    for chain in chains:
+        chain.create_contact_modes(
+            object, num_knot_points_for_non_collision, time_in_each_mode
         )
-        for idx in non_collision_faces
-    ]
 
-    non_collision_vertices = [
-        gcs.AddVertex(mode.get_polyhedron(), mode.name) for mode in non_collision_modes
-    ]
-
-    # Add noncollision_modes to modes too
-    # TODO clean up
-    for mode, vertex in zip(non_collision_modes, non_collision_vertices):
-        modes[mode.name] = mode  # type: ignore
-        vertices[mode.name] = vertex  # type: ignore
-
-    for incoming_name, outgoing_name in connections:
-        incoming_vertex = vertices[incoming_name]
-        outgoing_vertex = vertices[outgoing_name]
-        incoming_mode = modes[incoming_name]
-        outgoing_mode = modes[outgoing_name]
-
-        add_edge_with_continuity_constraint(
+    for chain in chains:
+        incoming_vertex = contact_vertices[face_name(chain.start_contact_idx)]
+        outgoing_vertex = contact_vertices[face_name(chain.end_contact_idx)]
+        incoming_mode = contact_modes[face_name(chain.start_contact_idx)]
+        outgoing_mode = contact_modes[face_name(chain.end_contact_idx)]
+        chain.create_edges(
             incoming_vertex, outgoing_vertex, incoming_mode, outgoing_mode, gcs
         )
 
     # Add cost to non-collision vertices
-    for mode, vertex in zip(non_collision_modes, non_collision_vertices):
-        # TODO: squared dist doesn't work for some reason, look more into this!
-        # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
-        # non_collision_vertex.AddCost(squared_eucl_dist)
-        # diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
-        vars = mode.get_vars_from_gcs_vertex(vertex)
-        cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
-        vertex.AddCost(cost)
+    # for mode, vertex in zip(non_collision_modes, non_collision_vertices):
+    #     # TODO: squared dist doesn't work for some reason, look more into this!
+    #     # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+    #     # non_collision_vertex.AddCost(squared_eucl_dist)
+    #     # diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
+    #     vars = mode.get_vars_from_gcs_vertex(vertex)
+    #     cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
+    #     vertex.AddCost(cost)
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
@@ -872,8 +907,8 @@ def plan_planar_pushing():
         v.name() for v in full_path if v.name() not in ["source", "target"]
     ]
 
-    vertices_on_path = [vertices[name] for name in vertex_names_on_path]
-    modes_on_path = [modes[name] for name in vertex_names_on_path]
+    vertices_on_path = [contact_vertices[name] for name in vertex_names_on_path]
+    modes_on_path = [contact_modes[name] for name in vertex_names_on_path]
 
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
