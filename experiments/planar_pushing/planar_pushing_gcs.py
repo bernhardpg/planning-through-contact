@@ -1,7 +1,7 @@
 import argparse
 import time
 from dataclasses import dataclass
-from typing import List, Literal, NamedTuple, Optional, TypeVar, Union
+from typing import Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -645,18 +645,12 @@ class GraphChain:
     start_contact_idx: int
     end_contact_idx: int
     non_collision_chain: List[int]
-    paths = {
-        (0, 1): [0],
-        (0, 2): [0, 2],
-        (0, 3): [0, 2, 3],
-        (1, 2): [0],
-        (1, 3): [0, 2, 3],
-        (2, 3): [2, 3],
-    }
 
     @classmethod
-    def from_contact_connection(cls, incoming: int, outgoing: int) -> "GraphChain":
-        non_collision_idx_on_chain = cls.paths[(incoming, outgoing)]  # type: ignore
+    def from_contact_connection(
+        cls, incoming: int, outgoing: int, paths: Dict[Tuple[int, int], List[int]]
+    ) -> "GraphChain":
+        non_collision_idx_on_chain = paths[(incoming, outgoing)]  # type: ignore
 
         return cls(incoming, outgoing, non_collision_idx_on_chain)
 
@@ -754,15 +748,43 @@ def plan_planar_pushing():
 
     elif experiment_number == 1:
         th_initial = 0
-        th_target = 0
+        th_target = 0.3
         pos_initial = np.array([[-0.2, 0.1]])
-        pos_target = np.array([[-0.2, 0.1]])
+        pos_target = np.array([[0.2, 0.2]])
 
-        source_connections = [0, 1, 2, 3]
-        target_connections = [0, 1, 2, 3]
-        faces_to_consider = [0, 1, 2, 3]
+        faces_to_consider = [0, 1, 2, 3, 6, 7]
+        source_connections = faces_to_consider
+        target_connections = faces_to_consider
 
-        face_connections = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+        face_connections = [
+            (i, j) for i in faces_to_consider for j in faces_to_consider[:-2] if i < j
+        ]
+        face_connections.extend([(0, 7), (0, 6), (3, 6), (3, 7)])
+
+        def generate_sequence(i, j):
+            seq = [k for k in range(i, j + 1)]  # 0 and 1 have the same set
+            replace_ones = [0 if k == 1 else k for k in seq]
+            no_repeats = [replace_ones[0]]
+            for i in range(1, len(replace_ones)):
+                if replace_ones[i] != replace_ones[i - 1]:
+                    no_repeats.append(replace_ones[i])
+
+            return no_repeats
+
+        # TODO: For some reason, this causes a very strange bug!
+        # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
+        paths = {
+            (0, 1): [0],
+            (0, 2): [0, 2],
+            (0, 3): [0, 2, 3],
+            (1, 2): [2],
+            (1, 3): [0, 2, 3],
+            (2, 3): [2, 3],
+            (0, 7): [0, 7],
+            (0, 6): [0, 7, 5],
+            (3, 6): [3, 4, 5],
+            (3, 7): [3, 4, 5, 7],
+        }
 
     elif experiment_number == 2:
         th_initial = 0
@@ -862,7 +884,7 @@ def plan_planar_pushing():
     num_knot_points_for_non_collision = 2
 
     chains = [
-        GraphChain.from_contact_connection(incoming_idx, outgoing_idx)
+        GraphChain.from_contact_connection(incoming_idx, outgoing_idx, paths)
         for incoming_idx, outgoing_idx in face_connections
     ]
     for chain in chains:
