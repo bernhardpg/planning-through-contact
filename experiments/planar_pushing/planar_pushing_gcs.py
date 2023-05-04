@@ -23,7 +23,7 @@ from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.two_d.t_pusher import TPusher
 from geometry.utilities import cross_2d
-from tools.types import NpExpressionArray, NpVariableArray
+from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from visualize.analysis import create_quasistatic_pushing_analysis
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
@@ -186,7 +186,9 @@ class ModeVars(NamedTuple):
         p_WB_vals = result.GetSolution(self.p_WBs)
 
         # When result.GetSolution() is called on an expression, it returns an expression, not float
-        eval_expr_on_vector = np.vectorize(lambda x: x.Evaluate())
+        eval_expr_on_vector = np.vectorize(
+            lambda x: x.Evaluate() if isinstance(x, sym.Expression) else x
+        )
 
         p_c_B_vals = eval_expr_on_vector(result.GetSolution(self.p_c_Bs))
         f_c_B_vals = eval_expr_on_vector(result.GetSolution(self.f_c_Bs))
@@ -445,6 +447,85 @@ class PlanarPushingContactMode:
         )
 
 
+class NonCollisionMode:
+    def __init__(
+        self,
+        object: TPusher,  # TODO: replace with RigidBody2D
+        non_collision_face_idx: int,
+        num_knot_points: int = 4,
+        end_time: float = 3,
+    ):
+        self.num_knot_points = num_knot_points
+        self.name = f"non_collision{non_collision_face_idx}"
+
+        faces = object.get_faces_for_collision_free_set(
+            PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
+        )
+
+        prog = MathematicalProgram()
+        # Finger location
+        p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
+        p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
+        self.p_BFs = np.hstack(
+            [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_BF_xs, p_BF_ys)]
+        )  # (2, num_knot_points)
+
+        self.constraints = []
+        for k in range(num_knot_points):
+            p_BF = self.p_BFs[:, k]
+
+            for face in faces:
+                dist_to_face = face.a.T.dot(p_BF) + face.b
+                self.constraints.append(ge(dist_to_face, 0))
+
+        p_WB_x = prog.NewContinuousVariables(1, "p_WB_x").item()
+        p_WB_y = prog.NewContinuousVariables(1, "p_WB_y").item()
+        self.p_WB = np.expand_dims(np.array([p_WB_x, p_WB_y]), 1)
+        self.cos_th = prog.NewContinuousVariables(1, "cos_th").item()
+        self.sin_th = prog.NewContinuousVariables(1, "sin_th").item()
+
+        self.vars = np.concatenate(
+            [
+                self.p_BFs.flatten(order="F"),  # [x1, y1, x2, y2, ...]
+                self.p_WB.flatten(),
+                [self.cos_th, self.sin_th],
+            ]
+        )
+
+    def get_polyhedron(self) -> opt.HPolyhedron:
+        poly = PolyhedronFormulator(self.constraints).formulate_polyhedron(self.vars)
+        return poly
+
+    def get_vars_from_gcs_vertex(
+        self, gcs_vertex: opt.GraphOfConvexSets.Vertex
+    ) -> ModeVars:
+        x = gcs_vertex.x()
+        NUM_DIMS = 2
+        p_BFs = x[: NUM_DIMS * self.num_knot_points].reshape(
+            (NUM_DIMS, self.num_knot_points), order="F"
+        )
+        p_WB = np.expand_dims(
+            x[NUM_DIMS * self.num_knot_points : NUM_DIMS * self.num_knot_points + 2], 1
+        )
+        cos_th = x[NUM_DIMS * self.num_knot_points + 2]
+        sin_th = x[NUM_DIMS * self.num_knot_points + 3]
+
+        # Repeat the variables as we only have one decision variable
+        p_WBs = p_WB.repeat(self.num_knot_points, axis=1)
+        cos_ths = np.array([cos_th] * self.num_knot_points)
+        sin_ths = np.array([sin_th] * self.num_knot_points)
+
+        # TODO for now we just set non-existent forces to zero
+        f_c_Bs = np.array(
+            [
+                [sym.Expression(0)] * self.num_knot_points,
+                [sym.Expression(0)] * self.num_knot_points,
+            ]
+        )
+
+        return ModeVars(cos_ths, sin_ths, p_WBs, p_BFs, f_c_Bs)
+
+
 def _create_obj_config(
     pos: npt.NDArray[np.float64], th: float
 ) -> npt.NDArray[np.float64]:
@@ -455,6 +536,7 @@ def _create_obj_config(
     return obj_pose
 
 
+# TODO should be a static method for PlanarPushingContactMode or something
 def add_source_or_target_edge(
     vertex: opt.GraphOfConvexSets.Vertex,
     point_vertex: opt.GraphOfConvexSets.Vertex,
@@ -488,6 +570,7 @@ def add_source_or_target_edge(
     return edge
 
 
+# TODO should be a static method for PlanarPushingContactMode or something
 def add_edge_with_continuity_constraint(
     u: opt.GraphOfConvexSets.Vertex,
     v: opt.GraphOfConvexSets.Vertex,
@@ -656,47 +739,69 @@ def plan_planar_pushing():
             source_or_target="target",
         )
 
-    noncollision_face = 0
-    # Add collision-free sets
-    if False:
-        faces = object.get_faces_for_collision_free_set(
-            PolytopeContactLocation(ContactLocation.FACE, noncollision_face)
+    non_collision_face = 0
+
+    if True:
+        non_collision_mode = NonCollisionMode(
+            object, non_collision_face, num_knot_points, end_time
         )
-        prog = MathematicalProgram()
-        # Finger location
-        p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
-        p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
-        p_BFs = [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_BF_xs, p_BF_ys)]
+        modes[non_collision_mode.name] = non_collision_mode  # type: ignore
 
-        constraints = []
-        for k in range(num_knot_points):
-            p_BF = p_BFs[k]
+        non_collision_vertex = gcs.AddVertex(
+            non_collision_mode.get_polyhedron(), non_collision_mode.name
+        )
 
-            for face in faces:
-                dist_to_face = face.a.T.dot(p_BF) + face.b
-                constraints.append(ge(dist_to_face, 0))
+        vertices[non_collision_mode.name] = non_collision_vertex
 
-        vars = np.concatenate(p_BFs)
-        # TODO replace this
-        poly = PolyhedronFormulator(constraints).formulate_polyhedron(vars)
-        non_collision_vertex = gcs.AddVertex(poly, f"non_collision_{noncollision_face}")
-        # TODO cleanup
-        p_BF_initial = np.expand_dims(non_collision_vertex.x()[0:2], 1)
-        p_BF_final = np.expand_dims(non_collision_vertex.x()[-2:], 1)
+        incoming_mode = modes[face_name(0)]
+        incoming_vertex = vertices[face_name(0)]
+        outgoing_mode = modes[face_name(2)]
+        outgoing_vertex = vertices[face_name(2)]
+        vars = non_collision_mode.get_vars_from_gcs_vertex(non_collision_vertex)
 
-        edge1 = gcs.AddEdge(vertices[0], non_collision_vertex)
-        edge2 = gcs.AddEdge(non_collision_vertex, vertices[2])
+        edge1 = gcs.AddEdge(vertices[face_name(0)], non_collision_vertex)
+        edge2 = gcs.AddEdge(non_collision_vertex, vertices[face_name(2)])
 
-        v0_vars = modes[0].get_vars_from_gcs_vertex(vertices[0])
-        v2_vars = modes[2].get_vars_from_gcs_vertex(vertices[2])
+        incoming_vars = modes[face_name(0)].get_vars_from_gcs_vertex(
+            vertices[face_name(0)]
+        )
+        outgoing_vars = modes[face_name(2)].get_vars_from_gcs_vertex(
+            vertices[face_name(2)]
+        )
 
-        cont_constraint_1 = eq(v0_vars.p_c_Bs[-1], p_BF_initial).flatten()
-        cont_constraint_2 = eq(p_BF_final, v2_vars.p_c_Bs[0]).flatten()
+        non_collision_vars = non_collision_mode.get_vars_from_gcs_vertex(
+            non_collision_vertex
+        )
 
-        for c in cont_constraint_1:
+        def _create_cont_constraints(
+            incoming_vars: ModeVars, outgoing_vars: ModeVars
+        ) -> NpFormulaArray:
+            constraints = []
+            constraints.append(
+                eq(incoming_vars.p_c_Bs[:, -1], outgoing_vars.p_c_Bs[:, 0]).flatten()
+            )
+            constraints.append(
+                eq(incoming_vars.p_WBs[:, -1], outgoing_vars.p_WBs[:, 0]).flatten()
+            )
+            constraints.append(
+                [
+                    incoming_vars.cos_ths[-1] == outgoing_vars.cos_ths[0],
+                    incoming_vars.sin_ths[-1] == outgoing_vars.sin_ths[0],
+                ]
+            )
+            return np.concatenate(constraints)
+
+        cont_constraints_edge_1 = _create_cont_constraints(
+            incoming_vars, non_collision_vars
+        )
+        cont_constraints_edge_2 = _create_cont_constraints(
+            non_collision_vars, outgoing_vars
+        )
+
+        for c in cont_constraints_edge_1:
             edge1.AddConstraint(c)
 
-        for c in cont_constraint_2:
+        for c in cont_constraints_edge_2:
             edge2.AddConstraint(c)
 
     options = opt.GraphOfConvexSetsOptions()
@@ -729,7 +834,7 @@ def plan_planar_pushing():
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     DT = 0.01
-    interpolate = True
+    interpolate = False
     R_traj = sum(
         [val.get_R_traj(end_time, DT, interpolate=interpolate) for val in vals], []
     )
@@ -742,6 +847,7 @@ def plan_planar_pushing():
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
     )
+    breakpoint()
 
     traj_length = len(R_traj)
     num_modes_in_solution = len(modes_on_path)
