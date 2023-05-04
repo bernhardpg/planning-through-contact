@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
@@ -452,7 +452,7 @@ class NonCollisionMode:
         self,
         object: TPusher,  # TODO: replace with RigidBody2D
         non_collision_face_idx: int,
-        num_knot_points: int = 4,
+        num_knot_points: int = 3,
         end_time: float = 3,
     ):
         self.num_knot_points = num_knot_points
@@ -475,7 +475,8 @@ class NonCollisionMode:
             p_BF = self.p_BFs[:, k]
 
             for face in faces:
-                dist_to_face = face.a.T.dot(p_BF) + face.b
+                # TODO: There is a sign error somewhere! b has the wrong sign
+                dist_to_face = face.a.T.dot(p_BF) - face.b
                 self.constraints.append(ge(dist_to_face, 0))
 
         p_WB_x = prog.NewContinuousVariables(1, "p_WB_x").item()
@@ -710,7 +711,7 @@ def plan_planar_pushing():
 
         add_edge_with_continuity_constraint(u_vertex, v_vertex, u_mode, v_mode, gcs)
 
-    source_connections = faces_to_consider
+    source_connections = [0]
     target_connections = faces_to_consider
 
     for v in source_connections:
@@ -742,8 +743,9 @@ def plan_planar_pushing():
     non_collision_face = 0
 
     if True:
+        num_knot_points_for_non_collision = 3
         non_collision_mode = NonCollisionMode(
-            object, non_collision_face, num_knot_points, end_time
+            object, non_collision_face, num_knot_points_for_non_collision, end_time
         )
         modes[non_collision_mode.name] = non_collision_mode  # type: ignore
 
@@ -800,9 +802,12 @@ def plan_planar_pushing():
         for c in cont_constraints_edge_2:
             edge2.AddConstraint(c)
 
-        diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]
-        squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
-        non_collision_vertex.AddCost(squared_eucl_dist)
+        diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
+        cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
+        non_collision_vertex.AddCost(cost)
+
+        # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+        # non_collision_vertex.AddCost(squared_eucl_dist)
 
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
@@ -834,7 +839,7 @@ def plan_planar_pushing():
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     DT = 0.01
-    interpolate = False
+    interpolate = True
     R_traj = sum(
         [val.get_R_traj(end_time, DT, interpolate=interpolate) for val in vals], []
     )
