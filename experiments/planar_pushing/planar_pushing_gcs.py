@@ -69,7 +69,6 @@ def interpolate_so2_using_slerp(
     """
 
     Rs_in_SO3 = [make_so3(R) for R in Rs]
-    breakpoint()
     knot_point_times = np.linspace(start_time, end_time, len(Rs))
     quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)
 
@@ -105,13 +104,100 @@ def interpolate_w_first_order_hold(
     return traj
 
 
+class ModeVarsResult(NamedTuple):
+    cos_ths: npt.NDArray[np.float64]
+    sin_ths: npt.NDArray[np.float64]
+    p_WBs: npt.NDArray[np.float64]
+    p_c_Bs: npt.NDArray[np.float64]
+    f_c_Bs: npt.NDArray[np.float64]
+
+    @property
+    def R_WBs(self) -> List[npt.NDArray[np.float64]]:
+        Rs = [
+            np.array([[cos, -sin], [sin, cos]])
+            for cos, sin in zip(self.cos_ths, self.sin_ths)
+        ]
+        return Rs
+
+    def _rotate_to_world(
+        self, vecs_B: npt.NDArray[np.float64]  # (2, num_knot_points)
+    ) -> npt.NDArray[np.float64]:
+        vecs_W = np.hstack(
+            [np.expand_dims(R.dot(v), 1) for R, v in zip(self.R_WBs, vecs_B.T)]
+        )
+        return vecs_W  # (2, num_knot_points)
+
+    @property
+    def p_c_Ws(self) -> npt.NDArray[np.float64]:
+        return self.p_WBs + self._rotate_to_world(self.p_c_Bs)
+
+    @property
+    def f_c_Ws(self) -> npt.NDArray[np.float64]:
+        return self.f_c_Bs
+
+    # Need to handle R_traj as a special case due to List[(2x2)] structure
+    def get_R_traj(
+        self, total_time: float, dt: float, interpolate: bool = False
+    ) -> List[npt.NDArray[np.float64]]:
+        if interpolate:
+            return interpolate_so2_using_slerp(self.R_WBs, 0, total_time, dt)
+        else:
+            return self.R_WBs
+
+    def _get_traj(
+        self,
+        knot_points: npt.NDArray[np.float64],
+        total_time: float,
+        dt: float,
+        interpolate: bool = False,
+    ) -> npt.NDArray[np.float64]:
+        if interpolate:
+            return interpolate_w_first_order_hold(knot_points.T, 0, total_time, dt)
+        else:
+            return knot_points.T
+
+    def get_p_WB_traj(
+        self, total_time: float, dt: float, interpolate: bool = False
+    ) -> npt.NDArray[np.float64]:
+        return self._get_traj(self.p_WBs, total_time, dt, interpolate)
+
+    def get_p_c_W_traj(
+        self, total_time: float, dt: float, interpolate: bool = False
+    ) -> npt.NDArray[np.float64]:
+        return self._get_traj(self.p_c_Ws, total_time, dt, interpolate)
+
+    def get_f_c_W_traj(
+        self, total_time: float, dt: float, interpolate: bool = False
+    ) -> npt.NDArray[np.float64]:
+        return self._get_traj(self.f_c_Ws, total_time, dt, interpolate)
+
+
 # TODO: should probably have a better name
 class ModeVars(NamedTuple):
-    cos_th: NpVariableArray
-    sin_th: NpVariableArray
-    p_WBs: List[NpVariableArray]
-    p_c_Bs: List[NpExpressionArray]
-    f_c_Bs: List[NpExpressionArray]
+    cos_ths: NpVariableArray  # (1, num_knot_points)
+    sin_ths: NpVariableArray  # (1, num_knot_points)
+    p_WBs: NpVariableArray  # (2, num_knot_points)
+    p_c_Bs: NpExpressionArray  # (2, num_knot_points)
+    f_c_Bs: NpExpressionArray  # (2, num_knot_points)
+
+    def eval_result(self, result: MathematicalProgramResult) -> ModeVarsResult:
+        cos_th_vals = result.GetSolution(self.cos_ths)
+        sin_th_vals = result.GetSolution(self.sin_ths)
+        p_WB_vals = result.GetSolution(self.p_WBs)
+
+        # When result.GetSolution() is called on an expression, it returns an expression, not float
+        eval_expr_on_vector = np.vectorize(lambda x: x.Evaluate())
+
+        p_c_B_vals = eval_expr_on_vector(result.GetSolution(self.p_c_Bs))
+        f_c_B_vals = eval_expr_on_vector(result.GetSolution(self.f_c_Bs))
+
+        return ModeVarsResult(
+            cos_th_vals,
+            sin_th_vals,
+            p_WB_vals,
+            p_c_B_vals,
+            f_c_B_vals,
+        )
 
 
 class PlanarPushingContactMode:
@@ -304,23 +390,27 @@ class PlanarPushingContactMode:
         lam = x[0 : self.num_knot_points]
         normal_forces = x[self.num_knot_points : 2 * self.num_knot_points]
         friction_forces = x[2 * self.num_knot_points : 3 * self.num_knot_points]
-        cos_th = x[3 * self.num_knot_points : 4 * self.num_knot_points]
-        sin_th = x[4 * self.num_knot_points : 5 * self.num_knot_points]
+        cos_ths = x[3 * self.num_knot_points : 4 * self.num_knot_points]
+        sin_ths = x[4 * self.num_knot_points : 5 * self.num_knot_points]
         p_WB_xs = x[5 * self.num_knot_points : 6 * self.num_knot_points]
         p_WB_ys = x[6 * self.num_knot_points : 7 * self.num_knot_points]
 
-        p_WBs = [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
+        p_WBs = np.hstack(
+            [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
+        )
 
-        f_c_Bs = [
-            c_n * self.normal_vec + c_f * self.tangent_vec
-            for c_n, c_f in zip(normal_forces, friction_forces)
-        ]
+        f_c_Bs = np.hstack(
+            [
+                c_n * self.normal_vec + c_f * self.tangent_vec
+                for c_n, c_f in zip(normal_forces, friction_forces)
+            ]
+        )
 
-        p_c_Bs = [l * self.pv1 + (1 - l) * self.pv2 for l in lam]
+        p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lam])
 
         return ModeVars(
-            cos_th,
-            sin_th,
+            cos_ths,
+            sin_ths,
             p_WBs,
             p_c_Bs,
             f_c_Bs,
@@ -407,14 +497,14 @@ def add_source_or_target_edge(
     vars = vertex_mode.get_vars_from_gcs_vertex(vertex)
     if source_or_target == "source":
         edge = gcs.AddEdge(point_vertex, vertex)
-        pos_vars = vars.p_WBs[0]
-        cos_var = vars.cos_th[0]
-        sin_var = vars.sin_th[0]
+        pos_vars = vars.p_WBs[:, 0]
+        cos_var = vars.cos_ths[0]
+        sin_var = vars.sin_ths[0]
     else:  # target
         edge = gcs.AddEdge(vertex, point_vertex)
-        pos_vars = vars.p_WBs[-1]
-        cos_var = vars.cos_th[-1]
-        sin_var = vars.sin_th[-1]
+        pos_vars = vars.p_WBs[:, -1]
+        cos_var = vars.cos_ths[-1]
+        sin_var = vars.sin_ths[-1]
 
     continuity_constraints = eq(pos_vars.flatten(), obj_config[0:2])
     for c in continuity_constraints.flatten():
@@ -441,15 +531,15 @@ def add_edge_with_continuity_constraint(
     u_vars = u_mode.get_vars_from_gcs_vertex(u)
     v_vars = v_mode.get_vars_from_gcs_vertex(v)
 
-    continuity_constraints = eq(u_vars.p_WBs[-1], v_vars.p_WBs[0])
+    continuity_constraints = eq(u_vars.p_WBs[:, -1], v_vars.p_WBs[:, 0])
     for c in continuity_constraints.flatten():
         edge.AddConstraint(c)
 
-    continuity_constraints = eq(u_vars.cos_th[-1], v_vars.cos_th[0])
+    continuity_constraints = eq(u_vars.cos_ths[-1], v_vars.cos_ths[0])
     for c in continuity_constraints.flatten():
         edge.AddConstraint(c)
 
-    continuity_constraints = eq(u_vars.sin_th[-1], v_vars.sin_th[0])
+    continuity_constraints = eq(u_vars.sin_ths[-1], v_vars.sin_ths[0])
     for c in continuity_constraints.flatten():
         edge.AddConstraint(c)
 
@@ -664,48 +754,22 @@ def plan_planar_pushing():
         mode.get_vars_from_gcs_vertex(vertex)
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
-    vals = get_vals(result, mode_vars_on_path)
-    cos_th_vals = np.concatenate(vals.cos_th)
-    sin_th_vals = np.concatenate(vals.sin_th)
-    p_WBs_vals = np.concatenate(vals.p_WBs)
-    f_c_Bs_vals = np.concatenate(vals.f_c_Bs)
-    p_c_Bs_vals = np.concatenate(vals.p_c_Bs)
-    breakpoint()
-
-    # Reconstruct quantities
-    R_WBs_vals = [
-        np.array([[cos, -sin], [sin, cos]])
-        for cos, sin in zip(cos_th_vals, sin_th_vals)
-    ]
-
-    contact_pos_in_W = np.vstack(
-        [
-            p_WB + R_WB.dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(p_WBs_vals, R_WBs_vals, p_c_Bs_vals)
-        ]
-    )
-
-    contact_force_in_W = np.vstack(
-        # Rotating by R messes things up. TODO: Look more into this!
-        [f_c_B for _, f_c_B in zip(R_WBs_vals, f_c_Bs_vals)]
-    )
+    vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     DT = 0.01
-
-    interpolate = False
-    if interpolate:
-        # Interpolate quantities
-        R_traj = interpolate_so2_using_slerp(R_WBs_vals, 0, end_time, DT)
-        com_traj = interpolate_w_first_order_hold(p_WBs_vals, 0, end_time, DT)
-        force_traj = interpolate_w_first_order_hold(contact_force_in_W, 0, end_time, DT)
-        contact_pos_traj = interpolate_w_first_order_hold(
-            contact_pos_in_W, 0, end_time, DT
-        )
-    else:
-        R_traj = R_WBs_vals
-        com_traj = p_WBs_vals
-        force_traj = contact_force_in_W
-        contact_pos_traj = contact_pos_in_W
+    interpolate = True
+    R_traj = sum(
+        [val.get_R_traj(end_time, DT, interpolate=interpolate) for val in vals], []
+    )
+    com_traj = np.vstack(
+        [val.get_p_WB_traj(end_time, DT, interpolate=interpolate) for val in vals]
+    )
+    force_traj = np.vstack(
+        [val.get_f_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
+    )
+    contact_pos_traj = np.vstack(
+        [val.get_p_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
+    )
 
     traj_length = len(R_traj)
     num_modes_in_solution = len(modes_on_path)
