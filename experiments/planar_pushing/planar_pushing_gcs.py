@@ -588,8 +588,11 @@ def plan_planar_pushing():
 
     faces_to_consider = [0, 2, 3]
 
+    def face_name(face_idx: float) -> str:
+        return f"face_{face_idx}"
+
     modes = {
-        face_idx: PlanarPushingContactMode(
+        face_name(face_idx): PlanarPushingContactMode(
             object,
             num_knot_points=num_knot_points,
             contact_face_idx=face_idx,
@@ -617,10 +620,10 @@ def plan_planar_pushing():
     connected_faces = [(2, 3)]
 
     for u, v in connected_faces:
-        u_vertex = vertices[u]
-        v_vertex = vertices[v]
-        u_mode = modes[u]
-        v_mode = modes[v]
+        u_vertex = vertices[face_name(u)]
+        v_vertex = vertices[face_name(v)]
+        u_mode = modes[face_name(u)]
+        v_mode = modes[face_name(v)]
 
         add_edge_with_continuity_constraint(u_vertex, v_vertex, u_mode, v_mode, gcs)
 
@@ -628,8 +631,8 @@ def plan_planar_pushing():
     target_connections = faces_to_consider
 
     for v in source_connections:
-        vertex = vertices[v]
-        mode = modes[v]
+        vertex = vertices[face_name(v)]
+        mode = modes[face_name(v)]
 
         add_source_or_target_edge(
             vertex,
@@ -641,8 +644,8 @@ def plan_planar_pushing():
         )
 
     for v in target_connections:
-        vertex = vertices[v]
-        mode = modes[v]
+        vertex = vertices[face_name(v)]
+        mode = modes[face_name(v)]
 
         add_source_or_target_edge(
             vertex,
@@ -716,8 +719,8 @@ def plan_planar_pushing():
         v.name() for v in full_path if v.name() not in ["source", "target"]
     ]
 
-    vertices_on_path = [vertices[int(name)] for name in vertex_names_on_path]
-    modes_on_path = [modes[int(name)] for name in vertex_names_on_path]
+    vertices_on_path = [vertices[name] for name in vertex_names_on_path]
+    modes_on_path = [modes[name] for name in vertex_names_on_path]
 
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
