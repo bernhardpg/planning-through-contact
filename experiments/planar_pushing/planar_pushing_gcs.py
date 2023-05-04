@@ -609,7 +609,7 @@ def add_edge_with_continuity_constraint(
     v_mode: Union[PlanarPushingContactMode, NonCollisionMode],
     gcs: opt.GraphOfConvexSets,
 ) -> opt.GraphOfConvexSets.Edge:
-    edge = gcs.AddEdge(u_vertex, v_vertex, f"{u_mode.name}_to_{v_mode.name}")
+    edge = gcs.AddEdge(u_vertex, v_vertex)
 
     u_vars = u_mode.get_vars_from_gcs_vertex(u_vertex)
     v_vars = v_mode.get_vars_from_gcs_vertex(v_vertex)
@@ -713,6 +713,24 @@ class GraphChain:
             add_edge_with_continuity_constraint(
                 curr_vertex, next_vertex, curr_mode, next_mode, gcs
             )
+
+    def add_costs(self, gcs: opt.GraphOfConvexSets) -> None:
+        for mode, vertex in zip(self.non_collision_modes, self.non_collision_vertices):
+            # TODO: squared dist doesn't work for some reason, look more into this!
+            # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+            # non_collision_vertex.AddCost(squared_eucl_dist)
+            # diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
+            vars = mode.get_vars_from_gcs_vertex(vertex)
+            cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
+            vertex.AddCost(cost)
+
+    def get_all_non_collision_vertices(self) -> List[opt.GraphOfConvexSets.Vertex]:
+        assert len(self.non_collision_vertices) > 0
+        return self.non_collision_vertices
+
+    def get_all_non_collision_modes(self) -> List[NonCollisionMode]:
+        assert len(self.non_collision_modes) > 0
+        return self.non_collision_modes
 
 
 def plan_planar_pushing():
@@ -860,16 +878,19 @@ def plan_planar_pushing():
         chain.create_edges(
             incoming_vertex, outgoing_vertex, incoming_mode, outgoing_mode, gcs
         )
+        chain.add_costs(gcs)
 
-    # Add cost to non-collision vertices
-    # for mode, vertex in zip(non_collision_modes, non_collision_vertices):
-    #     # TODO: squared dist doesn't work for some reason, look more into this!
-    #     # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
-    #     # non_collision_vertex.AddCost(squared_eucl_dist)
-    #     # diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
-    #     vars = mode.get_vars_from_gcs_vertex(vertex)
-    #     cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
-    #     vertex.AddCost(cost)
+    # Collect all modes and vertices in one big lookup table for trajectory retrieval
+    all_modes = contact_modes.copy()
+    all_vertices = contact_vertices.copy()
+
+    for chain in chains:
+        modes = chain.get_all_non_collision_modes()
+        vertices = chain.get_all_non_collision_vertices()
+
+        for mode, vertex in zip(modes, vertices):
+            all_modes[mode.name] = mode  # type: ignore
+            all_vertices[mode.name] = vertex
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
@@ -879,27 +900,26 @@ def plan_planar_pushing():
     options.convex_relaxation = True
     options.solver_options = SolverOptions()
     options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)
-    options.solver_options.SetOption(
-        MosekSolver.id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
-    )
-    options.solver_options.SetOption(MosekSolver.id(), "MSK_IPAR_INTPNT_SOLVE_FORM", 1)
-    options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_TOL_REL_GAP", 1e-3)
-    options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_MAX_TIME", 3600.0)
+    # options.solver_options.SetOption(
+    #     MosekSolver.id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
+    # )
+    # options.solver_options.SetOption(MosekSolver.id(), "MSK_IPAR_INTPNT_SOLVE_FORM", 1)
+    # options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_TOL_REL_GAP", 1e-3)
+    # options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_MAX_TIME", 3600.0)
     # options.solver_options.SetOption(GurobiSolver.id(), "MIPGap", 1e-3)
     # options.solver_options.SetOption(GurobiSolver.id(), "TimeLimit", 3600.0)
     if options.convex_relaxation is True:
-        options.preprocessing = False  # TODO Do I need to deal with this?
-        options.max_rounded_paths = 0
+        options.preprocessing = True  # TODO Do I need to deal with this?
+        options.max_rounded_paths = 1
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
 
-    breakpoint()
     assert result.is_success()
     print("Success!")
 
     flow_variables = [e.phi() for e in gcs.Edges()]
     flow_results = [result.GetSolution(p) for p in flow_variables]
     active_edges = [
-        edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= 0.99
+        edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= 0.55
     ]
 
     full_path = _find_path_to_target(active_edges, target_vertex, source_vertex)
@@ -907,8 +927,8 @@ def plan_planar_pushing():
         v.name() for v in full_path if v.name() not in ["source", "target"]
     ]
 
-    vertices_on_path = [contact_vertices[name] for name in vertex_names_on_path]
-    modes_on_path = [contact_modes[name] for name in vertex_names_on_path]
+    vertices_on_path = [all_vertices[name] for name in vertex_names_on_path]
+    modes_on_path = [all_modes[name] for name in vertex_names_on_path]
 
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
@@ -946,6 +966,7 @@ def plan_planar_pushing():
 
     traj_length = len(R_traj)
     num_modes_in_solution = len(modes_on_path)
+    breakpoint()
 
     compute_violation = False
     if compute_violation:
