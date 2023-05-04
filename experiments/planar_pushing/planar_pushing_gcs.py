@@ -759,15 +759,11 @@ def plan_planar_pushing():
         outgoing_vertex = vertices[face_name(2)]
         vars = non_collision_mode.get_vars_from_gcs_vertex(non_collision_vertex)
 
-        edge1 = gcs.AddEdge(vertices[face_name(0)], non_collision_vertex)
+        edge1 = gcs.AddEdge(incoming_vertex, non_collision_vertex)
         edge2 = gcs.AddEdge(non_collision_vertex, vertices[face_name(2)])
 
-        incoming_vars = modes[face_name(0)].get_vars_from_gcs_vertex(
-            vertices[face_name(0)]
-        )
-        outgoing_vars = modes[face_name(2)].get_vars_from_gcs_vertex(
-            vertices[face_name(2)]
-        )
+        incoming_vars = incoming_mode.get_vars_from_gcs_vertex(incoming_vertex)
+        outgoing_vars = outgoing_mode.get_vars_from_gcs_vertex(outgoing_vertex)
 
         non_collision_vars = non_collision_mode.get_vars_from_gcs_vertex(
             non_collision_vertex
@@ -804,11 +800,15 @@ def plan_planar_pushing():
         for c in cont_constraints_edge_2:
             edge2.AddConstraint(c)
 
+        diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]
+        squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+        non_collision_vertex.AddCost(squared_eucl_dist)
+
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
     if options.convex_relaxation is True:
         options.preprocessing = True  # TODO Do I need to deal with this?
-        options.max_rounded_paths = 10
+        options.max_rounded_paths = 100
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     assert result.is_success()
     print("Success!")
@@ -847,7 +847,6 @@ def plan_planar_pushing():
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
     )
-    breakpoint()
 
     traj_length = len(R_traj)
     num_modes_in_solution = len(modes_on_path)
