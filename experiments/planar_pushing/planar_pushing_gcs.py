@@ -10,10 +10,13 @@ import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge, le
 from pydrake.solvers import (
+    CommonSolverOption,
     MathematicalProgram,
     MathematicalProgramResult,
     MixedIntegerBranchAndBound,
+    MosekSolver,
     Solve,
+    SolverOptions,
 )
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
@@ -639,16 +642,68 @@ def plan_planar_pushing():
     experiment_number = 0
     if experiment_number == 0:
         th_initial = 0
-        # th_target = 0.5
-        th_target = 0
+        th_target = 0.5
         pos_initial = np.array([[0.0, 0.5]])
-        # pos_target = np.array([[0.2, 0.2]])
         pos_target = np.array([[0.2, 0.2]])
+
+        source_connections = [0]
+        target_connections = [3]
+        faces_to_consider = [0, 1, 2, 3]
+        non_collision_faces = [0, 1, 2, 3]
+        connections = [
+            (face_name(0), non_collision_name(0)),
+            (non_collision_name(0), non_collision_name(2)),
+            (non_collision_name(2), non_collision_name(3)),
+            (non_collision_name(3), face_name(3)),
+        ]
+
     elif experiment_number == 1:
         th_initial = 0
-        th_target = -0.8
+        # th_target = -0.8
+        th_target = 0
         pos_initial = np.array([[-0.2, 0.1]])
         pos_target = np.array([[0.2, 0.5]])
+
+        source_connections = [0]
+        target_connections = [7]
+        faces_to_consider = [0, 1, 2, 3, 4, 6, 7]
+        non_collision_faces = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        connections = [
+            (face_name(0), non_collision_name(0)),
+            (non_collision_name(0), face_name(1)),
+            (face_name(1), non_collision_name(1)),
+            (non_collision_name(1), face_name(2)),
+            (face_name(2), non_collision_name(3)),
+            (face_name(2), non_collision_name(2)),
+            (non_collision_name(2), non_collision_name(3)),
+            (non_collision_name(3), face_name(3)),
+            (face_name(3), non_collision_name(4)),
+            (non_collision_name(4), face_name(4)),
+            (face_name(4), non_collision_name(5)),
+            (non_collision_name(5), face_name(6)),
+            (face_name(6), non_collision_name(6)),
+            (non_collision_name(6), face_name(7)),
+            # # (non_collision_name(0), non_collision_name(1)),
+            # # (non_collision_name(1), non_collision_name(2)),
+            # # (non_collision_name(2), non_collision_name(3)),
+            # # (non_collision_name(3), non_collision_name(4)),
+            # # (non_collision_name(4), non_collision_name(5)),
+            # # (non_collision_name(5), non_collision_name(6)),
+            # (face_name(0), non_collision_name(0)),
+            # (non_collision_name(0), face_name(1)),
+            # (face_name(1), non_collision_name(1)),
+            # (non_collision_name(1), face_name(2)),
+            # (face_name(2), non_collision_name(3)),
+            # (face_name(2), non_collision_name(2)),
+            # (non_collision_name(3), face_name(3)),
+            # (face_name(3), non_collision_name(4)),
+            # (non_collision_name(4), face_name(4)),
+            # (face_name(4), non_collision_name(5)),
+            # (non_collision_name(5), face_name(6)),
+            # (face_name(6), non_collision_name(6)),
+            # (non_collision_name(6), face_name(7)),
+        ]
     elif experiment_number == 2:
         th_initial = 0
         th_target = 1.2
@@ -661,7 +716,7 @@ def plan_planar_pushing():
         pos_target = np.array([[-0.3, 0.2]])
 
     num_knot_points = 4
-    end_time = 1
+    time_in_each_mode = 1
 
     MASS = 1.0
     DIST_TO_CORNERS = 0.2
@@ -694,14 +749,12 @@ def plan_planar_pushing():
     source_vertex = gcs.AddVertex(source_point, name="source")
     target_vertex = gcs.AddVertex(target_point, name="target")
 
-    faces_to_consider = [0, 1, 2, 3]
-
     modes = {
         face_name(face_idx): PlanarPushingContactMode(
             object,
             num_knot_points=num_knot_points,
             contact_face_idx=face_idx,
-            end_time=end_time,
+            end_time=time_in_each_mode,
         )
         for face_idx in faces_to_consider
     }
@@ -717,9 +770,6 @@ def plan_planar_pushing():
             vars = vertex.x()[prog.FindDecisionVariableIndices(cost.variables())]
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
-
-    source_connections = [0]
-    target_connections = [3]
 
     for v in source_connections:
         vertex = vertices[face_name(v)]
@@ -747,11 +797,12 @@ def plan_planar_pushing():
             source_or_target="target",
         )
 
-    non_collision_faces = [0, 1, 2, 3]
-    num_knot_points_for_non_collision = 3
+    num_knot_points_for_non_collision = 2
 
     non_collision_modes = [
-        NonCollisionMode(object, idx, num_knot_points_for_non_collision, end_time)
+        NonCollisionMode(
+            object, idx, num_knot_points_for_non_collision, time_in_each_mode
+        )
         for idx in non_collision_faces
     ]
 
@@ -764,23 +815,6 @@ def plan_planar_pushing():
     for mode, vertex in zip(non_collision_modes, non_collision_vertices):
         modes[mode.name] = mode  # type: ignore
         vertices[mode.name] = vertex  # type: ignore
-
-    connections = [
-        (face_name(0), non_collision_name(0)),
-        (non_collision_name(0), non_collision_name(2)),
-        (non_collision_name(2), non_collision_name(3)),
-        (non_collision_name(3), face_name(3)),
-        # (non_collision_name(0), non_collision_name(1)),
-        # (non_collision_name(1), non_collision_name(0)),
-        # (non_collision_name(1), non_collision_name(2)),
-        # (non_collision_name(2), non_collision_name(1)),
-        # (non_collision_name(2), non_collision_name(3)),
-        # (non_collision_name(3), non_collision_name(2)),
-        # (non_collision_name(0), face_name(0)),
-        # (face_name(0), non_collision_name(0)),
-        # (non_collision_name(1), face_name(1)),
-        # (face_name(1), non_collision_name(1)),
-    ]
 
     for incoming_name, outgoing_name in connections:
         incoming_vertex = vertices[incoming_name]
@@ -808,10 +842,22 @@ def plan_planar_pushing():
 
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
+    options.solver_options = SolverOptions()
+    options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    options.solver_options.SetOption(
+        MosekSolver.id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
+    )
+    options.solver_options.SetOption(MosekSolver.id(), "MSK_IPAR_INTPNT_SOLVE_FORM", 1)
+    options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_TOL_REL_GAP", 1e-3)
+    options.solver_options.SetOption(MosekSolver.id(), "MSK_DPAR_MIO_MAX_TIME", 3600.0)
+    # options.solver_options.SetOption(GurobiSolver.id(), "MIPGap", 1e-3)
+    # options.solver_options.SetOption(GurobiSolver.id(), "TimeLimit", 3600.0)
     if options.convex_relaxation is True:
-        options.preprocessing = True  # TODO Do I need to deal with this?
-        options.max_rounded_paths = 100
+        options.preprocessing = False  # TODO Do I need to deal with this?
+        options.max_rounded_paths = 0
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
+
+    breakpoint()
     assert result.is_success()
     print("Success!")
 
@@ -836,18 +882,31 @@ def plan_planar_pushing():
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     DT = 0.01
-    interpolate = False
+    interpolate = True
     R_traj = sum(
-        [val.get_R_traj(end_time, DT, interpolate=interpolate) for val in vals], []
+        [
+            val.get_R_traj(time_in_each_mode, DT, interpolate=interpolate)
+            for val in vals
+        ],
+        [],
     )
     com_traj = np.vstack(
-        [val.get_p_WB_traj(end_time, DT, interpolate=interpolate) for val in vals]
+        [
+            val.get_p_WB_traj(time_in_each_mode, DT, interpolate=interpolate)
+            for val in vals
+        ]
     )
     force_traj = np.vstack(
-        [val.get_f_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
+        [
+            val.get_f_c_W_traj(time_in_each_mode, DT, interpolate=interpolate)
+            for val in vals
+        ]
     )
     contact_pos_traj = np.vstack(
-        [val.get_p_c_W_traj(end_time, DT, interpolate=interpolate) for val in vals]
+        [
+            val.get_p_c_W_traj(time_in_each_mode, DT, interpolate=interpolate)
+            for val in vals
+        ]
     )
 
     traj_length = len(R_traj)
@@ -918,9 +977,9 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / (end_time * num_modes_in_solution)
+    FRAMES_PER_SEC = len(R_traj) / (time_in_each_mode * num_modes_in_solution)
     viz.visualize(
-        [com_points_viz, contact_point_viz],
+        [contact_point_viz],
         [contact_force_viz],
         [box_viz],
         FRAMES_PER_SEC,

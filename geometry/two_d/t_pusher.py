@@ -54,6 +54,14 @@ class TPusher(RigidBody2d):
                 return [self.faces[2]]
             elif face_idx == 3:
                 return [self.faces[3]]
+            elif face_idx == 4:
+                return [self.faces[4]]
+            elif face_idx == 5:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 6:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 7:
+                return [self.faces[7]]
             else:
                 raise NotImplementedError("Currently only face 0 is supported")
 
