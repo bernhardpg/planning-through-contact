@@ -33,6 +33,20 @@ class TPusher(RigidBody2d):
 
         self.num_vertices = len(self.vertices)
 
+    def get_faces_for_collision_free_set(
+        self, location: PolytopeContactLocation
+    ) -> List[Hyperplane]:
+        if not location.pos == ContactLocation.FACE:
+            raise NotImplementedError(
+                "Can only find faces for collisionfree regions for faces."
+            )
+        else:
+            face_idx = location.idx
+            if face_idx == 0:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            else:
+                raise NotImplementedError("Currently only face 0 is supported")
+
     # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
     @property

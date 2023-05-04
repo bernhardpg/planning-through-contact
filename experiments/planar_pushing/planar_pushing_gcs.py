@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
-from pydrake.math import eq
+import pydrake.symbolic as sym
+from pydrake.math import eq, ge
 from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
@@ -16,6 +17,7 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from convex_relaxation.sdp import create_sdp_relaxation
+from geometry.polyhedron import PolyhedronFormulator
 from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
@@ -105,12 +107,11 @@ def interpolate_w_first_order_hold(
 
 # TODO: should probably have a better name
 class ModeVars(NamedTuple):
-    lam: NpVariableArray
-    normal_forces: NpVariableArray
-    friction_forces: NpVariableArray
     cos_th: NpVariableArray
     sin_th: NpVariableArray
     p_WBs: List[NpVariableArray]
+    p_c_Bs: List[NpExpressionArray]
+    f_c_Bs: List[NpExpressionArray]
 
 
 class PlanarPushingContactMode:
@@ -310,13 +311,19 @@ class PlanarPushingContactMode:
 
         p_WBs = [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
 
+        f_c_Bs = [
+            c_n * self.normal_vec + c_f * self.tangent_vec
+            for c_n, c_f in zip(normal_forces, friction_forces)
+        ]
+
+        p_c_Bs = [l * self.pv1 + (1 - l) * self.pv2 for l in lam]
+
         return ModeVars(
-            lam,
-            normal_forces,
-            friction_forces,
             cos_th,
             sin_th,
             p_WBs,
+            p_c_Bs,
+            f_c_Bs,
         )
 
     def solve(self):
@@ -349,23 +356,33 @@ class PlanarPushingContactMode:
 
 
 def get_vals(result: MathematicalProgramResult, mode_vars: List[ModeVars]) -> ModeVars:
-    lam_vals = [result.GetSolution(mode.lam) for mode in mode_vars]
-    normal_force_vals = [result.GetSolution(mode.normal_forces) for mode in mode_vars]
-    friction_forces_vals = [
-        result.GetSolution(mode.friction_forces) for mode in mode_vars
-    ]
     cos_th_vals = [result.GetSolution(mode.cos_th) for mode in mode_vars]
     sin_th_vals = [result.GetSolution(mode.sin_th) for mode in mode_vars]
     p_WB_vals = [
         [result.GetSolution(p_WB) for p_WB in mode.p_WBs] for mode in mode_vars
     ]
+    # When result.GetSolution() is called on an expression, it returns an expression, not float
+    eval_expr_on_vector = np.vectorize(lambda x: x.Evaluate())
+    p_c_B_vals = [
+        [
+            eval_expr_on_vector(result.GetSolution(p_c_B).flatten())
+            for p_c_B in mode.p_c_Bs
+        ]
+        for mode in mode_vars
+    ]
+    f_c_B_vals = [
+        [
+            eval_expr_on_vector(result.GetSolution(f_c_B).flatten())
+            for f_c_B in mode.f_c_Bs
+        ]
+        for mode in mode_vars
+    ]
     return ModeVars(
-        lam_vals,
-        normal_force_vals,
-        friction_forces_vals,
         cos_th_vals,
         sin_th_vals,
         p_WB_vals,
+        p_c_B_vals,
+        f_c_B_vals,
     )
 
 
@@ -454,7 +471,7 @@ def _find_path_to_target(
 
 
 def plan_planar_pushing():
-    experiment_number = 3
+    experiment_number = 0
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5
@@ -492,6 +509,7 @@ def plan_planar_pushing():
             vertex_distance=DIST_TO_CORNERS,
             num_vertices=num_vertices,
         )
+        raise NotImplementedError("Polytope missing support for collision free sets")
     else:
         object = TPusher(
             actuated=False,
@@ -509,7 +527,8 @@ def plan_planar_pushing():
     source_vertex = gcs.AddVertex(source_point, name="source")
     target_vertex = gcs.AddVertex(target_point, name="target")
 
-    faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
+    faces_to_consider = [0, 2, 3]
+
     modes = {
         face_idx: PlanarPushingContactMode(
             object,
@@ -533,7 +552,10 @@ def plan_planar_pushing():
             vertex.AddCost(a.T.dot(vars))
 
     # TODO: For now we need to avoid cycles
-    connected_faces = [(i, j) for i in range(8) for j in range(8) if i < j]
+    # connected_faces = [
+    #     (i, j) for i in faces_to_consider for j in faces_to_consider if i < j
+    # ]
+    connected_faces = [(2, 3)]
 
     for u, v in connected_faces:
         u_vertex = vertices[u]
@@ -572,6 +594,49 @@ def plan_planar_pushing():
             source_or_target="target",
         )
 
+    noncollision_face = 0
+    # Add collision-free sets
+    if False:
+        faces = object.get_faces_for_collision_free_set(
+            PolytopeContactLocation(ContactLocation.FACE, noncollision_face)
+        )
+        prog = MathematicalProgram()
+        # Finger location
+        p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
+        p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
+        p_BFs = [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_BF_xs, p_BF_ys)]
+
+        constraints = []
+        for k in range(num_knot_points):
+            p_BF = p_BFs[k]
+
+            for face in faces:
+                dist_to_face = face.a.T.dot(p_BF) + face.b
+                constraints.append(ge(dist_to_face, 0))
+
+        vars = np.concatenate(p_BFs)
+        # TODO replace this
+        poly = PolyhedronFormulator(constraints).formulate_polyhedron(vars)
+        non_collision_vertex = gcs.AddVertex(poly, f"non_collision_{noncollision_face}")
+        # TODO cleanup
+        p_BF_initial = np.expand_dims(non_collision_vertex.x()[0:2], 1)
+        p_BF_final = np.expand_dims(non_collision_vertex.x()[-2:], 1)
+
+        edge1 = gcs.AddEdge(vertices[0], non_collision_vertex)
+        edge2 = gcs.AddEdge(non_collision_vertex, vertices[2])
+
+        v0_vars = modes[0].get_vars_from_gcs_vertex(vertices[0])
+        v2_vars = modes[2].get_vars_from_gcs_vertex(vertices[2])
+
+        cont_constraint_1 = eq(v0_vars.p_c_Bs[-1], p_BF_initial).flatten()
+        cont_constraint_2 = eq(p_BF_final, v2_vars.p_c_Bs[0]).flatten()
+
+        for c in cont_constraint_1:
+            edge1.AddConstraint(c)
+
+        for c in cont_constraint_2:
+            edge2.AddConstraint(c)
+
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
     if options.convex_relaxation is True:
@@ -600,36 +665,14 @@ def plan_planar_pushing():
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = get_vals(result, mode_vars_on_path)
-    lam_vals = vals.lam
-    normal_forces_vals = vals.normal_forces
-    friction_forces_vals = vals.friction_forces
     cos_th_vals = np.concatenate(vals.cos_th)
     sin_th_vals = np.concatenate(vals.sin_th)
     p_WBs_vals = np.concatenate(vals.p_WBs)
-
-    normal_vecs = [mode.normal_vec for mode in modes_on_path]
-    tangent_vecs = [mode.tangent_vec for mode in modes_on_path]
-    pv1s = [mode.pv1 for mode in modes_on_path]
-    pv2s = [mode.pv2 for mode in modes_on_path]
+    f_c_Bs_vals = np.concatenate(vals.f_c_Bs)
+    p_c_Bs_vals = np.concatenate(vals.p_c_Bs)
+    breakpoint()
 
     # Reconstruct quantities
-    p_c_Bs_vals = np.concatenate(
-        [
-            np.hstack([lam * pv1 + (1 - lam) * pv2 for lam in lams]).T
-            for (pv1, pv2), lams in zip(zip(pv1s, pv2s), lam_vals)
-        ]
-    )
-    f_c_Bs_vals = np.concatenate(
-        [
-            np.hstack(
-                [c_n * normal_vec + c_f * tangent_vec for c_n, c_f in zip(c_ns, c_fs)]
-            ).T
-            for (normal_vec, tangent_vec), (c_ns, c_fs) in zip(
-                zip(normal_vecs, tangent_vecs),
-                zip(normal_forces_vals, friction_forces_vals),
-            )
-        ]
-    )
     R_WBs_vals = [
         np.array([[cos, -sin], [sin, cos]])
         for cos, sin in zip(cos_th_vals, sin_th_vals)
