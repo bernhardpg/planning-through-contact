@@ -123,6 +123,7 @@ class ModeVarsResult(NamedTuple):
     p_WBs: npt.NDArray[np.float64]
     p_c_Bs: npt.NDArray[np.float64]
     f_c_Bs: npt.NDArray[np.float64]
+    time_in_mode: float
 
     @property
     def R_WBs(self) -> List[npt.NDArray[np.float64]]:
@@ -150,39 +151,40 @@ class ModeVarsResult(NamedTuple):
 
     # Need to handle R_traj as a special case due to List[(2x2)] structure
     def get_R_traj(
-        self, total_time: float, dt: float, interpolate: bool = False
+        self, dt: float, interpolate: bool = False
     ) -> List[npt.NDArray[np.float64]]:
         if interpolate:
-            return interpolate_so2_using_slerp(self.R_WBs, 0, total_time, dt)
+            return interpolate_so2_using_slerp(self.R_WBs, 0, self.time_in_mode, dt)
         else:
             return self.R_WBs
 
     def _get_traj(
         self,
         knot_points: npt.NDArray[np.float64],
-        total_time: float,
         dt: float,
         interpolate: bool = False,
     ) -> npt.NDArray[np.float64]:
         if interpolate:
-            return interpolate_w_first_order_hold(knot_points.T, 0, total_time, dt)
+            return interpolate_w_first_order_hold(
+                knot_points.T, 0, self.time_in_mode, dt
+            )
         else:
             return knot_points.T
 
     def get_p_WB_traj(
-        self, total_time: float, dt: float, interpolate: bool = False
+        self, dt: float, interpolate: bool = False
     ) -> npt.NDArray[np.float64]:
-        return self._get_traj(self.p_WBs, total_time, dt, interpolate)
+        return self._get_traj(self.p_WBs, dt, interpolate)
 
     def get_p_c_W_traj(
-        self, total_time: float, dt: float, interpolate: bool = False
+        self, dt: float, interpolate: bool = False
     ) -> npt.NDArray[np.float64]:
-        return self._get_traj(self.p_c_Ws, total_time, dt, interpolate)
+        return self._get_traj(self.p_c_Ws, dt, interpolate)
 
     def get_f_c_W_traj(
-        self, total_time: float, dt: float, interpolate: bool = False
+        self, dt: float, interpolate: bool = False
     ) -> npt.NDArray[np.float64]:
-        return self._get_traj(self.f_c_Ws, total_time, dt, interpolate)
+        return self._get_traj(self.f_c_Ws, dt, interpolate)
 
 
 # TODO: should probably have a better name
@@ -192,6 +194,7 @@ class ModeVars(NamedTuple):
     p_WBs: NpVariableArray  # (2, num_knot_points)
     p_c_Bs: NpExpressionArray  # (2, num_knot_points)
     f_c_Bs: NpExpressionArray  # (2, num_knot_points)
+    time_in_mode: float
 
     def eval_result(self, result: MathematicalProgramResult) -> ModeVarsResult:
         cos_th_vals = result.GetSolution(self.cos_ths)
@@ -212,6 +215,7 @@ class ModeVars(NamedTuple):
             p_WB_vals,
             p_c_B_vals,
             f_c_B_vals,
+            self.time_in_mode,
         )
 
 
@@ -231,6 +235,7 @@ class PlanarPushingContactMode:
 
         self.num_knot_points = num_knot_points
         self.object = object
+        self.time_in_mode = end_time
 
         FRICTION_COEFF = 0.5
         G = 9.81
@@ -431,6 +436,7 @@ class PlanarPushingContactMode:
             p_WBs,
             p_c_Bs,
             f_c_Bs,
+            self.time_in_mode,
         )
 
     def solve(self):
@@ -473,6 +479,7 @@ class NonCollisionMode:
     ):
         self.num_knot_points = num_knot_points
         self.name = name
+        self.time_in_mode = end_time
 
         faces = object.get_faces_for_collision_free_set(
             PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
@@ -540,7 +547,7 @@ class NonCollisionMode:
             ]
         )
 
-        return ModeVars(cos_ths, sin_ths, p_WBs, p_BFs, f_c_Bs)
+        return ModeVars(cos_ths, sin_ths, p_WBs, p_BFs, f_c_Bs, self.time_in_mode)
 
 
 def _create_obj_config(
@@ -728,23 +735,70 @@ class GraphChain:
 
 
 def plan_planar_pushing():
-    experiment_number = 1
+    # Build the graph
+    # NOTE: Somewhat ad-hoc, as we are missing the code to deal with cycles currently
+    faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
+    source_connections = faces_to_consider
+    target_connections = faces_to_consider
+
+    face_connections = [
+        (i, j) for i in faces_to_consider for j in faces_to_consider[:-4] if i < j
+    ]
+    face_connections.extend(
+        [
+            (0, 7),
+            (0, 6),
+            (3, 6),
+            (3, 7),
+            (7, 6),
+            (7, 5),
+            (7, 4),
+            (6, 5),
+            (6, 4),
+            (5, 4),
+            (5, 3),
+            (5, 2),
+        ]
+    )
+
+    # TODO: For some reason, this causes a very strange bug!
+    # def generate_sequence(i, j):
+    #     seq = [k for k in range(i, j + 1)]  # 0 and 1 have the same set
+    #     replace_ones = [0 if k == 1 else k for k in seq]
+    #     no_repeats = [replace_ones[0]]
+    #     for i in range(1, len(replace_ones)):
+    #         if replace_ones[i] != replace_ones[i - 1]:
+    #             no_repeats.append(replace_ones[i])
+    #
+    #     return no_repeats
+    # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
+    paths = {
+        (0, 1): [0],
+        (0, 2): [0, 2],
+        (0, 3): [0, 2, 3],
+        (1, 2): [2],
+        (1, 3): [0, 2, 3],
+        (2, 3): [2, 3],
+        (0, 7): [0, 7],
+        (0, 6): [0, 7, 5],
+        (3, 6): [3, 4, 5],
+        (3, 7): [3, 4, 5, 7],
+        (7, 6): [7, 6],
+        (7, 5): [7, 6],
+        (7, 4): [7, 6, 4],
+        (6, 5): [5],
+        (6, 4): [5, 4],
+        (5, 4): [5, 4],
+        (5, 3): [5, 4, 3],
+        (5, 2): [5, 4, 3, 2],
+    }
+
+    experiment_number = 4
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5
         pos_initial = np.array([[0.0, 0.5]])
         pos_target = np.array([[0.2, 0.2]])
-
-        source_connections = [0]
-        target_connections = [3]
-        faces_to_consider = [0, 1, 2, 3]
-        non_collision_faces = [0, 1, 2, 3]
-        connections = [
-            (face_name(0), non_collision_name(0)),
-            (non_collision_name(0), non_collision_name(2)),
-            (non_collision_name(2), non_collision_name(3)),
-            (non_collision_name(3), face_name(3)),
-        ]
 
     elif experiment_number == 1:
         th_initial = 0
@@ -752,53 +806,27 @@ def plan_planar_pushing():
         pos_initial = np.array([[-0.2, 0.1]])
         pos_target = np.array([[0.2, 0.2]])
 
-        faces_to_consider = [0, 1, 2, 3, 6, 7]
-        source_connections = faces_to_consider
-        target_connections = faces_to_consider
-
-        face_connections = [
-            (i, j) for i in faces_to_consider for j in faces_to_consider[:-2] if i < j
-        ]
-        face_connections.extend([(0, 7), (0, 6), (3, 6), (3, 7)])
-
-        def generate_sequence(i, j):
-            seq = [k for k in range(i, j + 1)]  # 0 and 1 have the same set
-            replace_ones = [0 if k == 1 else k for k in seq]
-            no_repeats = [replace_ones[0]]
-            for i in range(1, len(replace_ones)):
-                if replace_ones[i] != replace_ones[i - 1]:
-                    no_repeats.append(replace_ones[i])
-
-            return no_repeats
-
-        # TODO: For some reason, this causes a very strange bug!
-        # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
-        paths = {
-            (0, 1): [0],
-            (0, 2): [0, 2],
-            (0, 3): [0, 2, 3],
-            (1, 2): [2],
-            (1, 3): [0, 2, 3],
-            (2, 3): [2, 3],
-            (0, 7): [0, 7],
-            (0, 6): [0, 7, 5],
-            (3, 6): [3, 4, 5],
-            (3, 7): [3, 4, 5, 7],
-        }
-
     elif experiment_number == 2:
-        th_initial = 0
-        th_target = 1.2
-        pos_initial = np.array([[0.4, 0.5]])
-        pos_target = np.array([[-0.2, 0.2]])
+        th_initial = 0.0
+        th_target = -0.6
+        pos_initial = np.array([[0.4, 0.4]])
+        pos_target = np.array([[0.1, 0.3]])
+
     elif experiment_number == 3:
         th_initial = 0
-        th_target = 1.2
-        pos_initial = np.array([[0.4, 0.5]])
-        pos_target = np.array([[-0.3, 0.2]])
+        th_target = -0.68
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[0.2, 0.2]])
+
+    elif experiment_number == 4:
+        th_initial = 0
+        th_target = 0.4
+        pos_initial = np.array([[0.2, 0.2]])
+        pos_target = np.array([[-0.18, 0.5]])
 
     num_knot_points = 4
-    time_in_each_mode = 1
+    time_in_contact = 2
+    time_moving = 0.5
 
     MASS = 1.0
     DIST_TO_CORNERS = 0.2
@@ -836,7 +864,7 @@ def plan_planar_pushing():
             object,
             num_knot_points=num_knot_points,
             contact_face_idx=face_idx,
-            end_time=time_in_each_mode,
+            end_time=time_in_contact,
         )
         for face_idx in faces_to_consider
     }
@@ -889,7 +917,7 @@ def plan_planar_pushing():
     ]
     for chain in chains:
         chain.create_contact_modes(
-            object, num_knot_points_for_non_collision, time_in_each_mode
+            object, num_knot_points_for_non_collision, time_moving
         )
 
     for chain in chains:
@@ -961,33 +989,20 @@ def plan_planar_pushing():
     DT = 0.01
     interpolate = True
     R_traj = sum(
-        [
-            val.get_R_traj(time_in_each_mode, DT, interpolate=interpolate)
-            for val in vals
-        ],
+        [val.get_R_traj(DT, interpolate=interpolate) for val in vals],
         [],
     )
     com_traj = np.vstack(
-        [
-            val.get_p_WB_traj(time_in_each_mode, DT, interpolate=interpolate)
-            for val in vals
-        ]
+        [val.get_p_WB_traj(DT, interpolate=interpolate) for val in vals]
     )
     force_traj = np.vstack(
-        [
-            val.get_f_c_W_traj(time_in_each_mode, DT, interpolate=interpolate)
-            for val in vals
-        ]
+        [val.get_f_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
     contact_pos_traj = np.vstack(
-        [
-            val.get_p_c_W_traj(time_in_each_mode, DT, interpolate=interpolate)
-            for val in vals
-        ]
+        [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
 
     traj_length = len(R_traj)
-    num_modes_in_solution = len(modes_on_path)
     breakpoint()
 
     compute_violation = False
@@ -1055,7 +1070,7 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / (time_in_each_mode * num_modes_in_solution)
+    FRAMES_PER_SEC = len(R_traj) / DT
     viz.visualize(
         [contact_point_viz],
         [contact_force_viz],
