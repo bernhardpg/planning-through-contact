@@ -31,6 +31,10 @@ Then run something like:
 cd drake-build
 export PYTHONPATH=${PWD}/install/lib/python3.11/site-packages:${PYTHONPATH}
 ```
+in my case
+```
+export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
 
 ## Running demos
 ```
