@@ -717,13 +717,14 @@ class GraphChain:
 
     def add_costs(self, gcs: opt.GraphOfConvexSets) -> None:
         for mode, vertex in zip(self.non_collision_modes, self.non_collision_vertices):
-            # TODO: squared dist doesn't work for some reason, look more into this!
-            # squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
-            # non_collision_vertex.AddCost(squared_eucl_dist)
-            # diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
             vars = mode.get_vars_from_gcs_vertex(vertex)
-            cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
-            vertex.AddCost(cost)
+            diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
+            squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+            vertex.AddCost(squared_eucl_dist)
+            # TODO: Remove
+            # vars = mode.get_vars_from_gcs_vertex(vertex)
+            # cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
+            # vertex.AddCost(cost)
 
     def get_all_non_collision_vertices(self) -> List[opt.GraphOfConvexSets.Vertex]:
         assert len(self.non_collision_vertices) > 0
