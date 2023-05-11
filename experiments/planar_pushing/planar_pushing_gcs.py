@@ -651,11 +651,11 @@ def create_continuity_constraints(
 class GraphChain:
     start_contact_idx: int
     end_contact_idx: int
-    non_collision_chain: List[int]
+    non_collision_chains: List[List[int]]
 
     @classmethod
     def from_contact_connection(
-        cls, incoming: int, outgoing: int, paths: Dict[Tuple[int, int], List[int]]
+        cls, incoming: int, outgoing: int, paths: Dict[Tuple[int, int], List[List[int]]]
     ) -> "GraphChain":
         non_collision_idx_on_chain = paths[(incoming, outgoing)]  # type: ignore
 
@@ -665,14 +665,17 @@ class GraphChain:
         self, object: TPusher, num_knot_points: int, time_in_each_mode: float
     ) -> None:
         self.non_collision_modes = [
-            NonCollisionMode(
-                object,
-                f"from_{self.start_contact_idx}_to_{self.end_contact_idx}_at_{idx}",
-                idx,
-                num_knot_points,
-                time_in_each_mode,
-            )
-            for idx in self.non_collision_chain
+            [
+                NonCollisionMode(
+                    object,
+                    f"from_{self.start_contact_idx}_to_{self.end_contact_idx}_at_{idx}",
+                    idx,
+                    num_knot_points,
+                    time_in_each_mode,
+                )
+                for idx in chain
+            ]
+            for chain in self.non_collision_chains
         ]
 
     def create_edges(
@@ -684,53 +687,66 @@ class GraphChain:
         gcs: opt.GraphOfConvexSets,
     ) -> None:
         self.non_collision_vertices = [
-            gcs.AddVertex(mode.get_polyhedron(), name=mode.name)
-            for mode in self.non_collision_modes
+            [
+                gcs.AddVertex(mode.get_polyhedron(), name=mode.name)
+                for mode in mode_chain
+            ]
+            for mode_chain in self.non_collision_modes
         ]
 
-        # Connect contact mode to first position mode
-        add_edge_with_continuity_constraint(
-            start_contact_vertex,
-            self.non_collision_vertices[0],
-            start_contact_mode,
-            self.non_collision_modes[0],
-            gcs,
-        )
-
-        # Connect last position mode to last contact mode
-        add_edge_with_continuity_constraint(
-            self.non_collision_vertices[-1],
-            end_contact_vertex,
-            self.non_collision_modes[-1],
-            end_contact_mode,
-            gcs,
-        )
-
-        for i in range(len(self.non_collision_chain) - 1):
-            curr_vertex = self.non_collision_vertices[i]
-            curr_mode = self.non_collision_modes[i]
-            next_vertex = self.non_collision_vertices[i + 1]
-            next_mode = self.non_collision_modes[i + 1]
+        for chain, modes, vertices in zip(
+            self.non_collision_chains,
+            self.non_collision_modes,
+            self.non_collision_vertices,
+        ):
+            # Connect contact mode to first position mode
             add_edge_with_continuity_constraint(
-                curr_vertex, next_vertex, curr_mode, next_mode, gcs
+                start_contact_vertex,
+                vertices[0],
+                start_contact_mode,
+                modes[0],
+                gcs,
             )
 
-    def add_costs(self, gcs: opt.GraphOfConvexSets) -> None:
-        for mode, vertex in zip(self.non_collision_modes, self.non_collision_vertices):
-            vars = mode.get_vars_from_gcs_vertex(vertex)
-            diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
-            squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
-            vertex.AddCost(squared_eucl_dist)
-            # TODO: Remove
-            # vars = mode.get_vars_from_gcs_vertex(vertex)
-            # cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
-            # vertex.AddCost(cost)
+            # Connect last position mode to last contact mode
+            add_edge_with_continuity_constraint(
+                vertices[-1],
+                end_contact_vertex,
+                modes[-1],
+                end_contact_mode,
+                gcs,
+            )
 
-    def get_all_non_collision_vertices(self) -> List[opt.GraphOfConvexSets.Vertex]:
+            for i in range(len(chain) - 1):
+                curr_vertex = vertices[i]
+                curr_mode = modes[i]
+                next_vertex = vertices[i + 1]
+                next_mode = modes[i + 1]
+                add_edge_with_continuity_constraint(
+                    curr_vertex, next_vertex, curr_mode, next_mode, gcs
+                )
+
+    def add_costs(self) -> None:
+        for modes, vertices in zip(
+            self.non_collision_modes, self.non_collision_vertices
+        ):
+            for mode, vertex in zip(modes, vertices):
+                vars = mode.get_vars_from_gcs_vertex(vertex)
+                diffs = vars.p_c_Bs[:, 1:] - vars.p_c_Bs[:, :-1]  # type: ignore
+                squared_eucl_dist = sum([d.T.dot(d) for d in diffs.T])
+                vertex.AddCost(squared_eucl_dist)
+                # TODO: Remove
+                # vars = mode.get_vars_from_gcs_vertex(vertex)
+                # cost = sum([p.T.dot(p) for p in vars.p_c_Bs.T])
+                # vertex.AddCost(cost)
+
+    def get_all_non_collision_vertices(
+        self,
+    ) -> List[List[opt.GraphOfConvexSets.Vertex]]:
         assert len(self.non_collision_vertices) > 0
         return self.non_collision_vertices
 
-    def get_all_non_collision_modes(self) -> List[NonCollisionMode]:
+    def get_all_non_collision_modes(self) -> List[List[NonCollisionMode]]:
         assert len(self.non_collision_modes) > 0
         return self.non_collision_modes
 
@@ -774,24 +790,24 @@ def plan_planar_pushing():
     #     return no_repeats
     # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
     paths = {
-        (0, 1): [0],
-        (0, 2): [0, 2],
-        (0, 3): [0, 2, 3],
-        (1, 2): [2],
-        (1, 3): [0, 2, 3],
-        (2, 3): [2, 3],
-        (0, 7): [0, 7],
-        (0, 6): [0, 7, 5],
-        (3, 6): [3, 4, 5],
-        (3, 7): [3, 4, 5, 7],
-        (7, 6): [7, 6],
-        (7, 5): [7, 6],
-        (7, 4): [7, 6, 4],
-        (6, 5): [5],
-        (6, 4): [5, 4],
-        (5, 4): [5, 4],
-        (5, 3): [5, 4, 3],
-        (5, 2): [5, 4, 3, 2],
+        (0, 1): [[0], [0, 7, 5, 4, 3, 2, 0]],
+        (0, 2): [[0, 2], [0, 7, 5, 4, 3, 2]],
+        (0, 3): [[0, 2, 3], [0, 7, 5, 4, 3]],
+        (1, 2): [[2], [0]],
+        (1, 3): [[0, 2, 3], [0]],
+        (2, 3): [[2, 3], [0]],
+        (0, 7): [[0, 7], [0]],
+        (0, 6): [[0, 7, 5], [0]],
+        (3, 6): [[3, 4, 5], [0]],
+        (3, 7): [[3, 4, 5, 7], [0]],
+        (7, 6): [[7, 6], [0]],
+        (7, 5): [[7, 6], [0]],
+        (7, 4): [[7, 6, 4], [0]],
+        (6, 5): [[5], [0]],
+        (6, 4): [[5, 4], [0]],
+        (5, 4): [[5, 4], [0]],
+        (5, 3): [[5, 4, 3], [0]],
+        (5, 2): [[5, 4, 3, 2], [0]],
     }
 
     experiment_number = 4
@@ -929,19 +945,20 @@ def plan_planar_pushing():
         chain.create_edges(
             incoming_vertex, outgoing_vertex, incoming_mode, outgoing_mode, gcs
         )
-        chain.add_costs(gcs)
+        chain.add_costs()
 
     # Collect all modes and vertices in one big lookup table for trajectory retrieval
     all_modes = contact_modes.copy()
     all_vertices = contact_vertices.copy()
 
     for chain in chains:
-        modes = chain.get_all_non_collision_modes()
-        vertices = chain.get_all_non_collision_vertices()
+        mode_chain = chain.get_all_non_collision_modes()
+        vertex_chain = chain.get_all_non_collision_vertices()
 
-        for mode, vertex in zip(modes, vertices):
-            all_modes[mode.name] = mode  # type: ignore
-            all_vertices[mode.name] = vertex
+        for modes, vertices in zip(mode_chain, vertex_chain):
+            for mode, vertex in zip(modes, vertices):
+                all_modes[mode.name] = mode  # type: ignore
+                all_vertices[mode.name] = vertex
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
