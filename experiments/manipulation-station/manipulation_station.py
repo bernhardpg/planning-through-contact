@@ -59,6 +59,11 @@ pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_svg(
     "deleteme/graph_test.svg"
 )
 
+
+pydot.graph_from_dot_data(plant.GetTopologyGraphvizString())[0].write_svg(
+    "deleteme/topology.svg"
+)
+
 simulator = Simulator(diagram, context)
 simulator.set_target_realtime_rate(1.0)
 simulator.AdvanceTo(5.0)
