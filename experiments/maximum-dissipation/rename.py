@@ -237,8 +237,8 @@ class ModeVars(NamedTuple):
 
             return padded_means
 
-        p_c_B_vals = make_mean(p_c_B_vals)
-        f_c_B_vals = make_mean(f_c_B_vals)
+        # p_c_B_vals = make_mean(p_c_B_vals)
+        # f_c_B_vals = make_mean(f_c_B_vals)
 
         return ModeVarsResult(
             cos_th_vals,
@@ -353,13 +353,13 @@ class PlanarPushingContactMode:
             v_WB = v_WBs[k]
             omega_WB = omega_WBs[k]
             # NOTE: We enforce dynamics at midway points
-            f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
-            p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
-            R_WB = (R_WBs[k] + R_WBs[k + 1]) / 2
+            # f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
+            # p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
+            # R_WB = (R_WBs[k] + R_WBs[k + 1]) / 2
 
-            # f_c_B = f_c_Bs[k]
-            # p_c_B = p_c_Bs[k]
-            # R_WB = R_WBs[k]
+            f_c_B = f_c_Bs[k]
+            p_c_B = p_c_Bs[k]
+            R_WB = R_WBs[k]
 
             # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
             R = np.zeros((3, 3), dtype="O")
@@ -411,9 +411,32 @@ class PlanarPushingContactMode:
         if pos_target is not None:
             prog.AddLinearConstraint(eq(p_WBs[-1], pos_target))
 
+        # Store real prog and real variables
+        self.prog = prog
+        # NOTE: A lot of bad naming and renaming going around here now!
+        p_WBs = np.hstack(
+            [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
+        )
+        f_c_Bs = np.hstack(
+            [
+                c_n * self.normal_vec + c_f * self.tangent_vec
+                for c_n, c_f in zip(normal_forces, friction_forces)
+            ]
+        )
+        p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lams])
+        self.true_mode_vars = ModeVars(
+            cos_ths,
+            sin_ths,
+            p_WBs,
+            p_c_Bs,
+            f_c_Bs,
+            self.time_in_mode,
+        )
+
         start = time.time()
         print("Starting to create SDP relaxation...")
         self.relaxed_prog, self.X, _ = create_sdp_relaxation(prog)
+        self.x = self.X[1:, 0]
         end = time.time()
         print(
             f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
@@ -425,14 +448,13 @@ class PlanarPushingContactMode:
         # where the 1 is added because the first element of x is 1.
         # This gives ((n+1)^2 - (n+1))/2 + (n+1) decision variables
         # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
-        x = self.X[1:, 0]
-        self.lam = x[0:num_knot_points]
-        self.normal_forces = x[num_knot_points : 2 * num_knot_points]
-        self.friction_forces = x[2 * num_knot_points : 3 * num_knot_points]
-        self.cos_th = x[3 * num_knot_points : 4 * num_knot_points]
-        self.sin_th = x[4 * num_knot_points : 5 * num_knot_points]
-        self.p_WB_xs = x[5 * num_knot_points : 6 * num_knot_points]
-        self.p_WB_ys = x[6 * num_knot_points : 7 * num_knot_points]
+        self.lam = self.x[0:num_knot_points]
+        self.normal_forces = self.x[num_knot_points : 2 * num_knot_points]
+        self.friction_forces = self.x[2 * num_knot_points : 3 * num_knot_points]
+        self.cos_th = self.x[3 * num_knot_points : 4 * num_knot_points]
+        self.sin_th = self.x[4 * num_knot_points : 5 * num_knot_points]
+        self.p_WB_xs = self.x[5 * num_knot_points : 6 * num_knot_points]
+        self.p_WB_ys = self.x[6 * num_knot_points : 7 * num_knot_points]
 
         # Keep variables
         # NOTE: Not in the original class definition
@@ -450,7 +472,7 @@ class PlanarPushingContactMode:
         )
         self.p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in self.lam])
 
-        self.mode_vars = ModeVars(
+        self.relaxed_mode_vars = ModeVars(
             self.cos_th,
             self.sin_th,
             self.p_WBs,
@@ -460,75 +482,6 @@ class PlanarPushingContactMode:
         )
 
         self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
-
-    def get_spectrahedron(self) -> opt.Spectrahedron:
-        # Variables should be the stacked columns of the lower
-        # triangular part of the symmetric matrix from relaxed_prog, see
-        # https://robotlocomotion.github.io/doxygen_cxx/classdrake_1_1solvers_1_1_mathematical_program.html#a8f718351922bc149cb6e7fa6d82288a5
-        spectrahedron = opt.Spectrahedron(self.relaxed_prog)
-        return spectrahedron
-
-    def get_vars_from_gcs_vertex(
-        self, gcs_vertex: opt.GraphOfConvexSets.Vertex
-    ) -> ModeVars:
-        x = gcs_vertex.x()[1 : self.num_variables + 2]
-
-        lam = x[0 : self.num_knot_points]
-        normal_forces = x[self.num_knot_points : 2 * self.num_knot_points]
-        friction_forces = x[2 * self.num_knot_points : 3 * self.num_knot_points]
-        cos_ths = x[3 * self.num_knot_points : 4 * self.num_knot_points]
-        sin_ths = x[4 * self.num_knot_points : 5 * self.num_knot_points]
-        p_WB_xs = x[5 * self.num_knot_points : 6 * self.num_knot_points]
-        p_WB_ys = x[6 * self.num_knot_points : 7 * self.num_knot_points]
-
-        p_WBs = np.hstack(
-            [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
-        )
-
-        f_c_Bs = np.hstack(
-            [
-                c_n * self.normal_vec + c_f * self.tangent_vec
-                for c_n, c_f in zip(normal_forces, friction_forces)
-            ]
-        )
-
-        p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lam])
-
-        return ModeVars(
-            cos_ths,
-            sin_ths,
-            p_WBs,
-            p_c_Bs,
-            f_c_Bs,
-            self.time_in_mode,
-        )
-
-    def solve(self):
-        print("Solving...")
-        start = time.time()
-        result = Solve(self.relaxed_prog)
-        end = time.time()
-        print(f"Solved in {end - start} seconds")
-        assert result.is_success()
-        print("Success!")
-
-        lam_vals = result.GetSolution(self.lam)
-        normal_forces_vals = result.GetSolution(self.normal_forces)
-        friction_forces_vals = result.GetSolution(self.friction_forces)
-        cos_th_vals = result.GetSolution(self.cos_th)
-        sin_th_vals = result.GetSolution(self.sin_th)
-        p_WB_xs_vals = result.GetSolution(self.p_WB_xs)
-        p_WB_ys_vals = result.GetSolution(self.p_WB_ys)
-
-        return (
-            lam_vals,
-            normal_forces_vals,
-            friction_forces_vals,
-            cos_th_vals,
-            sin_th_vals,
-            p_WB_xs_vals,
-            p_WB_ys_vals,
-        )
 
 
 def plan_planar_pushing():
@@ -571,11 +524,25 @@ def plan_planar_pushing():
         pos_target=pos_target,
     )
 
-    result = Solve(contact_mode.relaxed_prog)
-    assert result.is_success()
-    print("Success!")
+    relaxed_result = Solve(contact_mode.relaxed_prog)
+    assert relaxed_result.is_success()
+    print("Found solution to relaxed problem!")
 
-    vals = [contact_mode.mode_vars.eval_result(result)]
+    relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
+
+    print("Solving nonlinear trajopt...")
+    contact_mode.prog.SetInitialGuess(
+        contact_mode.prog.decision_variables(), relaxed_sols
+    )
+
+    true_result = Solve(contact_mode.prog)
+    assert true_result.is_success()
+    print("Found solution to true problem!")
+
+    relaxed_vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
+    true_vals = [contact_mode.true_mode_vars.eval_result(true_result)]
+    USE_RELAXED_SOL = False
+    vals = relaxed_vals if USE_RELAXED_SOL else true_vals
 
     DT = 0.01
     interpolate = False
