@@ -125,12 +125,26 @@ class ModeVarsResult(NamedTuple):
     time_in_mode: float
 
     @property
+    def num_knot_points(self) -> int:
+        return len(self.R_WBs)
+
+    @property
     def R_WBs(self) -> List[npt.NDArray[np.float64]]:
         Rs = [
             np.array([[cos, -sin], [sin, cos]])
             for cos, sin in zip(self.cos_ths, self.sin_ths)
         ]
         return Rs
+
+    @property
+    def v_WBs(self) -> npt.NDArray[np.float64]:
+        dt = self.num_knot_points / self.time_in_mode
+        forward_diffs = (self.p_WBs[:, 1:] - self.p_WBs[:, 0:-1]) / dt
+        # NOTE: quick fix
+        res = np.hstack(
+            (forward_diffs, np.zeros((2, 1)))
+        )  # add zeros to the end to make velocity traj as long as all other trajs
+        return res
 
     def _rotate_to_world(
         self, vecs_B: npt.NDArray[np.float64]  # (2, num_knot_points)
@@ -185,9 +199,15 @@ class ModeVarsResult(NamedTuple):
     ) -> npt.NDArray[np.float64]:
         return self._get_traj(self.f_c_Ws, dt, interpolate)
 
+    def get_v_WB_traj(
+        self, dt: float, interpolate: bool = False
+    ) -> npt.NDArray[np.float64]:
+        return self._get_traj(self.v_WBs, dt, interpolate)
+
 
 # TODO: should probably have a better name
 class ModeVars(NamedTuple):
+    # TODO: Refactor all code so that it just creates a ModeVars object, which instantiates all the variables (based on prog)
     cos_ths: NpVariableArray  # (1, num_knot_points)
     sin_ths: NpVariableArray  # (1, num_knot_points)
     p_WBs: NpVariableArray  # (2, num_knot_points)
@@ -298,7 +318,9 @@ class PlanarPushingContactMode:
             np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
             for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)
         ]
-        v_c_Bs = forward_differences(p_c_Bs, dt)
+        v_c_Bs = forward_differences(
+            p_c_Bs, dt
+        )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
 
         # In 2D, omega_z = theta_dot will be at position (0,1) in R_dot * R'
         omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WB_dots)]
@@ -497,7 +519,7 @@ def plan_planar_pushing():
         th_initial = 0
         th_target = 0
         pos_initial = np.array([[0.0, 0.5]])
-        pos_target = np.array([[-0.3, 0.5]])
+        pos_target = np.array([[-0.3, 0.2]])
     else:
         th_initial = 0
         th_target = 0.4
@@ -550,6 +572,9 @@ def plan_planar_pushing():
     )
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
+    )
+    object_vel_traj = np.vstack(
+        [val.get_v_WB_traj(DT, interpolate=interpolate) for val in vals]
     )
 
     traj_length = len(R_traj)
@@ -618,11 +643,14 @@ def plan_planar_pushing():
     contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
+    # visualize velocity with an arrow (i.e. as a force), and reverse force scaling
+    object_vel_viz = VisualizationForce2d(com_traj, CONTACT_COLOR, object_vel_traj / 0.02)  # type: ignore
+
     viz = Visualizer2d()
     FRAMES_PER_SEC = len(R_traj) / time_in_contact
     viz.visualize(
         [contact_point_viz],
-        [contact_force_viz],
+        [contact_force_viz, object_vel_viz],
         [box_viz],
         FRAMES_PER_SEC,
         target_viz,
