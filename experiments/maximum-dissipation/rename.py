@@ -228,6 +228,18 @@ class ModeVars(NamedTuple):
         p_c_B_vals = eval_expr_on_vector(result.GetSolution(self.p_c_Bs))
         f_c_B_vals = eval_expr_on_vector(result.GetSolution(self.f_c_Bs))
 
+        # TODO: Temporary fix to debug through visualization.
+        # NOTE: We enforce dynamics at mid-way points, so plot mid-way points
+        # (this is also how we compute vels)
+        def make_mean(vec):
+            means = (vec[:, 0:-1] + vec[:, 1:]) / 2
+            padded_means = np.hstack((means, np.zeros((2, 1))))
+
+            return padded_means
+
+        p_c_B_vals = make_mean(p_c_B_vals)
+        f_c_B_vals = make_mean(f_c_B_vals)
+
         return ModeVarsResult(
             cos_th_vals,
             sin_th_vals,
@@ -341,11 +353,13 @@ class PlanarPushingContactMode:
             v_WB = v_WBs[k]
             omega_WB = omega_WBs[k]
             # NOTE: We enforce dynamics at midway points
-            # f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
-            # p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
-            f_c_B = f_c_Bs[k]
-            p_c_B = p_c_Bs[k]
-            R_WB = R_WBs[k]
+            f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
+            p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
+            R_WB = (R_WBs[k] + R_WBs[k + 1]) / 2
+
+            # f_c_B = f_c_Bs[k]
+            # p_c_B = p_c_Bs[k]
+            # R_WB = R_WBs[k]
 
             # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
             R = np.zeros((3, 3), dtype="O")
@@ -521,7 +535,7 @@ def plan_planar_pushing():
     experiment_number = 0
     if experiment_number == 0:
         th_initial = 0
-        th_target = 0
+        th_target = 0.8
         pos_initial = np.array([[0.0, 0.5]])
         pos_target = np.array([[-0.3, 0.2]])
     else:
@@ -530,11 +544,12 @@ def plan_planar_pushing():
         pos_initial = np.array([[0.2, 0.2]])
         pos_target = np.array([[-0.18, 0.5]])
 
-    num_knot_points = 4
+    num_knot_points = 8
     time_in_contact = 2
 
     MASS = 1.0
     DIST_TO_CORNERS = 0.2
+    VIS_REALTIME_RATE = 0.25
     num_vertices = 4
 
     object = EquilateralPolytope2d(
@@ -648,10 +663,11 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     # visualize velocity with an arrow (i.e. as a force), and reverse force scaling
-    object_vel_viz = VisualizationForce2d(com_traj, CONTACT_COLOR, object_vel_traj / 0.02)  # type: ignore
+    VEL_VIZ_SCALE_CONSTANT = 0.005
+    object_vel_viz = VisualizationForce2d(com_traj, CONTACT_COLOR, object_vel_traj / VEL_VIZ_SCALE_CONSTANT)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / time_in_contact
+    FRAMES_PER_SEC = len(R_traj) / (time_in_contact / VIS_REALTIME_RATE)
     viz.visualize(
         [contact_point_viz],
         [contact_force_viz, object_vel_viz],
