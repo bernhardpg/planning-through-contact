@@ -48,12 +48,10 @@ def non_collision_name(face_idx: float) -> str:
     return f"non_collision_{face_idx}"
 
 
-def forward_differences(
-    vars: List[NpExpressionArray], dt: float
-) -> List[NpExpressionArray]:
+def forward_differences(vars, dt: float):
     # TODO: It is cleaner to implement this using a forward diff matrix, but as a first step I do this the simplest way
     forward_diffs = [
-        (var_next - var_curr) / dt for var_curr, var_next in zip(vars[0:-1], vars[1:])
+        (var_next - var_curr) / dt for var_curr, var_next in zip(vars[0:-1], vars[1:])  # type: ignore
     ]
     return forward_diffs
 
@@ -116,20 +114,74 @@ def interpolate_w_first_order_hold(
     return traj
 
 
-class ModeVarsResult(NamedTuple):
-    cos_ths: npt.NDArray[np.float64]
-    sin_ths: npt.NDArray[np.float64]
-    p_WBs: npt.NDArray[np.float64]
-    p_c_Bs: npt.NDArray[np.float64]
-    f_c_Bs: npt.NDArray[np.float64]
+# TODO: should probably have a better name
+class ModeVars(NamedTuple):
+    # NOTE: These types are wrong
+    lams: NpVariableArray  # (1, num_knot_points)
+    normal_forces: NpVariableArray  # (1, num_knot_points)
+    friction_forces: NpVariableArray  # (1, num_knot_points)
+    cos_ths: NpVariableArray  # (1, num_knot_points)
+    sin_ths: NpVariableArray  # (1, num_knot_points)
+    p_WB_xs: NpVariableArray  # (1, num_knot_points)
+    p_WB_ys: NpVariableArray  # (1, num_knot_points)
+
     time_in_mode: float
 
-    @property
-    def num_knot_points(self) -> int:
-        return len(self.R_WBs)
+    pv1: npt.NDArray[np.float64]
+    pv2: npt.NDArray[np.float64]
+    normal_vec: npt.NDArray[np.float64]
+    tangent_vec: npt.NDArray[np.float64]
+    dt: float
+
+    @classmethod
+    def make(
+        cls,
+        prog: MathematicalProgram,
+        object: RigidBody2d,
+        contact_face: PolytopeContactLocation,
+        num_knot_points: int,
+        time_in_mode: float,
+    ) -> "ModeVars":
+        # Contact positions
+        lams = prog.NewContinuousVariables(num_knot_points, "lam")
+        pv1, pv2 = object.get_proximate_vertices_from_location(contact_face)
+
+        # Contact forces
+        normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
+        friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
+        (
+            normal_vec,
+            tangent_vec,
+        ) = object.get_norm_and_tang_vecs_from_location(contact_face)
+
+        # Rotations
+        cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
+        sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
+
+        # Box position relative to world frame
+        p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
+        p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
+
+        dt = time_in_mode / num_knot_points
+
+        return cls(
+            lams,
+            normal_forces,
+            friction_forces,
+            cos_ths,
+            sin_ths,
+            p_WB_xs,
+            p_WB_ys,
+            time_in_mode,
+            pv1,
+            pv2,
+            normal_vec,
+            tangent_vec,
+            dt,
+        )
 
     @property
-    def R_WBs(self) -> List[npt.NDArray[np.float64]]:
+    def R_WBs(self):
         Rs = [
             np.array([[cos, -sin], [sin, cos]])
             for cos, sin in zip(self.cos_ths, self.sin_ths)
@@ -137,30 +189,79 @@ class ModeVarsResult(NamedTuple):
         return Rs
 
     @property
-    def v_WBs(self) -> npt.NDArray[np.float64]:
-        dt = self.num_knot_points / self.time_in_mode
-        forward_diffs = (self.p_WBs[:, 1:] - self.p_WBs[:, 0:-1]) / dt
-        # NOTE: quick fix
-        res = np.hstack(
-            (forward_diffs, np.zeros((2, 1)))
-        )  # add zeros to the end to make velocity traj as long as all other trajs
-        return res
+    def p_WBs(self):
+        return [
+            np.array([x, y]).reshape((2, 1)) for x, y in zip(self.p_WB_xs, self.p_WB_ys)
+        ]
 
-    def _rotate_to_world(
-        self, vecs_B: npt.NDArray[np.float64]  # (2, num_knot_points)
-    ) -> npt.NDArray[np.float64]:
-        vecs_W = np.hstack(
-            [np.expand_dims(R.dot(v), 1) for R, v in zip(self.R_WBs, vecs_B.T)]
+    @property
+    def f_c_Bs(self):
+        return [
+            c_n * self.normal_vec + c_f * self.tangent_vec
+            for c_n, c_f in zip(self.normal_forces, self.friction_forces)
+        ]
+
+    @property
+    def p_c_Bs(self):
+        return [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
+
+    @property
+    def v_WBs(self):
+        return forward_differences(self.p_WBs, self.dt)
+
+    @property
+    def cos_th_dots(self):
+        return forward_differences(self.cos_ths, self.dt)
+
+    @property
+    def sin_th_dots(self):
+        return forward_differences(self.sin_ths, self.dt)
+
+    @property
+    def omega_WBs(self):
+        R_WB_dots = [
+            np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
+            for cos_dot, sin_dot in zip(self.cos_th_dots, self.sin_th_dots)
+        ]
+        # In 2D, omega_z = theta_dot will be at position (0,1) in R_dot * R'
+        oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
+        return oms
+
+    def eval_result(self, result: MathematicalProgramResult) -> "ModeVars":
+        lam_vals = result.GetSolution(self.lams)
+        cos_th_vals = result.GetSolution(self.cos_ths)
+        sin_th_vals = result.GetSolution(self.sin_ths)
+        normal_force_vals = result.GetSolution(self.normal_forces)
+        friction_force_vals = result.GetSolution(self.friction_forces)
+        p_WB_x_vals = result.GetSolution(self.p_WB_xs)
+        p_WB_y_vals = result.GetSolution(self.p_WB_ys)
+
+        return ModeVars(
+            lam_vals,
+            normal_force_vals,
+            friction_force_vals,
+            cos_th_vals,
+            sin_th_vals,
+            p_WB_x_vals,
+            p_WB_y_vals,
+            self.time_in_mode,
+            self.pv1,
+            self.pv2,
+            self.normal_vec,
+            self.tangent_vec,
+            self.dt,
         )
-        return vecs_W  # (2, num_knot_points)
 
     @property
-    def p_c_Ws(self) -> npt.NDArray[np.float64]:
-        return self.p_WBs + self._rotate_to_world(self.p_c_Bs)
+    def p_c_Ws(self) -> List[npt.NDArray[np.float64]]:
+        return [
+            p_WB + R_WB.dot(p_c_B)
+            for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_c_Bs)
+        ]
 
     @property
-    def f_c_Ws(self) -> npt.NDArray[np.float64]:
-        return self.f_c_Bs
+    def f_c_Ws(self) -> List[npt.NDArray[np.float64]]:
+        return [R_WB.dot(f_c_B) for f_c_B, R_WB in zip(self.f_c_Bs, self.R_WBs)]
 
     # Need to handle R_traj as a special case due to List[(2x2)] structure
     def get_R_traj(
@@ -173,10 +274,11 @@ class ModeVarsResult(NamedTuple):
 
     def _get_traj(
         self,
-        knot_points: npt.NDArray[np.float64],
+        point_sequence: List[npt.NDArray[np.float64]],
         dt: float,
         interpolate: bool = False,
-    ) -> npt.NDArray[np.float64]:
+    ) -> npt.NDArray[np.float64]:  # (N, 2)
+        knot_points = np.hstack(point_sequence)  # (2, num_knot_points)
         if interpolate:
             return interpolate_w_first_order_hold(
                 knot_points.T, 0, self.time_in_mode, dt
@@ -202,52 +304,36 @@ class ModeVarsResult(NamedTuple):
     def get_v_WB_traj(
         self, dt: float, interpolate: bool = False
     ) -> npt.NDArray[np.float64]:
-        return self._get_traj(self.v_WBs, dt, interpolate)
+        # Pad with zero to avoid wrong length (velocities have one less element due to finite diffs)
+        num_dims = 2
+        return self._get_traj(self.v_WBs + [np.zeros((num_dims, 1))], dt, interpolate)  # type: ignore
 
 
-# TODO: should probably have a better name
-class ModeVars(NamedTuple):
-    # TODO: Refactor all code so that it just creates a ModeVars object, which instantiates all the variables (based on prog)
-    cos_ths: NpVariableArray  # (1, num_knot_points)
-    sin_ths: NpVariableArray  # (1, num_knot_points)
-    p_WBs: NpVariableArray  # (2, num_knot_points)
-    p_c_Bs: NpExpressionArray  # (2, num_knot_points)
-    f_c_Bs: NpExpressionArray  # (2, num_knot_points)
-    time_in_mode: float
+def quasi_static_dynamics(
+    v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, OBJECT_MASS
+):
+    G = 9.81
+    f_max = FRICTION_COEFF * G * OBJECT_MASS
+    tau_max = f_max * 0.2  # TODO: change this!
 
-    def eval_result(self, result: MathematicalProgramResult) -> ModeVarsResult:
-        cos_th_vals = result.GetSolution(self.cos_ths)
-        sin_th_vals = result.GetSolution(self.sin_ths)
-        p_WB_vals = result.GetSolution(self.p_WBs)
+    A = np.diag(
+        [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+    )  # Ellipsoidal Limit surface approximation
 
-        # When result.GetSolution() is called on an expression, it returns an expression, not float
-        eval_expr_on_vector = np.vectorize(
-            lambda x: x.Evaluate() if isinstance(x, sym.Expression) else x
-        )
+    # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
+    R = np.zeros((3, 3), dtype="O")
+    R[2, 2] = 1
+    R[0:2, 0:2] = R_WB
 
-        p_c_B_vals = eval_expr_on_vector(result.GetSolution(self.p_c_Bs))
-        f_c_B_vals = eval_expr_on_vector(result.GetSolution(self.f_c_Bs))
+    # Contact torques
+    tau_c_B = cross_2d(p_c_B, f_c_B)
 
-        # TODO: Temporary fix to debug through visualization.
-        # NOTE: We enforce dynamics at mid-way points, so plot mid-way points
-        # (this is also how we compute vels)
-        def make_mean(vec):
-            means = (vec[:, 0:-1] + vec[:, 1:]) / 2
-            padded_means = np.hstack((means, np.zeros((2, 1))))
+    x_dot = np.concatenate((v_WB, [[omega_WB]]))
+    wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
+    wrench_W = R.dot(wrench_B)
+    dynamics = A.dot(wrench_W)
 
-            return padded_means
-
-        # p_c_B_vals = make_mean(p_c_B_vals)
-        # f_c_B_vals = make_mean(f_c_B_vals)
-
-        return ModeVarsResult(
-            cos_th_vals,
-            sin_th_vals,
-            p_WB_vals,
-            p_c_B_vals,
-            f_c_B_vals,
-            self.time_in_mode,
-        )
+    return x_dot, dynamics  # x_dot, f(x,u)
 
 
 class PlanarPushingContactMode:
@@ -269,14 +355,6 @@ class PlanarPushingContactMode:
         self.time_in_mode = end_time
 
         FRICTION_COEFF = 0.5
-        G = 9.81
-
-        f_max = FRICTION_COEFF * G * object.mass
-        tau_max = f_max * 0.2  # TODO change this!
-
-        A = np.diag(
-            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-        )  # Ellipsoidal Limit surface approximation
 
         dt = end_time / num_knot_points
         self.dt = dt
@@ -287,110 +365,60 @@ class PlanarPushingContactMode:
             pos=ContactLocation.FACE, idx=contact_face_idx
         )
 
-        # Contact positions
-        lams = prog.NewContinuousVariables(num_knot_points, "lam")
-        for lam in lams:
+        vars = ModeVars.make(prog, object, contact_face, num_knot_points, end_time)
+
+        for lam in vars.lams:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        self.pv1, self.pv2 = self.object.get_proximate_vertices_from_location(
-            contact_face
-        )
-        p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in lams]
-
-        # Contact forces
-        normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
-        friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
-        (
-            self.normal_vec,
-            self.tangent_vec,
-        ) = self.object.get_norm_and_tang_vecs_from_location(contact_face)
-        f_c_Bs = [
-            c_n * self.normal_vec + c_f * self.tangent_vec
-            for c_n, c_f in zip(normal_forces, friction_forces)
-        ]
-
-        # Rotations
-        cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
-        sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
-        R_WBs = [
-            np.array([[cos, sin], [-sin, cos]]) for cos, sin in zip(cos_ths, sin_ths)
-        ]
-
-        # Box position relative to world frame
-        p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
-        p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
-        p_WBs = [np.array([x, y]) for x, y in zip(p_WB_xs, p_WB_ys)]
-
-        # Compute velocities
-        v_WBs = forward_differences(p_WBs, dt)
-        cos_th_dots = forward_differences(cos_ths, dt)
-        sin_th_dots = forward_differences(sin_ths, dt)
-        R_WB_dots = [
-            np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
-            for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)
-        ]
-        v_c_Bs = forward_differences(
-            p_c_Bs, dt
-        )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
-
-        # In 2D, omega_z = theta_dot will be at position (0,1) in R_dot * R'
-        omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WB_dots)]
-
         # SO(2) constraints
-        for c, s in zip(cos_ths, sin_ths):
+        for c, s in zip(vars.cos_ths, vars.sin_ths):
             prog.AddConstraint(c**2 + s**2 == 1)
 
-        # # Friction cone constraints
-        for c_n in normal_forces:
+        # Friction cone constraints
+        for c_n in vars.normal_forces:
             prog.AddLinearConstraint(c_n >= 0)
-        for c_n, c_f in zip(normal_forces, friction_forces):
+        for c_n, c_f in zip(vars.normal_forces, vars.friction_forces):
             prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
         # Quasi-static dynamics
         for k in range(num_knot_points - 1):
-            v_WB = v_WBs[k]
-            omega_WB = omega_WBs[k]
+            v_WB = vars.v_WBs[k]
+            omega_WB = vars.omega_WBs[k]
+
             # NOTE: We enforce dynamics at midway points
-            # f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
-            # p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
-            # R_WB = (R_WBs[k] + R_WBs[k + 1]) / 2
+            # f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
+            # p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
+            # R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
 
-            f_c_B = f_c_Bs[k]
-            p_c_B = p_c_Bs[k]
-            R_WB = R_WBs[k]
+            f_c_B = vars.f_c_Bs[k]
+            p_c_B = vars.p_c_Bs[k]
+            R_WB = vars.R_WBs[k]
 
-            # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
-            R = np.zeros((3, 3), dtype="O")
-            R[2, 2] = 1
-            R[0:2, 0:2] = R_WB
-
-            # Contact torques
-            tau_c_B = cross_2d(p_c_B, f_c_B)
-
-            x_dot = np.concatenate([v_WB, [omega_WB]])
-            wrench_B = np.concatenate(
-                [f_c_B.flatten(), [tau_c_B]]
-            )  # NOTE: Should fix not nice vector dimensions
-            wrench_W = R.dot(wrench_B)
-
-            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench_W))
+            x_dot, dyn = quasi_static_dynamics(
+                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, object.mass
+            )
+            quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
                 prog.AddConstraint(row)
 
         # Ensure sticking on the contact point
+        # TODO: remove this
+        v_c_Bs = forward_differences(
+            vars.p_c_Bs, dt
+        )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
         for v_c_B in v_c_Bs:
             prog.AddLinearConstraint(
                 eq(v_c_B, 0)
             )  # no velocity on contact points in body frame
 
         # Minimize kinetic energy through squared velocities
-        sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in v_WBs])
+        sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in vars.v_WBs]).item()  # type: ignore
         sq_angular_vels = sum(
             [
                 cos_dot**2 + sin_dot**2
-                for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)
+                for cos_dot, sin_dot in zip(vars.cos_th_dots, vars.sin_th_dots)
             ]
         )
         prog.AddQuadraticCost(sq_linear_vels)
@@ -402,36 +430,20 @@ class PlanarPushingContactMode:
         # Initial conditions (only first and last vertex will have this)
         if th_initial is not None:
             R_WB_I = create_R(th_initial)
-            prog.AddLinearConstraint(eq(R_WBs[0], R_WB_I))
+            prog.AddLinearConstraint(eq(vars.R_WBs[0], R_WB_I))
         if th_target is not None:
             R_WB_T = create_R(th_target)
-            prog.AddLinearConstraint(eq(R_WBs[-1], R_WB_T))
+            prog.AddLinearConstraint(eq(vars.R_WBs[-1], R_WB_T))
         if pos_initial is not None:
-            prog.AddLinearConstraint(eq(p_WBs[0], pos_initial))
+            assert pos_initial.shape == (2, 1)
+            prog.AddLinearConstraint(eq(vars.p_WBs[0], pos_initial))
         if pos_target is not None:
-            prog.AddLinearConstraint(eq(p_WBs[-1], pos_target))
+            assert pos_target.shape == (2, 1)
+            prog.AddLinearConstraint(eq(vars.p_WBs[-1], pos_target))
 
         # Store real prog and real variables
         self.prog = prog
-        # NOTE: A lot of bad naming and renaming going around here now!
-        p_WBs = np.hstack(
-            [np.expand_dims(np.array([x, y]), 1) for x, y in zip(p_WB_xs, p_WB_ys)]
-        )
-        f_c_Bs = np.hstack(
-            [
-                c_n * self.normal_vec + c_f * self.tangent_vec
-                for c_n, c_f in zip(normal_forces, friction_forces)
-            ]
-        )
-        p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lams])
-        self.true_mode_vars = ModeVars(
-            cos_ths,
-            sin_ths,
-            p_WBs,
-            p_c_Bs,
-            f_c_Bs,
-            self.time_in_mode,
-        )
+        self.true_mode_vars = vars
 
         start = time.time()
         print("Starting to create SDP relaxation...")
@@ -448,40 +460,29 @@ class PlanarPushingContactMode:
         # where the 1 is added because the first element of x is 1.
         # This gives ((n+1)^2 - (n+1))/2 + (n+1) decision variables
         # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
-        self.lam = self.x[0:num_knot_points]
-        self.normal_forces = self.x[num_knot_points : 2 * num_knot_points]
-        self.friction_forces = self.x[2 * num_knot_points : 3 * num_knot_points]
-        self.cos_th = self.x[3 * num_knot_points : 4 * num_knot_points]
-        self.sin_th = self.x[4 * num_knot_points : 5 * num_knot_points]
-        self.p_WB_xs = self.x[5 * num_knot_points : 6 * num_knot_points]
-        self.p_WB_ys = self.x[6 * num_knot_points : 7 * num_knot_points]
-
-        # Keep variables
-        # NOTE: Not in the original class definition
-        self.p_WBs = np.hstack(
-            [
-                np.expand_dims(np.array([x, y]), 1)
-                for x, y in zip(self.p_WB_xs, self.p_WB_ys)
-            ]
-        )
-        self.f_c_Bs = np.hstack(
-            [
-                c_n * self.normal_vec + c_f * self.tangent_vec
-                for c_n, c_f in zip(self.normal_forces, self.friction_forces)
-            ]
-        )
-        self.p_c_Bs = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in self.lam])
+        relaxed_lams = self.x[0:num_knot_points]
+        relaxed_normal_forces = self.x[num_knot_points : 2 * num_knot_points]
+        relaxed_friction_forces = self.x[2 * num_knot_points : 3 * num_knot_points]
+        relaxed_cos_th = self.x[3 * num_knot_points : 4 * num_knot_points]
+        relaxed_sin_th = self.x[4 * num_knot_points : 5 * num_knot_points]
+        relaxed_p_WB_xs = self.x[5 * num_knot_points : 6 * num_knot_points]
+        relaxed_p_WB_ys = self.x[6 * num_knot_points : 7 * num_knot_points]
 
         self.relaxed_mode_vars = ModeVars(
-            self.cos_th,
-            self.sin_th,
-            self.p_WBs,
-            self.p_c_Bs,
-            self.f_c_Bs,
-            self.time_in_mode,
+            relaxed_lams,
+            relaxed_normal_forces,
+            relaxed_friction_forces,
+            relaxed_cos_th,
+            relaxed_sin_th,
+            relaxed_p_WB_xs,
+            relaxed_p_WB_ys,
+            vars.time_in_mode,
+            vars.pv1,
+            vars.pv2,
+            vars.normal_vec,
+            vars.tangent_vec,
+            vars.dt,
         )
-
-        self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
 
 
 def plan_planar_pushing():
@@ -489,13 +490,21 @@ def plan_planar_pushing():
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.8
-        pos_initial = np.array([[0.0, 0.5]])
-        pos_target = np.array([[-0.3, 0.2]])
+        pos_initial = np.array([[0.0, 0.5]]).T
+        pos_target = np.array([[-0.3, 0.2]]).T
+        contact_face_idx = 0
+    elif experiment_number == 1:
+        th_initial = -np.pi / 4
+        th_target = -np.pi / 4 + 0.1
+        pos_initial = np.array([[-0.3, 0.5]]).T
+        pos_target = np.array([[-0.2, 0.2]]).T
+        contact_face_idx = 3
     else:
         th_initial = 0
-        th_target = 0.4
-        pos_initial = np.array([[0.2, 0.2]])
-        pos_target = np.array([[-0.18, 0.5]])
+        th_target = 0.8
+        pos_initial = np.array([[0.0, 0.5]]).T
+        pos_target = np.array([[-0.3, 0.2]]).T
+        contact_face_idx = 0
 
     num_knot_points = 8
     time_in_contact = 2
@@ -516,7 +525,7 @@ def plan_planar_pushing():
     contact_mode = PlanarPushingContactMode(
         object,
         num_knot_points=num_knot_points,
-        contact_face_idx=0,
+        contact_face_idx=contact_face_idx,
         end_time=time_in_contact,
         th_initial=th_initial,
         pos_initial=pos_initial,
@@ -524,25 +533,26 @@ def plan_planar_pushing():
         pos_target=pos_target,
     )
 
+    USE_RELAXED_SOL = False
     relaxed_result = Solve(contact_mode.relaxed_prog)
     assert relaxed_result.is_success()
     print("Found solution to relaxed problem!")
 
     relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
 
-    print("Solving nonlinear trajopt...")
-    contact_mode.prog.SetInitialGuess(
-        contact_mode.prog.decision_variables(), relaxed_sols
-    )
+    if USE_RELAXED_SOL:
+        vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
+    else:
+        print("Solving nonlinear trajopt...")
+        contact_mode.prog.SetInitialGuess(
+            contact_mode.prog.decision_variables(), relaxed_sols
+        )
 
-    true_result = Solve(contact_mode.prog)
-    assert true_result.is_success()
-    print("Found solution to true problem!")
+        true_result = Solve(contact_mode.prog)
+        assert true_result.is_success()
+        print("Found solution to true problem!")
 
-    relaxed_vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
-    true_vals = [contact_mode.true_mode_vars.eval_result(true_result)]
-    USE_RELAXED_SOL = False
-    vals = relaxed_vals if USE_RELAXED_SOL else true_vals
+        vals = [contact_mode.true_mode_vars.eval_result(true_result)]
 
     DT = 0.01
     interpolate = False
@@ -550,6 +560,13 @@ def plan_planar_pushing():
         [val.get_R_traj(DT, interpolate=interpolate) for val in vals],
         [],
     )
+
+    # Make sure rotation relaxation is tight
+    for R in R_traj:
+        det = np.abs(np.linalg.det(R))
+        eps = 0.01
+        assert det <= 1 + eps and det >= 1 - eps
+
     com_traj = np.vstack(
         [val.get_p_WB_traj(DT, interpolate=interpolate) for val in vals]
     )
@@ -576,26 +593,9 @@ def plan_planar_pushing():
 
         quasi_static_violation = []
         for k in range(traj_length - 1):
-            v_WB = (com_traj[k + 1] - com_traj[k]) / DT
-            R_dot = (R_traj[k + 1] - R_traj[k]) / DT
-            R = R_traj[k]
-            omega_WB = R_dot.dot(R.T)[1, 0]
-            f_c_B = force_traj[k]
-            p_c_B = contact_pos_traj[k]
-            com = com_traj[k]
-
-            # Contact torques
-            tau_c_B = _cross_2d(p_c_B - com, f_c_B)
-
-            x_dot = np.concatenate([v_WB, [omega_WB]])
-            wrench = np.concatenate(
-                [f_c_B.flatten(), [tau_c_B]]
-            )  # NOTE: Should fix not nice vector dimensions
-
-            R_padded = np.zeros((3, 3))
-            R_padded[2, 2] = 1
-            R_padded[0:2, 0:2] = R
-            violation = x_dot - R_padded.dot(A).dot(wrench)
+            x_dot, dyn = quasi_static_dynamics(
+                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, object.mass
+            )
             quasi_static_violation.append(violation)
 
         quasi_static_violation = np.vstack(quasi_static_violation)
@@ -608,6 +608,7 @@ def plan_planar_pushing():
     TABLE_COLOR = COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
     TARGET_COLOR = COLORS["firebrick1"]
+    VELOCITY_COLOR = COLORS["darkorange1"]
 
     flattened_rotation = np.vstack([R.flatten() for R in R_traj])
     box_viz = VisualizationPolygon2d.from_trajs(
@@ -630,8 +631,8 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     # visualize velocity with an arrow (i.e. as a force), and reverse force scaling
-    VEL_VIZ_SCALE_CONSTANT = 0.005
-    object_vel_viz = VisualizationForce2d(com_traj, CONTACT_COLOR, object_vel_traj / VEL_VIZ_SCALE_CONSTANT)  # type: ignore
+    VEL_VIZ_SCALE_CONSTANT = 0.02
+    object_vel_viz = VisualizationForce2d(com_traj, VELOCITY_COLOR, object_vel_traj / VEL_VIZ_SCALE_CONSTANT)  # type: ignore
 
     viz = Visualizer2d()
     FRAMES_PER_SEC = len(R_traj) / (time_in_contact / VIS_REALTIME_RATE)
