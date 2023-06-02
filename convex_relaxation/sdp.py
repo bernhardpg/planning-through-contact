@@ -100,7 +100,7 @@ def _generic_constraint_binding_to_polynomials(
 
     polys = []
     for b_u, b_l in zip(b_upper, b_lower):
-        if b_u == b_u:  # eq constraint
+        if b_u == b_l:  # eq constraint
             polys.append((b_u - poly, ConstraintType.EQ))
         else:
             if not np.isinf(b_l):
