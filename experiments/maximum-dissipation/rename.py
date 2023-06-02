@@ -340,26 +340,30 @@ class PlanarPushingContactMode:
         for k in range(num_knot_points - 1):
             v_WB = v_WBs[k]
             omega_WB = omega_WBs[k]
-            f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
-            p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
+            # NOTE: We enforce dynamics at midway points
+            # f_c_B = (f_c_Bs[k] + f_c_Bs[k + 1]) / 2
+            # p_c_B = (p_c_Bs[k] + p_c_Bs[k + 1]) / 2
+            f_c_B = f_c_Bs[k]
+            p_c_B = p_c_Bs[k]
+            R_WB = R_WBs[k]
 
+            # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
             R = np.zeros((3, 3), dtype="O")
             R[2, 2] = 1
-            R[0:2, 0:2] = R_WBs[
-                k
-            ]  # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
+            R[0:2, 0:2] = R_WB
 
             # Contact torques
             tau_c_B = cross_2d(p_c_B, f_c_B)
 
             x_dot = np.concatenate([v_WB, [omega_WB]])
-            wrench = np.concatenate(
+            wrench_B = np.concatenate(
                 [f_c_B.flatten(), [tau_c_B]]
             )  # NOTE: Should fix not nice vector dimensions
+            wrench_W = R.dot(wrench_B)
 
-            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench))
-            # for row in quasi_static_dynamic_constraint:
-            #     prog.AddConstraint(row)
+            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench_W))
+            for row in quasi_static_dynamic_constraint:
+                prog.AddConstraint(row)
 
         # Ensure sticking on the contact point
         for v_c_B in v_c_Bs:
