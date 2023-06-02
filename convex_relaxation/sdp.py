@@ -117,9 +117,7 @@ def _quadratic_cost_binding_to_homogenuous_form(
     b = binding.evaluator().b()
     c = binding.evaluator().c()
     x = binding.variables()
-    # Note that we are not multiplying with 1/2 here, as we should. However,
-    # we use homogenous form, so this does not matter.
-    poly = sym.Polynomial(x.T.dot(Q.dot(x)) + b.T.dot(x) + c)
+    poly = sym.Polynomial(0.5 * x.T.dot(Q.dot(x)) + b.T.dot(x) + c)
     Q_hom = _quadratic_polynomial_to_homoenuous_form(poly, basis, num_vars)
     return Q_hom
 
