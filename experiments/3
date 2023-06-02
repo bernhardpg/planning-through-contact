@@ -11,12 +11,10 @@ import pydrake.symbolic as sym
 from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     CommonSolverOption,
-    IpoptSolver,
     MathematicalProgram,
     MathematicalProgramResult,
     MixedIntegerBranchAndBound,
     MosekSolver,
-    SnoptSolver,
     Solve,
     SolverOptions,
 )
@@ -310,12 +308,6 @@ class ModeVars(NamedTuple):
         num_dims = 2
         return self._get_traj(self.v_WBs + [np.zeros((num_dims, 1))], dt, interpolate)  # type: ignore
 
-    def get_omega_WB_traj(
-        self, dt: float, interpolate: bool = False
-    ) -> npt.NDArray[np.float64]:
-        # Pad with zero to avoid wrong length (velocities have one less element due to finite diffs)
-        return self._get_traj(self.omega_WBs + [0], dt, interpolate)  # type: ignore
-
 
 def quasi_static_dynamics(
     v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, OBJECT_MASS
@@ -339,9 +331,7 @@ def quasi_static_dynamics(
     x_dot = np.concatenate((v_WB, [[omega_WB]]))
     wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
     wrench_W = R.dot(wrench_B)
-    dynamics = A.dot(
-        wrench_W
-    )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
+    dynamics = A.dot(wrench_W)
 
     return x_dot, dynamics  # x_dot, f(x,u)
 
@@ -364,7 +354,7 @@ class PlanarPushingContactMode:
         self.object = object
         self.time_in_mode = end_time
 
-        self.FRICTION_COEFF = 0.5
+        FRICTION_COEFF = 0.5
 
         dt = end_time / num_knot_points
         self.dt = dt
@@ -389,8 +379,8 @@ class PlanarPushingContactMode:
         for c_n in vars.normal_forces:
             prog.AddLinearConstraint(c_n >= 0)
         for c_n, c_f in zip(vars.normal_forces, vars.friction_forces):
-            prog.AddLinearConstraint(c_f <= self.FRICTION_COEFF * c_n)
-            prog.AddLinearConstraint(c_f >= -self.FRICTION_COEFF * c_n)
+            prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
+            prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
         # Quasi-static dynamics
         for k in range(num_knot_points - 1):
@@ -407,7 +397,7 @@ class PlanarPushingContactMode:
             R_WB = vars.R_WBs[k]
 
             x_dot, dyn = quasi_static_dynamics(
-                v_WB, omega_WB, f_c_B, p_c_B, R_WB, self.FRICTION_COEFF, object.mass
+                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, object.mass
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
@@ -496,7 +486,7 @@ class PlanarPushingContactMode:
 
 
 def plan_planar_pushing():
-    experiment_number = 2
+    experiment_number = 0
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.8
@@ -508,12 +498,6 @@ def plan_planar_pushing():
         th_target = -np.pi / 4 + 0.1
         pos_initial = np.array([[-0.3, 0.5]]).T
         pos_target = np.array([[-0.2, 0.2]]).T
-        contact_face_idx = 3
-    elif experiment_number == 2:
-        th_initial = 0
-        th_target = 1.0
-        pos_initial = np.array([[-0.3, 0.5]]).T
-        pos_target = np.array([[0.2, 0.2]]).T
         contact_face_idx = 3
     else:
         th_initial = 0
@@ -529,9 +513,6 @@ def plan_planar_pushing():
     DIST_TO_CORNERS = 0.2
     VIS_REALTIME_RATE = 0.25
     num_vertices = 4
-
-    USE_RELAXED_SOL = False
-    COMPUTE_VIOLATION = False
 
     object = EquilateralPolytope2d(
         actuated=False,
@@ -552,6 +533,7 @@ def plan_planar_pushing():
         pos_target=pos_target,
     )
 
+    USE_RELAXED_SOL = False
     relaxed_result = Solve(contact_mode.relaxed_prog)
     assert relaxed_result.is_success()
     print("Found solution to relaxed problem!")
@@ -562,14 +544,11 @@ def plan_planar_pushing():
         vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
     else:
         print("Solving nonlinear trajopt...")
-        solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        solver_options.SetOption(IpoptSolver.id(), "tol", 1e-4)
         contact_mode.prog.SetInitialGuess(
             contact_mode.prog.decision_variables(), relaxed_sols
         )
 
-        true_result = Solve(contact_mode.prog, solver_options=solver_options)
+        true_result = Solve(contact_mode.prog)
         assert true_result.is_success()
         print("Found solution to true problem!")
 
@@ -600,48 +579,27 @@ def plan_planar_pushing():
     object_vel_traj = np.vstack(
         [val.get_v_WB_traj(DT, interpolate=interpolate) for val in vals]
     )
-    object_ang_vel_traj = np.vstack(
-        [val.get_omega_WB_traj(DT, interpolate=interpolate) for val in vals]
-    )
+
     traj_length = len(R_traj)
 
-    # Print mean velocities for error plots
-    max_trans_vel = np.max([np.linalg.norm(vel) for vel in object_vel_traj])
-    max_ang_vel = np.max(object_ang_vel_traj)
-    print(f"Max translational velocity: {max_trans_vel}")
-    print(f"Max angular velocity: {max_ang_vel}")
+    compute_violation = False
+    if compute_violation:
+        # NOTE: SHOULD BE MOVED!
+        # compute quasi-static dynamic violation
+        def _cross_2d(v1, v2):
+            return (
+                v1[0] * v2[1] - v1[1] * v2[0]
+            )  # copied because the other one assumes the result is a np array, here it is just a scalar. clean up!
 
-    vars = vals[0]
-    if COMPUTE_VIOLATION:
         quasi_static_violation = []
         for k in range(traj_length - 1):
-            v_WB = vars.v_WBs[k]
-            omega_WB = vars.omega_WBs[k]
-            f_c_B = vars.f_c_Bs[k]
-            p_c_B = vars.p_c_Bs[k]
-            R_WB = vars.R_WBs[k]
-
             x_dot, dyn = quasi_static_dynamics(
-                v_WB,
-                omega_WB,
-                f_c_B,
-                p_c_B,
-                R_WB,
-                contact_mode.FRICTION_COEFF,
-                object.mass,
+                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, object.mass
             )
-            violation = x_dot - dyn
             quasi_static_violation.append(violation)
 
-        quasi_static_violation = np.hstack(
-            quasi_static_violation
-        ).T  # (N, num_knot_points)
-        create_quasistatic_pushing_analysis(
-            quasi_static_violation,
-            num_knot_points,
-            trans_velocity_ref=max_trans_vel,
-            angular_velocity_ref=max_ang_vel,
-        )
+        quasi_static_violation = np.vstack(quasi_static_violation)
+        create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
         plt.show()
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
