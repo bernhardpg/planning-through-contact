@@ -397,14 +397,14 @@ class PlanarPushingContactMode:
             v_WB = vars.v_WBs[k]
             omega_WB = vars.omega_WBs[k]
 
-            # NOTE: We enforce dynamics at midway points
-            # f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
-            # p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
-            # R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
+            # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
+            f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
+            p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
+            R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
 
-            f_c_B = vars.f_c_Bs[k]
-            p_c_B = vars.p_c_Bs[k]
-            R_WB = vars.R_WBs[k]
+            # f_c_B = vars.f_c_Bs[k]
+            # p_c_B = vars.p_c_Bs[k]
+            # R_WB = vars.R_WBs[k]
 
             x_dot, dyn = quasi_static_dynamics(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, self.FRICTION_COEFF, object.mass
@@ -495,8 +495,7 @@ class PlanarPushingContactMode:
         )
 
 
-def plan_planar_pushing():
-    experiment_number = 2
+def plan_planar_pushing(experiment_number: int, compute_violation: bool):
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.8
@@ -531,7 +530,6 @@ def plan_planar_pushing():
     num_vertices = 4
 
     USE_RELAXED_SOL = False
-    COMPUTE_VIOLATION = False
 
     object = EquilateralPolytope2d(
         actuated=False,
@@ -612,14 +610,20 @@ def plan_planar_pushing():
     print(f"Max angular velocity: {max_ang_vel}")
 
     vars = vals[0]
-    if COMPUTE_VIOLATION:
+    if compute_violation:
         quasi_static_violation = []
         for k in range(traj_length - 1):
             v_WB = vars.v_WBs[k]
             omega_WB = vars.omega_WBs[k]
-            f_c_B = vars.f_c_Bs[k]
-            p_c_B = vars.p_c_Bs[k]
-            R_WB = vars.R_WBs[k]
+
+            # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
+            f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
+            p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
+            R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
+
+            # f_c_B = vars.f_c_Bs[k]
+            # p_c_B = vars.p_c_Bs[k]
+            # R_WB = vars.R_WBs[k]
 
             x_dot, dyn = quasi_static_dynamics(
                 v_WB,
@@ -690,12 +694,20 @@ def plan_planar_pushing():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--exp",
+        "-e",
+        "--experiment",
         help="Which experiment to run",
         type=int,
         default=0,
     )
+    parser.add_argument(
+        "-c",
+        "--compute_violation",
+        help="Display relaxation error plot",
+        action="store_true",
+    )
     args = parser.parse_args()
-    experiment_number = args.exp
+    experiment_number = args.experiment
+    compute_violation = args.compute_violation
 
-    plan_planar_pushing()
+    plan_planar_pushing(experiment_number, compute_violation)
