@@ -562,12 +562,13 @@ def plan_planar_pushing(experiment_number: int, compute_violation: bool):
         print("Solving nonlinear trajopt...")
         solver_options = SolverOptions()
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        solver_options.SetOption(IpoptSolver.id(), "tol", 1e-4)
+        solver_options.SetOption(IpoptSolver.id(), "tol", 1e-6)
         contact_mode.prog.SetInitialGuess(
             contact_mode.prog.decision_variables(), relaxed_sols
         )
 
-        true_result = Solve(contact_mode.prog, solver_options=solver_options)
+        snopt = SnoptSolver()
+        true_result = snopt.Solve(contact_mode.prog, solver_options=solver_options)
         assert true_result.is_success()
         print("Found solution to true problem!")
 
