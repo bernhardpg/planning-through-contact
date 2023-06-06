@@ -133,18 +133,14 @@ def create_forces_eq_and_opposite_analysis(
 def create_quasistatic_pushing_analysis(
     dynamics_violation: npt.NDArray[np.float64],  # (N, dims)
     num_ctrl_points: int,
-    mass: Optional[float] = None,  # reference values used for scaling
-    width: Optional[float] = None,
+    trans_velocity_ref: float,
+    angular_velocity_ref: float,
 ):
-    if mass is None or width is None:
-        force_ref = 1
-        torque_ref = 1
-    else:
-        force_ref = mass * 9.81
-        torque_ref = force_ref * width / 2
-
     N = dynamics_violation.shape[0]
     x_axis = np.linspace(0, num_ctrl_points, N)
+
+    trans_axis_max = trans_velocity_ref * 1.7
+    ang_axis_max = angular_velocity_ref * 1.7
 
     fig, axs = plt.subplots(3, sharex=True)
     fig.suptitle("Violation of quasi-static dynamics with ellipsoidal limit surface")
@@ -152,19 +148,19 @@ def create_quasistatic_pushing_analysis(
     axs[0].plot(x_axis, dynamics_violation[:, 0])
     axs[0].set_title("Violation in $\dot x$")
     axs[0].set(ylabel="[m/s]")
-    axs[0].set_ylim(-force_ref, force_ref)
+    axs[0].set_ylim(-trans_axis_max, trans_axis_max)
 
     axs[1].plot(x_axis, dynamics_violation[:, 1])
     axs[1].set_title("Violation in $\dot y$")
     axs[1].set(xlabel="Time [s]", ylabel="[m/s]")
     axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
-    axs[1].set_ylim(-torque_ref, torque_ref)
+    axs[1].set_ylim(-trans_axis_max, trans_axis_max)
 
     axs[2].plot(x_axis, dynamics_violation[:, 2])
     axs[2].set_title("Violation in $\omega$")
     axs[2].set(xlabel="Time [s]", ylabel="[rad/s]")
     axs[2].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
-    axs[2].set_ylim(-torque_ref, torque_ref)
+    axs[2].set_ylim(-ang_axis_max, ang_axis_max)
 
     for ax in axs:
         ax.grid()
