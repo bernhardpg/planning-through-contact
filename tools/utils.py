@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, List
+from typing import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -39,3 +39,11 @@ def evaluate_np_expressions_array(
     from_expr_to_float = np.vectorize(lambda expr: expr.Evaluate())
     solutions = from_expr_to_float(result.GetSolution(expr))
     return solutions
+
+
+def forward_differences(vars, dt: float):
+    # TODO: It is cleaner to implement this using a forward difference matrix, but as a first step keep it like this
+    forward_diffs = [
+        (var_next - var_curr) / dt for var_curr, var_next in zip(vars[0:-1], vars[1:])  # type: ignore
+    ]
+    return forward_diffs

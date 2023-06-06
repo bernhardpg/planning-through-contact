@@ -59,6 +59,11 @@ class CollisionGeometry(ABC):
     def get_face_length(self, location: PolytopeContactLocation) -> float:
         pass
 
+    @classmethod
+    @abstractmethod
+    def from_drake(cls, drake_shape: DrakeShape):
+        pass
+
     def get_shortest_vec_from_com_to_face(
         self, location: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
@@ -66,7 +71,12 @@ class CollisionGeometry(ABC):
         vec = (v1 + v2) / 2
         return vec
 
-    @classmethod
     @abstractmethod
-    def from_drake(cls, drake_shape: DrakeShape):
+    def get_contact_locations(self) -> List[PolytopeContactLocation]:
+        pass
+
+    @abstractmethod
+    def get_collision_free_regions(
+        self,
+    ) -> List[PolytopeContactLocation]:  # TODO: what should the return type be here?
         pass
