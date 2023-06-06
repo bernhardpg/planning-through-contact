@@ -1,5 +1,7 @@
 import numpy as np
 import pydot
+from pydrake.common import FindResourceOrThrow
+from pydrake.examples import ManipulationStation
 from pydrake.geometry import MeshcatVisualizer, StartMeshcat
 from pydrake.math import RigidTransform, RotationMatrix
 from pydrake.multibody.parsing import Parser
@@ -105,8 +107,64 @@ def simple_iiwa_and_brick():
 
 
 def manipulation_station():
-    ...
+    # Start meshcat
+    meshcat = StartMeshcat()  # type: ignore
+    meshcat.Delete()
+    meshcat.DeleteAddedControls()
+
+    station = ManipulationStation()
+    plant = station.get_mutable_multibody_plant()
+    scene_graph = station.get_mutable_scene_graph()
+
+    parser = Parser(plant, scene_graph)
+
+    # Load iiwa model
+    iiwa_model_file = FindResourceOrThrow(
+        "drake/manipulation/models/iiwa_description/iiwa7/" "iiwa7_no_collision.sdf"
+    )
+    (iiwa,) = parser.AddModels(iiwa_model_file)
+    X_WI = RigidTransform.Identity()  # type: ignore
+
+    # Weld iiwa to world frame
+    plant.WeldFrames(
+        plant.world_frame(), plant.GetFrameByName("iiwa_link_0", iiwa), X_WI
+    )
+
+    # Load wsg model
+    wsg_model_file = FindResourceOrThrow(
+        "drake/manipulation/models/wsg_50_description/sdf/" "schunk_wsg_50.sdf"
+    )
+    (wsg,) = parser.AddModels(wsg_model_file)
+    X_7G = RigidTransform.Identity()  # type: ignore
+
+    # Weld gripper to iiwa
+    plant.WeldFrames(
+        plant.GetFrameByName("iiwa_link_7", iiwa),
+        plant.GetFrameByName("body", wsg),
+        X_7G,
+    )
+
+    # Register models for the controller
+    station.RegisterIiwaControllerModel(
+        iiwa_model_file,
+        iiwa,
+        plant.world_frame(),
+        plant.GetFrameByName("iiwa_link_0", iiwa),
+        X_WI,
+    )
+    station.RegisterWsgControllerModel(
+        wsg_model_file,
+        wsg,
+        plant.GetFrameByName("iiwa_link_7", iiwa),
+        plant.GetFrameByName("body", wsg),
+        X_7G,
+    )
+
+    # Finalize
+    station.Finalize()
+    breakpoint()
 
 
 if __name__ == "__main__":
-    simple_iiwa_and_brick()
+    manipulation_station()
+    # simple_iiwa_and_brick()
