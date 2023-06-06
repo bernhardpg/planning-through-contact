@@ -225,7 +225,7 @@ class ModeVars(NamedTuple):
             np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
             for cos_dot, sin_dot in zip(self.cos_th_dots, self.sin_th_dots)
         ]
-        # In 2D, omega_z = theta_dot will be at position (0,1) in R_dot * R'
+        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
         oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
         return oms
 
@@ -495,7 +495,9 @@ class PlanarPushingContactMode:
         )
 
 
-def plan_planar_pushing(experiment_number: int, compute_violation: bool):
+def plan_planar_pushing(
+    experiment_number: int, compute_violation: bool, round_solution: bool
+):
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.8
@@ -529,8 +531,6 @@ def plan_planar_pushing(experiment_number: int, compute_violation: bool):
     VIS_REALTIME_RATE = 0.25
     num_vertices = 4
 
-    USE_RELAXED_SOL = False
-
     object = EquilateralPolytope2d(
         actuated=False,
         name="Slider",
@@ -556,9 +556,7 @@ def plan_planar_pushing(experiment_number: int, compute_violation: bool):
 
     relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
 
-    if USE_RELAXED_SOL:
-        vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
-    else:
+    if round_solution:
         print("Solving nonlinear trajopt...")
         solver_options = SolverOptions()
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
@@ -573,6 +571,8 @@ def plan_planar_pushing(experiment_number: int, compute_violation: bool):
         print("Found solution to true problem!")
 
         vals = [contact_mode.true_mode_vars.eval_result(true_result)]
+    else:
+        vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
 
     DT = 0.01
     interpolate = False
@@ -707,8 +707,15 @@ if __name__ == "__main__":
         help="Display relaxation error plot",
         action="store_true",
     )
+    parser.add_argument(
+        "-r",
+        "--round",
+        help="Round solution using nonlinear trajopt",
+        action="store_true",
+    )
     args = parser.parse_args()
     experiment_number = args.experiment
     compute_violation = args.compute_violation
+    round_solution = args.round
 
-    plan_planar_pushing(experiment_number, compute_violation)
+    plan_planar_pushing(experiment_number, compute_violation, round_solution)
