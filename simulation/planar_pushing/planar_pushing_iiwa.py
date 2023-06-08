@@ -213,6 +213,8 @@ class KeyptsLCM(LeafSystem):
         qp_WB = np.concatenate((q_wxyz, p_xyz))
         xyt_WB = full_to_planar_coordinates(qp_WB)
 
+        # TODO: Fix keypoint handling with octotrack
+
         # keypts = get_keypoints(xyt_WB)
         # keypts = np.concatenate((keypts, np.zeros((1, 5))))
         #
@@ -242,12 +244,21 @@ class PlanarPushingStation:
             self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
         )
 
-        diagram = builder.Build()
-        self.simulator = Simulator(diagram)
+        self.diagram = builder.Build()
+        self.simulator = Simulator(self.diagram)
         self.simulator.set_target_realtime_rate(1.0)
 
         self.set_default_joint_position()
         self.set_default_box_position()
+
+    def export_diagram(self, target_folder: str):
+        import pydot
+
+        filename = target_folder + "/diagram.png"
+        pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_png(  # type: ignore
+            filename
+        )
+        print(f"Saved diagram to: {filename}")
 
     def run(self, timeout=1e8):
         self.simulator.AdvanceTo(timeout)

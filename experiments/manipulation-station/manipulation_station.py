@@ -359,6 +359,8 @@ def manipulation_station():
 
 def planar_pushing_station():
     station = PlanarPushingStation()
+    breakpoint()
+    # station.export_diagram("deleteme")
     station.run()
 
 

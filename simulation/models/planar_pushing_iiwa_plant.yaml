@@ -16,21 +16,6 @@ directives:
     file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_with_box_collision.sdf
 
 - add_model:
-    name: goal
-    file: package://planning_through_contact/goal_box.sdf
-
-- add_frame:
-    name: goal_base
-    X_PF:
-        base_frame: world
-        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
-        translation: [0.8, 0.0, 0.0]
-
-- add_weld:
-    parent: goal_base
-    child: goal::goal_box
-
-- add_model:
     name: pusher
     file: package://planning_through_contact/pusher_floating.sdf
 
