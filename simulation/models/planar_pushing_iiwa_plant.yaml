@@ -1,0 +1,50 @@
+directives:
+- add_model:
+    name: small_table
+    file: package://planning_through_contact/small_table.urdf
+
+- add_weld:
+    parent: world
+    child: small_table::TableTop
+
+- add_model:
+    name: box
+    file: package://drake/manipulation/models/ycb/sdf/004_sugar_box.sdf
+
+- add_model:
+    name: iiwa
+    file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_with_box_collision.sdf
+
+- add_model:
+    name: goal
+    file: package://planning_through_contact/goal_box.sdf
+
+- add_frame:
+    name: goal_base
+    X_PF:
+        base_frame: world
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.8, 0.0, 0.0]
+
+- add_weld:
+    parent: goal_base
+    child: goal::goal_box
+
+- add_model:
+    name: pusher
+    file: package://planning_through_contact/pusher_floating.sdf
+
+- add_frame:
+    name: pusher_base
+    X_PF:
+        base_frame: pusher::cylinder
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.0, 0.0, -0.09]
+
+- add_weld:
+    parent: iiwa::iiwa_link_7
+    child: pusher_base
+
+- add_weld:
+    parent: world
+    child: iiwa::iiwa_link_0

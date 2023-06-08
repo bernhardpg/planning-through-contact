@@ -23,7 +23,38 @@ export PYTHONPATH=$PYTHONPATH:.
 
 ## Running (deprecated) demos
 ```
+<<<<<<< HEAD
 poetry run python deprecated/run_demos.py --demo box_push
+=======
+poetry run python main.py
+```
+
+## Installing Drake
+Drake must be built from source and added to the pythonpath, after activating the virtual environment (TODO: @bernhardpg fix this, only a short term solution). See the "Building the python bindings" section in https://robotlocomotion.github.io/from_source.html.
+Then run something like:
+```
+cd drake-build
+export PYTHONPATH=${PWD}/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
+in my case
+```
+export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
+
+Add current folder to pythonpath:
+```
+export PYTHONPATH=$PYTHONPATH:.
+```
+
+Make sure to have LCM downloaded and built to a directory. Add `lcm` to the pythonpath:
+```
+export PYTHONPATH="$PYTHONPATH:/Users/bernhardpg/software/lcm/build/python"
+```
+
+## Running demos
+```
+poetry run python main.py --demo box_push
+>>>>>>> e9dff25 (Add more sophistaced manipulation station simulation setup using lcm)
 ```
 
 ```

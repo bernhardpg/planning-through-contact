@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package>
+  <name>planning_through_contact</name>
+  <version>1.0.0</version>
+  <description>
+    This package contains models for Drake simulation in planning_through_contact repo
+  </description>
+  <author email="graesdal@mit.edu">Bernhard Paus Graesdal</author>
+  <maintainer email="graesdal@mit.edu">Bernhard Paus Graesdal</maintainer>
+  <license>BSD</license>
+</package>

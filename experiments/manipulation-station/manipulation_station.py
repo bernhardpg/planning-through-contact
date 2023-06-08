@@ -12,6 +12,8 @@ from pydrake.systems.controllers import InverseDynamicsController
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import FirstOrderLowPassFilter, VectorLogSink
 
+from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingStation
+
 
 class SchunkWsgButtons(LeafSystem):
     """
@@ -245,7 +247,28 @@ def manipulation_station():
     builder = DiagramBuilder()
 
     station = builder.AddSystem(ManipulationStation(time_step=1e-4))
-    station.SetupManipulationClassStation()
+    plant = station.get_mutable_multibody_plant()
+    scene_graph = station.get_mutable_scene_graph()
+
+    # Add table
+    table_url = (
+        "package://drake/examples/manipulation_station/models/"
+        "amazon_table_simplified.sdf"
+    )
+    table_model = Parser(plant, scene_graph).AddModelsFromUrl(table_url)[0]
+
+    dx_table_center_to_robot_base = 0.3257
+    dz_table_top_robot_base = 0.0127
+    X_WT = RigidTransform(
+        np.array([dx_table_center_to_robot_base, 0, -dz_table_top_robot_base])
+    )
+
+    plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("amazon_table"), X_WT)
+
+    #
+    breakpoint()
+
+    # station.SetupManipulationClassStation()
     station.AddManipulandFromFile(
         "drake/examples/manipulation_station/models/" + "061_foam_brick.sdf",
         RigidTransform(RotationMatrix.Identity(), [0.6, 0, 0]),  # type: ignore
@@ -255,7 +278,6 @@ def manipulation_station():
     SETUP_MANUALLY = False
     if SETUP_MANUALLY:
         plant = station.get_mutable_multibody_plant()
-        scene_graph = station.get_mutable_scene_graph()
 
         parser = Parser(plant, scene_graph)
 
@@ -335,7 +357,13 @@ def manipulation_station():
     breakpoint()
 
 
+def planar_pushing_station():
+    station = PlanarPushingStation()
+    station.run()
+
+
 if __name__ == "__main__":
-    manipulation_station()
+    # manipulation_station()
     # simple_iiwa_and_brick()
+    planar_pushing_station()
     # teleop()
