@@ -12,14 +12,20 @@ from pydrake.systems.controllers import InverseDynamicsController
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import FirstOrderLowPassFilter, VectorLogSink
 
-from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingSimulation
+from simulation.planar_pushing.planar_pushing_iiwa import (
+    PlanarPose,
+    PlanarPushingSimulation,
+)
 
 
 def planar_pushing_station():
     sim = PlanarPushingSimulation()
     # station.export_diagram("deleteme")
     box = sim.get_box()
-    breakpoint()
+    initial_pose = sim.get_box_planar_pose()
+    target_pose = PlanarPose(x=0.5, y=0.5, theta=0.2)
+
+    finger_pose = sim.get_pusher_planar_pose()
     sim.run()
 
     # Make motion plan:

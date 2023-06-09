@@ -1,0 +1,59 @@
+from dataclasses import dataclass
+
+import numpy as np
+import numpy.typing as npt
+from pydrake.common.eigen_geometry import Quaternion
+from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
+
+
+@dataclass
+class PlanarPose:
+    x: float
+    y: float
+    theta: float
+
+    @classmethod
+    def from_pose(cls, pose: RigidTransform) -> "PlanarPose":
+        """
+        Creates a planar pose from a RigidTransform.
+
+        The z-position value is disregarded, and theta is set to the rotation about the z-axis.
+        """
+        x = pose.translation()[0]
+        y = pose.translation()[1]
+
+        Z_AXIS = 2
+        theta = RollPitchYaw(pose.rotation()).vector()[Z_AXIS]
+        return cls(x, y, theta)
+
+    def to_pose(self, object_height: float) -> RigidTransform:
+        raise NotImplementedError("Planar pose to rigid pose is not yet implemented!")
+
+    @classmethod
+    def from_generalized_coords(cls, q: npt.NDArray[np.float64]) -> "PlanarPose":
+        """
+        Creates a planar pose from a vector q of generalized coordinates: [quaternion, translation]'
+
+        The z-position value is disregarded, and theta is set to the rotation about the z-axis.
+        """
+        q_wxyz = q[0:4] / np.linalg.norm(q[0:4])
+        x = q[4]
+        y = q[5]
+
+        Z_AXIS = 2
+        theta = RollPitchYaw(Quaternion(q_wxyz)).vector()[Z_AXIS]
+        return cls(x, y, theta)
+
+    def to_generalized_coords(self, object_height: float) -> npt.NDArray[np.float64]:
+        """
+        Returns the full RigidBody pose as generalized coordinates: [quaternion, translation]'
+
+        """
+        q_wxyz = Quaternion(
+            RotationMatrix(RollPitchYaw([0, 0, self.theta])).matrix()  # type: ignore
+        ).wxyz()
+        p_xyz = np.array([self.x, self.y, object_height])
+        return np.concatenate((q_wxyz, p_xyz))
+
+    def vector(self) -> npt.NDArray[np.float64]:
+        return np.array([self.x, self.y, self.theta])

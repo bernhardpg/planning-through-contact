@@ -23,7 +23,7 @@ from pydrake.multibody.parsing import (
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import Diagram, DiagramBuilder
+from pydrake.systems.framework import Context, Diagram, DiagramBuilder
 from pydrake.systems.lcm import (
     LcmInterfaceSystem,
     LcmPublisherSystem,
@@ -31,27 +31,8 @@ from pydrake.systems.lcm import (
 )
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 
+from geometry.planar.planar_pose import PlanarPose
 from geometry.rigid_body import RigidBody
-
-# NOTE: Big parts of this code is based on code by Terry Suh: http://hjrobotics.net/
-
-
-def planar_to_full_coordinates(x):
-    """Given x in planar coordinates, convert to full coordinates."""
-    box_dim = np.array([0.0867, 0.1703, 0.0391])
-    theta = x[2]
-    q_wxyz = Quaternion(RotationMatrix(RollPitchYaw([0, 0, theta])).matrix()).wxyz()
-    p_xyz = np.array([x[0], x[1], box_dim[2]])
-    return np.concatenate((q_wxyz, p_xyz))
-
-
-def full_to_planar_coordinates(x):
-    """Given x in full coordinates, convert to planar coordinates."""
-    q_wxyz = x[0:4] / np.linalg.norm(x[0:4])
-    p_xyz = x[4:7]
-
-    theta = RollPitchYaw(Quaternion(q_wxyz)).vector()[2]
-    return np.concatenate((p_xyz[0:2], np.array([theta])))
 
 
 def get_keypoints(x):
@@ -67,6 +48,7 @@ def get_keypoints(x):
             [1, 1, 1, 1, 1],
         ]
     )
+    # TODO: Remove
     box_dim = np.array([0.0867, 0.1703, 0.0391])
     # These dimensions come from the ycb dataset on 004_sugar_box.sdf
     # Make homogeneous coordinates
@@ -78,7 +60,7 @@ def get_keypoints(x):
 
     # transform according to pose x.
     X_WB = RigidTransform(
-        RollPitchYaw(np.array([0.0, 0.0, x[2]])), np.array([x[0], x[1], 0.0])
+        RollPitchYaw(np.array([0.0, 0.0, x[2]])), np.array([x[0], x[1], 0.0])  # type: ignore
     ).GetAsMatrix4()
 
     X_WK = X_WB @ keypoints
@@ -91,7 +73,7 @@ class ManipulationDiagram(Diagram):
         Diagram.__init__(self)
 
         self.h_mbp = 1e-3
-        self.meshcat = StartMeshcat()
+        self.meshcat = StartMeshcat()  # type: ignore
 
         self.meshcat.SetTransform(
             path="/Cameras/default",
@@ -100,10 +82,6 @@ class ManipulationDiagram(Diagram):
                 0.01 * np.array([0.05, 0.0, 0.1]),
             ).GetAsMatrix4(),
         )
-
-        # These dimensions come from the ycb dataset on 004_sugar_box.sdf
-        # The elements corresponds to box_width along [x,y,z] dimension.
-        self.box_dim = np.array([0.0867, 0.1703, 0.0391])
 
         builder = DiagramBuilder()
         self.mbp, self.sg = AddMultibodyPlantSceneGraph(builder, time_step=self.h_mbp)
@@ -126,12 +104,11 @@ class ManipulationDiagram(Diagram):
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
-        self.box_index = self.mbp.GetBodyByName("base_link_sugar").index()
-
         # Add visualizer.
         self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.sg, self.meshcat)  # type: ignore
 
         self.add_controller(builder)
+
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
         builder.BuildInto(self)
@@ -215,6 +192,18 @@ class ManipulationDiagram(Diagram):
 
         return box_shape
 
+    def get_box_planar_pose(self, context: Context):
+        pose = self.mbp.GetFreeBodyPose(context, self.get_box_body())
+        planar_pose = PlanarPose.from_pose(pose)
+        return planar_pose
+
+    def get_pusher_planar_pose(self, context: Context):
+        W = self.mbp.world_frame()
+        P = self.mbp.GetFrameByName("pusher_base")
+        pose = self.mbp.CalcRelativeTransform(context, W, P)
+        planar_pose = PlanarPose.from_pose(pose)
+        return planar_pose
+
 
 class KeyptsLCM(LeafSystem):
     def __init__(self, box_index):
@@ -228,11 +217,11 @@ class KeyptsLCM(LeafSystem):
         self.DeclarePeriodicPublishEvent(1.0 / 200.0, 0.0, self.publish)
 
     def publish(self, context):
-        X_WB = self.get_input_port().Eval(context)[self.box_index]
+        X_WB = self.get_input_port().Eval(context)[self.box_index]  # type: ignore
         q_wxyz = Quaternion(X_WB.rotation().matrix()).wxyz()
         p_xyz = X_WB.translation()
         qp_WB = np.concatenate((q_wxyz, p_xyz))
-        xyt_WB = full_to_planar_coordinates(qp_WB)
+        planar_pose = PlanarPose.from_generalized_coords(qp_WB).vector()
 
         # TODO: Fix keypoint handling with octotrack
 
@@ -260,7 +249,9 @@ class PlanarPushingSimulation:
         builder = DiagramBuilder()
         self.station = builder.AddSystem(ManipulationDiagram())
         self.connect_lcm(builder, self.station)
-        self.keypts_lcm = builder.AddSystem(KeyptsLCM(self.station.box_index))
+        self.keypts_lcm = builder.AddSystem(
+            KeyptsLCM(self.station.get_box_body().index())
+        )
         builder.Connect(
             self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
         )
@@ -268,6 +259,9 @@ class PlanarPushingSimulation:
         self.diagram = builder.Build()
         self.simulator = Simulator(self.diagram)
         self.simulator.set_target_realtime_rate(1.0)
+
+        self.context = self.simulator.get_mutable_context()
+        self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
         self.set_default_joint_position()
         self.set_default_box_position()
@@ -285,24 +279,20 @@ class PlanarPushingSimulation:
         self.simulator.AdvanceTo(timeout)
 
     def set_default_joint_position(self):
-        context = self.simulator.get_mutable_context()
-        mbp_context = self.station.mbp.GetMyContextFromRoot(context)
         self.default_joint_position = np.array(
             [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
         )
         self.station.mbp.SetPositions(
-            mbp_context, self.station.iiwa, self.default_joint_position
+            self.mbp_context, self.station.iiwa, self.default_joint_position
         )
 
     def set_default_box_position(self):
-        context = self.simulator.get_mutable_context()
-        mbp_context = self.station.mbp.GetMyContextFromRoot(context)
-        self.default_box_position = planar_to_full_coordinates(
-            np.array([0.5, 0.0, 0.0])
-        )
-        self.station.mbp.SetPositions(
-            mbp_context, self.station.box, self.default_box_position
-        )
+        # TODO: Take this as argument
+        default_box_position = PlanarPose(x=0.5, y=0.0, theta=0.0)
+
+        box_height = self.station.get_box_shape().height()
+        q = default_box_position.to_generalized_coords(box_height)
+        self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
 
     def connect_lcm(self, builder, station):
         # Set up LCM publisher subscribers.
@@ -310,7 +300,7 @@ class PlanarPushingSimulation:
         lcm_system = builder.AddSystem(LcmInterfaceSystem(lcm))
         iiwa_command = builder.AddSystem(IiwaCommandReceiver())
         iiwa_command_subscriber = builder.AddSystem(
-            LcmSubscriberSystem.Make(
+            LcmSubscriberSystem.Make(  # type: ignore
                 channel="IIWA_COMMAND",
                 lcm_type=lcmt_iiwa_command,
                 lcm=lcm,
@@ -362,7 +352,7 @@ class PlanarPushingSimulation:
 
         iiwa_status_publisher = builder.AddSystem(
             LcmPublisherSystem.Make(
-                "IIWA_STATUS",
+                "IIWA_STATUS",  # type: ignore
                 lcm_type=lcmt_iiwa_status,
                 lcm=lcm,
                 publish_period=0.005,
@@ -379,3 +369,9 @@ class PlanarPushingSimulation:
 
         box = RigidBody.from_drake(box_shape, box_body, "box")
         return box
+
+    def get_box_planar_pose(self):
+        return self.station.get_box_planar_pose(self.mbp_context)
+
+    def get_pusher_planar_pose(self):
+        return self.station.get_pusher_planar_pose(self.mbp_context)
