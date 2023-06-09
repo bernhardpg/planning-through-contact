@@ -7,8 +7,11 @@ from typing import Optional, Tuple
 from pydrake.geometry.optimization import ConvexSet
 from tqdm import tqdm
 
-from geometry.collision_pair import CollisionPairHandler
-from geometry.contact_mode import ContactModeConfig, PrioritizedContactModeConfig
+from deprecated.geometry.collision_pair import CollisionPairHandler
+from deprecated.geometry.contact_mode import (
+    ContactModeConfig,
+    PrioritizedContactModeConfig,
+)
 
 
 @dataclass(eq=True)

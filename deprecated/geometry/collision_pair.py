@@ -8,16 +8,16 @@ import pydrake.symbolic as sym
 from pydrake.geometry.optimization import ConvexSet
 from pydrake.math import eq, ge, le
 
-from geometry.bezier import BezierVariable
-from geometry.contact_mode import (
+from deprecated.geometry.bezier import BezierVariable
+from deprecated.geometry.contact_mode import (
     ContactMode,
     ContactModeConfig,
     ContactModeType,
     PositionModeType,
     calc_intersection_of_contact_modes,
 )
+from deprecated.geometry.rigid_body import RigidBody
 from geometry.polyhedron import PolyhedronFormulator
-from geometry.rigid_body import RigidBody
 
 
 @dataclass

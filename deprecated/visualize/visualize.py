@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 from matplotlib import animation
 
-from geometry.rigid_body import RigidBody
+from deprecated.geometry.rigid_body import RigidBody
 
 # WARNING: This will be deprecated soon in favor of Visualizer2d
 

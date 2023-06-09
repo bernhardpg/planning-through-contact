@@ -4,7 +4,7 @@ from typing import Literal
 import numpy.typing as npt
 import pydrake.symbolic as sym
 
-from geometry.bezier import BezierVariable
+from deprecated.geometry.bezier import BezierVariable
 
 
 @dataclass
