@@ -21,7 +21,6 @@ from pydrake.multibody.parsing import (
     ProcessModelDirectives,
 )
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
-from pydrake.multibody.tree import RigidBody
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Diagram, DiagramBuilder
 from pydrake.systems.lcm import (
