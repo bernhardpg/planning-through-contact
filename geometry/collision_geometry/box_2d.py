@@ -1,70 +1,99 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
+from pydrake.geometry import Box as DrakeBox
 
+from geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from geometry.hyperplane import Hyperplane, construct_2d_plane_from_points
-from geometry.two_d.contact.types import ContactLocation
-from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.utilities import normalize_vec
-
-# TODO: This class will be removed in favor of geometry/collision_geometry/box_2d
 
 
 @dataclass
-class Box2d(RigidBody2d):
-    width: float = 3
-    height: float = 2
+class Box2d(CollisionGeometry):
+    """
+    Implements a two-dimensional box collision geometry.
+    """
 
-    # TODO: This class should be simplified similar to EquilateralPolytope2d
-    # NOTE: This entire class uses indices starting at 1. This should really be changed!
-
-    # v1 -- v2
+    width: float
+    height: float
+    # v0 -- v1
     # |     |
-    # v4 -- v3
+    # v3 -- v2
+
+    @classmethod
+    def from_drake(
+        cls, drake_box: DrakeBox, axis_mode: Literal["planar"] = "planar"
+    ) -> "Box2d":
+        """
+        Constructs a two-dimensional box from a Drake 3D box.
+
+        By default, it is assumed that the box is intended to be used with planar pushing, and
+        hence the two-dimensional box is constructed with the 'depth' and 'width' from the Drake box.
+        """
+        if axis_mode == "planar":
+            width = drake_box.depth()
+            height = drake_box.width()
+            return cls(width, height)
+        else:
+            raise NotImplementedError(
+                "Only planar conversion from 3D drake box is currently supported."
+            )
 
     @property
-    def v1(self) -> npt.NDArray[np.float64]:
+    def _v0(self) -> npt.NDArray[np.float64]:
         return np.array([[-self.width / 2], [self.height / 2]])
 
     @property
-    def v2(self) -> npt.NDArray[np.float64]:
+    def _v1(self) -> npt.NDArray[np.float64]:
         return np.array([[self.width / 2], [self.height / 2]])
 
     @property
-    def v3(self) -> npt.NDArray[np.float64]:
+    def _v2(self) -> npt.NDArray[np.float64]:
         return np.array([[self.width / 2], [-self.height / 2]])
 
     @property
-    def v4(self) -> npt.NDArray[np.float64]:
+    def _v3(self) -> npt.NDArray[np.float64]:
         return np.array([[-self.width / 2], [-self.height / 2]])
 
     @property
-    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
-        return np.hstack([self.v1, self.v2, self.v3, self.v4])
+    def vertices(self) -> List[npt.NDArray[np.float64]]:
+        return [self._v0, self._v1, self._v2, self._v3]
 
-    # v1 - f1 - v2
+    @property
+    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
+        return np.hstack([self._v0, self._v1, self._v2, self._v3])
+
+    # v0 - f1 - v1
     # |          |
     # f4         f2
     # |          |
-    # v4 --f3--- v3
+    # v3 --f3--- v2
 
     @property
-    def face_1(self) -> Hyperplane:
-        return construct_2d_plane_from_points(self.v1, self.v2)
+    def _face_1(self) -> Hyperplane:
+        return construct_2d_plane_from_points(self._v0, self._v1)
 
     @property
-    def face_2(self) -> Hyperplane:
-        return construct_2d_plane_from_points(self.v2, self.v3)
+    def _face_2(self) -> Hyperplane:
+        return construct_2d_plane_from_points(self._v1, self._v2)
 
     @property
-    def face_3(self) -> Hyperplane:
-        return construct_2d_plane_from_points(self.v3, self.v4)
+    def _face_3(self) -> Hyperplane:
+        return construct_2d_plane_from_points(self._v2, self._v3)
 
     @property
-    def face_4(self) -> Hyperplane:
-        return construct_2d_plane_from_points(self.v4, self.v1)
+    def _face_4(self) -> Hyperplane:
+        return construct_2d_plane_from_points(self._v3, self._v0)
+
+    @property
+    def faces(self) -> List[Hyperplane]:
+        return [self._face_1, self._face_2, self._face_3, self._face_4]
 
     #  --------------------
     #  |        |         |
@@ -198,13 +227,13 @@ class Box2d(RigidBody2d):
             )
         elif location.pos == ContactLocation.VERTEX:
             if location.idx == 1:
-                return self.v4, self.v2
+                return self._v3, self._v1
             elif location.idx == 2:
-                return self.v1, self.v3
+                return self._v0, self._v2
             elif location.idx == 3:
-                return self.v2, self.v4
+                return self._v1, self._v3
             elif location.idx == 4:
-                return self.v3, self.v1
+                return self._v2, self._v0
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
@@ -219,26 +248,26 @@ class Box2d(RigidBody2d):
     ) -> List[npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
             if location.idx == 1:
-                return [self.v1, self.v2]
+                return [self._v0, self._v1]
             elif location.idx == 2:
-                return [self.v2, self.v3]
+                return [self._v1, self._v2]
             elif location.idx == 3:
-                return [self.v3, self.v4]
+                return [self._v2, self._v3]
             elif location.idx == 4:
-                return [self.v4, self.v1]
+                return [self._v3, self._v0]
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
         elif location.pos == ContactLocation.VERTEX:
             if location.idx == 1:
-                return [self.v1]
+                return [self._v0]
             elif location.idx == 2:
-                return [self.v2]
+                return [self._v1]
             elif location.idx == 3:
-                return [self.v3]
+                return [self._v2]
             elif location.idx == 4:
-                return [self.v4]
+                return [self._v3]
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
@@ -255,13 +284,13 @@ class Box2d(RigidBody2d):
             raise NotImplementedError(f"Can't get hyperplane for vertex contact")
         elif location.pos == ContactLocation.FACE:
             if location.idx == 1:
-                return self.face_1
+                return self._face_1
             elif location.idx == 2:
-                return self.face_2
+                return self._face_2
             elif location.idx == 3:
-                return self.face_3
+                return self._face_3
             elif location.idx == 4:
-                return self.face_4
+                return self._face_4
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"

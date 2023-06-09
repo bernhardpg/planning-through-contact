@@ -21,6 +21,7 @@ from pydrake.multibody.parsing import (
     ProcessModelDirectives,
 )
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
+from pydrake.multibody.tree import RigidBody as DrakeRigidBody
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Diagram, DiagramBuilder
 from pydrake.systems.lcm import (
@@ -29,6 +30,8 @@ from pydrake.systems.lcm import (
     LcmSubscriberSystem,
 )
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
+
+from geometry.rigid_body import RigidBody
 
 # NOTE: Big parts of this code is based on code by Terry Suh: http://hjrobotics.net/
 
@@ -198,14 +201,18 @@ class ManipulationDiagram(Diagram):
             "iiwa_torque_external",
         )
 
-    def get_box_shape(self) -> Box:
+    def get_box_body(self) -> DrakeRigidBody:
         box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.box)
+        return box_body
+
+    def get_box_shape(self) -> Box:
+        box_body = self.get_box_body()
         collision_geometries = self.mbp.GetCollisionGeometriesForBody(box_body)
 
         inspector = self.sg.model_inspector()
         shapes = [inspector.GetShape(id) for id in collision_geometries]
         box_shape = next(shape for shape in shapes if isinstance(shape, Box))
-        breakpoint()
+
         return box_shape
 
 
@@ -297,10 +304,6 @@ class PlanarPushingSimulation:
             mbp_context, self.station.box, self.default_box_position
         )
 
-    def get_box_geometry(self) -> Box:
-        box_shape = self.station.get_box_shape()
-        breakpoint()
-
     def connect_lcm(self, builder, station):
         # Set up LCM publisher subscribers.
         lcm = DrakeLcm()
@@ -369,3 +372,10 @@ class PlanarPushingSimulation:
         builder.Connect(
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
+
+    def get_box(self) -> RigidBody:
+        box_body = self.station.get_box_body()
+        box_shape = self.station.get_box_shape()
+
+        box = RigidBody.from_drake(box_shape, box_body, "box")
+        return box

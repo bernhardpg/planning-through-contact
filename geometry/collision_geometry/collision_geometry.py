@@ -1,28 +1,30 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, NamedTuple, Optional, Tuple
+from enum import Enum
+from typing import List, NamedTuple, Tuple
 
 import numpy as np
 import numpy.typing as npt
+from pydrake.geometry import Shape as DrakeShape
 
 from geometry.hyperplane import Hyperplane
-from geometry.two_d.contact.types import ContactLocation
-
-GRAV_ACC = 9.81
-
-# TODO: Deprecate this in favor of new, more general rigid_body using Drake functionality
 
 
+class ContactLocation(Enum):
+    FACE = 1
+    VERTEX = 2
+
+
+# TODO: move this?
 class PolytopeContactLocation(NamedTuple):
     pos: ContactLocation
     idx: int
 
 
-@dataclass
-class RigidBody2d(ABC):
-    actuated: bool
-    name: str
-    mass: Optional[float]
+class CollisionGeometry(ABC):
+    """
+    Abstract class for all of the collision geometries supported by the contact planner,
+    with all of the helper functions required by the planner.
+    """
 
     @abstractmethod
     def get_proximate_vertices_from_location(
@@ -53,13 +55,9 @@ class RigidBody2d(ABC):
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
         pass
 
-    @property
-    def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
-        if self.mass is None:
-            raise ValueError(
-                "Rigid body must have a mass to calculate gravitational force"
-            )
-        return np.array([0, -self.mass * GRAV_ACC]).reshape((-1, 1))
+    @abstractmethod
+    def get_face_length(self, location: PolytopeContactLocation) -> float:
+        pass
 
     def get_shortest_vec_from_com_to_face(
         self, location: PolytopeContactLocation
@@ -68,6 +66,7 @@ class RigidBody2d(ABC):
         vec = (v1 + v2) / 2
         return vec
 
+    @classmethod
     @abstractmethod
-    def get_face_length(self, location: PolytopeContactLocation) -> float:
+    def from_drake(cls, drake_shape: DrakeShape):
         pass

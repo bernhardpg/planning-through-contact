@@ -18,7 +18,7 @@ from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingSimulatio
 def planar_pushing_station():
     sim = PlanarPushingSimulation()
     # station.export_diagram("deleteme")
-    sim.get_box_geometry()
+    box = sim.get_box()
     breakpoint()
     sim.run()
 
