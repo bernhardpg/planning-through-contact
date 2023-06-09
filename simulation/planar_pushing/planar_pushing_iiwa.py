@@ -11,7 +11,7 @@ from pydrake.all import (
     Quaternion,
     StateInterpolatorWithDiscreteDerivative,
 )
-from pydrake.geometry import MeshcatVisualizer, StartMeshcat
+from pydrake.geometry import Box, MeshcatVisualizer, StartMeshcat
 from pydrake.lcm import DrakeLcm
 from pydrake.manipulation.kuka_iiwa import IiwaCommandReceiver, IiwaStatusSender
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
@@ -21,6 +21,7 @@ from pydrake.multibody.parsing import (
     ProcessModelDirectives,
 )
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
+from pydrake.multibody.tree import RigidBody
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Diagram, DiagramBuilder
 from pydrake.systems.lcm import (
@@ -29,6 +30,8 @@ from pydrake.systems.lcm import (
     LcmSubscriberSystem,
 )
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
+
+# NOTE: Big parts of this code is based on code by Terry Suh: http://hjrobotics.net/
 
 
 def planar_to_full_coordinates(x):
@@ -88,9 +91,6 @@ class ManipulationDiagram(Diagram):
         self.h_mbp = 1e-3
         self.meshcat = StartMeshcat()
 
-        # These dimensions come from the ycb dataset on 004_sugar_box.sdf
-        # The elements corresponds to box_width along [x,y,z] dimension.
-        self.box_dim = np.array([0.0867, 0.1703, 0.0391])
         self.meshcat.SetTransform(
             path="/Cameras/default",
             matrix=RigidTransform(
@@ -98,6 +98,10 @@ class ManipulationDiagram(Diagram):
                 0.01 * np.array([0.05, 0.0, 0.1]),
             ).GetAsMatrix4(),
         )
+
+        # These dimensions come from the ycb dataset on 004_sugar_box.sdf
+        # The elements corresponds to box_width along [x,y,z] dimension.
+        self.box_dim = np.array([0.0867, 0.1703, 0.0391])
 
         builder = DiagramBuilder()
         self.mbp, self.sg = AddMultibodyPlantSceneGraph(builder, time_step=self.h_mbp)
@@ -115,6 +119,7 @@ class ManipulationDiagram(Diagram):
         self.mbp.Finalize()
 
         # Get model instances for box and pusher.
+        # NOTE: These are unused
         self.box = self.mbp.GetModelInstanceByName("box")
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
@@ -194,6 +199,16 @@ class ManipulationDiagram(Diagram):
             "iiwa_torque_external",
         )
 
+    def get_box_shape(self) -> Box:
+        box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.box)
+        collision_geometries = self.mbp.GetCollisionGeometriesForBody(box_body)
+
+        inspector = self.sg.model_inspector()
+        shapes = [inspector.GetShape(id) for id in collision_geometries]
+        box_shape = next(shape for shape in shapes if isinstance(shape, Box))
+        breakpoint()
+        return box_shape
+
 
 class KeyptsLCM(LeafSystem):
     def __init__(self, box_index):
@@ -228,7 +243,7 @@ class KeyptsLCM(LeafSystem):
         # self.lc.publish("KEYPTS", msg.encode())
 
 
-class PlanarPushingStation:
+class PlanarPushingSimulation:
     """
     Planar pushing dynamical system, implemented in Drake.
     x: position of box and pusher, [x_box, y_box, theta_box, x_pusher, y_pusher]
@@ -282,6 +297,10 @@ class PlanarPushingStation:
         self.station.mbp.SetPositions(
             mbp_context, self.station.box, self.default_box_position
         )
+
+    def get_box_geometry(self) -> Box:
+        box_shape = self.station.get_box_shape()
+        breakpoint()
 
     def connect_lcm(self, builder, station):
         # Set up LCM publisher subscribers.

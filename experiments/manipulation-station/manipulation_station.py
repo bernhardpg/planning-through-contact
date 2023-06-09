@@ -12,7 +12,7 @@ from pydrake.systems.controllers import InverseDynamicsController
 from pydrake.systems.framework import DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import FirstOrderLowPassFilter, VectorLogSink
 
-from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingStation
+from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingSimulation
 
 
 class SchunkWsgButtons(LeafSystem):
@@ -358,9 +358,10 @@ def manipulation_station():
 
 
 def planar_pushing_station():
-    station = PlanarPushingStation()
-    breakpoint()
+    sim = PlanarPushingSimulation()
     # station.export_diagram("deleteme")
+    sim.get_box_geometry()
+    breakpoint()
     station.run()
 
 
