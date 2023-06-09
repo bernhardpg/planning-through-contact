@@ -20,19 +20,17 @@ from simulation.planar_pushing.planar_pushing_iiwa import (
 
 def planar_pushing_station():
     sim = PlanarPushingSimulation()
-    # station.export_diagram("deleteme")
     box = sim.get_box()
-    initial_pose = sim.get_box_planar_pose()
-    target_pose = PlanarPose(x=0.5, y=0.5, theta=0.2)
 
-    finger_pose = sim.get_pusher_planar_pose()
+    box_initial_pose = PlanarPose(x=1.0, y=0.0, theta=0.0)
+    box_target_pose = PlanarPose(x=0.5, y=0.0, theta=0.2)
+    sim.set_box_planar_pose(box_initial_pose)
+
+    finger_initial_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
+    sim.set_pusher_planar_pose(finger_initial_pose)
+
+    # finger_pose = sim.get_pusher_planar_pose()
     sim.run()
-
-    # Make motion plan:
-    # 1. Need object geometry and mass (not inertia)
-    # 2. Need initial object position
-    # 3. Need initial manipulator position
-    # 4. Need target object position
 
 
 if __name__ == "__main__":

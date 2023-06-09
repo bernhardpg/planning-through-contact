@@ -22,7 +22,7 @@ directives:
 - add_frame:
     name: pusher_base
     X_PF:
-        base_frame: pusher::cylinder
+        base_frame: pusher::pusher
         rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
         translation: [0.0, 0.0, -0.09]
 

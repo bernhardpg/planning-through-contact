@@ -2,6 +2,7 @@ from pathlib import Path
 
 import lcm
 import numpy as np
+import numpy.typing as npt
 from drake import lcmt_iiwa_command, lcmt_iiwa_status
 from pydrake.all import (
     AbstractValue,
@@ -15,13 +16,16 @@ from pydrake.geometry import Box, MeshcatVisualizer, StartMeshcat
 from pydrake.lcm import DrakeLcm
 from pydrake.manipulation.kuka_iiwa import IiwaCommandReceiver, IiwaStatusSender
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
+from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.multibody.parsing import (
     LoadModelDirectives,
     Parser,
     ProcessModelDirectives,
 )
 from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
+from pydrake.multibody.tree import Frame
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
+from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Context, Diagram, DiagramBuilder
 from pydrake.systems.lcm import (
@@ -35,6 +39,7 @@ from geometry.planar.planar_pose import PlanarPose
 from geometry.rigid_body import RigidBody
 
 
+# TODO: remove
 def get_keypoints(x):
     """
     Get keypoints given pose x.
@@ -68,7 +73,7 @@ def get_keypoints(x):
     return X_WK[0:2, :]
 
 
-class ManipulationDiagram(Diagram):
+class PlanarPushingDiagram(Diagram):
     def __init__(self):
         Diagram.__init__(self)
 
@@ -114,19 +119,19 @@ class ManipulationDiagram(Diagram):
         builder.BuildInto(self)
 
     def add_controller(self, builder):
-        ctrl_plant = MultibodyPlant(1e-3)
-        parser = Parser(ctrl_plant)
+        self.controller_plant = MultibodyPlant(1e-3)
+        parser = Parser(self.controller_plant)
         parser.package_map().PopulateFromFolder(str(self.models_folder))
         directives = LoadModelDirectives(
             str(self.models_folder / "iiwa_controller_plant.yaml")
         )
-        ProcessModelDirectives(directives, ctrl_plant, parser)  # type: ignore
-        ctrl_plant.Finalize()
+        ProcessModelDirectives(directives, self.controller_plant, parser)  # type: ignore
+        self.controller_plant.Finalize()
         kp = 800 * np.ones(7)
         ki = 100 * np.ones(7)
         kd = 2 * np.sqrt(kp)
         arm_controller = builder.AddSystem(
-            InverseDynamicsController(ctrl_plant, kp, ki, kd, False)
+            InverseDynamicsController(self.controller_plant, kp, ki, kd, False)
         )
         adder = builder.AddSystem(Adder(2, 7))
         state_from_position = builder.AddSystem(
@@ -184,10 +189,10 @@ class ManipulationDiagram(Diagram):
 
     def get_box_shape(self) -> Box:
         box_body = self.get_box_body()
-        collision_geometries = self.mbp.GetCollisionGeometriesForBody(box_body)
+        collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(box_body)
 
         inspector = self.sg.model_inspector()
-        shapes = [inspector.GetShape(id) for id in collision_geometries]
+        shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
         box_shape = next(shape for shape in shapes if isinstance(shape, Box))
 
         return box_shape
@@ -197,10 +202,24 @@ class ManipulationDiagram(Diagram):
         planar_pose = PlanarPose.from_pose(pose)
         return planar_pose
 
-    def get_pusher_planar_pose(self, context: Context):
-        W = self.mbp.world_frame()
+    def get_pusher_shape(self) -> Box:
+        pusher_body = self.mbp.GetBodyByName("pusher")
+        collision_geometry_id = self.mbp.GetCollisionGeometriesForBody(pusher_body)[0]
+
+        inspector = self.sg.model_inspector()
+        pusher_shape = inspector.GetShape(collision_geometry_id)
+
+        return pusher_shape
+
+    @property
+    def pusher_frame(self) -> Frame:
         P = self.mbp.GetFrameByName("pusher_base")
-        pose = self.mbp.CalcRelativeTransform(context, W, P)
+        return P
+
+    def get_pusher_planar_pose(self, context: Context):
+        pose = self.mbp.CalcRelativeTransform(
+            context, self.mbp.world_frame(), self.pusher_frame
+        )
         planar_pose = PlanarPose.from_pose(pose)
         return planar_pose
 
@@ -246,8 +265,14 @@ class PlanarPushingSimulation:
     """
 
     def __init__(self):
+        self.DEFAULT_JOINT_POSITIONS = np.array(
+            [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
+        )
+        self.DEFAULT_BOX_POSITION = PlanarPose(x=0.5, y=0.0, theta=0.0)
+
         builder = DiagramBuilder()
-        self.station = builder.AddSystem(ManipulationDiagram())
+        self.station = builder.AddSystem(PlanarPushingDiagram())
+
         self.connect_lcm(builder, self.station)
         self.keypts_lcm = builder.AddSystem(
             KeyptsLCM(self.station.get_box_body().index())
@@ -257,14 +282,15 @@ class PlanarPushingSimulation:
         )
 
         self.diagram = builder.Build()
+
         self.simulator = Simulator(self.diagram)
         self.simulator.set_target_realtime_rate(1.0)
 
         self.context = self.simulator.get_mutable_context()
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
-        self.set_default_joint_position()
-        self.set_default_box_position()
+        self._set_joint_positions(self.DEFAULT_JOINT_POSITIONS)
+        self.set_box_planar_pose(self.DEFAULT_BOX_POSITION)
 
     def export_diagram(self, target_folder: str):
         import pydot
@@ -277,22 +303,6 @@ class PlanarPushingSimulation:
 
     def run(self, timeout=1e8):
         self.simulator.AdvanceTo(timeout)
-
-    def set_default_joint_position(self):
-        self.default_joint_position = np.array(
-            [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
-        )
-        self.station.mbp.SetPositions(
-            self.mbp_context, self.station.iiwa, self.default_joint_position
-        )
-
-    def set_default_box_position(self):
-        # TODO: Take this as argument
-        default_box_position = PlanarPose(x=0.5, y=0.0, theta=0.0)
-
-        box_height = self.station.get_box_shape().height()
-        q = default_box_position.to_generalized_coords(box_height)
-        self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
 
     def connect_lcm(self, builder, station):
         # Set up LCM publisher subscribers.
@@ -363,6 +373,8 @@ class PlanarPushingSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
+        self.TABLE_BUFFER_DIST = 0.05
+
     def get_box(self) -> RigidBody:
         box_body = self.station.get_box_body()
         box_shape = self.station.get_box_shape()
@@ -373,5 +385,74 @@ class PlanarPushingSimulation:
     def get_box_planar_pose(self):
         return self.station.get_box_planar_pose(self.mbp_context)
 
+    def set_box_planar_pose(self, box_pose: PlanarPose):
+        box_height = self.station.get_box_shape().height()
+        q = box_pose.to_generalized_coords(box_height + self.TABLE_BUFFER_DIST)
+        self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
+
     def get_pusher_planar_pose(self):
         return self.station.get_pusher_planar_pose(self.mbp_context)
+
+    def set_pusher_planar_pose(
+        self, planar_pose: PlanarPose, disregard_angle: bool = True
+    ):
+        """
+        Sets the planar pose of the pusher.
+
+        @param planar_pose: Desired end-effector planar pose.
+        @param disregard_angle: Whether or not to enforce the z-axis rotation specified by the planar_pose.
+        """
+
+        ik = InverseKinematics(self.station.mbp, self.mbp_context)
+        pusher_shape = self.station.get_pusher_shape()
+        pose = planar_pose.to_pose(
+            object_height=pusher_shape.length() + self.TABLE_BUFFER_DIST
+        )
+
+        ik.AddPositionConstraint(
+            self.station.pusher_frame,
+            np.zeros(3),
+            self.station.mbp.world_frame(),
+            pose.translation(),
+            pose.translation(),
+        )
+
+        if disregard_angle:
+            z_unit_vec = np.array([0, 0, 1])
+            ik.AddAngleBetweenVectorsConstraint(
+                self.station.pusher_frame,
+                z_unit_vec,
+                self.station.mbp.world_frame(),
+                -z_unit_vec,  # The pusher object has z-axis pointing up
+                0,
+                0,
+            )
+
+        else:
+            ik.AddOrientationConstraint(
+                self.station.pusher_frame,
+                RotationMatrix(),
+                self.station.mbp.world_frame(),
+                pose.rotation(),
+                0.0,
+            )
+
+        # Non-penetration
+        ik.AddMinimumDistanceConstraint(0.001, 0.1)
+
+        # Cost on deviation from default joint positions
+        prog = ik.get_mutable_prog()
+        q = ik.q()
+
+        box_position = self.station.mbp.GetPositions(self.mbp_context, self.station.box)
+        q0 = np.concatenate([self.DEFAULT_JOINT_POSITIONS, box_position])
+        prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
+        prog.SetInitialGuess(q, q0)
+
+        # Will automatically set the positions of the objects
+        Solve(ik.prog())
+
+    def _set_joint_positions(self, joint_positions: npt.NDArray[np.float64]):
+        self.station.mbp.SetPositions(
+            self.mbp_context, self.station.iiwa, joint_positions
+        )

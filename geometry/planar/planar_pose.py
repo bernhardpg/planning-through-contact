@@ -27,7 +27,17 @@ class PlanarPose:
         return cls(x, y, theta)
 
     def to_pose(self, object_height: float) -> RigidTransform:
-        raise NotImplementedError("Planar pose to rigid pose is not yet implemented!")
+        """
+        Creates a RigidTransform from a planar pose, with the x-axis pointing downwards.
+
+        @param object_height: Height of the object. This is required to set the z-value of the pose correctly.
+
+        """
+        pose = RigidTransform(
+            RollPitchYaw(np.array([np.pi, 0.0, self.theta])),  # type: ignore
+            np.array([self.x, self.y, object_height]),
+        )
+        return pose
 
     @classmethod
     def from_generalized_coords(cls, q: npt.NDArray[np.float64]) -> "PlanarPose":

@@ -12,7 +12,7 @@
   <!-- world->ghost_body_y->ghost_body_z_sphere-->
   <model name="pusher">
     <!-- The model for a solid box of uniform density. -->
-    <link name="cylinder">
+    <link name="pusher">
       <inertial>
         <mass>0.1</mass>
 
