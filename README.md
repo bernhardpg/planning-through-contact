@@ -14,16 +14,6 @@ poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
-Finally, make sure to have graphviz installed on your computer. On MacOS, run the following command:
-```
-brew install graphviz
-```
-
-Now everything needed to run the project should be installed. To run any files in the project, prefix the command with `poetry run ...`. For example:
-```
-poetry run python main.py
-```
-
 ## Installing Drake
 Drake must be built from source and added to the pythonpath, after activating the virtual environment (TODO: @bernhardpg fix this, only a short term solution). See the "Building the python bindings" section in https://robotlocomotion.github.io/from_source.html.
 Then run something like:
@@ -36,13 +26,13 @@ in my case
 export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
 ```
 
-## Running demos
+## Running (deprecated) demos
 ```
-poetry run python main.py --demo box_push
+poetry run python deprecated/run_demos.py --demo box_push
 ```
 
 ```
-poetry run python main.py --demo box_pickup
+poetry run python deprecated/run_demos.py --demo box_pickup
 ```
 
 Planning for flipping up polytopes of different shapes:

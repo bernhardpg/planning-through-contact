@@ -16,10 +16,10 @@ from pydrake.solvers import (
 )
 from tqdm import tqdm
 
+from deprecated.geometry.bezier import BezierCurve
 from deprecated.geometry.collision_pair import CollisionPair, CollisionPairHandler
 from deprecated.geometry.rigid_body import RigidBody
 from deprecated.planning.graph_builder import ContactModeConfig, Graph, GraphBuilder
-from geometry.bezier import BezierCurve
 
 
 class GcsContactPlanner:
