@@ -14,16 +14,11 @@ poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
-## Installing Drake
-Drake must be built from source and added to the pythonpath, after activating the virtual environment (TODO: @bernhardpg fix this, only a short term solution). See the "Building the python bindings" section in https://robotlocomotion.github.io/from_source.html.
-Then run something like:
+## Add this library to your pythonpath
+Add this module to pythonpath:
+
 ```
-cd drake-build
-export PYTHONPATH=${PWD}/install/lib/python3.11/site-packages:${PYTHONPATH}
-```
-in my case
-```
-export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
+export PYTHONPATH=$PYTHONPATH:.
 ```
 
 ## Running (deprecated) demos
