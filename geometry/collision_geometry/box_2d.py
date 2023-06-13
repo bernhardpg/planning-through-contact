@@ -69,146 +69,146 @@ class Box2d(CollisionGeometry):
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
         return np.hstack([self._v0, self._v1, self._v2, self._v3])
 
-    # v0 - f1 - v1
+    # v0 - f0 - v1
     # |          |
-    # f4         f2
+    # f3         f1
     # |          |
-    # v3 --f3--- v2
+    # v3 --f2--- v2
 
     @property
-    def _face_1(self) -> Hyperplane:
+    def _face_0(self) -> Hyperplane:
         return construct_2d_plane_from_points(self._v0, self._v1)
 
     @property
-    def _face_2(self) -> Hyperplane:
+    def _face_1(self) -> Hyperplane:
         return construct_2d_plane_from_points(self._v1, self._v2)
 
     @property
-    def _face_3(self) -> Hyperplane:
+    def _face_2(self) -> Hyperplane:
         return construct_2d_plane_from_points(self._v2, self._v3)
 
     @property
-    def _face_4(self) -> Hyperplane:
+    def _face_3(self) -> Hyperplane:
         return construct_2d_plane_from_points(self._v3, self._v0)
 
     @property
     def faces(self) -> List[Hyperplane]:
-        return [self._face_1, self._face_2, self._face_3, self._face_4]
+        return [self._face_0, self._face_1, self._face_2, self._face_3]
 
     #  --------------------
     #  |        |         |
-    #  |        v n1      |
+    #  |        v n0      |
     #  |                  |
-    #  | --> n4    n2 <-- |
+    #  | --> n3    n1 <-- |
     #  |                  |
     #  |        ^         |
-    #  |        | n3      |
+    #  |        | n2      |
     #  --------------------
 
     @property
-    def n1(self) -> npt.NDArray[np.float64]:
+    def _n0(self) -> npt.NDArray[np.float64]:
         return -np.array([0, 1]).reshape((-1, 1))
 
     @property
-    def n2(self) -> npt.NDArray[np.float64]:
+    def _n1(self) -> npt.NDArray[np.float64]:
         return -np.array([1, 0]).reshape((-1, 1))
 
     @property
-    def n3(self) -> npt.NDArray[np.float64]:
+    def _n2(self) -> npt.NDArray[np.float64]:
         return -np.array([0, -1]).reshape((-1, 1))
 
     @property
-    def n4(self) -> npt.NDArray[np.float64]:
+    def _n3(self) -> npt.NDArray[np.float64]:
         return -np.array([-1, 0]).reshape((-1, 1))
 
     # Right handed coordinate frame with z-axis out of plane and x-axis along normal
     #
-    #           t1--->
+    #           t0--->
     #       ---------
     #    ^  |       |
-    # t4 |  |       | | t2
+    # t3 |  |       | | t1
     #       |       | v
     #       ---------
-    #       <--- t3
+    #       <--- t2
 
     @property
-    def t1(self) -> npt.NDArray[np.float64]:
-        return self.n4
+    def _t0(self) -> npt.NDArray[np.float64]:
+        return self._n3
 
     @property
-    def t2(self) -> npt.NDArray[np.float64]:
-        return self.n1
+    def _t1(self) -> npt.NDArray[np.float64]:
+        return self._n0
 
     @property
-    def t3(self) -> npt.NDArray[np.float64]:
-        return self.n2
+    def _t2(self) -> npt.NDArray[np.float64]:
+        return self._n1
 
     @property
-    def t4(self) -> npt.NDArray[np.float64]:
-        return self.n3
+    def _t3(self) -> npt.NDArray[np.float64]:
+        return self._n2
 
     # Corner normal vectors
-    # nc1 -- nc2
+    # nc0 -- nc1
     # |       |
-    # nc4 -- nc3
+    # nc3 -- nc2
 
     @property
-    def nc1(self) -> npt.NDArray[np.float64]:
-        return normalize_vec(self.n4 + self.n1)
+    def _nc0(self) -> npt.NDArray[np.float64]:
+        return normalize_vec(self._n3 + self._n0)
 
     @property
-    def nc2(self) -> npt.NDArray[np.float64]:
-        return normalize_vec(self.n1 + self.n2)
+    def _nc1(self) -> npt.NDArray[np.float64]:
+        return normalize_vec(self._n0 + self._n1)
 
     @property
-    def nc3(self) -> npt.NDArray[np.float64]:
-        return normalize_vec(self.n2 + self.n3)
+    def _nc2(self) -> npt.NDArray[np.float64]:
+        return normalize_vec(self._n1 + self._n2)
 
     @property
-    def nc4(self) -> npt.NDArray[np.float64]:
-        return normalize_vec(self.n3 + self.n4)
+    def _nc3(self) -> npt.NDArray[np.float64]:
+        return normalize_vec(self._n2 + self._n3)
 
     @property
-    def tc1(self) -> npt.NDArray[np.float64]:
-        return self.nc4
+    def _tc0(self) -> npt.NDArray[np.float64]:
+        return self._nc3
 
     @property
-    def tc2(self) -> npt.NDArray[np.float64]:
-        return self.nc1
+    def _tc1(self) -> npt.NDArray[np.float64]:
+        return self._nc0
 
     @property
-    def tc3(self) -> npt.NDArray[np.float64]:
-        return self.nc2
+    def _tc2(self) -> npt.NDArray[np.float64]:
+        return self._nc1
 
     @property
-    def tc4(self) -> npt.NDArray[np.float64]:
-        return self.nc3
+    def _tc3(self) -> npt.NDArray[np.float64]:
+        return self._nc2
 
     def get_norm_and_tang_vecs_from_location(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
-            if location.idx == 1:
-                return self.n1, self.t1
+            if location.idx == 0:
+                return self._n0, self._t0
+            elif location.idx == 1:
+                return self._n1, self._t1
             elif location.idx == 2:
-                return self.n2, self.t2
+                return self._n2, self._t2
             elif location.idx == 3:
-                return self.n3, self.t3
-            elif location.idx == 4:
-                return self.n4, self.t4
+                return self._n3, self._t3
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
         elif location.pos == ContactLocation.VERTEX:
-            if location.idx == 1:
-                return self.nc1, self.tc1
+            if location.idx == 0:
+                return self._nc0, self._tc0
+            elif location.idx == 1:
+                return self._nc1, self._tc1
             elif location.idx == 2:
-                return self.nc2, self.tc2
+                return self._nc2, self._tc2
             elif location.idx == 3:
-                return self.nc3, self.tc3
-            elif location.idx == 4:
-                return self.nc4, self.tc4
+                return self._nc3, self._tc3
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
@@ -226,13 +226,13 @@ class Box2d(CollisionGeometry):
                 f"Can't get neighbouring vertices for face contact"
             )
         elif location.pos == ContactLocation.VERTEX:
-            if location.idx == 1:
+            if location.idx == 0:
                 return self._v3, self._v1
-            elif location.idx == 2:
+            elif location.idx == 1:
                 return self._v0, self._v2
-            elif location.idx == 3:
+            elif location.idx == 2:
                 return self._v1, self._v3
-            elif location.idx == 4:
+            elif location.idx == 3:
                 return self._v2, self._v0
             else:
                 raise NotImplementedError(
@@ -247,26 +247,26 @@ class Box2d(CollisionGeometry):
         self, location: PolytopeContactLocation
     ) -> List[npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
-            if location.idx == 1:
+            if location.idx == 0:
                 return [self._v0, self._v1]
-            elif location.idx == 2:
+            elif location.idx == 1:
                 return [self._v1, self._v2]
-            elif location.idx == 3:
+            elif location.idx == 2:
                 return [self._v2, self._v3]
-            elif location.idx == 4:
+            elif location.idx == 3:
                 return [self._v3, self._v0]
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
         elif location.pos == ContactLocation.VERTEX:
-            if location.idx == 1:
+            if location.idx == 0:
                 return [self._v0]
-            elif location.idx == 2:
+            elif location.idx == 1:
                 return [self._v1]
-            elif location.idx == 3:
+            elif location.idx == 2:
                 return [self._v2]
-            elif location.idx == 4:
+            elif location.idx == 3:
                 return [self._v3]
             else:
                 raise NotImplementedError(
@@ -283,14 +283,14 @@ class Box2d(CollisionGeometry):
         if location.pos == ContactLocation.VERTEX:
             raise NotImplementedError(f"Can't get hyperplane for vertex contact")
         elif location.pos == ContactLocation.FACE:
-            if location.idx == 1:
+            if location.idx == 0:
+                return self._face_0
+            elif location.idx == 1:
                 return self._face_1
             elif location.idx == 2:
                 return self._face_2
             elif location.idx == 3:
                 return self._face_3
-            elif location.idx == 4:
-                return self._face_4
             else:
                 raise NotImplementedError(
                     f"Location {location.pos}: {location.idx} not implemented"
@@ -304,9 +304,21 @@ class Box2d(CollisionGeometry):
         if not location.pos == ContactLocation.FACE:
             raise ValueError("Can only get face length for a face")
 
-        if location.idx == 1 or location.idx == 3:
+        if location.idx == 0 or location.idx == 2:
             return self.width
-        elif location.idx == 2 or location.idx == 4:
+        elif location.idx == 1 or location.idx == 3:
             return self.height
         else:
             raise ValueError(f"Can not get length for face {location.idx} for a box")
+
+    def get_contact_locations(self) -> List[PolytopeContactLocation]:
+        locs = [
+            PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
+            for idx in range(0, len(self.faces))
+        ]
+        return locs
+
+    def get_collision_free_regions(
+        self,
+    ) -> List[PolytopeContactLocation]:  # TODO: what should the return type be here?
+        breakpoint()
