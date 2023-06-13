@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
+from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +22,28 @@ from geometry.planar.planar_pose import PlanarPose
 from geometry.rigid_body import RigidBody
 from tools.types import NpVariableArray
 
+GcsVertex = opt.GraphOfConvexSets.Vertex
+
+
+@dataclass
+class NonCollisionSubGraph:
+    vertices: List[GcsVertex]
+    modes: List[NonCollisionMode]
+
+    def get_edges(self) -> List[Tuple[GcsVertex, GcsVertex]]:
+        """
+        Returns all edges between any overlapping regions in the two-dimensional
+        space of positions as a tuple of vertices
+        """
+        position_sets = [mode.get_convex_set_in_positions() for mode in self.modes]
+        edge_idxs = [
+            (i, j)
+            for (i, u), (j, v) in combinations(enumerate(position_sets), 2)
+            if u.IntersectsWith(v)
+        ]
+        edges = [(self.vertices[i], self.vertices[j]) for (i, j) in edge_idxs]
+        return edges
+
 
 @dataclass
 class PlanarPushingPlanner:
@@ -38,6 +62,9 @@ class PlanarPushingPlanner:
         self._build_graph()
         self._add_costs()
 
+        for mode_1, mode_2 in combinations(self.contact_modes, 2):
+            self._build_subgraph(mode_1, mode_2)
+
     def _formulate_contact_modes(self):
         contact_locations = self.slider.geometry.contact_locations
         if not all([loc.pos == ContactLocation.FACE for loc in contact_locations]):
@@ -52,9 +79,6 @@ class PlanarPushingPlanner:
             NonCollisionMode.create_from_spec(loc, self.specs, self.slider)
             for loc in contact_locations
         ]
-
-        set_1 = self.non_collision_modes[0].get_convex_set()
-        breakpoint()
 
     def _build_graph(self):
         self.contact_vertices = [
@@ -77,6 +101,12 @@ class PlanarPushingPlanner:
 
         # Non collision modes
         # TODO:
+
+    def _build_subgraph(self, mode_1: FaceContactMode, mode_2: FaceContactMode):
+        vertices = [mode.get_convex_set() for mode in self.non_collision_modes]
+        subgraph = NonCollisionSubGraph(vertices, self.non_collision_modes)
+        edges = subgraph.get_edges()
+        breakpoint()
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True

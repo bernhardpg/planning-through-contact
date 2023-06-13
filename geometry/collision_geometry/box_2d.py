@@ -49,7 +49,7 @@ class Box2d(CollisionGeometry):
     def contact_locations(self) -> List[PolytopeContactLocation]:
         locs = [
             PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
-            for idx in range(0, len(self.faces))
+            for idx in range(len(self.faces))
         ]
         return locs
 

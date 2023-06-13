@@ -377,6 +377,11 @@ class NonCollisionMode(AbstractContactMode):
         self._define_constraints()
         self._define_cost()
 
+        # TODO: remove
+        # print(f"Name: {self.name}")
+        # for plane in self.planes:
+        #     print(plane)
+
     def _define_variables(self) -> NonCollisionVariables:
         # Finger location
         p_BF_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_x")
@@ -395,8 +400,7 @@ class NonCollisionMode(AbstractContactMode):
             p_BF = self.variables.p_BFs[:, k]
 
             for plane in self.planes:
-                # TODO: Is there a sign error somewhere? It seems that b has the wrong sign
-                dist_to_face = plane.a.T.dot(p_BF) - plane.b
+                dist_to_face = plane.a.T.dot(p_BF) - plane.b  # a'x >= b
                 self.prog.AddLinearConstraint(ge(dist_to_face, 0))
 
     def _define_cost(self) -> None:
@@ -407,15 +411,36 @@ class NonCollisionMode(AbstractContactMode):
     def get_convex_set(self) -> opt.Spectrahedron:
         # Create a temp program without a quadratic cost that we can use to create a polyhedron
         temp_prog = MathematicalProgram()
+        x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
         for c in self.prog.linear_constraints():
             idxs = self.prog.FindDecisionVariableIndices(c.variables())
-            x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
             vars = x[idxs]
             temp_prog.AddConstraint(c.evaluator(), vars)
 
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
         poly = opt.Spectrahedron(temp_prog)
+
+        # NOTE: They sets will likely be unbounded
+
+        return poly
+
+    def get_convex_set_in_positions(self) -> opt.Spectrahedron:
+        # Construct a small temporary program in R^2 that will allow us to check
+        # for positional intersections between regions
+        NUM_DIMS = 2
+        temp_prog = MathematicalProgram()
+        x = temp_prog.NewContinuousVariables(NUM_DIMS, "x")
+
+        for plane in self.planes:
+            dist_to_face = plane.a.T.dot(x) - plane.b  # a'x >= b
+            temp_prog.AddLinearConstraint(ge(dist_to_face, 0))
+
+        # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
+        # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
+        poly = opt.Spectrahedron(temp_prog)
+
+        # NOTE: They sets will likely be unbounded
         return poly
 
     def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
