@@ -11,7 +11,11 @@ from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
-from geometry.planar.planar_contact_modes import FaceContactMode, PlanarPlanSpecs
+from geometry.planar.planar_contact_modes import (
+    FaceContactMode,
+    NonCollisionMode,
+    PlanarPlanSpecs,
+)
 from geometry.planar.planar_pose import PlanarPose
 from geometry.rigid_body import RigidBody
 from tools.types import NpVariableArray
@@ -44,10 +48,12 @@ class PlanarPushingPlanner:
             for loc in contact_locations
         ]
 
-        planes = [
-            self.slider.geometry.get_planes_for_collision_free_region(loc)
+        self.non_collision_modes = [
+            NonCollisionMode.create_from_spec(loc, self.specs, self.slider)
             for loc in contact_locations
         ]
+
+        set_1 = self.non_collision_modes[0].get_convex_set()
         breakpoint()
 
     def _build_graph(self):

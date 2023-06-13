@@ -6,14 +6,15 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq
-from pydrake.solvers import LinearCost, MathematicalProgram
+from pydrake.math import eq, ge
+from pydrake.solvers import Binding, LinearConstraint, LinearCost, MathematicalProgram
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
 )
+from geometry.polyhedron import PolyhedronFormulator
 from geometry.rigid_body import RigidBody
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
@@ -23,12 +24,19 @@ from tools.utils import forward_differences
 @dataclass
 class PlanarPlanSpecs:
     num_knot_points_contact: int = 4
-    num_knot_points_repositioning: int = 2
+    num_knot_points_non_collision: int = 2
     time_in_contact: float = 2
-    time_repositioning: float = 0.5
+    time_non_collision: float = 0.5
 
 
+@dataclass
 class AbstractContactMode(ABC):
+    name: str
+    num_knot_points: int
+    time_in_mode: float
+    contact_location: PolytopeContactLocation
+    object: RigidBody
+
     @abstractmethod
     def get_convex_set(self) -> opt.ConvexSet:
         pass
@@ -37,11 +45,15 @@ class AbstractContactMode(ABC):
     def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
         pass
 
-    # @abstractmethod
-    # def get_variables_from_vertex(
-    #     self, vertex: opt.GraphOfConvexSets.Vertex
-    # ):  # TODO: returntype
-    #     pass
+    @classmethod
+    @abstractmethod
+    def create_from_spec(
+        cls,
+        contact_location: PolytopeContactLocation,
+        specs: PlanarPlanSpecs,
+        object: RigidBody,
+    ) -> "AbstractContactMode":
+        pass
 
 
 @dataclass
@@ -129,12 +141,6 @@ class FaceContactVariables:
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
-    name: str
-    num_knot_points: int
-    time_in_mode: float
-    contact_location: PolytopeContactLocation
-    object: RigidBody
-
     @classmethod
     def create_from_spec(
         cls,
@@ -321,9 +327,96 @@ class FaceContactMode(AbstractContactMode):
         return x_dot, dynamics  # x_dot, f(x,u)
 
 
-class NonCollisionMode:
+@dataclass
+class NonCollisionVariables:
+    p_BF_xs: NpVariableArray
+    p_BF_ys: NpVariableArray
+    p_WB_x: NpVariableArray
+    p_WB_y: NpVariableArray
+    cos_th: NpVariableArray
+    sin_th: NpVariableArray
+
+    @property
+    def p_BFs(self):
+        return np.hstack(
+            [
+                np.expand_dims(np.array([x, y]), 1)
+                for x, y in zip(self.p_BF_xs, self.p_BF_ys)
+            ]
+        )  # (2, num_knot_points)
+
+    @property
+    def p_WB(self):
+        return np.expand_dims(np.array([self.p_WB_x, self.p_WB_y]), 1)  # (2, 1)
+
+
+@dataclass
+class NonCollisionMode(AbstractContactMode):
     @classmethod
     def create_from_spec(
-        cls, contact_location: PolytopeContactLocation, specs: PlanarPlanSpecs
+        cls,
+        contact_location: PolytopeContactLocation,
+        specs: PlanarPlanSpecs,
+        object: RigidBody,
     ) -> "NonCollisionMode":
-        return cls()  # TODO
+        name = str(contact_location)
+        return cls(
+            name,
+            specs.num_knot_points_non_collision,
+            specs.time_non_collision,
+            contact_location,
+            object,
+        )
+
+    def __post_init__(self) -> None:
+        self.planes = self.object.geometry.get_planes_for_collision_free_region(
+            self.contact_location
+        )
+        self.prog = MathematicalProgram()
+        self.variables = self._define_variables()
+        self._define_constraints()
+        self._define_cost()
+
+    def _define_variables(self) -> NonCollisionVariables:
+        # Finger location
+        p_BF_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_x")
+        p_BF_ys = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_y")
+
+        # We only need one variable for the pose of the object
+        p_WB_x = self.prog.NewContinuousVariables(1, "p_WB_x").item()
+        p_WB_y = self.prog.NewContinuousVariables(1, "p_WB_y").item()
+        cos_th = self.prog.NewContinuousVariables(1, "cos_th").item()
+        sin_th = self.prog.NewContinuousVariables(1, "sin_th").item()
+
+        return NonCollisionVariables(p_BF_xs, p_BF_ys, p_WB_x, p_WB_y, cos_th, sin_th)
+
+    def _define_constraints(self) -> None:
+        for k in range(self.num_knot_points):
+            p_BF = self.variables.p_BFs[:, k]
+
+            for plane in self.planes:
+                # TODO: Is there a sign error somewhere? It seems that b has the wrong sign
+                dist_to_face = plane.a.T.dot(p_BF) - plane.b
+                self.prog.AddLinearConstraint(ge(dist_to_face, 0))
+
+    def _define_cost(self) -> None:
+        position_diffs = self.variables.p_BFs[:, 1:] - self.variables.p_BFs[:, :-1]  # type: ignore
+        squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
+        self.prog.AddCost(squared_eucl_dist)
+
+    def get_convex_set(self) -> opt.Spectrahedron:
+        # Create a temp program without a quadratic cost that we can use to create a polyhedron
+        temp_prog = MathematicalProgram()
+        for c in self.prog.linear_constraints():
+            idxs = self.prog.FindDecisionVariableIndices(c.variables())
+            x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
+            vars = x[idxs]
+            temp_prog.AddConstraint(c.evaluator(), vars)
+
+        # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
+        # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
+        poly = opt.Spectrahedron(temp_prog)
+        return poly
+
+    def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
+        breakpoint()
