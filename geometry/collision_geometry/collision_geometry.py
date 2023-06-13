@@ -19,6 +19,9 @@ class PolytopeContactLocation(NamedTuple):
     pos: ContactLocation
     idx: int
 
+    def __str__(self) -> str:
+        return f"{self.pos.name}_{self.idx}"
+
 
 class CollisionGeometry(ABC):
     """

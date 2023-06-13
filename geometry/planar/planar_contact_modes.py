@@ -7,7 +7,7 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram
+from pydrake.solvers import LinearCost, MathematicalProgram
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.collision_geometry.collision_geometry import (
@@ -36,6 +36,12 @@ class AbstractContactMode(ABC):
     @abstractmethod
     def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
         pass
+
+    # @abstractmethod
+    # def get_variables_from_vertex(
+    #     self, vertex: opt.GraphOfConvexSets.Vertex
+    # ):  # TODO: returntype
+    #     pass
 
 
 @dataclass
@@ -123,6 +129,7 @@ class FaceContactVariables:
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
+    name: str
     num_knot_points: int
     time_in_mode: float
     contact_location: PolytopeContactLocation
@@ -135,7 +142,9 @@ class FaceContactMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
     ) -> "FaceContactMode":
+        name = str(contact_location)
         return cls(
+            name,
             specs.num_knot_points_contact,
             specs.time_in_contact,
             contact_location,
@@ -258,20 +267,25 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddQuadraticCost(sq_angular_vels)
 
     def get_convex_set(self) -> opt.Spectrahedron:
-        import time
-
-        start = time.time()
-        print("Starting to create SDP relaxation...")
-        self.relaxed_prog, self.X, _ = create_sdp_relaxation(self.prog)
-        self.x = self.X[1:, 0]
-        end = time.time()
-        print(
-            f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
-        )
+        self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
         breakpoint()
+
+    def get_cost_terms(self) -> Tuple[List[List[int]], List[LinearCost]]:
+        if self.relaxed_prog is None:
+            raise RuntimeError(
+                "Relaxed program must be constructed before cost can be formulated for vertex."
+            )
+
+        costs = self.relaxed_prog.linear_costs()
+        evaluators = [cost.evaluator() for cost in costs]
+        var_idxs = [
+            self.relaxed_prog.FindDecisionVariableIndices(cost.variables())
+            for cost in costs
+        ]
+        return var_idxs, evaluators
 
     @staticmethod
     def get_midpoint(vals, k: int):

@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from pydrake.solvers import Binding, LinearCost
 
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -30,6 +31,8 @@ class PlanarPushingPlanner:
     def __post_init__(self):
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
+        self._build_graph()
+        self._add_costs()
 
     def _formulate_contact_modes(self):
         contact_locations = self.slider.geometry.get_contact_locations()
@@ -40,16 +43,30 @@ class PlanarPushingPlanner:
             FaceContactMode.create_from_spec(loc, self.specs, self.slider)
             for loc in contact_locations
         ]
-        # set_1 = self.contact_modes[0].get_convex_set()
-        breakpoint()
 
-        collision_free_regions = self.slider.geometry.get_collision_free_regions()
-        if not all([loc.pos == ContactLocation.FACE for loc in collision_free_regions]):
-            raise RuntimeError("Only face contacts are supported for planar pushing.")
+        # collision_free_regions = self.slider.geometry.get_collision_free_regions()
+        # if not all([loc.pos == ContactLocation.FACE for loc in collision_free_regions]):
+        #     raise RuntimeError("Only face contacts are supported for planar pushing.")
+
+    def _build_graph(self):
+        self.contact_vertices = [
+            self.gcs.AddVertex(mode.get_convex_set(), mode.name)
+            for mode in self.contact_modes
+        ]
 
         # TODO:
         # for each pair of contact modes:
         #   create a subgraph of noncollisionmodes connecting the contact modes
+
+    def _add_costs(self):
+        # Contact modes
+        for mode, vertex in zip(self.contact_modes, self.contact_vertices):
+            var_idxs, evaluators = mode.get_cost_terms()
+            vars = vertex.x()[var_idxs]
+            bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
+            for b in bindings:
+                breakpoint()
+                vertex.AddCost(b)
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True
