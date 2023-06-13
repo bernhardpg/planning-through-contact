@@ -58,6 +58,11 @@ class CollisionGeometry(ABC):
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
         pass
 
+    @property
+    @abstractmethod
+    def contact_locations(self) -> List[PolytopeContactLocation]:
+        pass
+
     @abstractmethod
     def get_face_length(self, location: PolytopeContactLocation) -> float:
         pass
@@ -75,11 +80,7 @@ class CollisionGeometry(ABC):
         return vec
 
     @abstractmethod
-    def get_contact_locations(self) -> List[PolytopeContactLocation]:
-        pass
-
-    @abstractmethod
-    def get_collision_free_regions(
-        self,
-    ) -> List[PolytopeContactLocation]:  # TODO: what should the return type be here?
+    def get_planes_for_collision_free_region(
+        self, location: PolytopeContactLocation
+    ) -> List[Hyperplane]:
         pass

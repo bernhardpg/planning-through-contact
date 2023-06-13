@@ -14,9 +14,16 @@ def get_angle_between_planes(plane_A: Hyperplane, plane_B: Hyperplane) -> float:
     return theta
 
 
+# TODO: make this a classmethod of Hyperplane
 def construct_2d_plane_from_points(
     p1: npt.NDArray[np.float64], p2: npt.NDArray[np.float64]
 ) -> Hyperplane:
+    """
+    Constructs a 2D hyperplane from two points.
+
+    With the z-axis defined out of the plane, and the x-axis from p1 to p2, the
+    normal vector for the plane is defined along the y-axis.
+    """
     diff = p2 - p1
     normal_vec = np.array([-diff[1], diff[0]]).reshape((-1, 1))
     a = normal_vec / np.linalg.norm(normal_vec)

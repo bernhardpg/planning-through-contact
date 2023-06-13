@@ -35,7 +35,7 @@ class PlanarPushingPlanner:
         self._add_costs()
 
     def _formulate_contact_modes(self):
-        contact_locations = self.slider.geometry.get_contact_locations()
+        contact_locations = self.slider.geometry.contact_locations
         if not all([loc.pos == ContactLocation.FACE for loc in contact_locations]):
             raise RuntimeError("Only face contacts are supported for planar pushing.")
 
@@ -44,9 +44,11 @@ class PlanarPushingPlanner:
             for loc in contact_locations
         ]
 
-        # collision_free_regions = self.slider.geometry.get_collision_free_regions()
-        # if not all([loc.pos == ContactLocation.FACE for loc in collision_free_regions]):
-        #     raise RuntimeError("Only face contacts are supported for planar pushing.")
+        planes = [
+            self.slider.geometry.get_planes_for_collision_free_region(loc)
+            for loc in contact_locations
+        ]
+        breakpoint()
 
     def _build_graph(self):
         self.contact_vertices = [
@@ -65,8 +67,10 @@ class PlanarPushingPlanner:
             vars = vertex.x()[var_idxs]
             bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
             for b in bindings:
-                breakpoint()
                 vertex.AddCost(b)
+
+        # Non collision modes
+        # TODO:
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True

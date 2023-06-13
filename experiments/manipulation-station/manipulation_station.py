@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
@@ -19,6 +21,7 @@ def planar_pushing_station():
     specs = PlanarPlanSpecs()
 
     planner = PlanarPushingPlanner(box, specs)
+    planner.save_graph_diagram(Path("graph.svg"))
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
 

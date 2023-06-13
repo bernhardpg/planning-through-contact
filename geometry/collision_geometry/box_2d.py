@@ -46,6 +46,18 @@ class Box2d(CollisionGeometry):
             )
 
     @property
+    def contact_locations(self) -> List[PolytopeContactLocation]:
+        locs = [
+            PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
+            for idx in range(0, len(self.faces))
+        ]
+        return locs
+
+    @property
+    def _com(self) -> npt.NDArray[np.float64]:
+        return np.zeros((2, 1))
+
+    @property
     def _v0(self) -> npt.NDArray[np.float64]:
         return np.array([[-self.width / 2], [self.height / 2]])
 
@@ -311,14 +323,28 @@ class Box2d(CollisionGeometry):
         else:
             raise ValueError(f"Can not get length for face {location.idx} for a box")
 
-    def get_contact_locations(self) -> List[PolytopeContactLocation]:
-        locs = [
-            PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
-            for idx in range(0, len(self.faces))
-        ]
-        return locs
+    def get_planes_for_collision_free_region(
+        self, location: PolytopeContactLocation
+    ) -> List[Hyperplane]:
+        if not location.pos == ContactLocation.FACE:
+            raise ValueError("Can only get collision free region for a face")
 
-    def get_collision_free_regions(
-        self,
-    ) -> List[PolytopeContactLocation]:  # TODO: what should the return type be here?
-        breakpoint()
+        planes = [
+            self.faces[location.idx]
+        ]  # we always want the hyperplane for the current face
+        if location.idx == 0:
+            planes.append(construct_2d_plane_from_points(self._v0, self._com))
+            planes.append(construct_2d_plane_from_points(self._com, self._v1))
+        elif location.idx == 1:
+            planes.append(construct_2d_plane_from_points(self._v1, self._com))
+            planes.append(construct_2d_plane_from_points(self._com, self._v2))
+        elif location.idx == 2:
+            planes.append(construct_2d_plane_from_points(self._v2, self._com))
+            planes.append(construct_2d_plane_from_points(self._com, self._v3))
+        elif location.idx == 3:
+            planes.append(construct_2d_plane_from_points(self._v3, self._com))
+            planes.append(construct_2d_plane_from_points(self._com, self._v0))
+        else:
+            raise ValueError(f"Can not get collision free region for {location}")
+
+        return planes
