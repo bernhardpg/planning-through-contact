@@ -1,29 +1,38 @@
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.solvers import Binding, CommonSolverOption, LinearCost, MathematicalProgramResult, QuadraticCost, SolverOptions
+from pydrake.math import eq
+from pydrake.solvers import (
+    Binding,
+    CommonSolverOption,
+    LinearCost,
+    MathematicalProgramResult,
+    QuadraticCost,
+    SolverOptions,
+)
 
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
 from geometry.planar.planar_contact_modes import (
+    AbstractContactMode,
     FaceContactMode,
     NonCollisionMode,
     PlanarPlanSpecs,
 )
 from geometry.planar.planar_pose import PlanarPose
 from geometry.rigid_body import RigidBody
-from tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
+BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 
 @dataclass
@@ -31,8 +40,8 @@ class NonCollisionSubGraph:
     sets: List[opt.ConvexSet]
     modes: List[NonCollisionMode]
     vertices: List[GcsVertex]
-    edges: List[GcsEdge]
-    graph_connections: List[GcsEdge]
+    edges: Dict[Tuple[int, int], BidirGcsEdge]
+    graph_connections: Dict[int, BidirGcsEdge]
 
     @classmethod
     def from_modes(
@@ -57,12 +66,15 @@ class NonCollisionSubGraph:
 
         edge_idxs = cls._get_edge_idxs(modes)
         # Add bi-directional edges
-        edges = [gcs.AddEdge(vertices[i], vertices[j]) for i, j in edge_idxs]
-        edges.extend([gcs.AddEdge(vertices[j], vertices[i]) for i, j in edge_idxs])
+        edges = {
+            (i, j): (
+                gcs.AddEdge(vertices[i], vertices[j]),
+                gcs.AddEdge(vertices[j], vertices[i]),
+            )
+            for i, j in edge_idxs
+        }
 
-        no_graph_connections = []
-
-        return cls(sets, modes, vertices, edges, no_graph_connections)
+        return cls(sets, modes, vertices, edges, {})
 
     @staticmethod
     def _get_edge_idxs(modes: List[NonCollisionMode]) -> List[Tuple[int, int]]:
@@ -79,6 +91,29 @@ class NonCollisionSubGraph:
         ]
         return edge_idxs
 
+    def __post_init__(self) -> None:
+        for (i, j), (first_edge, second_edge) in self.edges.items():
+            # Bi-directional edges
+            self._add_continuity_constraints(i, j, first_edge)
+            self._add_continuity_constraints(j, i, second_edge)
+
+    def _add_continuity_constraints(
+        self, outgoing_idx: int, incoming_idx: int, edge: GcsEdge
+    ):
+        first_vars = self.modes[incoming_idx].get_continuity_vars("first").vector
+        last_vars = self.modes[outgoing_idx].get_continuity_vars("last").vector
+
+        first_var_idxs = self.modes[incoming_idx].prog.FindDecisionVariableIndices(
+            first_vars
+        )
+        last_var_idxs = self.modes[outgoing_idx].prog.FindDecisionVariableIndices(
+            last_vars
+        )
+
+        constraint = eq(edge.xu()[first_var_idxs], edge.xv()[last_var_idxs])
+        for c in constraint:
+            edge.AddConstraint(c)
+
     def add_connection_to_full_graph(
         self,
         gcs: opt.GraphOfConvexSets,
@@ -89,11 +124,9 @@ class NonCollisionSubGraph:
         Adds a bi-directional edge between the provided connection vertex and the subgraph vertex with index connection_idx in this subgraph.
         """
 
-        self.graph_connections.append(
-            gcs.AddEdge(connection_vertex, self.vertices[connection_idx])
-        )
-        self.graph_connections.append(
-            gcs.AddEdge(self.vertices[connection_idx], connection_vertex)
+        self.graph_connections[connection_idx] = (
+            gcs.AddEdge(connection_vertex, self.vertices[connection_idx]),
+            gcs.AddEdge(self.vertices[connection_idx], connection_vertex),
         )
 
 
@@ -113,6 +146,7 @@ class PlanarPushingPlanner:
         self._formulate_contact_modes()
         self._build_graph()
         self._add_costs()
+        # self._add_continuity_constraints()
 
     @property
     def num_contact_modes(self) -> int:
@@ -160,7 +194,6 @@ class PlanarPushingPlanner:
                 vars = vertex.x()[var_idxs]
                 binding = Binding[QuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
-            
 
     def _build_subgraph(self, mode_i: int, mode_j: int) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.from_modes(
@@ -173,6 +206,35 @@ class PlanarPushingPlanner:
             self.gcs, self.contact_vertices[mode_j], mode_j
         )
         return subgraph
+
+    def _add_continuity_constraints(self) -> None:
+        for subgraph in self.subgraphs:
+            # connection between contact modes and subgraph
+            for contact_mode_idx, edges in subgraph.graph_connections.items():
+                self._add_continuity_constraint(
+                    self.contact_modes[contact_mode_idx],
+                    subgraph.modes[contact_mode_idx],
+                    edges,
+                )
+
+    # @staticmethod
+    # def _add_continuity_constraint(
+    #     mode_i: AbstractContactMode,
+    #     mode_j: AbstractContactMode,
+    #     edges: List[GcsEdge] | BidirGcsEdge,
+    # ) -> None:
+    # first_vars = mode_i.get_first_continuity_vars()
+    # last_vars = mode_j.get_last_continuity_vars()
+    # first_vars.get_variables()
+    #
+    # constraint = eq(first_vars.vector, last_vars.vector)
+    # for c in constraint:
+    #     breakpoint()
+    #
+    # for edge in edges:
+    #     for c in cont_constraint:
+    #         edge.AddConstraint(c)
+    # breakpoint()
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True
@@ -204,13 +266,15 @@ class PlanarPushingPlanner:
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.solver_options = SolverOptions()
-        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1) # type: ignore
-        
+        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 1
-            
-        result = self.gcs.SolveShortestPath(self.source_vertex, self.target_vertex, options)
+
+        result = self.gcs.SolveShortestPath(
+            self.source_vertex, self.target_vertex, options
+        )
         return result
 
     def save_graph_diagram(self, filepath: Path) -> None:

@@ -1,13 +1,19 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge
-from pydrake.solvers import Binding, LinearConstraint, LinearCost, MathematicalProgram, QuadraticCost
+from pydrake.solvers import (
+    Binding,
+    LinearConstraint,
+    LinearCost,
+    MathematicalProgram,
+    QuadraticCost,
+)
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.collision_geometry.collision_geometry import (
@@ -19,6 +25,34 @@ from geometry.rigid_body import RigidBody
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import forward_differences
+
+
+@dataclass
+class ContinuityVariables:
+    """
+    A collection of the variables that continuity is enforced over
+    """
+
+    p_BF: NpVariableArray | NpExpressionArray
+    p_WB: NpVariableArray
+    cos_th: sym.Variable
+    sin_th: sym.Variable
+
+    @property
+    def vector(self) -> NpVariableArray | NpExpressionArray:
+        return np.concatenate(
+            (self.p_BF.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
+        )
+
+    def get_variables(self) -> NpVariableArray:
+        # NOTE: Very specific way of picking out the variables
+        # TODO: clean up this
+        if isinstance(self.p_BF[0, 0], sym.Expression):
+            lam = list(self.p_BF[0, 0].GetVariables())[0]
+            vars = np.concatenate(([lam], self.vector[2:]))
+            return vars
+        else:
+            return self.vector
 
 
 @dataclass
@@ -42,7 +76,9 @@ class AbstractContactMode(ABC):
         pass
 
     @abstractmethod
-    def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
+    def get_continuity_vars(
+        self, first_or_last: Literal["first", "last"]
+    ) -> ContinuityVariables:
         pass
 
     @classmethod
@@ -276,8 +312,23 @@ class FaceContactMode(AbstractContactMode):
         self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
-    def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
-        breakpoint()
+    def get_continuity_vars(
+        self, first_or_last: Literal["first", "last"]
+    ) -> ContinuityVariables:
+        if first_or_last == "first":
+            return ContinuityVariables(
+                self.variables.p_c_Bs[0],
+                self.variables.p_WBs[0],
+                self.variables.cos_ths[0],
+                self.variables.sin_ths[0],
+            )
+        else:
+            return ContinuityVariables(
+                self.variables.p_c_Bs[-1],
+                self.variables.p_WBs[-1],
+                self.variables.cos_ths[-1],
+                self.variables.sin_ths[-1],
+            )
 
     def get_cost_terms(self) -> Tuple[List[List[int]], List[LinearCost]]:
         if self.relaxed_prog is None:
@@ -333,8 +384,8 @@ class NonCollisionVariables:
     p_BF_ys: NpVariableArray
     p_WB_x: NpVariableArray
     p_WB_y: NpVariableArray
-    cos_th: NpVariableArray
-    sin_th: NpVariableArray
+    cos_th: sym.Variable
+    sin_th: sym.Variable
 
     @property
     def p_BFs(self):
@@ -443,10 +494,25 @@ class NonCollisionMode(AbstractContactMode):
         # NOTE: They sets will likely be unbounded
         return poly
 
-    def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
-        breakpoint()
-        
+    def get_continuity_vars(
+        self, first_or_last: Literal["first", "last"]
+    ) -> ContinuityVariables:
+        if first_or_last == "first":
+            return ContinuityVariables(
+                self.variables.p_BFs[:, 0],
+                self.variables.p_WB,
+                self.variables.cos_th,
+                self.variables.sin_th,
+            )
+        else:
+            return ContinuityVariables(
+                self.variables.p_BFs[:, -1],
+                self.variables.p_WB,
+                self.variables.cos_th,
+                self.variables.sin_th,
+            )
+
     def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        cost = self.prog.quadratic_costs()[0] # only one cost term
+        cost = self.prog.quadratic_costs()[0]  # only one cost term
         var_idxs = self.prog.FindDecisionVariableIndices(cost.variables())
         return var_idxs, cost.evaluator()
