@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.solvers import Binding, LinearCost, MathematicalProgramResult
+from pydrake.solvers import Binding, CommonSolverOption, LinearCost, MathematicalProgramResult, SolverOptions
 
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -192,7 +192,16 @@ class PlanarPushingPlanner:
         # TODO: Cartesian product between slider and pusher target pose
 
     def solve(self) -> MathematicalProgramResult:
-        result = self.gcs.SolveShortestPath(self.source_vertex, self.target_vertex)
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = True
+        options.solver_options = SolverOptions()
+        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1) # type: ignore
+        
+        if options.convex_relaxation is True:
+            options.preprocessing = True  # TODO Do I need to deal with this?
+            options.max_rounded_paths = 1
+            
+        result = self.gcs.SolveShortestPath(self.source_vertex, self.target_vertex, options)
         return result
 
     def save_graph_diagram(self, filepath: Path) -> None:
