@@ -1,7 +1,5 @@
+import time
 from pathlib import Path
-
-import numpy as np
-from pydrake.solvers import Solve
 
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
@@ -26,8 +24,13 @@ def planar_pushing_station():
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
     planner.save_graph_diagram(Path("graph.svg"))
-    breakpoint()
+
+    start = time.time()
     result = planner.solve()
+    end = time.time()
+    elapsed_time = end - start
+    print(f"Total elapsed time: {elapsed_time}")
+
     assert result.is_success()
 
     # sim.set_box_planar_pose(box_initial_pose)

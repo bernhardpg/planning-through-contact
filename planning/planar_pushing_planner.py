@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal, Tuple
 
-import numpy as np
-import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq
@@ -17,12 +15,8 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
-from geometry.collision_geometry.collision_geometry import (
-    ContactLocation,
-    PolytopeContactLocation,
-)
+from geometry.collision_geometry.collision_geometry import ContactLocation
 from geometry.planar.planar_contact_modes import (
-    AbstractContactMode,
     FaceContactMode,
     NonCollisionMode,
     PlanarPlanSpecs,
@@ -146,7 +140,7 @@ class PlanarPushingPlanner:
         self._formulate_contact_modes()
         self._build_graph()
         self._add_costs()
-        # self._add_continuity_constraints()
+        self._add_continuity_constraints_for_transitions()
 
     @property
     def num_contact_modes(self) -> int:
@@ -207,34 +201,81 @@ class PlanarPushingPlanner:
         )
         return subgraph
 
-    def _add_continuity_constraints(self) -> None:
+    def _add_continuity_constraints_for_transitions(self) -> None:
         for subgraph in self.subgraphs:
-            # connection between contact modes and subgraph
-            for contact_mode_idx, edges in subgraph.graph_connections.items():
-                self._add_continuity_constraint(
-                    self.contact_modes[contact_mode_idx],
-                    subgraph.modes[contact_mode_idx],
-                    edges,
+            for mode_idx, (
+                first_edge,
+                second_edge,
+            ) in subgraph.graph_connections.items():
+                # bi-directional edges
+                self._add_cont_const_btwn_contact_and_non_collision(
+                    self.contact_modes[mode_idx],
+                    subgraph.modes[mode_idx],
+                    first_edge,  # from contact mode to non-collision
+                    "outgoing",
+                )
+                self._add_cont_const_btwn_contact_and_non_collision(
+                    self.contact_modes[mode_idx],
+                    subgraph.modes[mode_idx],
+                    second_edge,  # from non-collision to contact mode
+                    "incoming",
                 )
 
-    # @staticmethod
-    # def _add_continuity_constraint(
-    #     mode_i: AbstractContactMode,
-    #     mode_j: AbstractContactMode,
-    #     edges: List[GcsEdge] | BidirGcsEdge,
-    # ) -> None:
-    # first_vars = mode_i.get_first_continuity_vars()
-    # last_vars = mode_j.get_last_continuity_vars()
-    # first_vars.get_variables()
-    #
-    # constraint = eq(first_vars.vector, last_vars.vector)
-    # for c in constraint:
-    #     breakpoint()
-    #
-    # for edge in edges:
-    #     for c in cont_constraint:
-    #         edge.AddConstraint(c)
-    # breakpoint()
+    @staticmethod
+    def _add_cont_const_btwn_contact_and_non_collision(
+        contact_mode: FaceContactMode,
+        non_collision_mode: NonCollisionMode,
+        edge: GcsEdge,
+        incoming_or_outgoing: Literal["incoming", "outgoing"],
+    ):
+        """
+        @param incoming_or_outgoing: Whether the edge is from a contact mode to a non_collision mode, or the other way around:
+            "outgoing": contact_mode -> non_collision_mode
+            "incoming": contact_mode <- non_collision_mode
+        """
+        if incoming_or_outgoing == "incoming":
+            non_collision_vars_last = non_collision_mode.get_continuity_vars(
+                "last"
+            ).vector
+            last_var_idxs = non_collision_mode.prog.FindDecisionVariableIndices(
+                non_collision_vars_last
+            )
+            lhs = edge.xu()[last_var_idxs]
+
+            contact_vars_first = contact_mode.get_continuity_vars("first")
+            A, b = sym.DecomposeAffineExpressions(
+                contact_vars_first.vector, contact_vars_first.get_pure_variables()
+            )
+
+            first_var_idxs = contact_mode.prog.FindDecisionVariableIndices(
+                contact_vars_first.get_pure_variables()
+            )
+
+            rhs = A.dot(edge.xv()[first_var_idxs]) + b
+
+        else:
+            contact_vars_last = contact_mode.get_continuity_vars("last")
+            A, b = sym.DecomposeAffineExpressions(
+                contact_vars_last.vector, contact_vars_last.get_pure_variables()
+            )
+
+            last_var_idxs = contact_mode.prog.FindDecisionVariableIndices(
+                contact_vars_last.get_pure_variables()
+            )
+
+            lhs = A.dot(edge.xu()[last_var_idxs]) + b
+
+            non_collision_vars_first = non_collision_mode.get_continuity_vars(
+                "first"
+            ).vector
+            first_var_idxs = non_collision_mode.prog.FindDecisionVariableIndices(
+                non_collision_vars_first
+            )
+            rhs = edge.xv()[first_var_idxs]
+
+        constraint = eq(lhs, rhs)
+        for c in constraint:
+            edge.AddConstraint(c)
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True

@@ -44,15 +44,20 @@ class ContinuityVariables:
             (self.p_BF.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
         )
 
-    def get_variables(self) -> NpVariableArray:
+    def get_pure_variables(self) -> NpVariableArray:
+        """
+        Function that returns a vector with only the symbolic variables (as opposed to having some be symbolic Expressions)
+        """
+        if not isinstance(self.p_BF[0, 0], sym.Expression):
+            raise RuntimeError(
+                "This function should only be called on instances that comes from FaceContactMode"
+            )
+
         # NOTE: Very specific way of picking out the variables
         # TODO: clean up this
-        if isinstance(self.p_BF[0, 0], sym.Expression):
-            lam = list(self.p_BF[0, 0].GetVariables())[0]
-            vars = np.concatenate(([lam], self.vector[2:]))
-            return vars
-        else:
-            return self.vector
+        lam = list(self.p_BF[0, 0].GetVariables())[0]
+        vars = np.concatenate(([lam], self.vector[2:]))
+        return vars
 
 
 @dataclass
