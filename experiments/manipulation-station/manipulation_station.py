@@ -32,6 +32,10 @@ def planar_pushing_station():
     print(f"Total elapsed time: {elapsed_time}")
 
     assert result.is_success()
+    path = planner.get_path(result)
+
+    vertex_names_on_path = [v.name() for v in path if v.name()]
+    print(vertex_names_on_path)
 
     # sim.set_box_planar_pose(box_initial_pose)
 

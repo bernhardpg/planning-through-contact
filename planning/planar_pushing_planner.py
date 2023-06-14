@@ -124,6 +124,20 @@ class NonCollisionSubGraph:
         )
 
 
+def _find_path_to_target(
+    edges: List[opt.GraphOfConvexSets.Edge],
+    target: opt.GraphOfConvexSets.Vertex,
+    u: opt.GraphOfConvexSets.Vertex,
+) -> List[opt.GraphOfConvexSets.Vertex]:
+    current_edge = next(e for e in edges if e.u() == u)
+    v = current_edge.v()
+    target_reached = v == target
+    if target_reached:
+        return [u] + [v]
+    else:
+        return [u] + _find_path_to_target(edges, target, v)
+
+
 @dataclass
 class PlanarPushingPlanner:
     """
@@ -288,20 +302,46 @@ class PlanarPushingPlanner:
         ...
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
-        point = opt.Point(pose.vector())
+        point = opt.Point(pose.full_vector())
         self.source_vertex = self.gcs.AddVertex(point, name="source")
         self.source_edges = [
             self.gcs.AddEdge(self.source_vertex, v) for v in self.contact_vertices
         ]
+        self._add_continuity_constraint_with_source()
         # TODO: Cartesian product between slider and pusher initial pose
 
+    def _add_continuity_constraint_with_source(self) -> None:
+        for edge, mode in zip(self.source_edges, self.contact_modes):
+            source_vars = edge.xu()
+
+            # TODO: also incorporate continuity constraints on the finger
+            first_vars = mode.get_continuity_vars("first").vector[2:]
+            first_var_idxs = mode.prog.FindDecisionVariableIndices(first_vars)
+
+            constraint = eq(source_vars, edge.xv()[first_var_idxs])
+            for c in constraint:
+                edge.AddConstraint(c)
+
     def set_slider_target_pose(self, pose: PlanarPose) -> None:
-        point = opt.Point(pose.vector())
+        point = opt.Point(pose.full_vector())
         self.target_vertex = self.gcs.AddVertex(point, name="target")
         self.target_edges = [
             self.gcs.AddEdge(v, self.target_vertex) for v in self.contact_vertices
         ]
+        self._add_continuity_constraint_with_target()
         # TODO: Cartesian product between slider and pusher target pose
+
+    def _add_continuity_constraint_with_target(self) -> None:
+        for edge, mode in zip(self.target_edges, self.contact_modes):
+            target_vars = edge.xv()
+
+            # TODO: also incorporate continuity constraints on the finger
+            last_vars = mode.get_continuity_vars("last").vector[2:]
+            last_var_idxs = mode.prog.FindDecisionVariableIndices(last_vars)
+
+            constraint = eq(edge.xu()[last_var_idxs], target_vars)
+            for c in constraint:
+                edge.AddConstraint(c)
 
     def solve(self) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
@@ -317,6 +357,21 @@ class PlanarPushingPlanner:
             self.source_vertex, self.target_vertex, options
         )
         return result
+
+    def get_path(
+        self, result: MathematicalProgramResult, flow_treshold: float = 0.55
+    ) -> List[GcsVertex]:
+        flow_variables = [e.phi() for e in self.gcs.Edges()]
+        flow_results = [result.GetSolution(p) for p in flow_variables]
+        active_edges = [
+            edge
+            for edge, flow in zip(self.gcs.Edges(), flow_results)
+            if flow >= flow_treshold
+        ]
+        full_path = _find_path_to_target(
+            active_edges, self.target_vertex, self.source_vertex
+        )
+        return full_path
 
     def save_graph_diagram(self, filepath: Path) -> None:
         graphviz = self.gcs.GetGraphvizString()

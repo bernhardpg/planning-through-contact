@@ -67,3 +67,9 @@ class PlanarPose:
 
     def vector(self) -> npt.NDArray[np.float64]:
         return np.array([self.x, self.y, self.theta])
+
+    def full_vector(self) -> npt.NDArray[np.float64]:
+        """
+        Returns a vector where theta is represented by two variables, cos(theta) and sin(theta).
+        """
+        return np.array([self.x, self.y, np.cos(self.theta), np.sin(self.theta)])
