@@ -6,9 +6,9 @@ from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
-import pydrake.symbolic as sym
 
 from geometry.bezier import BezierCurve
+from geometry.collision_geometry.collision_geometry import CollisionGeometry
 from geometry.two_d.rigid_body_2d import RigidBody2d
 from visualize.colors import COLORS, RGB
 
@@ -67,7 +67,8 @@ class VisualizationPolygon2d(VisualizationPoint2d):
         cls,
         com_position: npt.NDArray[np.float64],  # (num_steps, n)
         rotation: npt.NDArray[np.float64],  # (num_steps, n ** 2)
-        polytope: RigidBody2d,
+        polytope: RigidBody2d
+        | CollisionGeometry,  # TODO: RigidBody2d will be deprecated!
         color: RGB,
     ) -> "VisualizationPolygon2d":
         # Transform points into world frame
@@ -175,8 +176,8 @@ class VisualizationCone2d(VisualizationPolygon2d):
 
 
 class Visualizer2d:
-    WINDOW_WIDTH = 600
-    WINDOW_HEIGHT = 450
+    WINDOW_WIDTH = 1200
+    WINDOW_HEIGHT = 900
     PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT * 7 / 8]).reshape((-1, 1))
     PLOT_SCALE = 500
     FORCE_SCALE = 0.02

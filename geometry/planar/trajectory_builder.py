@@ -3,7 +3,6 @@ from typing import List
 
 import numpy as np
 import numpy.typing as npt
-from pydrake.solvers import MathematicalProgramResult
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from geometry.planar.planar_contact_modes import (
@@ -11,15 +10,19 @@ from geometry.planar.planar_contact_modes import (
     NonCollisionVariables,
 )
 from geometry.utilities import from_so2_to_so3
-from planning.planar_pushing_planner import VertexModePair
 
 
 @dataclass
 class PlanarTrajectory:
+    dt: float
     R_WB: List[npt.NDArray[np.float64]]  # [(2,2) x traj_length]
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
     p_c_W: npt.NDArray[np.float64]  # (2, traj_length)
     f_c_W: npt.NDArray[np.float64]  # (2, traj_length)
+
+    @property
+    def N(self) -> int:
+        return self.p_WB.shape[1]
 
 
 class PlanarTrajectoryBuilder:
@@ -29,6 +32,7 @@ class PlanarTrajectoryBuilder:
     def get_trajectory(
         self, dt: float = 0.01, interpolate: bool = True
     ) -> PlanarTrajectory:
+        # TODO: make an option to not interpolate
         R_WB = sum(
             [
                 self.interpolate_so2_using_slerp(p.R_WBs, 0, p.time_in_mode, dt)
@@ -51,7 +55,7 @@ class PlanarTrajectoryBuilder:
                 for p in self.path
             ]
         )
-        return PlanarTrajectory(R_WB, p_WB, p_c_W, f_c_W)
+        return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W)
 
     def _get_traj_by_interpolation(
         self,

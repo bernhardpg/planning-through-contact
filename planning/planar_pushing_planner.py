@@ -367,11 +367,12 @@ class PlanarPushingPlanner:
             for c in constraint:
                 edge.AddConstraint(c)
 
-    def solve(self) -> MathematicalProgramResult:
+    def solve(self, print_output: bool = False) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = True
-        options.solver_options = SolverOptions()
-        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        if print_output:
+            options.solver_options = SolverOptions()
+            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?

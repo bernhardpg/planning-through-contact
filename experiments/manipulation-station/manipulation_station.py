@@ -7,6 +7,7 @@ from simulation.planar_pushing.planar_pushing_iiwa import (
     PlanarPose,
     PlanarPushingSimulation,
 )
+from visualize.planar import visualize_planar_pushing_trajectory
 
 
 def planar_pushing_station():
@@ -35,6 +36,7 @@ def planar_pushing_station():
     assert result.is_success()
     path = planner.get_path(result)
     traj = PlanarTrajectoryBuilder(path).get_trajectory()
+    visualize_planar_pushing_trajectory(traj, box.geometry)
 
     # sim.set_box_planar_pose(box_initial_pose)
 
