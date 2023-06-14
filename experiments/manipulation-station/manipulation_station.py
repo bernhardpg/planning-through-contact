@@ -1,6 +1,7 @@
 import time
 from pathlib import Path
 
+from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
     PlanarPose,
@@ -33,9 +34,8 @@ def planar_pushing_station():
 
     assert result.is_success()
     path = planner.get_path(result)
-
-    vertex_names_on_path = [v.name() for v in path if v.name()]
-    print(vertex_names_on_path)
+    breakpoint()
+    traj_builder = PlanarTrajectoryBuilder(path)
 
     # sim.set_box_planar_pose(box_initial_pose)
 

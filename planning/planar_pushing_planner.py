@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, NamedTuple, Tuple
 
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
@@ -17,8 +17,11 @@ from pydrake.solvers import (
 
 from geometry.collision_geometry.collision_geometry import ContactLocation
 from geometry.planar.planar_contact_modes import (
+    AbstractModeVariables,
     FaceContactMode,
+    FaceContactVariables,
     NonCollisionMode,
+    NonCollisionVariables,
     PlanarPlanSpecs,
 )
 from geometry.planar.planar_pose import PlanarPose
@@ -27,6 +30,11 @@ from geometry.rigid_body import RigidBody
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
+
+
+class VertexModePair(NamedTuple):
+    vertex: GcsVertex
+    mode: FaceContactMode | NonCollisionMode
 
 
 @dataclass
@@ -123,6 +131,12 @@ class NonCollisionSubGraph:
             gcs.AddEdge(self.vertices[connection_idx], connection_vertex),
         )
 
+    def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
+        return {
+            v.name(): VertexModePair(vertex=v, mode=m)
+            for v, m in zip(self.vertices, self.modes)
+        }
+
 
 def _find_path_to_target(
     edges: List[opt.GraphOfConvexSets.Edge],
@@ -138,7 +152,6 @@ def _find_path_to_target(
         return [u] + _find_path_to_target(edges, target, v)
 
 
-@dataclass
 class PlanarPushingPlanner:
     """
     A planner that generates motion plans for pushing an object (the "slider") with a point finger (the "pusher").
@@ -146,15 +159,16 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
-    slider: RigidBody
-    specs: PlanarPlanSpecs
+    def __init__(self, slider: RigidBody, specs: PlanarPlanSpecs):
+        self.slider = slider
+        self.specs = specs
 
-    def __post_init__(self):
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
         self._build_graph()
         self._add_costs()
         self._add_continuity_constraints_for_transitions()
+        self._collect_all_vertex_mode_pairs()
 
     @property
     def num_contact_modes(self) -> int:
@@ -291,6 +305,16 @@ class PlanarPushingPlanner:
         for c in constraint:
             edge.AddConstraint(c)
 
+    def _collect_all_vertex_mode_pairs(self) -> None:
+        all_pairs = {
+            v.name(): VertexModePair(vertex=v, mode=m)
+            for v, m in zip(self.contact_vertices, self.contact_modes)
+        }
+        for subgraph in self.subgraphs:
+            all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+
+        self.all_pairs = all_pairs
+
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True
     ) -> None:
@@ -360,7 +384,7 @@ class PlanarPushingPlanner:
 
     def get_path(
         self, result: MathematicalProgramResult, flow_treshold: float = 0.55
-    ) -> List[GcsVertex]:
+    ) -> List[FaceContactVariables | NonCollisionVariables]:
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [result.GetSolution(p) for p in flow_variables]
         active_edges = [
@@ -368,9 +392,19 @@ class PlanarPushingPlanner:
             for edge, flow in zip(self.gcs.Edges(), flow_results)
             if flow >= flow_treshold
         ]
-        full_path = _find_path_to_target(
+        vertex_path = _find_path_to_target(
             active_edges, self.target_vertex, self.source_vertex
         )
+        pairs_on_path = [
+            self.all_pairs[v.name()]
+            for v in vertex_path
+            if v.name() not in ["source", "target"]
+        ]
+        full_path = [
+            pair.mode.get_variable_solutions(pair.vertex, result)
+            for pair in pairs_on_path
+        ]
+
         return full_path
 
     def save_graph_diagram(self, filepath: Path) -> None:

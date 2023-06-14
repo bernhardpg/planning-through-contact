@@ -12,6 +12,7 @@ from pydrake.solvers import (
     LinearConstraint,
     LinearCost,
     MathematicalProgram,
+    MathematicalProgramResult,
     QuadraticCost,
 )
 
@@ -26,7 +27,48 @@ from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpVariableArray
 from tools.utils import forward_differences
 
+GcsVertex = opt.GraphOfConvexSets.Vertex
+GcsEdge = opt.GraphOfConvexSets.Edge
 
+
+@dataclass
+class AbstractModeVariables(ABC):
+    num_knot_points: int
+    time_in_mode: float
+    dt: float
+
+    @property
+    @abstractmethod
+    def R_WBs(self):
+        pass
+
+    @property
+    @abstractmethod
+    def p_WBs(self):
+        pass
+
+    @property
+    @abstractmethod
+    def v_WBs(self):
+        pass
+
+    @property
+    @abstractmethod
+    def omega_WBs(self):
+        pass
+
+    @property
+    @abstractmethod
+    def p_c_Ws(self):
+        pass
+
+    @property
+    @abstractmethod
+    def f_c_Ws(self):
+        pass
+
+
+# TODO: perhaps this class can be unified with the other classes?
 @dataclass
 class ContinuityVariables:
     """
@@ -86,6 +128,12 @@ class AbstractContactMode(ABC):
     ) -> ContinuityVariables:
         pass
 
+    @abstractmethod
+    def get_variable_solutions(
+        self, vertex: GcsVertex, result: MathematicalProgramResult
+    ) -> AbstractModeVariables:
+        pass
+
     @classmethod
     @abstractmethod
     def create_from_spec(
@@ -98,17 +146,14 @@ class AbstractContactMode(ABC):
 
 
 @dataclass
-class FaceContactVariables:
-    lams: NpVariableArray  # (num_knot_points, )
-    normal_forces: NpVariableArray  # (num_knot_points, )
-    friction_forces: NpVariableArray  # (num_knot_points, )
-    cos_ths: NpVariableArray  # (num_knot_points, )
-    sin_ths: NpVariableArray  # (num_knot_points, )
-    p_WB_xs: NpVariableArray  # (num_knot_points, )
-    p_WB_ys: NpVariableArray  # (num_knot_points, )
-
-    time_in_mode: float
-    dt: float
+class FaceContactVariables(AbstractModeVariables):
+    lams: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    normal_forces: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    friction_forces: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    cos_ths: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    sin_ths: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    p_WB_xs: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    p_WB_ys: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
 
     pv1: npt.NDArray[np.float64]
     pv2: npt.NDArray[np.float64]
@@ -169,14 +214,14 @@ class FaceContactVariables:
         return oms
 
     @property
-    def p_c_Ws(self) -> List[npt.NDArray[np.float64]]:
+    def p_c_Ws(self):
         return [
             p_WB + R_WB.dot(p_c_B)
             for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_c_Bs)
         ]
 
     @property
-    def f_c_Ws(self) -> List[npt.NDArray[np.float64]]:
+    def f_c_Ws(self):
         return [R_WB.dot(f_c_B) for f_c_B, R_WB in zip(self.f_c_Bs, self.R_WBs)]
 
 
@@ -199,6 +244,8 @@ class FaceContactMode(AbstractContactMode):
         )
 
     def __post_init__(self) -> None:
+        self.dt = self.time_in_mode / self.num_knot_points
+
         self.prog = MathematicalProgram()
         self.variables = self._define_variables()
         self._define_constraints()
@@ -231,9 +278,10 @@ class FaceContactMode(AbstractContactMode):
         p_WB_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_WB_x")
         p_WB_ys = self.prog.NewContinuousVariables(self.num_knot_points, "p_WB_y")
 
-        dt = self.time_in_mode / self.num_knot_points
-
         return FaceContactVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
             lams,
             normal_forces,
             friction_forces,
@@ -241,8 +289,6 @@ class FaceContactMode(AbstractContactMode):
             sin_ths,
             p_WB_xs,
             p_WB_ys,
-            self.time_in_mode,
-            dt,
             pv1,
             pv2,
             normal_vec,
@@ -317,6 +363,58 @@ class FaceContactMode(AbstractContactMode):
         self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
+    # TODO: duplicated code
+    def _get_vars_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        vars: NpVariableArray,
+        result: MathematicalProgramResult,
+    ):
+        return result.GetSolution(
+            vertex_vars[self.prog.FindDecisionVariableIndices(vars)]
+        )
+
+    # TODO: duplicated code
+    def _get_var_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        var: sym.Variable,
+        result: MathematicalProgramResult,
+    ):
+        return result.GetSolution(vertex_vars[self.prog.FindDecisionVariableIndex(var)])
+
+    def get_variable_solutions(
+        self, vertex: GcsVertex, result: MathematicalProgramResult
+    ) -> FaceContactVariables:
+        # TODO: This can probably be cleaned up somehow
+        lams = self._get_vars_solution(vertex.x(), self.variables.lams, result)
+        normal_forces = self._get_vars_solution(
+            vertex.x(), self.variables.normal_forces, result
+        )
+        friction_forces = self._get_vars_solution(
+            vertex.x(), self.variables.friction_forces, result
+        )
+        cos_ths = self._get_vars_solution(vertex.x(), self.variables.cos_ths, result)
+        sin_ths = self._get_vars_solution(vertex.x(), self.variables.sin_ths, result)
+        p_WB_xs = self._get_vars_solution(vertex.x(), self.variables.p_WB_xs, result)
+        p_WB_ys = self._get_vars_solution(vertex.x(), self.variables.p_WB_ys, result)
+        return FaceContactVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            lams,
+            normal_forces,
+            friction_forces,
+            cos_ths,
+            sin_ths,
+            p_WB_xs,
+            p_WB_ys,
+            self.variables.pv1,
+            self.variables.pv2,
+            self.variables.normal_vec,
+            self.variables.tangent_vec,
+        )
+
     def get_continuity_vars(
         self, first_or_last: Literal["first", "last"]
     ) -> ContinuityVariables:
@@ -384,13 +482,13 @@ class FaceContactMode(AbstractContactMode):
 
 
 @dataclass
-class NonCollisionVariables:
-    p_BF_xs: NpVariableArray
-    p_BF_ys: NpVariableArray
-    p_WB_x: NpVariableArray
-    p_WB_y: NpVariableArray
-    cos_th: sym.Variable
-    sin_th: sym.Variable
+class NonCollisionVariables(AbstractModeVariables):
+    p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
+    p_BF_ys: NpVariableArray | npt.NDArray[np.float64]
+    p_WB_x: NpVariableArray | npt.NDArray[np.float64]
+    p_WB_y: NpVariableArray | npt.NDArray[np.float64]
+    cos_th: sym.Variable | float
+    sin_th: sym.Variable | float
 
     @property
     def p_BFs(self):
@@ -404,6 +502,38 @@ class NonCollisionVariables:
     @property
     def p_WB(self):
         return np.expand_dims(np.array([self.p_WB_x, self.p_WB_y]), 1)  # (2, 1)
+
+    @property
+    def R_WBs(self):
+        Rs = [
+            np.array([[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]])
+        ] * self.num_knot_points
+        return Rs
+
+    @property
+    def p_WBs(self):
+        return self.p_WB.repeat(self.num_knot_points, axis=1)
+
+    @property
+    def v_WBs(self):
+        NUM_DIMS = 2
+        return np.zeros((NUM_DIMS, self.num_knot_points))
+
+    @property
+    def omega_WBs(self):
+        return np.zeros((self.num_knot_points,))
+
+    @property
+    def p_c_Ws(self):
+        return [
+            p_WB + R_WB.dot(p_c_B)
+            for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_BFs)
+        ]
+
+    @property
+    def f_c_Ws(self):
+        NUM_DIMS = 2
+        return np.zeros((NUM_DIMS, self.num_knot_points))
 
 
 @dataclass
@@ -425,6 +555,8 @@ class NonCollisionMode(AbstractContactMode):
         )
 
     def __post_init__(self) -> None:
+        self.dt = self.time_in_mode / self.num_knot_points
+
         self.planes = self.object.geometry.get_planes_for_collision_free_region(
             self.contact_location
         )
@@ -449,7 +581,17 @@ class NonCollisionMode(AbstractContactMode):
         cos_th = self.prog.NewContinuousVariables(1, "cos_th").item()
         sin_th = self.prog.NewContinuousVariables(1, "sin_th").item()
 
-        return NonCollisionVariables(p_BF_xs, p_BF_ys, p_WB_x, p_WB_y, cos_th, sin_th)
+        return NonCollisionVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            p_BF_xs,
+            p_BF_ys,
+            p_WB_x,
+            p_WB_y,
+            cos_th,
+            sin_th,
+        )
 
     def _define_constraints(self) -> None:
         for k in range(self.num_knot_points):
@@ -463,6 +605,46 @@ class NonCollisionMode(AbstractContactMode):
         position_diffs = self.variables.p_BFs[:, 1:] - self.variables.p_BFs[:, :-1]  # type: ignore
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
         self.prog.AddCost(squared_eucl_dist)
+
+    def _get_vars_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        vars: NpVariableArray,
+        result: MathematicalProgramResult,
+    ):
+        return result.GetSolution(
+            vertex_vars[self.prog.FindDecisionVariableIndices(vars)]
+        )
+
+    def _get_var_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        var: sym.Variable,
+        result: MathematicalProgramResult,
+    ):
+        return result.GetSolution(vertex_vars[self.prog.FindDecisionVariableIndex(var)])
+
+    def get_variable_solutions(
+        self, vertex: GcsVertex, result: MathematicalProgramResult
+    ) -> NonCollisionVariables:
+        # TODO: This can probably be cleaned up somehow
+        p_BF_xs = self._get_vars_solution(vertex.x(), self.variables.p_BF_xs, result)
+        p_BF_ys = self._get_vars_solution(vertex.x(), self.variables.p_BF_ys, result)
+        p_WB_x = self._get_vars_solution(vertex.x(), self.variables.p_WB_x, result)
+        p_WB_y = self._get_vars_solution(vertex.x(), self.variables.p_WB_y, result)
+        cos_th = self._get_var_solution(vertex.x(), self.variables.cos_th, result)
+        sin_th = self._get_var_solution(vertex.x(), self.variables.sin_th, result)
+        return NonCollisionVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            p_BF_xs,
+            p_BF_ys,
+            p_WB_x,
+            p_WB_y,
+            cos_th,
+            sin_th,
+        )
 
     def get_convex_set(self) -> opt.Spectrahedron:
         # Create a temp program without a quadratic cost that we can use to create a polyhedron
