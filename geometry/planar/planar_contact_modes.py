@@ -7,7 +7,7 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge
-from pydrake.solvers import Binding, LinearConstraint, LinearCost, MathematicalProgram
+from pydrake.solvers import Binding, LinearConstraint, LinearCost, MathematicalProgram, QuadraticCost
 
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.collision_geometry.collision_geometry import (
@@ -445,3 +445,8 @@ class NonCollisionMode(AbstractContactMode):
 
     def get_boundary_variables(self) -> Tuple[NpExpressionArray]:
         breakpoint()
+        
+    def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
+        cost = self.prog.quadratic_costs()[0] # only one cost term
+        var_idxs = self.prog.FindDecisionVariableIndices(cost.variables())
+        return var_idxs, cost.evaluator()

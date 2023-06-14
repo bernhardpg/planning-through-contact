@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.solvers import Binding, CommonSolverOption, LinearCost, MathematicalProgramResult, SolverOptions
+from pydrake.solvers import Binding, CommonSolverOption, LinearCost, MathematicalProgramResult, QuadraticCost, SolverOptions
 
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -139,8 +139,10 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        for mode_i, mode_j in combinations(range(self.num_contact_modes), 2):
+        self.subgraphs = [
             self._build_subgraph(mode_i, mode_j)
+            for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
+        ]
 
     def _add_costs(self):
         # Contact modes
@@ -152,9 +154,15 @@ class PlanarPushingPlanner:
                 vertex.AddCost(b)
 
         # Non collision modes
-        # TODO:
+        for subgraph in self.subgraphs:
+            for mode, vertex in zip(subgraph.modes, subgraph.vertices):
+                var_idxs, evaluator = mode.get_cost_term()
+                vars = vertex.x()[var_idxs]
+                binding = Binding[QuadraticCost](evaluator, vars)
+                vertex.AddCost(binding)
+            
 
-    def _build_subgraph(self, mode_i: int, mode_j: int):
+    def _build_subgraph(self, mode_i: int, mode_j: int) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.from_modes(
             self.non_collision_modes, self.gcs, mode_i, mode_j
         )
@@ -164,6 +172,7 @@ class PlanarPushingPlanner:
         subgraph.add_connection_to_full_graph(
             self.gcs, self.contact_vertices[mode_j], mode_j
         )
+        return subgraph
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True

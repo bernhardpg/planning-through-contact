@@ -26,9 +26,9 @@ def planar_pushing_station():
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
     planner.save_graph_diagram(Path("graph.svg"))
+    breakpoint()
     result = planner.solve()
     assert result.is_success()
-    breakpoint()
 
     # sim.set_box_planar_pose(box_initial_pose)
 
