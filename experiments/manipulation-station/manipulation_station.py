@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+from pydrake.solvers import Solve
 
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
@@ -21,10 +22,11 @@ def planar_pushing_station():
     specs = PlanarPlanSpecs()
 
     planner = PlanarPushingPlanner(box, specs)
-    planner.save_graph_diagram(Path("graph.svg"))
+
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
-
+    planner.save_graph_diagram(Path("graph.svg"))
+    result = planner.solve()
     breakpoint()
 
     # sim.set_box_planar_pose(box_initial_pose)

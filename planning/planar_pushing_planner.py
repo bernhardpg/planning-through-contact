@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.solvers import Binding, LinearCost
+from pydrake.solvers import Binding, LinearCost, MathematicalProgramResult
 
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -177,13 +177,23 @@ class PlanarPushingPlanner:
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         point = opt.Point(pose.vector())
-        self.source = self.gcs.AddVertex(point, name="source")
+        self.source_vertex = self.gcs.AddVertex(point, name="source")
+        self.source_edges = [
+            self.gcs.AddEdge(self.source_vertex, v) for v in self.contact_vertices
+        ]
         # TODO: Cartesian product between slider and pusher initial pose
 
     def set_slider_target_pose(self, pose: PlanarPose) -> None:
         point = opt.Point(pose.vector())
-        self.target = self.gcs.AddVertex(point, name="target")
+        self.target_vertex = self.gcs.AddVertex(point, name="target")
+        self.target_edges = [
+            self.gcs.AddEdge(v, self.target_vertex) for v in self.contact_vertices
+        ]
         # TODO: Cartesian product between slider and pusher target pose
+
+    def solve(self) -> MathematicalProgramResult:
+        result = self.gcs.SolveShortestPath(self.source_vertex, self.target_vertex)
+        return result
 
     def save_graph_diagram(self, filepath: Path) -> None:
         graphviz = self.gcs.GetGraphvizString()
