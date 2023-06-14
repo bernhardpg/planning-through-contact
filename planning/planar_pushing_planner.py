@@ -23,26 +23,78 @@ from geometry.rigid_body import RigidBody
 from tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
+GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 @dataclass
 class NonCollisionSubGraph:
-    vertices: List[GcsVertex]
+    sets: List[opt.ConvexSet]
     modes: List[NonCollisionMode]
+    vertices: List[GcsVertex]
+    edges: List[GcsEdge]
+    graph_connections: List[GcsEdge]
 
-    def get_edges(self) -> List[Tuple[GcsVertex, GcsVertex]]:
+    @classmethod
+    def from_modes(
+        cls,
+        modes: List[NonCollisionMode],
+        gcs: opt.GraphOfConvexSets,
+        mode_i: int,
+        mode_j: int,
+    ) -> "NonCollisionSubGraph":
+        """
+        Constructs a subgraph of non-collision modes, based on the given modes. This constructor takes in the GCS instance,
+        and adds the vertices and edges to the GCS instance.
+
+        @param mode_i: Index of first contact mode where this subgraph is connected
+        @param mode_j: Index of second contact mode where this subgraph is connected
+        """
+
+        sets = [mode.get_convex_set() for mode in modes]
+
+        vertex_names = [f"{mode_i}_TO_{mode_j}_{mode.name}" for mode in modes]
+        vertices = [gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)]
+
+        edge_idxs = cls._get_edge_idxs(modes)
+        # Add bi-directional edges
+        edges = [gcs.AddEdge(vertices[i], vertices[j]) for i, j in edge_idxs]
+        edges.extend([gcs.AddEdge(vertices[j], vertices[i]) for i, j in edge_idxs])
+
+        no_graph_connections = []
+
+        return cls(sets, modes, vertices, edges, no_graph_connections)
+
+    @staticmethod
+    def _get_edge_idxs(modes: List[NonCollisionMode]) -> List[Tuple[int, int]]:
         """
         Returns all edges between any overlapping regions in the two-dimensional
         space of positions as a tuple of vertices
         """
-        position_sets = [mode.get_convex_set_in_positions() for mode in self.modes]
+
+        position_sets = [mode.get_convex_set_in_positions() for mode in modes]
         edge_idxs = [
             (i, j)
             for (i, u), (j, v) in combinations(enumerate(position_sets), 2)
             if u.IntersectsWith(v)
         ]
-        edges = [(self.vertices[i], self.vertices[j]) for (i, j) in edge_idxs]
-        return edges
+        return edge_idxs
+
+    def add_connection_to_full_graph(
+        self,
+        gcs: opt.GraphOfConvexSets,
+        connection_vertex: GcsVertex,
+        connection_idx: int,
+    ) -> None:
+        """
+        Adds a bi-directional edge between the provided connection vertex and the subgraph vertex with index connection_idx in this subgraph.
+        """
+
+        self.graph_connections.append(
+            gcs.AddEdge(connection_vertex, self.vertices[connection_idx])
+        )
+        self.graph_connections.append(
+            gcs.AddEdge(self.vertices[connection_idx], connection_vertex)
+        )
 
 
 @dataclass
@@ -62,8 +114,9 @@ class PlanarPushingPlanner:
         self._build_graph()
         self._add_costs()
 
-        for mode_1, mode_2 in combinations(self.contact_modes, 2):
-            self._build_subgraph(mode_1, mode_2)
+    @property
+    def num_contact_modes(self) -> int:
+        return len(self.contact_modes)
 
     def _formulate_contact_modes(self):
         contact_locations = self.slider.geometry.contact_locations
@@ -86,9 +139,8 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        # TODO:
-        # for each pair of contact modes:
-        #   create a subgraph of noncollisionmodes connecting the contact modes
+        for mode_i, mode_j in combinations(range(self.num_contact_modes), 2):
+            self._build_subgraph(mode_i, mode_j)
 
     def _add_costs(self):
         # Contact modes
@@ -102,11 +154,16 @@ class PlanarPushingPlanner:
         # Non collision modes
         # TODO:
 
-    def _build_subgraph(self, mode_1: FaceContactMode, mode_2: FaceContactMode):
-        vertices = [mode.get_convex_set() for mode in self.non_collision_modes]
-        subgraph = NonCollisionSubGraph(vertices, self.non_collision_modes)
-        edges = subgraph.get_edges()
-        breakpoint()
+    def _build_subgraph(self, mode_i: int, mode_j: int):
+        subgraph = NonCollisionSubGraph.from_modes(
+            self.non_collision_modes, self.gcs, mode_i, mode_j
+        )
+        subgraph.add_connection_to_full_graph(
+            self.gcs, self.contact_vertices[mode_i], mode_i
+        )
+        subgraph.add_connection_to_full_graph(
+            self.gcs, self.contact_vertices[mode_j], mode_j
+        )
 
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True

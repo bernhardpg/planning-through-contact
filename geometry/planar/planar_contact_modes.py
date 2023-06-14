@@ -359,7 +359,7 @@ class NonCollisionMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
     ) -> "NonCollisionMode":
-        name = str(contact_location)
+        name = f"NON_COLL_{contact_location.idx}"
         return cls(
             name,
             specs.num_knot_points_non_collision,
