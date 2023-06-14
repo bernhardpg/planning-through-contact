@@ -19,3 +19,13 @@ def normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 def two_d_rotation_matrix_from_angle(theta: float) -> npt.NDArray[np.float64]:
     R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     return R
+
+
+def from_so2_to_so3(R: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """
+    Takes a SO(2) rotation matrix and returns a rotation matrix in SO(3), where the original matrix
+    is treated as a rotation about the z-axis.
+    """
+    R_in_SO3 = np.eye(3)
+    R_in_SO3[0:2, 0:2] = R
+    return R_in_SO3

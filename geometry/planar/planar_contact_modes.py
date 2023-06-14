@@ -512,16 +512,16 @@ class NonCollisionVariables(AbstractModeVariables):
 
     @property
     def p_WBs(self):
-        return self.p_WB.repeat(self.num_knot_points, axis=1)
+        return [self.p_WB] * self.num_knot_points
 
     @property
     def v_WBs(self):
         NUM_DIMS = 2
-        return np.zeros((NUM_DIMS, self.num_knot_points))
+        return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
 
     @property
     def omega_WBs(self):
-        return np.zeros((self.num_knot_points,))
+        return [0] * self.num_knot_points
 
     @property
     def p_c_Ws(self):
@@ -533,7 +533,7 @@ class NonCollisionVariables(AbstractModeVariables):
     @property
     def f_c_Ws(self):
         NUM_DIMS = 2
-        return np.zeros((NUM_DIMS, self.num_knot_points))
+        return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
 
 
 @dataclass

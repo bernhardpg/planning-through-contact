@@ -34,8 +34,7 @@ def planar_pushing_station():
 
     assert result.is_success()
     path = planner.get_path(result)
-    breakpoint()
-    traj_builder = PlanarTrajectoryBuilder(path)
+    traj = PlanarTrajectoryBuilder(path).get_trajectory()
 
     # sim.set_box_planar_pose(box_initial_pose)
 
