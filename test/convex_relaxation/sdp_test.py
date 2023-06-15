@@ -1,3 +1,4 @@
+import numpy as np
 import pydrake.symbolic as sym
 from pydrake.solvers import MathematicalProgram, Solve
 
@@ -28,6 +29,7 @@ def test_equality_elimination_with_initial_guess():
 
 
 def test_equality_elimination_with_sdp_relaxation():
+    # TODO: Fix problem where sdp relaxation doesn't pick up quadratic constraints
     prog = MathematicalProgram()
     x = prog.NewContinuousVariables(1, "x")[0]
     y = prog.NewContinuousVariables(1, "y")[0]
@@ -35,7 +37,9 @@ def test_equality_elimination_with_sdp_relaxation():
     prog.AddQuadraticConstraint(x**2 + y**2 - 1, 0, 0)
     prog.AddLinearConstraint(x == y)
 
-    # prog.AddQuadraticCost(x * y + x + y)
+    prog.AddQuadraticCost(
+        x * y + x + y
+    )  # add a cost with a linear term to make the relaxation tight
 
     # Solve with SDP relaxation
     relaxed_prog, X, _ = create_sdp_relaxation(prog)
@@ -54,7 +58,8 @@ def test_equality_elimination_with_sdp_relaxation():
 
     z_sol = relaxed_result.GetSolution(Z[1:, 0])
     eliminated_sol = retrieve_x(z_sol)
-    breakpoint()
+
+    assert np.allclose(sol_relaxation, eliminated_sol, atol=1e-3)
 
 
 if __name__ == "__main__":

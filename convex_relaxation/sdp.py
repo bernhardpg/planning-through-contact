@@ -297,10 +297,9 @@ def eliminate_equality_constraints(
             binding_Q = e.Q()
             var_idxs = prog.FindDecisionVariableIndices(binding.variables())
 
-            for (binding_i, prog_i), (binding_j, prog_j) in zip(
-                enumerate(var_idxs), enumerate(var_idxs)
-            ):
-                Q[prog_i, prog_j] = binding_Q[binding_i, binding_j]
+            for binding_i, prog_i in enumerate(var_idxs):
+                for binding_j, prog_j in enumerate(var_idxs):
+                    Q[prog_i, prog_j] = binding_Q[binding_i, binding_j]
 
             b = np.zeros(old_dim)
             b[var_idxs] = e.b()
@@ -329,6 +328,33 @@ def eliminate_equality_constraints(
             #
             # F_rows = F[var_idxs, :]
             # new_Q = F_rows.T.dot(Q).dot(F_rows)
+
+    has_linear_costs = len(prog.linear_costs()) > 0
+    if has_linear_costs:
+        raise NotImplementedError("Linear costs not yet implemented!")
+
+    if len(prog.quadratic_costs()) > 0:
+        for binding in prog.quadratic_costs():
+            e = binding.evaluator()
+            Q = np.zeros((old_dim, old_dim))
+            binding_Q = e.Q()
+            var_idxs = prog.FindDecisionVariableIndices(binding.variables())
+
+            for binding_i, prog_i in enumerate(var_idxs):
+                for binding_j, prog_j in enumerate(var_idxs):
+                    Q[prog_i, prog_j] = binding_Q[binding_i, binding_j]
+
+            b = np.zeros(old_dim)
+            b[var_idxs] = e.b()
+
+            c = e.c()
+
+            new_Q = F.T.dot(Q).dot(F)
+            new_b = x_hat.T.dot(Q).dot(F) + b.T.dot(F)
+
+            new_c = c - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
+
+            new_prog.AddQuadraticCost(new_Q, new_b, new_c, new_decision_vars)
 
     get_x_from_z = lambda z: F.dot(z) + x_hat
     return new_prog, get_x_from_z
