@@ -55,11 +55,11 @@ def _linear_binding_to_expressions(binding: Binding) -> NpExpressionArray:
     return np.array(formulas)
 
 
-def _linear_bindings_to_homogenuous_form(
+def _linear_bindings_to_affine_terms(
     linear_bindings: List[Binding],
     bounding_box_expressions: NpExpressionArray,
     vars: NpVariableArray,
-) -> npt.NDArray[np.float64]:
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     if len(linear_bindings) > 0:
         binding_type = type(linear_bindings[0].evaluator())
         if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
@@ -80,7 +80,25 @@ def _linear_bindings_to_homogenuous_form(
     all_linear_exprs = np.concatenate([linear_exprs, bounding_box_expressions])
 
     A, b = sym.DecomposeAffineExpressions(all_linear_exprs.flatten(), vars)
+    return A, b
+
+
+def _affine_terms_to_homogenous_form(
+    A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
+    return A_homogenous
+
+
+def _linear_bindings_to_homogenuous_form(
+    linear_bindings: List[Binding],
+    bounding_box_expressions: NpExpressionArray,
+    vars: NpVariableArray,
+) -> npt.NDArray[np.float64]:
+    A, b = _linear_bindings_to_affine_terms(
+        linear_bindings, bounding_box_expressions, vars
+    )
+    A_homogenous = _affine_terms_to_homogenous_form(A, b)
     return A_homogenous
 
 
@@ -199,8 +217,68 @@ def _collect_bounding_box_constraints(
     return bounding_box_eqs, bounding_box_ineqs
 
 
-def eliminate_equality_constraints(prog: MathematicalProgram):
+# TODO: Move to some utils file
+def get_nullspace_matrix(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    U, s, V_hermitian_transpose = np.linalg.svd(A)
+    eps = 1e-6
+    zero_idxs = np.where(np.abs(s) <= eps)[0]
+    V = V_hermitian_transpose.T  # Real matrix, so conjugate transpose = transpose
+
+    V_zero = V[:, zero_idxs]
+
+    # TODO: move this to a unit test
+    assert np.isclose(np.sum(A.dot(V_zero)), 0)
+    return V_zero
+
+
+def find_solution(
+    A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    x, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
+    return x
+
+
+def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalProgram:
+    decision_vars = np.array(
+        sorted(prog.decision_variables(), key=lambda x: x.get_id())
+    )
+    bounding_box_eqs, bounding_box_ineqs = _collect_bounding_box_constraints(
+        prog.bounding_box_constraints()
+    )
+
+    has_linear_eq_constraints = (
+        len(prog.linear_equality_constraints()) > 0 or len(bounding_box_eqs) > 0
+    )
+    if not has_linear_eq_constraints:
+        raise ValueError("There are no linear equality constraints to eliminate.")
+
+    A_eq, b_eq = _linear_bindings_to_affine_terms(
+        prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
+    )
+    F = get_nullspace_matrix(A_eq)
+    x_hat = find_solution(A_eq, b_eq)
     breakpoint()
+    new_dim = A_eq.shape[0]
+    new_prog = MathematicalProgram()
+    new_decision_vars = new_prog.NewContinuousVariables(new_dim, "x")
+
+    has_linear_ineq_constraints = (
+        len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
+    )
+    if has_linear_ineq_constraints:
+        A, b = _linear_bindings_to_affine_terms(
+            prog.linear_constraints(), bounding_box_eqs, decision_vars
+        )
+        breakpoint()
+
+    has_generic_constaints = len(prog.generic_constraints()) > 0
+    if has_generic_constaints:
+        raise ValueError(
+            "Cannot eliminate equality constraints for program with generic constraints."
+        )
+
+    if len(prog.quadratic_constraints() > 0):
+        breakpoint()
 
 
 def create_sdp_relaxation(

@@ -22,7 +22,7 @@ from pydrake.solvers import (
 )
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from convex_relaxation.sdp import create_sdp_relaxation
+from convex_relaxation.sdp import create_sdp_relaxation, eliminate_equality_constraints
 from geometry.polyhedron import PolyhedronFormulator
 from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
@@ -383,7 +383,7 @@ class PlanarPushingContactMode:
 
         # SO(2) constraints
         for c, s in zip(vars.cos_ths, vars.sin_ths):
-            prog.AddConstraint(c**2 + s**2 == 1)
+            prog.AddQuadraticConstraint(c**2 + s**2 - 1, 0, 0)
 
         # Friction cone constraints
         for c_n in vars.normal_forces:
@@ -409,9 +409,9 @@ class PlanarPushingContactMode:
             x_dot, dyn = quasi_static_dynamics(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, self.FRICTION_COEFF, object.mass
             )
-            quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
-            for row in quasi_static_dynamic_constraint:
-                prog.AddConstraint(row)
+            quasi_static_dynamic_constraint = x_dot - dyn
+            for row in quasi_static_dynamic_constraint.flatten():
+                prog.AddQuadraticConstraint(row, 0, 0)
 
         # Ensure sticking on the contact point
         # TODO: remove this
@@ -553,6 +553,7 @@ def plan_planar_pushing(
     import time
 
     start_time = time.time()
+    smaller_prog = eliminate_equality_constraints(contact_mode.prog)
     relaxed_result = Solve(contact_mode.relaxed_prog)
     end_time = time.time()
     assert relaxed_result.is_success()
