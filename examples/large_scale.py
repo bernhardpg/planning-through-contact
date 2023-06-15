@@ -129,7 +129,8 @@ class Gcs:
     @property
     def path_length_cost(self) -> L2NormCost:
         diffs = np.diff(self.decision_var_matrix)
-        A = sym.DecomposeLinearExpressions(diffs.flatten(), self.decision_var_vector)
+        A = sym.DecomposeLinearExpressions(
+            diffs.flatten(), self.decision_var_vector)
         b = np.zeros((A.shape[0], 1))
         return L2NormCost(A, b)
 
@@ -153,7 +154,8 @@ class Gcs:
 
     def add_vertex(self, node: Node) -> GraphOfConvexSets.Vertex:
         vertex = self.gcs.AddVertex(
-            self.cartesian_power(node.convex_set, self.NUM_CTRL_POINTS), node.id
+            self.cartesian_power(
+                node.convex_set, self.NUM_CTRL_POINTS), node.id
         )
         self.vertices[node.id] = vertex
         return vertex
@@ -222,7 +224,8 @@ class Gcs:
         )
         vertex_values = np.hstack(
             [
-                result.GetSolution(v.x()).reshape((self.NUM_DIMS, -1), order="F")
+                result.GetSolution(v.x()).reshape(
+                    (self.NUM_DIMS, -1), order="F")
                 for v in path
             ]
         )
@@ -315,7 +318,7 @@ class GraphBuilder:
         result = gcs.solve()
 
         ctrl_points = gcs.get_ctrl_points(result)
-        gcs.save_graph_diagram("output/final_path.svg", result)
+        gcs.save_graph_diagram("final_path.svg", result)
 
         # TODO remove
         visualize_polytopes(create_test_polytopes())
@@ -357,10 +360,10 @@ class GraphBuilder:
 
         gcs.set_source(source_id)
         gcs.set_target(target_id)
-        gcs.save_graph_diagram("output/latest_graph_unsolved.svg")
+        gcs.save_graph_diagram("latest_graph_unsolved.svg")
         result = gcs.solve()
 
-        gcs.save_graph_diagram("output/latest_graph_solved.svg", result)
+        gcs.save_graph_diagram("latest_graph_solved.svg", result)
         print(f"Cost for node {new_node.id}: {result.get_optimal_cost()}")
 
         return result.get_optimal_cost()
@@ -371,6 +374,11 @@ def gcs_a_star():
 
     polytopes = create_test_polytopes()
     visualize_polytopes(polytopes)
-    all_nodes = [ConvexSetNode(poly, str(idx)) for idx, poly in enumerate(polytopes)]
+    all_nodes = [ConvexSetNode(poly, str(idx))
+                 for idx, poly in enumerate(polytopes)]
     builder = GraphBuilder(all_nodes)
     builder.build_graph(all_nodes[0].id, all_nodes[-1].id)
+
+
+if __name__ == "__main__":
+    gcs_a_star()
