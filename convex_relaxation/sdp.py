@@ -1,4 +1,5 @@
 from enum import Enum
+from itertools import permutations
 from typing import List, Tuple
 
 import numpy as np
@@ -128,7 +129,7 @@ def _generic_constraint_binding_to_polynomials(
     return polys
 
 
-def _quadratic_cost_binding_to_homogenuous_form(
+def _quadratic_binding_to_homogenuous_form(
     binding: Binding, basis: NpMonomialArray, num_vars: int
 ) -> npt.NDArray[np.float64]:
     Q = binding.evaluator().Q()
@@ -221,14 +222,19 @@ def _collect_bounding_box_constraints(
 def get_nullspace_matrix(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     U, s, V_hermitian_transpose = np.linalg.svd(A)
     eps = 1e-6
-    zero_idxs = np.where(np.abs(s) <= eps)[0]
+    zero_idxs = np.where(np.abs(s) <= eps)[0].tolist()
     V = V_hermitian_transpose.T  # Real matrix, so conjugate transpose = transpose
 
-    V_zero = V[:, zero_idxs]
+    remaining_idxs = list(range(len(s), len(V)))
+
+    V_zero = V[:, zero_idxs + remaining_idxs]
 
     # TODO: move this to a unit test
     assert np.isclose(np.sum(A.dot(V_zero)), 0)
-    return V_zero
+
+    # TODO: figure out how to get the dimensions right here
+    nullspace_matrix = V_zero
+    return nullspace_matrix
 
 
 def find_solution(
@@ -242,6 +248,7 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
     decision_vars = np.array(
         sorted(prog.decision_variables(), key=lambda x: x.get_id())
     )
+    old_dim = len(decision_vars)
     bounding_box_eqs, bounding_box_ineqs = _collect_bounding_box_constraints(
         prog.bounding_box_constraints()
     )
@@ -257,8 +264,8 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
     )
     F = get_nullspace_matrix(A_eq)
     x_hat = find_solution(A_eq, b_eq)
-    breakpoint()
-    new_dim = A_eq.shape[0]
+
+    new_dim = F.shape[1]
     new_prog = MathematicalProgram()
     new_decision_vars = new_prog.NewContinuousVariables(new_dim, "x")
 
@@ -266,10 +273,12 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
     )
     if has_linear_ineq_constraints:
-        A, b = _linear_bindings_to_affine_terms(
+        B, d = _linear_bindings_to_affine_terms(
             prog.linear_constraints(), bounding_box_eqs, decision_vars
+        )  # Bx >= d
+        new_prog.AddLinearConstraint(
+            B.dot(F), d, np.ones_like(d) * np.inf, new_decision_vars
         )
-        breakpoint()
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
@@ -277,8 +286,34 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
             "Cannot eliminate equality constraints for program with generic constraints."
         )
 
-    if len(prog.quadratic_constraints() > 0):
-        breakpoint()
+    if len(prog.quadratic_constraints()) > 0:
+        for binding in prog.quadratic_constraints():
+            e = binding.evaluator()
+            Q = np.zeros((old_dim, old_dim))
+            binding_Q = e.Q()
+            var_idxs = prog.FindDecisionVariableIndices(binding.variables())
+
+            for (binding_i, prog_i), (binding_j, prog_j) in zip(
+                enumerate(var_idxs), enumerate(var_idxs)
+            ):
+                Q[prog_i, prog_j] = binding_Q[binding_i, binding_j]
+
+            b = np.zeros(old_dim)
+            b[var_idxs] = e.b()
+
+            new_Q = F.T.dot(Q).dot(F)
+            new_b = 2 * x_hat.T.dot(Q).dot(F) + b.T.dot(F)
+            lb = e.lower_bound().item()
+            ub = e.upper_bound().item()
+            new_prog.AddQuadraticConstraint(new_Q, new_b, lb, ub, new_decision_vars)
+
+            # Better way of doing this:
+            # Q = binding.evaluator().Q()
+            # b = binding.evaluator().b()
+            # var_idxs = prog.FindDecisionVariableIndices(binding.variables())
+            #
+            # F_rows = F[var_idxs, :]
+            # new_Q = F_rows.T.dot(Q).dot(F_rows)
 
 
 def create_sdp_relaxation(
@@ -316,7 +351,7 @@ def create_sdp_relaxation(
     if has_quadratic_costs:
         quadratic_costs = prog.quadratic_costs()
         Q_cost = [
-            _quadratic_cost_binding_to_homogenuous_form(c, basis, num_vars)
+            _quadratic_binding_to_homogenuous_form(c, basis, num_vars)
             for c in quadratic_costs
         ]
         for Q in Q_cost:
