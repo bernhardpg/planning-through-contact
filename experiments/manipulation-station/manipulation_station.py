@@ -1,4 +1,3 @@
-import time
 from pathlib import Path
 
 from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
@@ -26,16 +25,8 @@ def planar_pushing_station():
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
     planner.save_graph_diagram(Path("graph.svg"))
+    traj = planner.make_trajectory()
 
-    start = time.time()
-    result = planner.solve()
-    end = time.time()
-    elapsed_time = end - start
-    print(f"Total elapsed time: {elapsed_time}")
-
-    assert result.is_success()
-    path = planner.get_path(result)
-    traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=False)
     breakpoint()
     visualize_planar_pushing_trajectory(traj, box.geometry)
 

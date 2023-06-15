@@ -25,6 +25,7 @@ from geometry.planar.planar_contact_modes import (
     PlanarPlanSpecs,
 )
 from geometry.planar.planar_pose import PlanarPose
+from geometry.planar.trajectory_builder import PlanarTrajectory, PlanarTrajectoryBuilder
 from geometry.rigid_body import RigidBody
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -265,7 +266,7 @@ class PlanarPushingPlanner:
             non_collision_vars_last = non_collision_mode.get_continuity_vars(
                 "last"
             ).vector
-            last_var_idxs = non_collision_mode.prog.FindDecisionVariableIndices(
+            last_var_idxs = non_collision_mode.get_variable_indices_in_gcs_vertex(
                 non_collision_vars_last
             )
             lhs = edge.xu()[last_var_idxs]
@@ -296,7 +297,7 @@ class PlanarPushingPlanner:
             non_collision_vars_first = non_collision_mode.get_continuity_vars(
                 "first"
             ).vector
-            first_var_idxs = non_collision_mode.prog.FindDecisionVariableIndices(
+            first_var_idxs = non_collision_mode.get_variable_indices_in_gcs_vertex(
                 non_collision_vars_first
             )
             rhs = edge.xv()[first_var_idxs]
@@ -318,12 +319,12 @@ class PlanarPushingPlanner:
     def set_pusher_initial_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True
     ) -> None:
-        ...
+        raise NotImplementedError("Setting the pose of the pusher is not yet supported")
 
     def set_pusher_final_pose(
         self, pose: PlanarPose, disregard_rotation: bool = True
     ) -> None:
-        ...
+        raise NotImplementedError("Setting the pose of the pusher is not yet supported")
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         point = opt.Point(pose.full_vector())
@@ -367,7 +368,7 @@ class PlanarPushingPlanner:
             for c in constraint:
                 edge.AddConstraint(c)
 
-    def solve(self, print_output: bool = False) -> MathematicalProgramResult:
+    def _solve(self, print_output: bool = False) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         if print_output:
@@ -383,7 +384,7 @@ class PlanarPushingPlanner:
         )
         return result
 
-    def get_path(
+    def _get_path(
         self, result: MathematicalProgramResult, flow_treshold: float = 0.55
     ) -> List[FaceContactVariables | NonCollisionVariables]:
         flow_variables = [e.phi() for e in self.gcs.Edges()]
@@ -407,6 +408,25 @@ class PlanarPushingPlanner:
         ]
 
         return full_path
+
+    def make_trajectory(
+        self, print_output: bool = False, measure_time: bool = False
+    ) -> PlanarTrajectory:
+        import time
+
+        start = time.time()
+        result = self._solve(print_output)
+        assert result.is_success()
+        end = time.time()
+
+        if measure_time:
+            elapsed_time = end - start
+            print(f"Total elapsed optimization time: {elapsed_time}")
+
+        path = self._get_path(result)
+        traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=False)
+
+        return traj
 
     def save_graph_diagram(self, filepath: Path) -> None:
         graphviz = self.gcs.GetGraphvizString()

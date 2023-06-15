@@ -134,6 +134,10 @@ class AbstractContactMode(ABC):
     ) -> AbstractModeVariables:
         pass
 
+    @abstractmethod
+    def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
+        pass
+
     @classmethod
     @abstractmethod
     def create_from_spec(
@@ -143,6 +147,26 @@ class AbstractContactMode(ABC):
         object: RigidBody,
     ) -> "AbstractContactMode":
         pass
+
+    def _get_vars_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        vars: NpVariableArray,
+        result: MathematicalProgramResult,
+    ) -> npt.NDArray[np.float64]:
+        return result.GetSolution(
+            vertex_vars[self.get_variable_indices_in_gcs_vertex(vars)]
+        )
+
+    def _get_var_solution(
+        self,
+        vertex_vars: NpVariableArray,
+        var: sym.Variable,
+        result: MathematicalProgramResult,
+    ) -> float:
+        return result.GetSolution(
+            vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]  # type: ignore
+        )
 
 
 @dataclass
@@ -365,28 +389,6 @@ class FaceContactMode(AbstractContactMode):
         self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
-    # TODO: duplicated code
-    def _get_vars_solution(
-        self,
-        vertex_vars: NpVariableArray,
-        vars: NpVariableArray,
-        result: MathematicalProgramResult,
-    ):
-        return result.GetSolution(
-            vertex_vars[self.get_variable_indices_in_gcs_vertex(vars)]
-        )
-
-    # TODO: duplicated code
-    def _get_var_solution(
-        self,
-        vertex_vars: NpVariableArray,
-        var: sym.Variable,
-        result: MathematicalProgramResult,
-    ):
-        return result.GetSolution(
-            vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]
-        )
-
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         # NOTE: This function relies on the fact that the sdp relaxation
         # returns an ordering of variables [1, x1, x2, ...],
@@ -456,6 +458,7 @@ class FaceContactMode(AbstractContactMode):
 
         costs = self.relaxed_prog.linear_costs()
         evaluators = [cost.evaluator() for cost in costs]
+        # NOTE: here we must get the indices from the relaxed program!
         var_idxs = [
             self.relaxed_prog.FindDecisionVariableIndices(cost.variables())
             for cost in costs
@@ -616,34 +619,19 @@ class NonCollisionMode(AbstractContactMode):
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
         self.prog.AddCost(squared_eucl_dist)
 
-    def _get_vars_solution(
-        self,
-        vertex_vars: NpVariableArray,
-        vars: NpVariableArray,
-        result: MathematicalProgramResult,
-    ):
-        return result.GetSolution(
-            vertex_vars[self.prog.FindDecisionVariableIndices(vars)]
-        )
-
-    def _get_var_solution(
-        self,
-        vertex_vars: NpVariableArray,
-        var: sym.Variable,
-        result: MathematicalProgramResult,
-    ):
-        return result.GetSolution(vertex_vars[self.prog.FindDecisionVariableIndex(var)])
+    def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
+        return self.prog.FindDecisionVariableIndices(vars)
 
     def get_variable_solutions(
         self, vertex: GcsVertex, result: MathematicalProgramResult
     ) -> NonCollisionVariables:
         # TODO: This can probably be cleaned up somehow
-        p_BF_xs = self._get_vars_solution(vertex.x(), self.variables.p_BF_xs, result)
-        p_BF_ys = self._get_vars_solution(vertex.x(), self.variables.p_BF_ys, result)
-        p_WB_x = self._get_vars_solution(vertex.x(), self.variables.p_WB_x, result)
-        p_WB_y = self._get_vars_solution(vertex.x(), self.variables.p_WB_y, result)
-        cos_th = self._get_var_solution(vertex.x(), self.variables.cos_th, result)
-        sin_th = self._get_var_solution(vertex.x(), self.variables.sin_th, result)
+        p_BF_xs = self._get_vars_solution(vertex.x(), self.variables.p_BF_xs, result)  # type: ignore
+        p_BF_ys = self._get_vars_solution(vertex.x(), self.variables.p_BF_ys, result)  # type: ignore
+        p_WB_x = self._get_vars_solution(vertex.x(), self.variables.p_WB_x, result)  # type: ignore
+        p_WB_y = self._get_vars_solution(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
+        cos_th = self._get_var_solution(vertex.x(), self.variables.cos_th, result)  # type: ignore
+        sin_th = self._get_var_solution(vertex.x(), self.variables.sin_th, result)  # type: ignore
         return NonCollisionVariables(
             self.variables.num_knot_points,
             self.variables.time_in_mode,
@@ -661,7 +649,7 @@ class NonCollisionMode(AbstractContactMode):
         temp_prog = MathematicalProgram()
         x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
         for c in self.prog.linear_constraints():
-            idxs = self.prog.FindDecisionVariableIndices(c.variables())
+            idxs = self.get_variable_indices_in_gcs_vertex(c.variables())
             vars = x[idxs]
             temp_prog.AddConstraint(c.evaluator(), vars)
 
@@ -711,5 +699,5 @@ class NonCollisionMode(AbstractContactMode):
 
     def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
         cost = self.prog.quadratic_costs()[0]  # only one cost term
-        var_idxs = self.prog.FindDecisionVariableIndices(cost.variables())
+        var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
         return var_idxs, cost.evaluator()
