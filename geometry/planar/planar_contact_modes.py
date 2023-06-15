@@ -9,6 +9,7 @@ import pydrake.symbolic as sym
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
+    BoundingBoxConstraint,
     LinearConstraint,
     LinearCost,
     MathematicalProgram,
@@ -609,8 +610,8 @@ class NonCollisionMode(AbstractContactMode):
             p_BF = self.variables.p_BFs[k]
 
             for plane in self.planes:
-                dist_to_face = plane.a.T.dot(p_BF) - plane.b  # a'x >= b
-                self.prog.AddLinearConstraint(ge(dist_to_face, 0))
+                dist_to_face = (plane.a.T.dot(p_BF) - plane.b).item()  # a'x >= b
+                self.prog.AddLinearConstraint(dist_to_face >= 0)
 
     def _define_cost(self) -> None:
         position_diffs = np.array(
@@ -653,7 +654,14 @@ class NonCollisionMode(AbstractContactMode):
         # Create a temp program without a quadratic cost that we can use to create a polyhedron
         temp_prog = MathematicalProgram()
         x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
-        for c in self.prog.linear_constraints():
+        # Some linear constraints will be added as bounding box constraints
+        for c in self.prog.GetAllConstraints():
+            if not (
+                isinstance(c.evaluator(), LinearConstraint)
+                or isinstance(c.evaluator(), BoundingBoxConstraint)
+            ):
+                raise ValueError("Constraints must be linear!")
+
             idxs = self.get_variable_indices_in_gcs_vertex(c.variables())
             vars = x[idxs]
             temp_prog.AddConstraint(c.evaluator(), vars)
