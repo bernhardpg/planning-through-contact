@@ -199,6 +199,10 @@ def _collect_bounding_box_constraints(
     return bounding_box_eqs, bounding_box_ineqs
 
 
+def eliminate_equality_constraints(prog: MathematicalProgram):
+    breakpoint()
+
+
 def create_sdp_relaxation(
     prog: MathematicalProgram,
     use_linear_relaxation: bool = False,

@@ -139,7 +139,6 @@ class EquilateralPolytope2d(RigidBody2d):
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if location.pos == ContactLocation.FACE:
-            breakpoint()
             return self.normal_vecs[location.idx], self.tangent_vecs[location.idx]
         elif location.pos == ContactLocation.VERTEX:
             return (

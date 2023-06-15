@@ -526,7 +526,7 @@ def plan_planar_pushing(
     num_knot_points = 8
     time_in_contact = 2
 
-    MASS = 1.0
+    MASS = 0.3
     DIST_TO_CORNERS = 0.2
     VIS_REALTIME_RATE = 0.25
     num_vertices = 4
@@ -550,9 +550,14 @@ def plan_planar_pushing(
         pos_target=pos_target,
     )
 
+    import time
+
+    start_time = time.time()
     relaxed_result = Solve(contact_mode.relaxed_prog)
+    end_time = time.time()
     assert relaxed_result.is_success()
     print("Found solution to relaxed problem!")
+    print(f"Elapsed time: {end_time - start_time}")
 
     relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
 
@@ -678,7 +683,7 @@ def plan_planar_pushing(
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     # visualize velocity with an arrow (i.e. as a force), and reverse force scaling
-    VEL_VIZ_SCALE_CONSTANT = 0.02
+    VEL_VIZ_SCALE_CONSTANT = 0.3
     object_vel_viz = VisualizationForce2d(com_traj, VELOCITY_COLOR, object_vel_traj / VEL_VIZ_SCALE_CONSTANT)  # type: ignore
 
     viz = Visualizer2d()
