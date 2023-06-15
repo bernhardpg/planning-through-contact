@@ -1,6 +1,6 @@
 from enum import Enum
 from itertools import permutations
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -244,7 +244,11 @@ def find_solution(
     return x
 
 
-def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalProgram:
+def eliminate_equality_constraints(
+    prog: MathematicalProgram,
+) -> Tuple[
+    MathematicalProgram, Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]
+]:
     decision_vars = np.array(
         sorted(prog.decision_variables(), key=lambda x: x.get_id())
     )
@@ -301,11 +305,22 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
             b = np.zeros(old_dim)
             b[var_idxs] = e.b()
 
-            new_Q = F.T.dot(Q).dot(F)
-            new_b = 2 * x_hat.T.dot(Q).dot(F) + b.T.dot(F)
             lb = e.lower_bound().item()
             ub = e.upper_bound().item()
-            new_prog.AddQuadraticConstraint(new_Q, new_b, lb, ub, new_decision_vars)
+
+            new_Q = F.T.dot(Q).dot(F)
+            new_b = x_hat.T.dot(Q).dot(F) + b.T.dot(F)
+
+            new_lb = lb - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
+            new_ub = ub - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
+
+            new_prog.AddQuadraticConstraint(
+                new_Q, new_b, new_lb, new_ub, new_decision_vars
+            )
+            # z = new_decision_vars
+            # constraint = z.T.dot(new_Q).dot(z) + new_b.T.dot(z) - new_lb
+            # print(f"Adding expression: {constraint}")
+            # breakpoint()
 
             # Better way of doing this:
             # Q = binding.evaluator().Q()
@@ -314,6 +329,9 @@ def eliminate_equality_constraints(prog: MathematicalProgram) -> MathematicalPro
             #
             # F_rows = F[var_idxs, :]
             # new_Q = F_rows.T.dot(Q).dot(F_rows)
+
+    get_x_from_z = lambda z: F.dot(z) + x_hat
+    return new_prog, get_x_from_z
 
 
 def create_sdp_relaxation(

@@ -553,7 +553,10 @@ def plan_planar_pushing(
     import time
 
     start_time = time.time()
-    smaller_prog = eliminate_equality_constraints(contact_mode.prog)
+    smaller_prog, F, x_hat = eliminate_equality_constraints(contact_mode.prog)
+    smaller_result = Solve(smaller_prog)
+    assert smaller_result.is_success()
+    breakpoint()
     relaxed_result = Solve(contact_mode.relaxed_prog)
     end_time = time.time()
     assert relaxed_result.is_success()
