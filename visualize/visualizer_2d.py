@@ -178,9 +178,9 @@ class VisualizationCone2d(VisualizationPolygon2d):
 class Visualizer2d:
     WINDOW_WIDTH = 1200
     WINDOW_HEIGHT = 900
-    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT * 7 / 8]).reshape((-1, 1))
+    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2]).reshape((-1, 1))
     PLOT_SCALE = 500
-    FORCE_SCALE = 0.02
+    FORCE_SCALE = 0.1
     POINT_RADIUS = 0.01
 
     def visualize(
@@ -200,11 +200,24 @@ class Visualizer2d:
         num_frames = curve_lengths[0]
         pause_between_frames = 1 / frames_per_sec
 
-        self.app = tk.Tk()
-        self.app.title("box")
+        self.root = tk.Tk()
+        self.root.title("Visualization")
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # calculate x and y coordinates for the Tk root window
+        x = (screen_width / 2) - (self.WINDOW_WIDTH / 2)
+        y = (screen_height / 2) - (self.WINDOW_HEIGHT / 2)
+
+        # Set the dimensions of the screen
+        # and where it is placed
+        self.root.geometry(
+            "%dx%d+%d+%d" % (self.WINDOW_WIDTH, self.WINDOW_HEIGHT, x, y)
+        )
 
         self.canvas = Canvas(
-            self.app, width=self.WINDOW_WIDTH, height=self.WINDOW_HEIGHT, bg="white"
+            self.root, width=self.WINDOW_WIDTH, height=self.WINDOW_HEIGHT, bg="white"
         )
         self.canvas.pack()
 
@@ -228,7 +241,7 @@ class Visualizer2d:
             if frame_idx == 0:
                 time.sleep(2)
 
-        self.app.mainloop()
+        self.root.mainloop()
 
     def _transform_points_for_plotting(
         self,

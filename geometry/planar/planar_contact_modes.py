@@ -165,8 +165,8 @@ class AbstractContactMode(ABC):
         result: MathematicalProgramResult,
     ) -> float:
         return result.GetSolution(
-            vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]  # type: ignore
-        )
+            vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]
+        ).item()
 
 
 @dataclass
@@ -348,9 +348,9 @@ class FaceContactMode(AbstractContactMode):
 
             # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
             if use_midpoint:
-                f_c_B = self.get_midpoint(self.variables.f_c_Bs, k)
-                p_c_B = self.get_midpoint(self.variables.p_c_Bs, k)
-                R_WB = self.get_midpoint(self.variables.R_WBs, k)
+                f_c_B = self._get_midpoint(self.variables.f_c_Bs, k)
+                p_c_B = self._get_midpoint(self.variables.p_c_Bs, k)
+                R_WB = self._get_midpoint(self.variables.R_WBs, k)
             else:
                 f_c_B = self.variables.f_c_Bs[k]
                 p_c_B = self.variables.p_c_Bs[k]
@@ -466,7 +466,7 @@ class FaceContactMode(AbstractContactMode):
         return var_idxs, evaluators
 
     @staticmethod
-    def get_midpoint(vals, k: int):
+    def _get_midpoint(vals, k: int):
         return vals[k] + vals[k + 1] / 2
 
     @staticmethod
@@ -503,19 +503,17 @@ class FaceContactMode(AbstractContactMode):
 class NonCollisionVariables(AbstractModeVariables):
     p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
     p_BF_ys: NpVariableArray | npt.NDArray[np.float64]
-    p_WB_x: NpVariableArray | npt.NDArray[np.float64]
-    p_WB_y: NpVariableArray | npt.NDArray[np.float64]
+    p_WB_x: sym.Variable | float
+    p_WB_y: sym.Variable | float
     cos_th: sym.Variable | float
     sin_th: sym.Variable | float
 
     @property
     def p_BFs(self):
-        return np.hstack(
-            [
-                np.expand_dims(np.array([x, y]), 1)
-                for x, y in zip(self.p_BF_xs, self.p_BF_ys)
-            ]
-        )  # (2, num_knot_points)
+        return [
+            np.expand_dims(np.array([x, y]), 1)
+            for x, y in zip(self.p_BF_xs, self.p_BF_ys)
+        ]  # (2, 1)
 
     @property
     def p_WB(self):
@@ -608,14 +606,21 @@ class NonCollisionMode(AbstractContactMode):
 
     def _define_constraints(self) -> None:
         for k in range(self.num_knot_points):
-            p_BF = self.variables.p_BFs[:, k]
+            p_BF = self.variables.p_BFs[k]
 
             for plane in self.planes:
                 dist_to_face = plane.a.T.dot(p_BF) - plane.b  # a'x >= b
                 self.prog.AddLinearConstraint(ge(dist_to_face, 0))
 
     def _define_cost(self) -> None:
-        position_diffs = self.variables.p_BFs[:, 1:] - self.variables.p_BFs[:, :-1]  # type: ignore
+        position_diffs = np.array(
+            [
+                p_next - p_curr
+                for p_next, p_curr in zip(
+                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                )
+            ]
+        )
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
         self.prog.AddCost(squared_eucl_dist)
 
@@ -628,8 +633,8 @@ class NonCollisionMode(AbstractContactMode):
         # TODO: This can probably be cleaned up somehow
         p_BF_xs = self._get_vars_solution(vertex.x(), self.variables.p_BF_xs, result)  # type: ignore
         p_BF_ys = self._get_vars_solution(vertex.x(), self.variables.p_BF_ys, result)  # type: ignore
-        p_WB_x = self._get_vars_solution(vertex.x(), self.variables.p_WB_x, result)  # type: ignore
-        p_WB_y = self._get_vars_solution(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
+        p_WB_x = self._get_var_solution(vertex.x(), self.variables.p_WB_x, result)  # type: ignore
+        p_WB_y = self._get_var_solution(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
         cos_th = self._get_var_solution(vertex.x(), self.variables.cos_th, result)  # type: ignore
         sin_th = self._get_var_solution(vertex.x(), self.variables.sin_th, result)  # type: ignore
         return NonCollisionVariables(
@@ -684,17 +689,17 @@ class NonCollisionMode(AbstractContactMode):
     ) -> ContinuityVariables:
         if first_or_last == "first":
             return ContinuityVariables(
-                self.variables.p_BFs[:, 0],
-                self.variables.p_WB,  # type: ignore
+                self.variables.p_BFs[0],
+                self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
             )
         else:
             return ContinuityVariables(
-                self.variables.p_BFs[:, -1],
+                self.variables.p_BFs[-1],
                 self.variables.p_WB,
-                self.variables.cos_th,
-                self.variables.sin_th,
+                self.variables.cos_th,  # type: ignore
+                self.variables.sin_th,  # type: ignore
             )
 
     def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:

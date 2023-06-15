@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import numpy as np
+
 from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
@@ -13,8 +15,8 @@ def planar_pushing_station():
     sim = PlanarPushingSimulation()
     box = sim.get_box()
 
-    box_initial_pose = PlanarPose(x=1.0, y=0.0, theta=0.0)
-    box_target_pose = PlanarPose(x=0.5, y=0.0, theta=0.2)
+    box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+    box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.5)
     finger_initial_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
     finger_target_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
 
@@ -25,7 +27,7 @@ def planar_pushing_station():
     planner.set_slider_initial_pose(box_initial_pose)
     planner.set_slider_target_pose(box_target_pose)
     planner.save_graph_diagram(Path("graph.svg"))
-    traj = planner.make_trajectory()
+    traj = planner.make_trajectory(interpolate=False, print_path=True)
 
     breakpoint()
     visualize_planar_pushing_trajectory(traj, box.geometry)

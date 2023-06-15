@@ -104,16 +104,16 @@ class NonCollisionSubGraph:
         self, outgoing_idx: int, incoming_idx: int, edge: GcsEdge
     ):
         first_vars = self.modes[incoming_idx].get_continuity_vars("first").vector
-        last_vars = self.modes[outgoing_idx].get_continuity_vars("last").vector
-
-        first_var_idxs = self.modes[incoming_idx].prog.FindDecisionVariableIndices(
+        first_var_idxs = self.modes[incoming_idx].get_variable_indices_in_gcs_vertex(
             first_vars
         )
-        last_var_idxs = self.modes[outgoing_idx].prog.FindDecisionVariableIndices(
+
+        last_vars = self.modes[outgoing_idx].get_continuity_vars("last").vector
+        last_var_idxs = self.modes[outgoing_idx].get_variable_indices_in_gcs_vertex(
             last_vars
         )
 
-        constraint = eq(edge.xu()[first_var_idxs], edge.xv()[last_var_idxs])
+        constraint = eq(edge.xu()[last_var_idxs], edge.xv()[first_var_idxs])
         for c in constraint:
             edge.AddConstraint(c)
 
@@ -385,7 +385,10 @@ class PlanarPushingPlanner:
         return result
 
     def _get_path(
-        self, result: MathematicalProgramResult, flow_treshold: float = 0.55
+        self,
+        result: MathematicalProgramResult,
+        flow_treshold: float = 0.55,
+        print_path: bool = False,
     ) -> List[FaceContactVariables | NonCollisionVariables]:
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [result.GetSolution(p) for p in flow_variables]
@@ -407,10 +410,20 @@ class PlanarPushingPlanner:
             for pair in pairs_on_path
         ]
 
+        if print_path:
+            names = [v.name() for v in vertex_path]
+            print("Vertices on path:")
+            for name in names:
+                print(f" - {name}")
+
         return full_path
 
     def make_trajectory(
-        self, print_output: bool = False, measure_time: bool = False
+        self,
+        print_path: bool = False,
+        print_output: bool = False,
+        measure_time: bool = False,
+        interpolate: bool = True,
     ) -> PlanarTrajectory:
         import time
 
@@ -423,8 +436,8 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        path = self._get_path(result)
-        traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=False)
+        path = self._get_path(result, print_path=print_path)
+        traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=interpolate)
 
         return traj
 

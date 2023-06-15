@@ -21,7 +21,7 @@ def visualize_planar_pushing_trajectory(
 
     flattened_rotation = np.vstack([R.flatten() for R in traj.R_WB])
     box_viz = VisualizationPolygon2d.from_trajs(
-        traj.p_WB,
+        traj.p_WB.T,
         flattened_rotation,
         object_geometry,
         BOX_COLOR,
@@ -29,17 +29,17 @@ def visualize_planar_pushing_trajectory(
 
     # NOTE: I don't really need the entire trajectory here, but leave for now
     target_viz = VisualizationPolygon2d.from_trajs(
-        traj.p_WB,
+        traj.p_WB.T,
         flattened_rotation,
         object_geometry,
         TARGET_COLOR,
     )
 
-    contact_point_viz = VisualizationPoint2d(traj.p_c_W, FINGER_COLOR)
-    contact_force_viz = VisualizationForce2d(traj.p_c_W, CONTACT_COLOR, traj.f_c_W)
+    contact_point_viz = VisualizationPoint2d(traj.p_c_W.T, FINGER_COLOR)
+    contact_force_viz = VisualizationForce2d(traj.p_c_W.T, CONTACT_COLOR, traj.f_c_W.T)
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = traj.N / traj.dt
+    FRAMES_PER_SEC = traj.dt
     viz.visualize(
         [contact_point_viz],
         [contact_force_viz],

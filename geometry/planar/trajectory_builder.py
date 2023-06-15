@@ -25,6 +25,12 @@ class PlanarTrajectory:
         if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
             raise ValueError("Rotations do not have determinant 1.")
 
+        traj_lengths_equal = all(
+            [traj.shape[1] for traj in [self.p_WB, self.p_c_W, self.f_c_W]]
+        ) and (len(self.R_WB) == self.p_WB.shape[1])
+        if not traj_lengths_equal:
+            raise ValueError("Trajectories are not of equal length.")
+
     @property
     def N(self) -> int:
         return self.p_WB.shape[1]
@@ -65,10 +71,11 @@ class PlanarTrajectoryBuilder:
                 [p.R_WBs for p in self.path],
                 [],  # merge all of the lists to one
             )
-            p_WB = np.vstack([p.p_WBs for p in self.path])
-            p_c_W = np.vstack([p.p_c_Ws for p in self.path])
-            f_c_W = np.vstack([p.f_c_Ws for p in self.path])
+            p_WB = np.hstack(sum([p.p_WBs for p in self.path], []))
+            p_c_W = np.hstack(sum([p.p_c_Ws for p in self.path], []))
+            f_c_W = np.hstack(sum([p.f_c_Ws for p in self.path], []))
 
+            # Fixed dt when replaying knot points
             dt = 0.8
 
         return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W)
@@ -112,7 +119,7 @@ class PlanarTrajectoryBuilder:
         start_time: float,
         end_time: float,
         dt: float,
-    ) -> npt.NDArray[np.float64]:  # (NUM_POINTS, NUM_DIMS)
+    ) -> npt.NDArray[np.float64]:  # (traj_length, num_dims)
         """
         Assumes evenly spaced knot points.
 
@@ -128,6 +135,6 @@ class PlanarTrajectoryBuilder:
         traj_times = np.arange(start_time, end_time, dt)
         traj = np.hstack(
             [first_order_hold.value(t) for t in traj_times]
-        ).T  # transpose to match format in rest of project
+        ).T  # (traj_length, num_dims)
 
         return traj
