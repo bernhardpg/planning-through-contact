@@ -275,7 +275,7 @@ class PlanarPushingPlanner:
                 contact_vars_first.vector, contact_vars_first.get_pure_variables()
             )
 
-            first_var_idxs = contact_mode.prog.FindDecisionVariableIndices(
+            first_var_idxs = contact_mode.get_variable_indices_in_gcs_vertex(
                 contact_vars_first.get_pure_variables()
             )
 
@@ -287,7 +287,7 @@ class PlanarPushingPlanner:
                 contact_vars_last.vector, contact_vars_last.get_pure_variables()
             )
 
-            last_var_idxs = contact_mode.prog.FindDecisionVariableIndices(
+            last_var_idxs = contact_mode.get_variable_indices_in_gcs_vertex(
                 contact_vars_last.get_pure_variables()
             )
 
@@ -340,7 +340,7 @@ class PlanarPushingPlanner:
 
             # TODO: also incorporate continuity constraints on the finger
             first_vars = mode.get_continuity_vars("first").vector[2:]
-            first_var_idxs = mode.prog.FindDecisionVariableIndices(first_vars)
+            first_var_idxs = mode.get_variable_indices_in_gcs_vertex(first_vars)
 
             constraint = eq(source_vars, edge.xv()[first_var_idxs])
             for c in constraint:
@@ -361,7 +361,7 @@ class PlanarPushingPlanner:
 
             # TODO: also incorporate continuity constraints on the finger
             last_vars = mode.get_continuity_vars("last").vector[2:]
-            last_var_idxs = mode.prog.FindDecisionVariableIndices(last_vars)
+            last_var_idxs = mode.get_variable_indices_in_gcs_vertex(last_vars)
 
             constraint = eq(edge.xu()[last_var_idxs], target_vars)
             for c in constraint:

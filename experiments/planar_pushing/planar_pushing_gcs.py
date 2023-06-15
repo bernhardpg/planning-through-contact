@@ -810,7 +810,7 @@ def plan_planar_pushing():
         (5, 2): [[5, 4, 3, 2], [0]],
     }
 
-    experiment_number = 4
+    experiment_number = 2
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5

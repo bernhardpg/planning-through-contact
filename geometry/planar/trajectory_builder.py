@@ -20,6 +20,11 @@ class PlanarTrajectory:
     p_c_W: npt.NDArray[np.float64]  # (2, traj_length)
     f_c_W: npt.NDArray[np.float64]  # (2, traj_length)
 
+    def __post_init__(self) -> None:
+        dets = np.array([np.linalg.det(R) for R in self.R_WB])
+        if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
+            raise ValueError("Rotations do not have determinant 1.")
+
     @property
     def N(self) -> int:
         return self.p_WB.shape[1]
@@ -32,29 +37,40 @@ class PlanarTrajectoryBuilder:
     def get_trajectory(
         self, dt: float = 0.01, interpolate: bool = True
     ) -> PlanarTrajectory:
-        # TODO: make an option to not interpolate
-        R_WB = sum(
-            [
-                self.interpolate_so2_using_slerp(p.R_WBs, 0, p.time_in_mode, dt)
-                for p in self.path
-            ],
-            [],  # merge all of the lists to one
-        )
-        p_WB = np.vstack(
-            [self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]  # type: ignore
-        )
-        p_c_W = np.vstack(
-            [
-                self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
-                for p in self.path
-            ]
-        )
-        f_c_W = np.vstack(
-            [
-                self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
-                for p in self.path
-            ]
-        )
+        if interpolate:
+            R_WB = sum(
+                [
+                    self.interpolate_so2_using_slerp(p.R_WBs, 0, p.time_in_mode, dt)
+                    for p in self.path
+                ],
+                [],  # merge all of the lists to one
+            )
+            p_WB = np.vstack(
+                [self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]  # type: ignore
+            )
+            p_c_W = np.vstack(
+                [
+                    self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
+                    for p in self.path
+                ]
+            )
+            f_c_W = np.vstack(
+                [
+                    self._get_traj_by_interpolation(p.f_c_Ws, dt, p.time_in_mode)
+                    for p in self.path
+                ]
+            )
+        else:
+            R_WB = sum(
+                [p.R_WBs for p in self.path],
+                [],  # merge all of the lists to one
+            )
+            p_WB = np.vstack([p.p_WBs for p in self.path])
+            p_c_W = np.vstack([p.p_c_Ws for p in self.path])
+            f_c_W = np.vstack([p.f_c_Ws for p in self.path])
+
+            dt = 0.8
+
         return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W)
 
     def _get_traj_by_interpolation(

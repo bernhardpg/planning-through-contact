@@ -360,6 +360,8 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddQuadraticCost(sq_angular_vels)
 
     def get_convex_set(self) -> opt.Spectrahedron:
+        # NOTE: All variables in the relaxed prog will be shifted by one,
+        # because of the SDP relaxation that adds a first variable with value 1!
         self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
@@ -371,7 +373,7 @@ class FaceContactMode(AbstractContactMode):
         result: MathematicalProgramResult,
     ):
         return result.GetSolution(
-            vertex_vars[self.prog.FindDecisionVariableIndices(vars)]
+            vertex_vars[self.get_variable_indices_in_gcs_vertex(vars)]
         )
 
     # TODO: duplicated code
@@ -381,27 +383,40 @@ class FaceContactMode(AbstractContactMode):
         var: sym.Variable,
         result: MathematicalProgramResult,
     ):
-        return result.GetSolution(vertex_vars[self.prog.FindDecisionVariableIndex(var)])
+        return result.GetSolution(
+            vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]
+        )
+
+    def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
+        # NOTE: This function relies on the fact that the sdp relaxation
+        # returns an ordering of variables [1, x1, x2, ...],
+        # where [x1, x2, ...] is the original ordering in self.prog
+        idxs = self.prog.FindDecisionVariableIndices(vars)
+        idxs_shifted = [
+            i + 1 for i in idxs
+        ]  # We must shift the indices by one because of the SDP relaxation which adds a 1 as the first variable
+        return idxs_shifted
 
     def get_variable_solutions(
         self, vertex: GcsVertex, result: MathematicalProgramResult
     ) -> FaceContactVariables:
         # TODO: This can probably be cleaned up somehow
-        lams = self._get_vars_solution(vertex.x(), self.variables.lams, result)
+        lams = self._get_vars_solution(vertex.x(), self.variables.lams, result)  # type: ignore
         normal_forces = self._get_vars_solution(
-            vertex.x(), self.variables.normal_forces, result
+            vertex.x(), self.variables.normal_forces, result  # type: ignore
         )
         friction_forces = self._get_vars_solution(
-            vertex.x(), self.variables.friction_forces, result
+            vertex.x(), self.variables.friction_forces, result  # type: ignore
         )
-        cos_ths = self._get_vars_solution(vertex.x(), self.variables.cos_ths, result)
-        sin_ths = self._get_vars_solution(vertex.x(), self.variables.sin_ths, result)
-        p_WB_xs = self._get_vars_solution(vertex.x(), self.variables.p_WB_xs, result)
-        p_WB_ys = self._get_vars_solution(vertex.x(), self.variables.p_WB_ys, result)
+        cos_ths = self._get_vars_solution(vertex.x(), self.variables.cos_ths, result)  # type: ignore
+        sin_ths = self._get_vars_solution(vertex.x(), self.variables.sin_ths, result)  # type: ignore
+        p_WB_xs = self._get_vars_solution(vertex.x(), self.variables.p_WB_xs, result)  # type: ignore
+        p_WB_ys = self._get_vars_solution(vertex.x(), self.variables.p_WB_ys, result)  # type: ignore
+
         return FaceContactVariables(
-            self.num_knot_points,
-            self.time_in_mode,
-            self.dt,
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
             lams,
             normal_forces,
             friction_forces,
@@ -565,11 +580,6 @@ class NonCollisionMode(AbstractContactMode):
         self._define_constraints()
         self._define_cost()
 
-        # TODO: remove
-        # print(f"Name: {self.name}")
-        # for plane in self.planes:
-        #     print(plane)
-
     def _define_variables(self) -> NonCollisionVariables:
         # Finger location
         p_BF_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_x")
@@ -635,9 +645,9 @@ class NonCollisionMode(AbstractContactMode):
         cos_th = self._get_var_solution(vertex.x(), self.variables.cos_th, result)
         sin_th = self._get_var_solution(vertex.x(), self.variables.sin_th, result)
         return NonCollisionVariables(
-            self.num_knot_points,
-            self.time_in_mode,
-            self.dt,
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -687,9 +697,9 @@ class NonCollisionMode(AbstractContactMode):
         if first_or_last == "first":
             return ContinuityVariables(
                 self.variables.p_BFs[:, 0],
-                self.variables.p_WB,
-                self.variables.cos_th,
-                self.variables.sin_th,
+                self.variables.p_WB,  # type: ignore
+                self.variables.cos_th,  # type: ignore
+                self.variables.sin_th,  # type: ignore
             )
         else:
             return ContinuityVariables(
