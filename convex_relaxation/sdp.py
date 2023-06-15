@@ -482,4 +482,37 @@ def create_sdp_relaxation(
             for c in constraints:  # Drake requires us to add one constraint at the time
                 relaxed_prog.AddLinearConstraint(c)
 
+    # TODO: clean up
+    if len(prog.quadratic_constraints()) > 0:
+        (
+            generic_eq_constraints_as_polynomials,
+            generic_ineq_constraints_as_polynomials,
+        ) = _generic_constraint_bindings_to_polynomials(prog.quadratic_constraints())
+
+        generic_constraints_as_polynomials = np.concatenate(
+            (
+                generic_eq_constraints_as_polynomials.flatten(),
+                generic_ineq_constraints_as_polynomials.flatten(),
+            )
+        )
+        _assert_max_degree(generic_constraints_as_polynomials, DEGREE_QUADRATIC)
+
+        Q_eqs = [
+            _quadratic_polynomial_to_homoenuous_form(p, basis, num_vars)
+            for p in generic_eq_constraints_as_polynomials
+        ]
+        for Q in Q_eqs:
+            constraints = eq(np.sum(X * Q), 0).flatten()
+
+            for c in constraints:  # Drake requires us to add one constraint at the time
+                relaxed_prog.AddLinearConstraint(c)
+        Q_ineqs = [
+            _quadratic_polynomial_to_homoenuous_form(p, basis, num_vars)
+            for p in generic_ineq_constraints_as_polynomials
+        ]
+        for Q in Q_ineqs:
+            constraints = ge(np.sum(X * Q), 0).flatten()
+            for c in constraints:  # Drake requires us to add one constraint at the time
+                relaxed_prog.AddLinearConstraint(c)
+
     return relaxed_prog, X, basis

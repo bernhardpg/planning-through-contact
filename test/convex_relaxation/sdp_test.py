@@ -58,8 +58,11 @@ def test_equality_elimination_with_sdp_relaxation():
 
     z_sol = relaxed_result.GetSolution(Z[1:, 0])
     eliminated_sol = retrieve_x(z_sol)
-
     assert np.allclose(sol_relaxation, eliminated_sol, atol=1e-3)
+
+    TRUE_SOL = np.array([-0.70710678, -0.70710678])
+
+    assert np.allclose(eliminated_sol, TRUE_SOL, atol=1e-3)
 
 
 if __name__ == "__main__":
