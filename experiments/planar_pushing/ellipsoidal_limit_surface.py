@@ -550,7 +550,7 @@ def plan_planar_pushing(
         pos_target=pos_target,
     )
 
-    solve_smaller = False
+    solve_smaller = True
     if solve_smaller:
         # TODO: there is a bug here somewhere!
         smaller_prog, retrieve_x = eliminate_equality_constraints(contact_mode.prog)

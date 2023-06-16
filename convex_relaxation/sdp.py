@@ -61,6 +61,10 @@ def _linear_bindings_to_affine_terms(
     bounding_box_expressions: NpExpressionArray,
     vars: NpVariableArray,
 ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Returns A and b satisfying
+    Ax + b = vector of expressions (bindings)
+    """
     if len(linear_bindings) > 0:
         binding_type = type(linear_bindings[0].evaluator())
         if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
@@ -87,6 +91,9 @@ def _linear_bindings_to_affine_terms(
 def _affine_terms_to_homogenous_form(
     A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
+    """
+    Assumes Ax + b = 0 should hold (note the sign difference from Ax = b)
+    """
     A_homogenous = np.hstack((b.reshape(-1, 1), A))
     return A_homogenous
 
@@ -96,6 +103,9 @@ def _linear_bindings_to_homogenuous_form(
     bounding_box_expressions: NpExpressionArray,
     vars: NpVariableArray,
 ) -> npt.NDArray[np.float64]:
+    """
+    Returns the matrix that satisfies [b A][1 x]' = 0
+    """
     A, b = _linear_bindings_to_affine_terms(
         linear_bindings, bounding_box_expressions, vars
     )
@@ -266,7 +276,9 @@ def eliminate_equality_constraints(
         prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
     )
     F = get_nullspace_matrix(A_eq)
-    x_hat = find_solution(A_eq, b_eq)
+    x_hat = find_solution(
+        A_eq, -b_eq
+    )  # TODO: Sign must be flipped because of the way _linear_bindings_to_affine_terms returns A and b
 
     new_dim = F.shape[1]
     new_prog = MathematicalProgram()

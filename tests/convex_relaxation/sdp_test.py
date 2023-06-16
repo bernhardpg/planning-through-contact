@@ -169,7 +169,7 @@ class ProgSo2WithDetails(NamedTuple):
     create_r_vec_from_angle: Callable[[float], npt.NDArray[np.float64]]
 
 
-# @pytest.fixture
+@pytest.fixture
 def so_2_prog_multiple_points() -> ProgSo2WithDetails:
     # Initial conditions
     th_initial = 0
@@ -250,7 +250,10 @@ def test_so_2_relaxation_multiple_points(
 
     x_val = X_val[1:, 0]
     rs = get_r_from_x(x_val)
-    plot_cos_sine_trajs(rs.T)  # TODO: remove
+
+    DEBUG = False
+    if DEBUG:
+        plot_cos_sine_trajs(rs.T)
 
     assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
@@ -285,13 +288,17 @@ def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
     relaxed_prog, X, _ = create_sdp_relaxation(prog)
     result = Solve(relaxed_prog)
     X_val = result.GetSolution(X)
-    x_val_true = X_val[1:, 0]
+    x_val_true = X_val[1:, 0].reshape((-1, 1))
 
     rs = get_r_from_x(x)
 
-    plot_cos_sine_trajs(rs.T)
+    DEBUG = False
+    if DEBUG:
+        plot_cos_sine_trajs(rs.T)
+
     assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
+    assert np.allclose(x_val_true, x, atol=1e-5)
 
 
 if __name__ == "__main__":
