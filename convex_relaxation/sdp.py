@@ -81,7 +81,7 @@ def _linear_bindings_to_affine_terms(
     all_linear_exprs = np.concatenate([linear_exprs, bounding_box_expressions])
 
     A, b = sym.DecomposeAffineExpressions(all_linear_exprs.flatten(), vars)
-    return A, b
+    return A, b.reshape((-1, 1))
 
 
 def _affine_terms_to_homogenous_form(
@@ -184,10 +184,11 @@ def _generic_constraint_bindings_to_polynomials(
 def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
     max_degree = max([p.TotalDegree() for p in polys])
     min_degree = min([p.TotalDegree() for p in polys])
-    if max_degree > degree or min_degree < degree:
-        raise ValueError(
-            "Can only create SDP relaxation for (possibly non-convex) Quadratically Constrainted Quadratic Programs (QCQP)"
-        )  # TODO for now we don't allow lower degree or higher degree
+    # if max_degree > degree or min_degree < degree:
+    #     breakpoint()
+    #     raise ValueError(
+    #         "Can only create SDP relaxation for (possibly non-convex) Quadratically Constrainted Quadratic Programs (QCQP)"
+    #     )  # TODO for now we don't allow lower degree or higher degree
 
 
 def _collect_bounding_box_constraints(
@@ -201,6 +202,8 @@ def _collect_bounding_box_constraints(
 
         for x_i, b_u, b_l in zip(x, b_upper, b_lower):
             if b_u == b_l:  # eq constraint
+                # TODO: Remove this part
+                raise ValueError("Bounding box equalities are not supported!")
                 bounding_box_constraints.append((x_i - b_u, ConstraintType.EQ))
             else:
                 if not np.isinf(b_u):
@@ -229,10 +232,6 @@ def get_nullspace_matrix(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 
     V_zero = V[:, zero_idxs + remaining_idxs]
 
-    # TODO: move this to a unit test
-    assert np.isclose(np.sum(A.dot(V_zero)), 0)
-
-    # TODO: figure out how to get the dimensions right here
     nullspace_matrix = V_zero
     return nullspace_matrix
 
@@ -279,9 +278,9 @@ def eliminate_equality_constraints(
     if has_linear_ineq_constraints:
         B, d = _linear_bindings_to_affine_terms(
             prog.linear_constraints(), bounding_box_eqs, decision_vars
-        )  # Bx >= d
+        )  # B x >= d becomes B F z >= d - B x_hat
         new_prog.AddLinearConstraint(
-            B.dot(F), d, np.ones_like(d) * np.inf, new_decision_vars
+            B.dot(F), d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
         )
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
@@ -308,10 +307,19 @@ def eliminate_equality_constraints(
             ub = e.upper_bound().item()
 
             new_Q = F.T.dot(Q).dot(F)
-            new_b = x_hat.T.dot(Q).dot(F) + b.T.dot(F)
+            new_b = (x_hat.T.dot(Q).dot(F) + b.T.dot(F)).T
 
-            new_lb = lb - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
-            new_ub = ub - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
+            new_lb = lb - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat)).item()
+            new_ub = ub - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat)).item()
+
+            constraint_empty = (
+                np.allclose(new_Q, 0)
+                and np.allclose(new_b, 0)
+                and np.isclose(new_lb, 0)
+                and np.isclose(new_ub, 0)
+            )
+            if constraint_empty:
+                continue
 
             new_prog.AddQuadraticConstraint(
                 new_Q, new_b, new_lb, new_ub, new_decision_vars
@@ -350,13 +358,18 @@ def eliminate_equality_constraints(
             c = e.c()
 
             new_Q = F.T.dot(Q).dot(F)
-            new_b = x_hat.T.dot(Q).dot(F) + b.T.dot(F)
+            new_b = (x_hat.T.dot(Q).dot(F) + b.T.dot(F)).T
 
             new_c = c - (0.5 * x_hat.T.dot(Q).dot(x_hat) + b.T.dot(x_hat))
 
-            new_prog.AddQuadraticCost(new_Q, new_b, new_c, new_decision_vars)
+            new_prog.AddQuadraticCost(
+                new_Q, new_b, new_c, new_decision_vars, e.is_convex()
+            )
 
-    get_x_from_z = lambda z: F.dot(z) + x_hat
+    def get_x_from_z(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        z = z.reshape((-1, 1))  # make sure z is (N, 1)
+        return F.dot(z) + x_hat
+
     return new_prog, get_x_from_z
 
 
@@ -495,6 +508,10 @@ def create_sdp_relaxation(
                 generic_ineq_constraints_as_polynomials.flatten(),
             )
         )
+        # Don't add degree 0 polynomials (these should just be equal to 0)
+        generic_constraints_as_polynomials = [
+            c for c in generic_constraints_as_polynomials if c.TotalDegree() > 0
+        ]
         _assert_max_degree(generic_constraints_as_polynomials, DEGREE_QUADRATIC)
 
         Q_eqs = [

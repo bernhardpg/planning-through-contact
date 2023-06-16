@@ -398,13 +398,13 @@ class PlanarPushingContactMode:
             omega_WB = vars.omega_WBs[k]
 
             # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
-            f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
-            p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
-            R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
+            # f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
+            # p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
+            # R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
 
-            # f_c_B = vars.f_c_Bs[k]
-            # p_c_B = vars.p_c_Bs[k]
-            # R_WB = vars.R_WBs[k]
+            f_c_B = vars.f_c_Bs[k]
+            p_c_B = vars.p_c_Bs[k]
+            R_WB = vars.R_WBs[k]
 
             x_dot, dyn = quasi_static_dynamics(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, self.FRICTION_COEFF, object.mass
@@ -500,7 +500,7 @@ def plan_planar_pushing(
 ):
     if experiment_number == 0:
         th_initial = 0
-        th_target = 0.8
+        th_target = 0.1
         pos_initial = np.array([[0.0, 0.5]]).T
         pos_target = np.array([[-0.3, 0.2]]).T
         contact_face_idx = 0
@@ -550,20 +550,24 @@ def plan_planar_pushing(
         pos_target=pos_target,
     )
 
-    import time
+    solve_smaller = False
+    if solve_smaller:
+        # TODO: there is a bug here somewhere!
+        smaller_prog, retrieve_x = eliminate_equality_constraints(contact_mode.prog)
+        relaxed_prog, X, _ = create_sdp_relaxation(smaller_prog)
+        solver_options = SolverOptions()
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+        assert relaxed_result.is_success()
 
-    start_time = time.time()
-    smaller_prog, F, x_hat = eliminate_equality_constraints(contact_mode.prog)
-    smaller_result = Solve(smaller_prog)
-    assert smaller_result.is_success()
-    breakpoint()
-    relaxed_result = Solve(contact_mode.relaxed_prog)
-    end_time = time.time()
-    assert relaxed_result.is_success()
-    print("Found solution to relaxed problem!")
-    print(f"Elapsed time: {end_time - start_time}")
+        relaxed_sols = retrieve_x(relaxed_result.GetSolution(X[1:, 0]))
+    else:
+        solver_options = SolverOptions()
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        relaxed_result = Solve(contact_mode.relaxed_prog, solver_options=solver_options)
+        assert relaxed_result.is_success()
 
-    relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
+        relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
 
     if round_solution:
         print("Solving nonlinear trajopt...")
@@ -580,6 +584,7 @@ def plan_planar_pushing(
         print("Found solution to true problem!")
 
         vals = [contact_mode.true_mode_vars.eval_result(true_result)]
+        breakpoint()
     else:
         vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
 
