@@ -1,9 +1,10 @@
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 import pytest
+from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
 from convex_relaxation.sdp import (
@@ -14,6 +15,7 @@ from convex_relaxation.sdp import (
     find_solution,
     get_nullspace_matrix,
 )
+from visualize.analysis import plot_cos_sine_trajs
 
 
 class LinearSystem(NamedTuple):
@@ -159,8 +161,142 @@ def test_sdp_relaxation_so_2_tightness(
     assert np.allclose(sol, so_2_true_sol)
 
 
-# if __name__ == "__main__":
-# test_sdp_relaxation_so_2_tightness(so_2_prog(), so_2_true_sol())
+class ProgSo2WithDetails(NamedTuple):
+    prog: MathematicalProgram
+    initial_angle: float
+    target_angle: float
+    get_rs_from_x: Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]
+    create_r_vec_from_angle: Callable[[float], npt.NDArray[np.float64]]
+
+
+# @pytest.fixture
+def so_2_prog_multiple_points() -> ProgSo2WithDetails:
+    # Initial conditions
+    th_initial = 0
+    th_final = np.pi - 0.2
+
+    NUM_CTRL_POINTS = 8
+    NUM_DIMS = 2
+
+    prog = MathematicalProgram()
+
+    r = prog.NewContinuousVariables(NUM_DIMS, NUM_CTRL_POINTS, "r")
+
+    # Constrain the points to lie on the unit circle
+    for i in range(NUM_CTRL_POINTS):
+        r_i = r[:, i]
+        so_2_constraint = r_i.T.dot(r_i) - 1
+        prog.AddQuadraticConstraint(so_2_constraint, 0, 0)
+
+    # Minimize squared euclidean distances in rotaion parameters
+    for i in range(NUM_CTRL_POINTS - 1):
+        r_i = r[:, i]
+        r_next = r[:, i + 1]
+        r_dot_i = r_next - r_i
+
+        rot_cost_i = r_dot_i.T.dot(r_dot_i)
+        prog.AddQuadraticCost(rot_cost_i)
+
+    minimize_squares = False
+    if minimize_squares:
+        for i in range(NUM_CTRL_POINTS):
+            r_i = r[:, i]
+            prog.AddQuadraticCost(r_i.T.dot(r_i))
+
+    create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
+
+    initial_cond = eq(r[:, 0], create_r_vec_from_angle(th_initial))
+    final_cond = eq(r[:, -1], create_r_vec_from_angle(th_final))
+
+    for c in initial_cond:
+        prog.AddLinearConstraint(c)
+
+    for c in final_cond:
+        prog.AddLinearConstraint(c)
+
+    def get_rs_from_x(x):
+        r_val = x[: NUM_CTRL_POINTS * NUM_DIMS]
+        r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
+        return r_val
+
+    return ProgSo2WithDetails(
+        prog, th_initial, th_final, get_rs_from_x, create_r_vec_from_angle
+    )
+
+
+def test_so_2_relaxation_multiple_points(
+    so_2_prog_multiple_points: ProgSo2WithDetails,
+) -> None:
+    (
+        prog,
+        th_initial,
+        th_target,
+        get_r_from_x,
+        create_r_vec_from_angle,
+    ) = so_2_prog_multiple_points
+
+    relaxed_prog, X, _ = create_sdp_relaxation(prog)
+    result = Solve(relaxed_prog)
+    assert result.is_success()
+
+    X_val = result.GetSolution(X)
+
+    tol = 1e-6
+    num_nonzero_eigvals = len(
+        [val for val in np.linalg.eigvals(X_val) if np.abs(val) >= tol]
+    )
+    assert num_nonzero_eigvals == 1
+    assert np.isclose(result.get_optimal_cost(), 1.2180540144494847)
+
+    x_val = X_val[1:, 0]
+    rs = get_r_from_x(x_val)
+    plot_cos_sine_trajs(rs.T)  # TODO: remove
+
+    assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
+    assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
+
+
+def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
+    (
+        prog,
+        th_initial,
+        th_target,
+        get_r_from_x,
+        create_r_vec_from_angle,
+    ) = so_2_prog_multiple_points
+
+    # Find solution by eliminating equalities first
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+    relaxed_prog, Z, _ = create_sdp_relaxation(smaller_prog)
+    result = Solve(relaxed_prog)
+    assert result.is_success()
+
+    Z_val = result.GetSolution(Z)
+
+    tol = 1e-6
+    num_nonzero_eigvals = len(
+        [val for val in np.linalg.eigvals(Z_val) if np.abs(val) >= tol]
+    )
+    assert num_nonzero_eigvals == 1
+    z = Z_val[1:, 0]
+    x = get_x(z)
+
+    # Find solution from relaxing the program directly
+    relaxed_prog, X, _ = create_sdp_relaxation(prog)
+    result = Solve(relaxed_prog)
+    X_val = result.GetSolution(X)
+    x_val_true = X_val[1:, 0]
+
+    rs = get_r_from_x(x)
+
+    plot_cos_sine_trajs(rs.T)
+    assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
+    assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
+
+
+if __name__ == "__main__":
+    # test_so_2_relaxation_multiple_points(so_2_prog_multiple_points())
+    test_eq_elimination(so_2_prog_multiple_points())
 # test_equality_elimination_with_initial_guess(so_2_prog(), so_2_true_sol())
 # test_equality_elimination_with_sdp_relaxation()
 
