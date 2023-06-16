@@ -551,23 +551,39 @@ def plan_planar_pushing(
     )
 
     solve_smaller = True
-    if solve_smaller:
-        # TODO: there is a bug here somewhere!
-        smaller_prog, retrieve_x = eliminate_equality_constraints(contact_mode.prog)
-        relaxed_prog, X, _ = create_sdp_relaxation(smaller_prog)
-        solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
-        assert relaxed_result.is_success()
 
-        relaxed_sols = retrieve_x(relaxed_result.GetSolution(X[1:, 0]))
-    else:
-        solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        relaxed_result = Solve(contact_mode.relaxed_prog, solver_options=solver_options)
-        assert relaxed_result.is_success()
+    NUM_TRIALS = 10
 
-        relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
+    elapsed_times = []
+    for _ in range(NUM_TRIALS):
+        if solve_smaller:
+            smaller_prog, retrieve_x = eliminate_equality_constraints(
+                contact_mode.prog, print_num_vars_eliminated=True
+            )
+            relaxed_prog, X, _ = create_sdp_relaxation(smaller_prog)
+            solver_options = SolverOptions()
+            # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            start_time = time.time()
+            relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+            end_time = time.time()
+            assert relaxed_result.is_success()
+
+            relaxed_sols = retrieve_x(relaxed_result.GetSolution(X[1:, 0]))
+        else:
+            solver_options = SolverOptions()
+            # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            start_time = time.time()
+            relaxed_result = Solve(
+                contact_mode.relaxed_prog, solver_options=solver_options
+            )
+            end_time = time.time()
+            assert relaxed_result.is_success()
+
+            relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
+        elapsed_time = end_time - start_time
+        elapsed_times.append(elapsed_time)
+
+    print(f"Mean elapsed time: {np.mean(elapsed_times)}")
 
     if round_solution:
         print("Solving nonlinear trajopt...")

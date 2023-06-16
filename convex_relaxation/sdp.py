@@ -254,7 +254,7 @@ def find_solution(
 
 
 def eliminate_equality_constraints(
-    prog: MathematicalProgram,
+    prog: MathematicalProgram, print_num_vars_eliminated: bool = False
 ) -> Tuple[
     MathematicalProgram, Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]
 ]:
@@ -283,6 +283,22 @@ def eliminate_equality_constraints(
     new_dim = F.shape[1]
     new_prog = MathematicalProgram()
     new_decision_vars = new_prog.NewContinuousVariables(new_dim, "x")
+
+    if print_num_vars_eliminated:
+        # In SDP relaxation we will have:
+        # (N^2 - N) / 2 + N variables
+        # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
+        calc_num_vars = lambda N: ((N + 1) ** 2 - (N + 1)) / 2 + (N + 1)
+        num_vars_without_elimination = calc_num_vars(old_dim)
+        num_vars_with_elimination = calc_num_vars(new_dim)
+        diff = num_vars_without_elimination - num_vars_with_elimination
+        print(
+            f"Total number of vars in SDP relaxation of original problem: {num_vars_without_elimination}"
+        )
+        print(
+            f"Total number of vars after elimination in SDP relaxation: {num_vars_with_elimination}"
+        )
+        print(f"Total number of variables eliminated: {diff}")
 
     has_linear_ineq_constraints = (
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
