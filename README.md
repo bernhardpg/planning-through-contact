@@ -21,6 +21,13 @@ Add this module to pythonpath:
 export PYTHONPATH=$PYTHONPATH:.
 ```
 
+## Some experiments
+Elimination of linear equality constraints:
+
+```
+python experiments/planar_pushing/one_contact_mode.py
+```
+
 ## Running (deprecated) demos
 ```
 poetry run python deprecated/run_demos.py --demo box_push
