@@ -59,11 +59,11 @@ class PlanarPose:
         Returns the full RigidBody pose as generalized coordinates: [quaternion, translation]'
 
         """
-        q_wxyz = Quaternion(
-            RotationMatrix(RollPitchYaw([0, 0, self.theta])).matrix()  # type: ignore
-        ).wxyz()
-        p_xyz = np.array([self.x, self.y, object_height])
-        return np.concatenate((q_wxyz, p_xyz))
+        pose = self.to_pose(object_height)
+        quat = pose.rotation().ToQuaternion().wxyz()
+        trans = pose.translation()
+        gen_coords = np.concatenate((quat, trans))
+        return gen_coords
 
     def vector(self) -> npt.NDArray[np.float64]:
         return np.array([self.x, self.y, self.theta])
