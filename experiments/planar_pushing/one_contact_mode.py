@@ -550,6 +550,7 @@ def plan_planar_pushing(
         pos_target=pos_target,
     )
 
+    # Solve the problem by using elimination of equality constraints
     solve_smaller = True
 
     NUM_TRIALS = 10
