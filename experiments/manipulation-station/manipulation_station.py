@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
@@ -14,25 +16,27 @@ def planar_pushing_station():
     box = sim.get_box()
 
     box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-    box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.5)
-    finger_initial_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
-    finger_target_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
+    box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
+    # finger_initial_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
+    # finger_target_pose = PlanarPose(x=0.7, y=0.3, theta=0.0)
 
     specs = PlanarPlanSpecs()
 
-    # planner = PlanarPushingPlanner(box, specs)
-    #
-    # planner.set_slider_initial_pose(box_initial_pose)
-    # planner.set_slider_target_pose(box_target_pose)
-    # planner.save_graph_diagram(Path("graph.svg"))
-    # traj = planner.make_trajectory(interpolate=False, print_path=True)
+    planner = PlanarPushingPlanner(box, specs)
 
-    # breakpoint()
-    # visualize_planar_pushing_trajectory(traj, box.geometry)
+    planner.set_slider_initial_pose(box_initial_pose)
+    planner.set_slider_target_pose(box_target_pose)
+    planner.save_graph_diagram(Path("graph.svg"))
+    traj = planner.make_trajectory(
+        interpolate=False, print_path=True, measure_time=True, print_output=True
+    )
 
-    sim.set_box_planar_pose(box_initial_pose)
+    visualize_planar_pushing_trajectory(traj, box.geometry)
+    breakpoint()
 
-    sim.set_pusher_planar_pose(finger_initial_pose)
+    # sim.set_box_planar_pose(box_initial_pose)
+
+    # sim.set_pusher_planar_pose(finger_initial_pose)
 
     finger_pose = sim.get_pusher_planar_pose()
     sim.run()

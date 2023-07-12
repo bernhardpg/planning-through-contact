@@ -56,7 +56,11 @@ class NonCollisionSubGraph:
     ) -> "NonCollisionSubGraph":
         """
         Constructs a subgraph of non-collision modes, based on the given modes. This constructor takes in the GCS instance,
-        and adds the vertices and edges to the GCS instance.
+        as well as the modes. The modes each has the option to get a convex set from its underlying mathematical program,
+        which is added as vertices to the GCS instance.
+
+        An edge is added between any two overlapping position modes, as well as between the incoming and outgoing
+        nodes to the bigger graph.
 
         @param mode_i: Index of first contact mode where this subgraph is connected
         @param mode_j: Index of second contact mode where this subgraph is connected
@@ -160,9 +164,9 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
-    def __init__(self, slider: RigidBody, specs: PlanarPlanSpecs):
+    def __init__(self, slider: RigidBody, plan_specs: PlanarPlanSpecs):
         self.slider = slider
-        self.specs = specs
+        self.plan_specs = plan_specs
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -177,16 +181,19 @@ class PlanarPushingPlanner:
 
     def _formulate_contact_modes(self):
         contact_locations = self.slider.geometry.contact_locations
+        # TODO: should just extract faces, rather than relying on the object to only pass faces as
+        # contact locations
+
         if not all([loc.pos == ContactLocation.FACE for loc in contact_locations]):
             raise RuntimeError("Only face contacts are supported for planar pushing.")
 
         self.contact_modes = [
-            FaceContactMode.create_from_spec(loc, self.specs, self.slider)
+            FaceContactMode.create_from_plan_spec(loc, self.plan_specs, self.slider)
             for loc in contact_locations
         ]
 
         self.non_collision_modes = [
-            NonCollisionMode.create_from_spec(loc, self.specs, self.slider)
+            NonCollisionMode.create_from_plan_spec(loc, self.plan_specs, self.slider)
             for loc in contact_locations
         ]
 

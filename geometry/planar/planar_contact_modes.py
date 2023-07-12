@@ -113,6 +113,12 @@ class PlanarPlanSpecs:
 
 @dataclass
 class AbstractContactMode(ABC):
+    """
+    Abstract base class for planar pushing contact modes.
+
+    Each contact mode will create a mathematicalprogram to handle variables and constraints.
+    """
+
     name: str
     num_knot_points: int
     time_in_mode: float
@@ -141,7 +147,7 @@ class AbstractContactMode(ABC):
 
     @classmethod
     @abstractmethod
-    def create_from_spec(
+    def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
@@ -253,7 +259,7 @@ class FaceContactVariables(AbstractModeVariables):
 @dataclass
 class FaceContactMode(AbstractContactMode):
     @classmethod
-    def create_from_spec(
+    def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
@@ -556,7 +562,7 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     @classmethod
-    def create_from_spec(
+    def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
@@ -687,6 +693,7 @@ class NonCollisionMode(AbstractContactMode):
 
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
+        # TODO: Replace this with an interface to the HPolyhedron class, once this is implemented in Drake.
         poly = opt.Spectrahedron(temp_prog)
 
         # NOTE: They sets will likely be unbounded
@@ -711,6 +718,9 @@ class NonCollisionMode(AbstractContactMode):
             )
 
     def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        cost = self.prog.quadratic_costs()[0]  # only one cost term
+        assert len(self.prog.quadratic_costs()) == 1
+
+        cost = self.prog.quadratic_costs()[0]  # only one cost term for these modes
+
         var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
         return var_idxs, cost.evaluator()
