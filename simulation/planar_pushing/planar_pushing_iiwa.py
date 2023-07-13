@@ -12,7 +12,8 @@ from pydrake.all import (
     Quaternion,
     StateInterpolatorWithDiscreteDerivative,
 )
-from pydrake.geometry import Box, MeshcatVisualizer, StartMeshcat
+from pydrake.geometry import Box as DrakeBox
+from pydrake.geometry import MeshcatVisualizer, StartMeshcat
 from pydrake.lcm import DrakeLcm
 from pydrake.manipulation.kuka_iiwa import IiwaCommandReceiver, IiwaStatusSender
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
@@ -74,19 +75,10 @@ def get_keypoints(x):
 
 
 class PlanarPushingDiagram(Diagram):
-    def __init__(self):
+    def __init__(self, add_visualizer: bool = False):
         Diagram.__init__(self)
 
         self.h_mbp = 1e-3
-        self.meshcat = StartMeshcat()  # type: ignore
-
-        self.meshcat.SetTransform(
-            path="/Cameras/default",
-            matrix=RigidTransform(
-                RollPitchYaw([-np.pi / 8, 0.0, np.pi / 2]),  # type: ignore
-                0.01 * np.array([0.05, 0.0, 0.1]),
-            ).GetAsMatrix4(),
-        )
 
         builder = DiagramBuilder()
         self.mbp, self.sg = AddMultibodyPlantSceneGraph(builder, time_step=self.h_mbp)
@@ -103,14 +95,22 @@ class PlanarPushingDiagram(Diagram):
         ProcessModelDirectives(directives, self.mbp, self.parser)  # type: ignore
         self.mbp.Finalize()
 
+        # TODO: rename these
         # Get model instances for box and pusher.
-        # NOTE: These are unused
         self.box = self.mbp.GetModelInstanceByName("box")
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
-        # Add visualizer.
-        self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.sg, self.meshcat)  # type: ignore
+        if add_visualizer:
+            self.meshcat = StartMeshcat()  # type: ignore
+            self.meshcat.SetTransform(
+                path="/Cameras/default",
+                matrix=RigidTransform(
+                    RollPitchYaw([-np.pi / 8, 0.0, np.pi / 2]),  # type: ignore
+                    0.01 * np.array([0.05, 0.0, 0.1]),
+                ).GetAsMatrix4(),
+            )
+            self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.sg, self.meshcat)  # type: ignore
 
         self.add_controller(builder)
 
@@ -187,22 +187,29 @@ class PlanarPushingDiagram(Diagram):
         box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.box)
         return box_body
 
-    def get_box_shape(self) -> Box:
+    def get_box_shape(self) -> DrakeBox:
         box_body = self.get_box_body()
         collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(box_body)
 
         inspector = self.sg.model_inspector()
         shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
-        box_shape = next(shape for shape in shapes if isinstance(shape, Box))
+        box_shape = next(shape for shape in shapes if isinstance(shape, DrakeBox))
 
         return box_shape
+
+    def get_box(self) -> RigidBody:
+        box_body = self.get_box_body()
+        box_shape = self.get_box_shape()
+
+        box = RigidBody.from_drake(box_shape, box_body, "box")
+        return box
 
     def get_box_planar_pose(self, context: Context):
         pose = self.mbp.GetFreeBodyPose(context, self.get_box_body())
         planar_pose = PlanarPose.from_pose(pose)
         return planar_pose
 
-    def get_pusher_shape(self) -> Box:
+    def get_pusher_shape(self) -> DrakeBox:
         pusher_body = self.mbp.GetBodyByName("pusher")
         collision_geometry_id = self.mbp.GetCollisionGeometriesForBody(pusher_body)[0]
 
@@ -271,11 +278,11 @@ class PlanarPushingSimulation:
         self.DEFAULT_BOX_POSITION = PlanarPose(x=0.5, y=0.0, theta=0.0)
 
         builder = DiagramBuilder()
-        self.station = builder.AddSystem(PlanarPushingDiagram())
+        self.station = builder.AddSystem(PlanarPushingDiagram(add_visualizer=True))
 
         self.connect_lcm(builder, self.station)
         self.keypts_lcm = builder.AddSystem(
-            KeyptsLCM(self.station.get_box_body().index())
+            KeyptsLCM(self.station._get_box_body().index())
         )
         builder.Connect(
             self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
@@ -376,11 +383,7 @@ class PlanarPushingSimulation:
         self.TABLE_BUFFER_DIST = 0.05
 
     def get_box(self) -> RigidBody:
-        box_body = self.station.get_box_body()
-        box_shape = self.station.get_box_shape()
-
-        box = RigidBody.from_drake(box_shape, box_body, "box")
-        return box
+        return self.station.get_box()
 
     def get_box_planar_pose(self):
         return self.station.get_box_planar_pose(self.mbp_context)
