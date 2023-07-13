@@ -133,6 +133,10 @@ class Box2d(CollisionGeometry):
     def _n3(self) -> npt.NDArray[np.float64]:
         return -np.array([-1, 0]).reshape((-1, 1))
 
+    @property
+    def normal_vecs(self) -> List[npt.NDArray[np.float64]]:
+        return [self._n0, self._n1, self._n2, self._n3]
+
     # Right handed coordinate frame with z-axis out of plane and x-axis along normal
     #
     #           t0--->
@@ -158,6 +162,10 @@ class Box2d(CollisionGeometry):
     @property
     def _t3(self) -> npt.NDArray[np.float64]:
         return self._n2
+
+    @property
+    def tangent_vecs(self) -> List[npt.NDArray[np.float64]]:
+        return [self._t0, self._t1, self._t2, self._t3]
 
     # Corner normal vectors
     # nc0 -- nc1

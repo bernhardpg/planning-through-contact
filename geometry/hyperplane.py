@@ -8,6 +8,9 @@ class Hyperplane(NamedTuple):
     a: npt.NDArray[np.float64]
     b: npt.NDArray[np.float64]
 
+    def __eq__(self, other: "Hyperplane") -> bool:
+        return np.allclose(self.a, other.a) and np.allclose(self.b, other.b)
+
 
 def get_angle_between_planes(plane_A: Hyperplane, plane_B: Hyperplane) -> float:
     theta = np.arccos(plane_B.a.T.dot(plane_A.a))[0, 0]
