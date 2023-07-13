@@ -282,7 +282,7 @@ class PlanarPushingSimulation:
 
         self.connect_lcm(builder, self.station)
         self.keypts_lcm = builder.AddSystem(
-            KeyptsLCM(self.station._get_box_body().index())
+            KeyptsLCM(self.station.get_box_body().index())
         )
         builder.Connect(
             self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
