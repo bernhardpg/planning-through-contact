@@ -12,6 +12,7 @@ from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     CommonSolverOption,
     IpoptSolver,
+    MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
     MixedIntegerBranchAndBound,
@@ -237,6 +238,7 @@ class ModeVars(NamedTuple):
         friction_force_vals = result.GetSolution(self.friction_forces)
         p_WB_x_vals = result.GetSolution(self.p_WB_xs)
         p_WB_y_vals = result.GetSolution(self.p_WB_ys)
+        breakpoint()
 
         return ModeVars(
             lam_vals,
@@ -369,70 +371,74 @@ class PlanarPushingContactMode:
         dt = end_time / num_knot_points
         self.dt = dt
 
-        prog = MathematicalProgram()
+        self.prog = MathematicalProgram()
 
         contact_face = PolytopeContactLocation(
             pos=ContactLocation.FACE, idx=contact_face_idx
         )
 
-        vars = ModeVars.make(prog, object, contact_face, num_knot_points, end_time)
+        self.vars = ModeVars.make(
+            self.prog, object, contact_face, num_knot_points, end_time
+        )
 
-        for lam in vars.lams:
-            prog.AddLinearConstraint(lam >= 0)
-            prog.AddLinearConstraint(lam <= 1)
+        for lam in self.vars.lams:
+            self.prog.AddLinearConstraint(lam >= 0)
+            self.prog.AddLinearConstraint(lam <= 1)
 
         # SO(2) constraints
-        for c, s in zip(vars.cos_ths, vars.sin_ths):
-            prog.AddQuadraticConstraint(c**2 + s**2 - 1, 0, 0)
+        for c, s in zip(self.vars.cos_ths, self.vars.sin_ths):
+            self.prog.AddQuadraticConstraint(c**2 + s**2 - 1, 0, 0)
 
         # Friction cone constraints
-        for c_n in vars.normal_forces:
-            prog.AddLinearConstraint(c_n >= 0)
-        for c_n, c_f in zip(vars.normal_forces, vars.friction_forces):
-            prog.AddLinearConstraint(c_f <= self.FRICTION_COEFF * c_n)
-            prog.AddLinearConstraint(c_f >= -self.FRICTION_COEFF * c_n)
+        for c_n in self.vars.normal_forces:
+            self.prog.AddLinearConstraint(c_n >= 0)
+        for c_n, c_f in zip(self.vars.normal_forces, self.vars.friction_forces):
+            self.prog.AddLinearConstraint(c_f <= self.FRICTION_COEFF * c_n)
+            self.prog.AddLinearConstraint(c_f >= -self.FRICTION_COEFF * c_n)
 
         # Quasi-static dynamics
         for k in range(num_knot_points - 1):
-            v_WB = vars.v_WBs[k]
-            omega_WB = vars.omega_WBs[k]
+            v_WB = self.vars.v_WBs[k]
+            omega_WB = self.vars.omega_WBs[k]
 
             # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
-            # f_c_B = (vars.f_c_Bs[k] + vars.f_c_Bs[k + 1]) / 2
-            # p_c_B = (vars.p_c_Bs[k] + vars.p_c_Bs[k + 1]) / 2
-            # R_WB = (vars.R_WBs[k] + vars.R_WBs[k + 1]) / 2
+            f_c_B = (self.vars.f_c_Bs[k] + self.vars.f_c_Bs[k + 1]) / 2
+            p_c_B = (self.vars.p_c_Bs[k] + self.vars.p_c_Bs[k + 1]) / 2
+            R_WB = (self.vars.R_WBs[k] + self.vars.R_WBs[k + 1]) / 2
 
-            f_c_B = vars.f_c_Bs[k]
-            p_c_B = vars.p_c_Bs[k]
-            R_WB = vars.R_WBs[k]
+            # f_c_B = self.vars.f_c_Bs[k]
+            # p_c_B = self.vars.p_c_Bs[k]
+            # R_WB = self.vars.R_WBs[k]
 
             x_dot, dyn = quasi_static_dynamics(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, self.FRICTION_COEFF, object.mass
             )
             quasi_static_dynamic_constraint = x_dot - dyn
             for row in quasi_static_dynamic_constraint.flatten():
-                prog.AddQuadraticConstraint(row, 0, 0)
+                self.prog.AddQuadraticConstraint(row, 0, 0)
 
         # Ensure sticking on the contact point
         # TODO: remove this
         v_c_Bs = forward_differences(
-            vars.p_c_Bs, dt
+            self.vars.p_c_Bs, dt
         )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
         for v_c_B in v_c_Bs:
-            prog.AddLinearConstraint(
+            self.prog.AddLinearConstraint(
                 eq(v_c_B, 0)
             )  # no velocity on contact points in body frame
 
         # Minimize kinetic energy through squared velocities
-        sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in vars.v_WBs]).item()  # type: ignore
+        sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in self.vars.v_WBs]).item()  # type: ignore
         sq_angular_vels = sum(
             [
                 cos_dot**2 + sin_dot**2
-                for cos_dot, sin_dot in zip(vars.cos_th_dots, vars.sin_th_dots)
+                for cos_dot, sin_dot in zip(
+                    self.vars.cos_th_dots, self.vars.sin_th_dots
+                )
             ]
         )
-        prog.AddQuadraticCost(sq_linear_vels)
-        prog.AddQuadraticCost(sq_angular_vels)
+        self.prog.AddQuadraticCost(sq_linear_vels)
+        self.prog.AddQuadraticCost(sq_angular_vels)
 
         def create_R(th: float) -> npt.NDArray[np.float64]:
             return np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
@@ -440,58 +446,25 @@ class PlanarPushingContactMode:
         # Initial conditions (only first and last vertex will have this)
         if th_initial is not None:
             R_WB_I = create_R(th_initial)
-            prog.AddLinearConstraint(eq(vars.R_WBs[0], R_WB_I))
+            self.prog.AddLinearConstraint(eq(self.vars.R_WBs[0], R_WB_I))
         if th_target is not None:
             R_WB_T = create_R(th_target)
-            prog.AddLinearConstraint(eq(vars.R_WBs[-1], R_WB_T))
+            self.prog.AddLinearConstraint(eq(self.vars.R_WBs[-1], R_WB_T))
         if pos_initial is not None:
             assert pos_initial.shape == (2, 1)
-            prog.AddLinearConstraint(eq(vars.p_WBs[0], pos_initial))
+            self.prog.AddLinearConstraint(eq(self.vars.p_WBs[0], pos_initial))
         if pos_target is not None:
             assert pos_target.shape == (2, 1)
-            prog.AddLinearConstraint(eq(vars.p_WBs[-1], pos_target))
-
-        # Store real prog and real variables
-        self.prog = prog
-        self.true_mode_vars = vars
+            self.prog.AddLinearConstraint(eq(self.vars.p_WBs[-1], pos_target))
 
         start = time.time()
+
         print("Starting to create SDP relaxation...")
-        self.relaxed_prog, self.X, _ = create_sdp_relaxation(prog)
-        self.x = self.X[1:, 0]
+        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        breakpoint()
         end = time.time()
         print(
             f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
-        )
-
-        # Retrieve original variables from X
-        # We have n = 7*num_knot_points variables
-        # This gives X dimensions (n+1,n+1)
-        # where the 1 is added because the first element of x is 1.
-        # This gives ((n+1)^2 - (n+1))/2 + (n+1) decision variables
-        # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
-        relaxed_lams = self.x[0:num_knot_points]
-        relaxed_normal_forces = self.x[num_knot_points : 2 * num_knot_points]
-        relaxed_friction_forces = self.x[2 * num_knot_points : 3 * num_knot_points]
-        relaxed_cos_th = self.x[3 * num_knot_points : 4 * num_knot_points]
-        relaxed_sin_th = self.x[4 * num_knot_points : 5 * num_knot_points]
-        relaxed_p_WB_xs = self.x[5 * num_knot_points : 6 * num_knot_points]
-        relaxed_p_WB_ys = self.x[6 * num_knot_points : 7 * num_knot_points]
-
-        self.relaxed_mode_vars = ModeVars(
-            relaxed_lams,
-            relaxed_normal_forces,
-            relaxed_friction_forces,
-            relaxed_cos_th,
-            relaxed_sin_th,
-            relaxed_p_WB_xs,
-            relaxed_p_WB_ys,
-            vars.time_in_mode,
-            vars.pv1,
-            vars.pv2,
-            vars.normal_vec,
-            vars.tangent_vec,
-            vars.dt,
         )
 
 
@@ -553,7 +526,8 @@ def plan_planar_pushing(
     # Solve the problem by using elimination of equality constraints
     eliminate_equalities = False
 
-    NUM_TRIALS = 10
+    NUM_TRIALS = 1
+    DEBUG = False
 
     elapsed_times = []
     for _ in range(NUM_TRIALS):
@@ -569,10 +543,11 @@ def plan_planar_pushing(
             end_time = time.time()
             assert relaxed_result.is_success()
 
-            relaxed_sols = retrieve_x(relaxed_result.GetSolution(X[1:, 0]))
         else:
             solver_options = SolverOptions()
-            # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            if DEBUG:
+                solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
             start_time = time.time()
             relaxed_result = Solve(
                 contact_mode.relaxed_prog, solver_options=solver_options
@@ -580,7 +555,6 @@ def plan_planar_pushing(
             end_time = time.time()
             assert relaxed_result.is_success()
 
-            relaxed_sols = relaxed_result.GetSolution(contact_mode.x)
         elapsed_time = end_time - start_time
         elapsed_times.append(elapsed_time)
 
@@ -600,14 +574,13 @@ def plan_planar_pushing(
         assert true_result.is_success()
         print("Found solution to true problem!")
 
-        vals = [contact_mode.true_mode_vars.eval_result(true_result)]
-        breakpoint()
+        vals = [contact_mode.vars.eval_result(true_result)]
     else:
         if eliminate_equalities:
             raise NotImplementedError(
                 "Have not yet implemented elimination of equalities without rounding."
             )
-        vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
+        vals = [contact_mode.vars.eval_result(relaxed_result)]
 
     DT = 0.01
     interpolate = False
