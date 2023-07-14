@@ -551,13 +551,13 @@ def plan_planar_pushing(
     )
 
     # Solve the problem by using elimination of equality constraints
-    solve_smaller = True
+    eliminate_equalities = False
 
     NUM_TRIALS = 10
 
     elapsed_times = []
     for _ in range(NUM_TRIALS):
-        if solve_smaller:
+        if eliminate_equalities:
             smaller_prog, retrieve_x = eliminate_equality_constraints(
                 contact_mode.prog, print_num_vars_eliminated=True
             )
@@ -603,6 +603,10 @@ def plan_planar_pushing(
         vals = [contact_mode.true_mode_vars.eval_result(true_result)]
         breakpoint()
     else:
+        if eliminate_equalities:
+            raise NotImplementedError(
+                "Have not yet implemented elimination of equalities without rounding."
+            )
         vals = [contact_mode.relaxed_mode_vars.eval_result(relaxed_result)]
 
     DT = 0.01
