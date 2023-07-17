@@ -14,6 +14,14 @@ poetry install -vvv
 ```
 (the `-vvv` flag adds verbose output).
 
+## Using external Drake build
+Externally built Drake must be added to the Python path:
+```
+export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
+
+See [the docs](https://drake.mit.edu/from_source.html) for how to build the Python bindings.
+
 ## Add this library to your pythonpath
 Add this module to pythonpath:
 

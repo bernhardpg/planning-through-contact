@@ -103,27 +103,6 @@ files = [
 ]
 
 [[package]]
-name = "drake"
-version = "1.19.0"
-description = "Model-based design and verification for robotics"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "drake-1.19.0-cp310-cp310-manylinux_2_31_x86_64.whl", hash = "sha256:0b822697316529468a963820b9f976331a2b025e3e2cbf70ded54d285fae59cf"},
-    {file = "drake-1.19.0-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:aee3daced44ca666144834e70cb5ed64932e3c01eed1ef2e63600def6d1fac62"},
-    {file = "drake-1.19.0-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:de5c593a18465b2f6797f440c08678803e1354c18e884fee57b9ce250087fdbb"},
-    {file = "drake-1.19.0-cp311-cp311-manylinux_2_31_x86_64.whl", hash = "sha256:7ee1d9d95065be703b5ebc2e6dc3ea8b1abff28eccac0db4ded38b3d9bf86fd9"},
-    {file = "drake-1.19.0-cp38-cp38-manylinux_2_31_x86_64.whl", hash = "sha256:6c1fae3da8776f2cbd7f8d00987907a8ae839b720b4d7fd84c58a392c2023f0c"},
-    {file = "drake-1.19.0-cp39-cp39-manylinux_2_31_x86_64.whl", hash = "sha256:932536222f46f97d797eca9f44f8f1364f7c752f94bb6b48303e2b6eb84026ab"},
-]
-
-[package.dependencies]
-matplotlib = "*"
-numpy = "*"
-pydot = "*"
-PyYAML = "*"
-
-[[package]]
 name = "fancycompleter"
 version = "0.9.1"
 description = "colorful TAB completion for Python prompt"
@@ -512,13 +491,13 @@ tests = ["check-manifest", "coverage", "defusedxml", "markdown2", "olefile", "pa
 
 [[package]]
 name = "platformdirs"
-version = "3.8.1"
+version = "3.9.1"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "platformdirs-3.8.1-py3-none-any.whl", hash = "sha256:cec7b889196b9144d088e4c57d9ceef7374f6c39694ad1577a0aab50d27ea28c"},
-    {file = "platformdirs-3.8.1.tar.gz", hash = "sha256:f87ca4fcff7d2b0f81c6a748a77973d7af0f4d526f98f308477c3c436c74d528"},
+    {file = "platformdirs-3.9.1-py3-none-any.whl", hash = "sha256:ad8291ae0ae5072f66c16945166cb11c63394c7a3ad1b1bc9828ca3162da8c2f"},
+    {file = "platformdirs-3.9.1.tar.gz", hash = "sha256:1b42b450ad933e981d56e59f1b97495428c9bd60698baab9f3eb3d00d5822421"},
 ]
 
 [package.extras]
@@ -728,13 +707,13 @@ telegram = ["requests"]
 
 [[package]]
 name = "virtualenv"
-version = "20.23.1"
+version = "20.24.0"
 description = "Virtual Python Environment builder"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "virtualenv-20.23.1-py3-none-any.whl", hash = "sha256:34da10f14fea9be20e0fd7f04aba9732f84e593dac291b757ce42e3368a39419"},
-    {file = "virtualenv-20.23.1.tar.gz", hash = "sha256:8ff19a38c1021c742148edc4f81cb43d7f8c6816d2ede2ab72af5b84c749ade1"},
+    {file = "virtualenv-20.24.0-py3-none-any.whl", hash = "sha256:18d1b37fc75cc2670625702d76849a91ebd383768b4e91382a8d51be3246049e"},
+    {file = "virtualenv-20.24.0.tar.gz", hash = "sha256:e2a7cef9da880d693b933db7654367754f14e20650dc60e8ee7385571f8593a3"},
 ]
 
 [package.dependencies]
@@ -759,4 +738,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.11"
-content-hash = "4f984facf3f2ad4e295c597d5bfbe026617765f707cfe54ecbd6ec372ae0aabd"
+content-hash = "eada68584d25423dc3920ad294cbe8e3b9cebebca7366d0a028dfddb5033e641"
