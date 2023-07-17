@@ -230,6 +230,37 @@ class ModeVars(NamedTuple):
         oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
         return oms
 
+    def eval_from_vec(
+        self, x: npt.NDArray[np.float64], prog: MathematicalProgram
+    ) -> "ModeVars":
+        """
+        Needs the prog to map variables through correct indices
+        """
+
+        lam_vals = x[prog.FindDecisionVariableIndices(self.lams)]
+        cos_th_vals = x[prog.FindDecisionVariableIndices(self.cos_ths)]
+        sin_th_vals = x[prog.FindDecisionVariableIndices(self.sin_ths)]
+        normal_force_vals = x[prog.FindDecisionVariableIndices(self.normal_forces)]
+        friction_force_vals = x[prog.FindDecisionVariableIndices(self.friction_forces)]
+        p_WB_x_vals = x[prog.FindDecisionVariableIndices(self.p_WB_xs)]
+        p_WB_y_vals = x[prog.FindDecisionVariableIndices(self.p_WB_ys)]
+
+        return ModeVars(
+            lam_vals,
+            normal_force_vals,
+            friction_force_vals,
+            cos_th_vals,
+            sin_th_vals,
+            p_WB_x_vals,
+            p_WB_y_vals,
+            self.time_in_mode,
+            self.pv1,
+            self.pv2,
+            self.normal_vec,
+            self.tangent_vec,
+            self.dt,
+        )
+
     def eval_result(self, result: MathematicalProgramResult) -> "ModeVars":
         lam_vals = result.GetSolution(self.lams)
         cos_th_vals = result.GetSolution(self.cos_ths)
@@ -461,7 +492,6 @@ class PlanarPushingContactMode:
 
         print("Starting to create SDP relaxation...")
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
-        breakpoint()
         end = time.time()
         print(
             f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
@@ -524,10 +554,14 @@ def plan_planar_pushing(
     )
 
     # Solve the problem by using elimination of equality constraints
-    eliminate_equalities = False
+    eliminate_equalities = True
 
     NUM_TRIALS = 1
     DEBUG = False
+
+    solver_options = SolverOptions()
+    if DEBUG:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
     elapsed_times = []
     for _ in range(NUM_TRIALS):
@@ -535,52 +569,50 @@ def plan_planar_pushing(
             smaller_prog, retrieve_x = eliminate_equality_constraints(
                 contact_mode.prog, print_num_vars_eliminated=True
             )
-            relaxed_prog, X, _ = create_sdp_relaxation(smaller_prog)
-            solver_options = SolverOptions()
-            # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-            start_time = time.time()
-            relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
-            end_time = time.time()
-            assert relaxed_result.is_success()
-
+            relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
         else:
-            solver_options = SolverOptions()
-            if DEBUG:
-                solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            relaxed_prog = contact_mode.relaxed_prog
 
-            start_time = time.time()
-            relaxed_result = Solve(
-                contact_mode.relaxed_prog, solver_options=solver_options
-            )
-            end_time = time.time()
-            assert relaxed_result.is_success()
+        start_time = time.time()
+        relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+        end_time = time.time()
+        assert relaxed_result.is_success()
 
         elapsed_time = end_time - start_time
         elapsed_times.append(elapsed_time)
 
     print(f"Mean elapsed time: {np.mean(elapsed_times)}")
 
+    if eliminate_equalities:
+        z_sols = relaxed_result.GetSolution(smaller_prog.decision_variables())  # type: ignore
+        decision_var_vals = retrieve_x(z_sols)  # type: ignore
+        relaxed_sols = contact_mode.vars.eval_from_vec(decision_var_vals, contact_mode.prog)  # type: ignore
+
+    else:
+        decision_var_vals = relaxed_result.GetSolution(
+            contact_mode.prog.decision_variables()
+        )
+        relaxed_sols = contact_mode.vars.eval_result(relaxed_result)  # type: ignore
+
+    vals = [
+        relaxed_sols
+    ]  # Will have one val per contact mode, but here there's only one
+
     if round_solution:
         print("Solving nonlinear trajopt...")
+
         solver_options = SolverOptions()
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
         solver_options.SetOption(IpoptSolver.id(), "tol", 1e-6)
+
         contact_mode.prog.SetInitialGuess(
-            contact_mode.prog.decision_variables(), relaxed_sols
+            contact_mode.prog.decision_variables(), decision_var_vals
         )
 
         snopt = SnoptSolver()
-        true_result = snopt.Solve(contact_mode.prog, solver_options=solver_options)
+        true_result = snopt.Solve(contact_mode.prog, solver_options=solver_options)  # type: ignore
         assert true_result.is_success()
         print("Found solution to true problem!")
-
-        vals = [contact_mode.vars.eval_result(true_result)]
-    else:
-        if eliminate_equalities:
-            raise NotImplementedError(
-                "Have not yet implemented elimination of equalities without rounding."
-            )
-        vals = [contact_mode.vars.eval_result(relaxed_result)]
 
     DT = 0.01
     interpolate = False

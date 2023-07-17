@@ -260,7 +260,7 @@ def eliminate_equality_constraints(
 ]:
     decision_vars = np.array(
         sorted(prog.decision_variables(), key=lambda x: x.get_id())
-    )
+    )  # Not really necessary, they are sorted in this order in the prog
     old_dim = len(decision_vars)
     bounding_box_eqs, bounding_box_ineqs = _collect_bounding_box_constraints(
         prog.bounding_box_constraints()
@@ -352,11 +352,6 @@ def eliminate_equality_constraints(
             new_prog.AddQuadraticConstraint(
                 new_Q, new_b, new_lb, new_ub, new_decision_vars
             )
-            # z = new_decision_vars
-            # constraint = z.T.dot(new_Q).dot(z) + new_b.T.dot(z) - new_lb
-            # print(f"Adding expression: {constraint}")
-            # breakpoint()
-
             # Better way of doing this:
             # Q = binding.evaluator().Q()
             # b = binding.evaluator().b()
@@ -396,7 +391,8 @@ def eliminate_equality_constraints(
 
     def get_x_from_z(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         z = z.reshape((-1, 1))  # make sure z is (N, 1)
-        return F.dot(z) + x_hat
+        x = F.dot(z) + x_hat
+        return x.flatten()  # (n_vars, )
 
     return new_prog, get_x_from_z
 
