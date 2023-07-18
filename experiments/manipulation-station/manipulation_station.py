@@ -28,7 +28,7 @@ def planar_pushing_station():
     planner.set_slider_target_pose(box_target_pose)
     planner.save_graph_diagram(Path("graph.svg"))
     traj = planner.make_trajectory(
-        interpolate=False, print_path=True, measure_time=True, print_output=True
+        interpolate=False, print_path=True, measure_time=True, print_output=False
     )
 
     visualize_planar_pushing_trajectory(traj, box.geometry)

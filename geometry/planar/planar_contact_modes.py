@@ -12,6 +12,7 @@ from pydrake.solvers import (
     BoundingBoxConstraint,
     LinearConstraint,
     LinearCost,
+    MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
     QuadraticCost,
@@ -393,7 +394,9 @@ class FaceContactMode(AbstractContactMode):
     def get_convex_set(self) -> opt.Spectrahedron:
         # NOTE: All variables in the relaxed prog will be shifted by one,
         # because of the SDP relaxation that adds a first variable with value 1!
-        self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
+        # self.relaxed_prog, _, _ = create_sdp_relaxation(self.prog)
+
+        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:

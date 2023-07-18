@@ -12,6 +12,7 @@ import pydrake.symbolic as sym
 from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     CommonSolverOption,
+    MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
     MixedIntegerBranchAndBound,
@@ -257,44 +258,45 @@ class PlanarPushingContactMode:
         )
 
         # Contact positions
-        lams = prog.NewContinuousVariables(num_knot_points, "lam")
-        for lam in lams:
+        self.lams = prog.NewContinuousVariables(num_knot_points, "lam")
+        for lam in self.lams:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
         self.pv1, self.pv2 = self.object.get_proximate_vertices_from_location(
             contact_face
         )
-        p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in lams]
+        p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
 
         # Contact forces
-        normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
-        friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
+        self.normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
+        self.friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
         (
             self.normal_vec,
             self.tangent_vec,
         ) = self.object.get_norm_and_tang_vecs_from_location(contact_face)
         f_c_Bs = [
             c_n * self.normal_vec + c_f * self.tangent_vec
-            for c_n, c_f in zip(normal_forces, friction_forces)
+            for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
         # Rotations
-        cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
-        sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
+        self.cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
+        self.sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
         R_WBs = [
-            np.array([[cos, sin], [-sin, cos]]) for cos, sin in zip(cos_ths, sin_ths)
+            np.array([[cos, sin], [-sin, cos]])
+            for cos, sin in zip(self.cos_ths, self.sin_ths)
         ]
 
         # Box position relative to world frame
-        p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
-        p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
-        p_WBs = [np.array([x, y]) for x, y in zip(p_WB_xs, p_WB_ys)]
+        self.p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
+        self.p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
+        p_WBs = [np.array([x, y]) for x, y in zip(self.p_WB_xs, self.p_WB_ys)]
 
         # Compute velocities
         v_WBs = forward_differences(p_WBs, dt)
-        cos_th_dots = forward_differences(cos_ths, dt)
-        sin_th_dots = forward_differences(sin_ths, dt)
+        cos_th_dots = forward_differences(self.cos_ths, dt)
+        sin_th_dots = forward_differences(self.sin_ths, dt)
         R_WB_dots = [
             np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
             for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)
@@ -305,13 +307,13 @@ class PlanarPushingContactMode:
         omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WB_dots)]
 
         # SO(2) constraints
-        for c, s in zip(cos_ths, sin_ths):
+        for c, s in zip(self.cos_ths, self.sin_ths):
             prog.AddConstraint(c**2 + s**2 == 1)
 
         # # Friction cone constraints
-        for c_n in normal_forces:
+        for c_n in self.normal_forces:
             prog.AddLinearConstraint(c_n >= 0)
-        for c_n, c_f in zip(normal_forces, friction_forces):
+        for c_n, c_f in zip(self.normal_forces, self.friction_forces):
             prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
@@ -374,26 +376,11 @@ class PlanarPushingContactMode:
 
         start = time.time()
         print("Starting to create SDP relaxation...")
-        self.relaxed_prog, self.X, _ = create_sdp_relaxation(prog)
+        self.relaxed_prog = MakeSemidefiniteRelaxation(prog)
         end = time.time()
         print(
             f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
         )
-
-        # Retrieve original variables from X
-        # We have n = 7*num_knot_points variables
-        # This gives X dimensions (n+1,n+1)
-        # where the 1 is added because the first element of x is 1.
-        # This gives ((n+1)^2 - (n+1))/2 + (n+1) decision variables
-        # (all entries - diagonal entries)/2 (because X symmetric) + add back diagonal)
-        x = self.X[1:, 0]
-        self.lam = x[0:num_knot_points]
-        self.normal_forces = x[num_knot_points : 2 * num_knot_points]
-        self.friction_forces = x[2 * num_knot_points : 3 * num_knot_points]
-        self.cos_th = x[3 * num_knot_points : 4 * num_knot_points]
-        self.sin_th = x[4 * num_knot_points : 5 * num_knot_points]
-        self.p_WB_xs = x[5 * num_knot_points : 6 * num_knot_points]
-        self.p_WB_ys = x[6 * num_knot_points : 7 * num_knot_points]
 
         self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
 
@@ -407,7 +394,7 @@ class PlanarPushingContactMode:
     def get_vars_from_gcs_vertex(
         self, gcs_vertex: opt.GraphOfConvexSets.Vertex
     ) -> ModeVars:
-        x = gcs_vertex.x()[1 : self.num_variables + 2]
+        x = gcs_vertex.x()[0 : self.num_variables + 1]
 
         lam = x[0 : self.num_knot_points]
         normal_forces = x[self.num_knot_points : 2 * self.num_knot_points]
@@ -448,12 +435,11 @@ class PlanarPushingContactMode:
         assert result.is_success()
         print("Success!")
 
-        x_val = result.GetSolution(self.X[1:, 0])
-        lam_vals = result.GetSolution(self.lam)
+        lam_vals = result.GetSolution(self.lams)
         normal_forces_vals = result.GetSolution(self.normal_forces)
         friction_forces_vals = result.GetSolution(self.friction_forces)
-        cos_th_vals = result.GetSolution(self.cos_th)
-        sin_th_vals = result.GetSolution(self.sin_th)
+        cos_th_vals = result.GetSolution(self.cos_ths)
+        sin_th_vals = result.GetSolution(self.sin_ths)
         p_WB_xs_vals = result.GetSolution(self.p_WB_xs)
         p_WB_ys_vals = result.GetSolution(self.p_WB_ys)
 
@@ -810,7 +796,7 @@ def plan_planar_pushing():
         (5, 2): [[5, 4, 3, 2], [0]],
     }
 
-    experiment_number = 1
+    experiment_number = 0
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5
