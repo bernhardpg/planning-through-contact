@@ -192,6 +192,56 @@ class FaceContactVariables(AbstractModeVariables):
     normal_vec: npt.NDArray[np.float64]
     tangent_vec: npt.NDArray[np.float64]
 
+    @classmethod
+    def from_prog(
+        cls,
+        prog: MathematicalProgram,
+        object_geometry: CollisionGeometry,
+        contact_location: PolytopeContactLocation,
+        num_knot_points: int,
+        time_in_mode: float,
+    ) -> "FaceContactVariables":
+        # Contact positions
+        lams = prog.NewContinuousVariables(num_knot_points, "lam")
+        pv1, pv2 = object_geometry.get_proximate_vertices_from_location(
+            contact_location
+        )
+
+        # Contact forces
+        normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
+        friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
+        (
+            normal_vec,
+            tangent_vec,
+        ) = object_geometry.get_norm_and_tang_vecs_from_location(contact_location)
+
+        # Rotations
+        cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
+        sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
+
+        # Box position relative to world frame
+        p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
+        p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
+
+        dt = time_in_mode / num_knot_points
+
+        return FaceContactVariables(
+            num_knot_points,
+            time_in_mode,
+            dt,
+            lams,
+            normal_forces,
+            friction_forces,
+            cos_ths,
+            sin_ths,
+            p_WB_xs,
+            p_WB_ys,
+            pv1,
+            pv2,
+            normal_vec,
+            tangent_vec,
+        )
+
     @property
     def R_WBs(self):
         Rs = [
@@ -276,56 +326,16 @@ class FaceContactMode(AbstractContactMode):
         )
 
     def __post_init__(self) -> None:
-        self.dt = self.time_in_mode / self.num_knot_points
-
         self.prog = MathematicalProgram()
-        self.variables = self._define_variables()
-        self._define_constraints()
-        self._define_costs()
-
-    def _define_variables(
-        self,
-    ) -> FaceContactVariables:
-        # Contact positions
-        lams = self.prog.NewContinuousVariables(self.num_knot_points, "lam")
-        pv1, pv2 = self.object.geometry.get_proximate_vertices_from_location(
-            self.contact_location
-        )
-
-        # Contact forces
-        normal_forces = self.prog.NewContinuousVariables(self.num_knot_points, "c_n")
-        friction_forces = self.prog.NewContinuousVariables(self.num_knot_points, "c_f")
-        (
-            normal_vec,
-            tangent_vec,
-        ) = self.object.geometry.get_norm_and_tang_vecs_from_location(
-            self.contact_location
-        )
-
-        # Rotations
-        cos_ths = self.prog.NewContinuousVariables(self.num_knot_points, "cos_th")
-        sin_ths = self.prog.NewContinuousVariables(self.num_knot_points, "sin_th")
-
-        # Box position relative to world frame
-        p_WB_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_WB_x")
-        p_WB_ys = self.prog.NewContinuousVariables(self.num_knot_points, "p_WB_y")
-
-        return FaceContactVariables(
+        self.variables = FaceContactVariables.from_prog(
+            self.prog,
+            self.object.geometry,
+            self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
-            self.dt,
-            lams,
-            normal_forces,
-            friction_forces,
-            cos_ths,
-            sin_ths,
-            p_WB_xs,
-            p_WB_ys,
-            pv1,
-            pv2,
-            normal_vec,
-            tangent_vec,
         )
+        self._define_constraints()
+        self._define_costs()
 
     def _define_constraints(self) -> None:
         # TODO: take this from drake simulation
