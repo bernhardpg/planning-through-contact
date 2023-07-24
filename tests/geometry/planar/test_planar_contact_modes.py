@@ -20,12 +20,12 @@ from visualize.analysis import plot_cos_sine_trajs
 from visualize.planar import visualize_planar_pushing_trajectory
 
 
-# @pytest.fixture
+@pytest.fixture
 def box_geometry() -> Box2d:
-    return Box2d(width=0.3, height=0.1)
+    return Box2d(width=0.3, height=0.3)
 
 
-# @pytest.fixture
+@pytest.fixture
 def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
     prog = MathematicalProgram()
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
@@ -43,7 +43,7 @@ def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
     return vars
 
 
-# @pytest.fixture
+@pytest.fixture
 def face_contact_mode(box_geometry: Box2d) -> FaceContactMode:
     mass = 0.3
     box = RigidBody("box", box_geometry, mass)
@@ -179,10 +179,10 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
     check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))
-    assert check_vars_eq(dyn[0], [face_contact_vars.normal_forces[0]])
-    assert check_vars_eq(dyn[1], [face_contact_vars.friction_forces[0]])
+    assert check_vars_eq(dyn[0, 0], [face_contact_vars.normal_forces[0]])
+    assert check_vars_eq(dyn[1, 0], [face_contact_vars.friction_forces[0]])
     assert check_vars_eq(
-        dyn[2],
+        dyn[2, 0],
         [
             face_contact_vars.lams[0],
             face_contact_vars.normal_forces[0],
@@ -210,14 +210,9 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     assert np.allclose(traj.R_WB[-1], final_pose.two_d_rot_matrix())
     assert np.allclose(traj.p_WB[:, -1:-2], final_pose.pos())
 
-    # (num_knot_points, 2): first col cosines, second col sines
-    rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
-    plot_cos_sine_trajs(rs)
-
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
-
-
-if __name__ == "__main__":
-    test_one_contact_mode(face_contact_mode(box_geometry()))

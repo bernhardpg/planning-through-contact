@@ -7,7 +7,7 @@ from geometry.hyperplane import Hyperplane
 from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingDiagram
 
 
-# @pytest.fixture
+@pytest.fixture
 def box_geometry() -> Box2d:
     # Get the default sugar box from the manipulation simulation
     station = PlanarPushingDiagram()

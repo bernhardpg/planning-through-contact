@@ -527,12 +527,9 @@ class FaceContactMode(AbstractContactMode):
         v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, OBJECT_MASS
     ):
         G = 9.81
-        # f_max = FRICTION_COEFF * G * OBJECT_MASS
-        # tau_max = f_max * 0.2
-
         # TODO(bernhardpg): Compute f_max and tau_max correctly
-        f_max = 4.905  # hardcoded from working planar pushing example
-        tau_max = 10
+        f_max = FRICTION_COEFF * G * OBJECT_MASS
+        tau_max = f_max * 0.2
 
         A = np.diag(
             # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
