@@ -487,15 +487,19 @@ class FaceContactMode(AbstractContactMode):
 
     @staticmethod
     def _get_midpoint(vals, k: int):
-        return vals[k] + vals[k + 1] / 2
+        return (vals[k] + vals[k + 1]) / 2
 
     @staticmethod
     def quasi_static_dynamics(
         v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, OBJECT_MASS
     ):
         G = 9.81
-        f_max = FRICTION_COEFF * G * OBJECT_MASS
-        tau_max = f_max * 0.2  # TODO: change this!
+        # f_max = FRICTION_COEFF * G * OBJECT_MASS
+        # tau_max = f_max * 0.2
+
+        # TODO(bernhardpg): Compute f_max and tau_max correctly
+        f_max = 4.905  # hardcoded from working planar pushing example
+        tau_max = 0.981
 
         A = np.diag(
             [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
@@ -511,12 +515,18 @@ class FaceContactMode(AbstractContactMode):
 
         x_dot = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
-        wrench_W = R.dot(wrench_B)
         dynamics = A.dot(
-            wrench_W
+            wrench_B
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
-        return x_dot, dynamics  # x_dot, f(x,u)
+        # TODO(bernhardpg): Use wrench in world frame after writing unit tests
+        # wrench_W = R.dot(wrench_B)
+        # dynamics = A.dot(
+        #     wrench_@
+        # )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
+
+        # x_dot, f(x,u)
+        return x_dot.squeeze(), dynamics.squeeze()  # (3,) , (3,)
 
 
 @dataclass

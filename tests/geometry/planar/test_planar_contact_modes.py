@@ -1,13 +1,18 @@
 # import pytest
 from pydrake.solvers import MathematicalProgram
-from pydrake.symbolic import Expression
+from pydrake.symbolic import Expression, Variables
 
 from geometry.collision_geometry.box_2d import Box2d
 from geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
-from geometry.planar.planar_contact_modes import FaceContactVariables
+from geometry.planar.planar_contact_modes import (
+    FaceContactMode,
+    FaceContactVariables,
+    PlanarPlanSpecs,
+)
+from geometry.rigid_body import RigidBody
 
 
 def test_face_contact_variables() -> None:
@@ -82,5 +87,74 @@ def test_face_contact_variables() -> None:
         assert f.shape == (2, 1)
 
 
+def test_face_contact_mode() -> None:
+    box_geometry = Box2d(width=0.1, height=0.2)
+    mass = 0.1
+    box = RigidBody("box", box_geometry, mass)
+    contact_location = PolytopeContactLocation(
+        ContactLocation.FACE, 3
+    )  # We use the same face as in the T-pusher demo to make it simple to write tests
+    specs = PlanarPlanSpecs()
+
+    num_knot_points = 4
+    time_in_contact = 2
+
+    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, box)
+
+    # for each knot point:
+    # 0 <= lam <= 0 and normal_force >= 0
+    NUM_BBOX = 3
+    assert len(mode.prog.bounding_box_constraints()) == num_knot_points * NUM_BBOX
+
+    # for each finite difference knot point:
+    # v_c_B == 0 and x and y quasi-static dynamics
+    # TODO(bernhardpg): Will get fewer linear equality constraints once the wrench is rotated to the world frame
+    NUM_LIN_EQS = 3
+    assert (
+        len(mode.prog.linear_equality_constraints())
+        == (num_knot_points - 1) * NUM_LIN_EQS
+    )
+
+
+def test_quasi_static_dynamics() -> None:
+    prog = MathematicalProgram()
+    box_geometry = Box2d(width=0.2, height=0.1)
+    mass = 0.1
+    friction_coeff = 0.5
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
+
+    num_knot_points = 4
+    time_in_contact = 2
+
+    vars = FaceContactVariables.from_prog(
+        prog,
+        box_geometry,
+        contact_location,
+        num_knot_points,
+        time_in_contact,
+    )
+
+    k = 0
+
+    f_c_B = vars.f_c_Bs[k]
+    p_c_B = vars.p_c_Bs[k]
+    R_WB = vars.R_WBs[k]
+    v_WB = vars.v_WBs[k]
+    omega_WB = vars.omega_WBs[k]
+
+    x_dot, dyn = FaceContactMode.quasi_static_dynamics(
+        v_WB, omega_WB, f_c_B, p_c_B, R_WB, friction_coeff, mass
+    )
+
+    check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))
+    assert check_vars_eq(dyn[0], [vars.normal_forces[0]])
+    assert check_vars_eq(dyn[1], [vars.friction_forces[0]])
+    assert check_vars_eq(
+        dyn[2], [vars.lams[0], vars.normal_forces[0], vars.friction_forces[0]]
+    )
+
+
 if __name__ == "__main__":
-    test_face_contact_variables()
+    # test_face_contact_variables()
+    test_face_contact_mode()
+    # test_quasi_static_dynamics()
