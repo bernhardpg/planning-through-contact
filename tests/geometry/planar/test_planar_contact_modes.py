@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from pydrake.solvers import MathematicalProgram
 from pydrake.symbolic import Expression, Variables
@@ -36,6 +37,18 @@ def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
         time_in_contact,
     )
     return vars
+
+
+@pytest.fixture
+def face_contact_mode(box_geometry: Box2d) -> FaceContactMode:
+    mass = 0.1
+    box = RigidBody("box", box_geometry, mass)
+    contact_location = PolytopeContactLocation(
+        ContactLocation.FACE, 3
+    )  # We use the same face as in the T-pusher demo to make it simple to write tests
+    specs = PlanarPlanSpecs()
+    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, box)
+    return mode
 
 
 def test_face_contact_variables(
@@ -99,32 +112,50 @@ def test_face_contact_variables(
         assert f.shape == (2, 1)
 
 
-def test_face_contact_mode(box_geometry: Box2d) -> None:
-    mass = 0.1
-    box = RigidBody("box", box_geometry, mass)
-    contact_location = PolytopeContactLocation(
-        ContactLocation.FACE, 3
-    )  # We use the same face as in the T-pusher demo to make it simple to write tests
-    specs = PlanarPlanSpecs()
-
-    num_knot_points = 4
-    time_in_contact = 2
-
-    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, box)
+def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
+    mode = face_contact_mode
+    num_knot_points = mode.num_knot_points
 
     # for each knot point:
     # 0 <= lam <= 0 and normal_force >= 0
-    NUM_BBOX = 3
-    assert len(mode.prog.bounding_box_constraints()) == num_knot_points * NUM_BBOX
+    num_bbox = num_knot_points * 3
+    assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
     # v_c_B == 0 and x and y quasi-static dynamics
     # TODO(bernhardpg): Will get fewer linear equality constraints once the wrench is rotated to the world frame
-    NUM_LIN_EQS = 3
-    assert (
-        len(mode.prog.linear_equality_constraints())
-        == (num_knot_points - 1) * NUM_LIN_EQS
+    num_lin_eq = (num_knot_points - 1) * 3
+    assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
+
+    # for each knot point:
+    # | c_f | <= \mu * c_n
+    num_lin = num_knot_points * 2
+    assert len(mode.prog.linear_constraints()) == num_lin
+
+    # for each knot point:
+    # c**2 + s**2 == 1
+    # for each finite diff point:
+    # omega_WB == torque_W
+    num_quad = num_knot_points + (num_knot_points - 1)
+    assert len(mode.prog.quadratic_constraints()) == num_quad
+
+    tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
+    assert len(mode.prog.GetAllConstraints()) == tot_num_consts
+
+    assert len(mode.prog.linear_costs()) == 0
+
+    # One quadratic cost for linear and angular velocities
+    assert len(mode.prog.quadratic_costs()) == 2
+
+    lin_vel_vars = Variables(mode.prog.quadratic_costs()[0].variables())
+    target_lin_vel_vars = Variables(np.concatenate(mode.variables.p_WBs))
+    assert lin_vel_vars.EqualTo(target_lin_vel_vars)
+
+    ang_vel_vars = Variables(mode.prog.quadratic_costs()[1].variables())
+    target_ang_vel_vars = Variables(
+        np.concatenate((mode.variables.cos_ths, mode.variables.sin_ths))
     )
+    assert ang_vel_vars.EqualTo(target_ang_vel_vars)
 
 
 def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
@@ -156,7 +187,4 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
 
-# if __name__ == "__main__":
-#     # test_face_contact_variables()
-#     # test_face_contact_mode(box_geometry())
-#     test_quasi_static_dynamics(face_contact_vars(box_geometry()))
+# def test_one_contact_mode()

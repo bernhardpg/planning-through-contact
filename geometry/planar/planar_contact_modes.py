@@ -94,7 +94,7 @@ class ContinuityVariables:
         """
         if not isinstance(self.p_BF[0, 0], sym.Expression):
             raise RuntimeError(
-                "This function should only be called on instances that comes from FaceContactMode"
+                "This function should only be called on instances that come from FaceContactMode"
             )
 
         # NOTE: Very specific way of picking out the variables
@@ -399,7 +399,7 @@ class FaceContactMode(AbstractContactMode):
                 )
             ]
         )
-        self.prog.AddQuadraticCost(sq_angular_vels)
+        self.prog.AddQuadraticCost(sq_angular_vels)  # type: ignore
 
     def get_convex_set(self) -> opt.Spectrahedron:
         # NOTE: All variables in the relaxed prog will be shifted by one,
