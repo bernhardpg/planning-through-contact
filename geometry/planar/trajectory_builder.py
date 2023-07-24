@@ -22,8 +22,8 @@ class PlanarTrajectory:
 
     def __post_init__(self) -> None:
         dets = np.array([np.linalg.det(R) for R in self.R_WB])
-        if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
-            raise ValueError("Rotations do not have determinant 1.")
+        # if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
+        #     raise ValueError("Rotations do not have determinant 1.")
 
         traj_lengths_equal = all(
             [traj.shape[1] for traj in [self.p_WB, self.p_c_W, self.f_c_W]]

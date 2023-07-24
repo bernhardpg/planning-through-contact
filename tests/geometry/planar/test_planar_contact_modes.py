@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from pydrake.solvers import MathematicalProgram
+from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.symbolic import Expression, Variables
 
 from geometry.collision_geometry.box_2d import Box2d
@@ -13,15 +13,19 @@ from geometry.planar.planar_contact_modes import (
     FaceContactVariables,
     PlanarPlanSpecs,
 )
+from geometry.planar.planar_pose import PlanarPose
+from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
 from geometry.rigid_body import RigidBody
+from visualize.analysis import plot_cos_sine_trajs
+from visualize.planar import visualize_planar_pushing_trajectory
 
 
-@pytest.fixture
+# @pytest.fixture
 def box_geometry() -> Box2d:
-    return Box2d(width=0.2, height=0.1)
+    return Box2d(width=0.3, height=0.1)
 
 
-@pytest.fixture
+# @pytest.fixture
 def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
     prog = MathematicalProgram()
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
@@ -39,9 +43,9 @@ def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
     return vars
 
 
-@pytest.fixture
+# @pytest.fixture
 def face_contact_mode(box_geometry: Box2d) -> FaceContactMode:
-    mass = 0.1
+    mass = 0.3
     box = RigidBody("box", box_geometry, mass)
     contact_location = PolytopeContactLocation(
         ContactLocation.FACE, 3
@@ -187,4 +191,33 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
 
-# def test_one_contact_mode()
+def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.8)
+    face_contact_mode.set_slider_initial_pose(initial_pose)
+    face_contact_mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.formulate_convex_relaxation()
+    result = Solve(face_contact_mode.relaxed_prog)
+    assert result.is_success()
+
+    vars = face_contact_mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert np.allclose(traj.R_WB[0], initial_pose.two_d_rot_matrix())
+    assert np.allclose(traj.p_WB[:, 0:1], initial_pose.pos())
+
+    assert np.allclose(traj.R_WB[-1], final_pose.two_d_rot_matrix())
+    assert np.allclose(traj.p_WB[:, -1:-2], final_pose.pos())
+
+    # (num_knot_points, 2): first col cosines, second col sines
+    rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+    plot_cos_sine_trajs(rs)
+
+    DEBUG = True
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+
+
+if __name__ == "__main__":
+    test_one_contact_mode(face_contact_mode(box_geometry()))

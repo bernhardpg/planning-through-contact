@@ -31,7 +31,7 @@ from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
 from geometry.two_d.t_pusher import TPusher
 from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
-from visualize.analysis import create_quasistatic_pushing_analysis
+from visualize.analysis import create_quasistatic_pushing_analysis, plot_cos_sine_trajs
 from visualize.colors import COLORS
 from visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -269,7 +269,6 @@ class ModeVars(NamedTuple):
         friction_force_vals = result.GetSolution(self.friction_forces)
         p_WB_x_vals = result.GetSolution(self.p_WB_xs)
         p_WB_y_vals = result.GetSolution(self.p_WB_ys)
-        breakpoint()
 
         return ModeVars(
             lam_vals,

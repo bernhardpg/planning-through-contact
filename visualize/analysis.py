@@ -16,6 +16,10 @@ TORQUE_REF = FORCE_REF * DISTANCE_REF  # Almost max torque
 
 
 def plot_cos_sine_trajs(rot_trajs: npt.NDArray[np.float64]):  # (num_steps, 2)
+    """
+    @param rot_trajs: Matrix of size (num_steps, 2), where the first col is
+    cosines and the second col is sines.
+    """
     # For some reason pyright complains about the typing being wrong with ax
     _, ax = plt.subplots(1, 1)
 
