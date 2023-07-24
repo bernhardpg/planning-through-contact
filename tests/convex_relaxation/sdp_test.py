@@ -288,7 +288,7 @@ def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
     relaxed_prog, X, _ = create_sdp_relaxation(prog)
     result = Solve(relaxed_prog)
     X_val = result.GetSolution(X)
-    x_val_true = X_val[1:, 0].reshape((-1, 1))
+    x_val_true = X_val[1:, 0]
 
     rs = get_r_from_x(x)
 
