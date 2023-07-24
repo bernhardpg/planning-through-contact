@@ -7,7 +7,7 @@ import pytest
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.sdp import (
+from planning_through_contact.convex_relaxation.sdp import (
     _collect_bounding_box_constraints,
     _linear_bindings_to_affine_terms,
     create_sdp_relaxation,
@@ -15,7 +15,7 @@ from convex_relaxation.sdp import (
     find_solution,
     get_nullspace_matrix,
 )
-from visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 
 class LinearSystem(NamedTuple):

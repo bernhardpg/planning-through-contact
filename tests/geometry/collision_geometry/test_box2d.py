@@ -1,10 +1,14 @@
 import numpy as np
 import pytest
 
-from geometry.collision_geometry.box_2d import Box2d
-from geometry.collision_geometry.collision_geometry import ContactLocation
-from geometry.hyperplane import Hyperplane
-from simulation.planar_pushing.planar_pushing_iiwa import PlanarPushingDiagram
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+)
+from planning_through_contact.geometry.hyperplane import Hyperplane
+from planning_through_contact.simulation.planar_pushing.planar_pushing_iiwa import (
+    PlanarPushingDiagram,
+)
 
 
 @pytest.fixture

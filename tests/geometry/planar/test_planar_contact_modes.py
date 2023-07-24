@@ -3,21 +3,25 @@ import pytest
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.symbolic import Expression, Variables
 
-from geometry.collision_geometry.box_2d import Box2d
-from geometry.collision_geometry.collision_geometry import (
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
-from geometry.planar.planar_contact_modes import (
+from planning_through_contact.geometry.planar.planar_contact_modes import (
     FaceContactMode,
     FaceContactVariables,
     PlanarPlanSpecs,
 )
-from geometry.planar.planar_pose import PlanarPose
-from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
-from geometry.rigid_body import RigidBody
-from visualize.analysis import plot_cos_sine_trajs
-from visualize.planar import visualize_planar_pushing_trajectory
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarTrajectoryBuilder,
+)
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.visualize.planar import (
+    visualize_planar_pushing_trajectory,
+)
 
 
 @pytest.fixture

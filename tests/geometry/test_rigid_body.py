@@ -1,7 +1,7 @@
 import pytest
 
-from geometry.collision_geometry.box_2d import Box2d
-from geometry.rigid_body import RigidBody
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.rigid_body import RigidBody
 from tests.geometry.collision_geometry.test_box2d import box_geometry
 
 
