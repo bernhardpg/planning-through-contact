@@ -1,13 +1,22 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.geometry.optimization as opt
+from pydrake.solvers import MathematicalProgramResult
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    VertexModePair,
+)
 from planning_through_contact.geometry.utilities import from_so2_to_so3
+from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
+
+GcsVertex = opt.GraphOfConvexSets.Vertex
+GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 @dataclass
@@ -37,6 +46,23 @@ class PlanarTrajectory:
 class PlanarTrajectoryBuilder:
     def __init__(self, path: List[FaceContactVariables | NonCollisionVariables]):
         self.path = path
+
+    @classmethod
+    def from_result(
+        cls,
+        result: MathematicalProgramResult,
+        gcs: opt.GraphOfConvexSets,
+        source_vertex: GcsVertex,
+        target_vertex: GcsVertex,
+        pairs: Dict[str, VertexModePair],
+    ):
+        vertex_path = get_gcs_solution_path(gcs, result, source_vertex, target_vertex)
+        pairs_on_path = [pairs[v.name()] for v in vertex_path]
+        path = [
+            pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
+            for pair in pairs_on_path
+        ]
+        return cls(path)
 
     def get_trajectory(
         self, dt: float = 0.01, interpolate: bool = True
