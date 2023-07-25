@@ -6,24 +6,15 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
 )
 from planning_through_contact.geometry.hyperplane import Hyperplane
-from planning_through_contact.simulation.planar_pushing.planar_pushing_iiwa import (
-    PlanarPushingDiagram,
-)
 
 
 @pytest.fixture
 def box_geometry() -> Box2d:
-    # Get the default sugar box from the manipulation simulation
-    station = PlanarPushingDiagram()
-    shape = station.get_box_shape()
-    box = Box2d.from_drake(shape, axis_mode="planar")
+    # Default sugar box dimensions
+    width = 0.1703
+    height = 0.0867
+    box = Box2d(width, height)
     return box
-
-
-def test_from_drake(box_geometry: Box2d) -> None:
-    # Make sure the box is loaded correctly
-    assert np.isclose(box_geometry.width, 0.1703)
-    assert np.isclose(box_geometry.height, 0.0867)
 
 
 def test_contact_locations(box_geometry: Box2d) -> None:

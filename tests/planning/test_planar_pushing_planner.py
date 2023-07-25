@@ -10,7 +10,6 @@ from planning_through_contact.planning.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
 from tests.geometry.collision_geometry.test_box2d import box_geometry
-from tests.geometry.test_rigid_body import rigid_body_box
 
 # @pytest.fixture
 # def planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
