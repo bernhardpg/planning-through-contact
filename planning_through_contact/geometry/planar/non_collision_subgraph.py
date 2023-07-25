@@ -54,7 +54,7 @@ class NonCollisionSubGraph:
         ]
         vertices = [gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)]
 
-        edge_idxs = cls._get_edge_idxs(non_collision_modes)
+        edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         # Add bi-directional edges
         edges = {
             (i, j): (
@@ -67,7 +67,9 @@ class NonCollisionSubGraph:
         return cls(sets, non_collision_modes, vertices, edges, {})
 
     @staticmethod
-    def _get_edge_idxs(modes: List[NonCollisionMode]) -> List[Tuple[int, int]]:
+    def _get_overlapping_edge_idxs(
+        modes: List[NonCollisionMode],
+    ) -> List[Tuple[int, int]]:
         """
         Returns all edges between any overlapping regions in the two-dimensional
         space of positions as a tuple of vertices

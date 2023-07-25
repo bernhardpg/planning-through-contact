@@ -127,6 +127,7 @@ class PlanarPushingPlanner:
         subgraph = NonCollisionSubGraph.from_modes(
             self.non_collision_modes, self.gcs, first_contact_mode, second_contact_mode
         )
+        # TODO(bernhardpg): this is confusing and should be refactored to be a part of NonCollisionSubGraph
         subgraph.add_connection_to_full_graph(
             self.gcs, self.contact_vertices[first_contact_mode], first_contact_mode
         )
