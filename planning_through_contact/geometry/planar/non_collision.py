@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import ge
+from pydrake.math import eq, ge
 from pydrake.solvers import (
     BoundingBoxConstraint,
     LinearConstraint,
@@ -24,6 +24,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.continuity_variables import (
     ContinuityVariables,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.tools.types import NpVariableArray
@@ -72,6 +73,19 @@ class NonCollisionVariables(AbstractModeVariables):
             p_WB_y,
             cos_th,
             sin_th,
+        )
+
+    def eval_result(self, result: MathematicalProgramResult) -> "NonCollisionVariables":
+        return NonCollisionVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            result.GetSolution(self.p_BF_xs),
+            result.GetSolution(self.p_BF_ys),
+            result.GetSolution(self.p_WB_x),  # type: ignore
+            result.GetSolution(self.p_WB_y),  # type: ignore
+            result.GetSolution(self.cos_th),  # type: ignore
+            result.GetSolution(self.sin_th),  # type: ignore
         )
 
     @property
@@ -168,6 +182,17 @@ class NonCollisionMode(AbstractContactMode):
         )
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
         self.prog.AddCost(squared_eucl_dist)
+
+    def set_slider_pose(self, pose: PlanarPose) -> None:
+        self.prog.AddLinearConstraint(self.variables.cos_th == np.cos(pose.theta))
+        self.prog.AddLinearConstraint(self.variables.sin_th == np.sin(pose.theta))
+        self.prog.AddLinearConstraint(eq(self.variables.p_WB, pose.pos()))
+
+    def set_finger_initial_pos(self, pos: npt.NDArray[np.float64]) -> None:
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pos))
+
+    def set_finger_final_pos(self, pos: npt.NDArray[np.float64]) -> None:
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pos))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         return self.prog.FindDecisionVariableIndices(vars)

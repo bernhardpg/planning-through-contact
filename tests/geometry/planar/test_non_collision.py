@@ -1,9 +1,17 @@
 import numpy as np
 import pydrake.symbolic as sym
+from pydrake.solvers import Solve
 
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
+)
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarTrajectoryBuilder,
+)
+from planning_through_contact.visualize.planar import (
+    visualize_planar_pushing_trajectory,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -90,3 +98,47 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     lin_vel_vars = sym.Variables(mode.prog.quadratic_costs()[0].variables())
     target_lin_vel_vars = sym.Variables(np.concatenate(mode.variables.p_BFs))
     assert lin_vel_vars.EqualTo(target_lin_vel_vars)
+
+
+def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
+    slider_pose = PlanarPose(0.3, 0, 0)
+    non_collision_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
+    non_collision_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(-0.15, 0, 0)
+    non_collision_mode.set_finger_final_pos(finger_final_pose.pos())
+
+    result = Solve(non_collision_mode.prog)
+    assert result.is_success()
+
+    vars = non_collision_mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert np.allclose(traj.R_WB[0], slider_pose.two_d_rot_matrix())
+    assert np.allclose(traj.p_WB[:, 0:1], slider_pose.pos())
+
+    assert np.allclose(traj.R_WB[-1], slider_pose.two_d_rot_matrix())
+    assert np.allclose(traj.p_WB[:, -1:1], slider_pose.pos())
+
+    assert np.allclose(
+        traj.p_c_W[:, 0:1], slider_pose.pos() + finger_initial_pose.pos()
+    )
+    assert np.allclose(traj.p_c_W[:, -1:], slider_pose.pos() + finger_final_pose.pos())
+
+    DEBUG = False
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, non_collision_mode.object.geometry)
+
+
+def test_infeasible_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
+    slider_pose = PlanarPose(0.3, 0, 0)
+    non_collision_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
+    non_collision_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(0, 0, 0)  # Will cause penetration
+    non_collision_mode.set_finger_final_pos(finger_final_pose.pos())
+
+    result = Solve(non_collision_mode.prog)
+    assert not result.is_success()
