@@ -12,6 +12,7 @@ from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
 )
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -32,6 +33,21 @@ def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
         prog,
         box_geometry,
         contact_location,
+        num_knot_points,
+        time_in_contact,
+    )
+    return vars
+
+
+@pytest.fixture
+def non_collision_vars() -> NonCollisionVariables:
+    prog = MathematicalProgram()
+
+    num_knot_points = 2
+    time_in_contact = 2
+
+    vars = NonCollisionVariables.from_prog(
+        prog,
         num_knot_points,
         time_in_contact,
     )
