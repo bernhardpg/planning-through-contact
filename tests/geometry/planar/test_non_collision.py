@@ -1,8 +1,16 @@
 import numpy as np
 import pydrake.symbolic as sym
 
-from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
-from tests.geometry.planar.fixtures import non_collision_vars
+from planning_through_contact.geometry.planar.non_collision import (
+    NonCollisionMode,
+    NonCollisionVariables,
+)
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    non_collision_mode,
+    non_collision_vars,
+    rigid_body_box,
+)
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -52,3 +60,33 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
     for f in non_collision_vars.f_c_Ws:
         assert f.shape == (2, 1)
         assert np.all(f == 0)
+
+
+def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
+    mode = non_collision_mode
+    num_knot_points = mode.num_knot_points
+
+    # We should have three planes for a collision free region for a normal box
+    num_planes = len(mode.planes)
+    assert num_planes == 3
+
+    # One linear constraint per plane, per knot point
+    num_linear_constraints = len(mode.prog.linear_constraints()) + len(
+        mode.prog.bounding_box_constraints()
+    )
+    assert num_linear_constraints == num_knot_points * num_planes
+
+    # The next two tests may fail for more complex geometries than boxes. If so, update them!
+    assert len(mode.prog.bounding_box_constraints()) == 2
+    assert len(mode.prog.linear_constraints()) == 4
+
+    assert len(mode.prog.linear_equality_constraints()) == 0
+
+    assert len(mode.prog.linear_costs()) == 0
+
+    # One quadratic cost for squared eucl distances
+    assert len(mode.prog.quadratic_costs()) == 1
+
+    lin_vel_vars = sym.Variables(mode.prog.quadratic_costs()[0].variables())
+    target_lin_vel_vars = sym.Variables(np.concatenate(mode.variables.p_BFs))
+    assert lin_vel_vars.EqualTo(target_lin_vel_vars)
