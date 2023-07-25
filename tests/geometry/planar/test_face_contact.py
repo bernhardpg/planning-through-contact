@@ -19,6 +19,7 @@ from tests.geometry.planar.fixtures import (
     box_geometry,
     face_contact_mode,
     face_contact_vars,
+    rigid_body_box,
 )
 
 
