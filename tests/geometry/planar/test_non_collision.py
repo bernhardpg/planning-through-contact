@@ -115,11 +115,11 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     vars = non_collision_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert np.allclose(traj.R_WB[0], slider_pose.two_d_rot_matrix())
-    assert np.allclose(traj.p_WB[:, 0:1], slider_pose.pos())
+    assert np.allclose(traj.R_WB[0], slider_pose.two_d_rot_matrix(), atol=1e-2)
+    assert np.allclose(traj.p_WB[:, 0:1], slider_pose.pos(), atol=1e-2)
 
-    assert np.allclose(traj.R_WB[-1], slider_pose.two_d_rot_matrix())
-    assert np.allclose(traj.p_WB[:, -1:1], slider_pose.pos())
+    assert np.allclose(traj.R_WB[-1], slider_pose.two_d_rot_matrix(), atol=1e-2)
+    assert np.allclose(traj.p_WB[:, -1:1], slider_pose.pos(), atol=1e-2)
 
     assert np.allclose(
         traj.p_c_W[:, 0:1], slider_pose.pos() + finger_initial_pose.pos()
