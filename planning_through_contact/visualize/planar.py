@@ -41,7 +41,7 @@ def visualize_planar_pushing_trajectory(
     contact_force_viz = VisualizationForce2d(traj.p_c_W.T, CONTACT_COLOR, traj.f_c_W.T)
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = traj.dt
+    FRAMES_PER_SEC = 1 / traj.dt
     viz.visualize(
         [contact_point_viz],
         [contact_force_viz],

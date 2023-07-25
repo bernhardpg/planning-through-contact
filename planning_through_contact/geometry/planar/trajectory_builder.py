@@ -32,9 +32,11 @@ class PlanarTrajectory:
         if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
             raise ValueError("Rotations do not have determinant 1.")
 
-        traj_lengths_equal = all(
-            [traj.shape[1] for traj in [self.p_WB, self.p_c_W, self.f_c_W]]
-        ) and (len(self.R_WB) == self.p_WB.shape[1])
+        all_traj_lenths = np.array(
+            [traj.shape[1] for traj in (self.p_WB, self.p_c_W, self.f_c_W)]
+            + [len(self.R_WB)]
+        )
+        traj_lengths_equal = np.all(all_traj_lenths == all_traj_lenths[0])
         if not traj_lengths_equal:
             raise ValueError("Trajectories are not of equal length.")
 
@@ -77,19 +79,19 @@ class PlanarTrajectoryBuilder:
             )
             p_WB = np.vstack(
                 [self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]  # type: ignore
-            )
+            ).T
             p_c_W = np.vstack(
                 [
                     self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
                     for p in self.path
                 ]
-            )
+            ).T
             f_c_W = np.vstack(
                 [
                     self._get_traj_by_interpolation(p.f_c_Ws, dt, p.time_in_mode)
                     for p in self.path
                 ]
-            )
+            ).T
         else:
             R_WB = sum(
                 [p.R_WBs for p in self.path],
