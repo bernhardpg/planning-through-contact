@@ -19,8 +19,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     AbstractModeVariables,
-)
-from planning_through_contact.geometry.planar.continuity_variables import (
     ContinuityVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose

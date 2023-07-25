@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -20,8 +20,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     AbstractModeVariables,
-)
-from planning_through_contact.geometry.planar.continuity_variables import (
     ContinuityVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -140,8 +138,10 @@ class NonCollisionMode(AbstractContactMode):
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
         object: RigidBody,
+        name: Optional[str] = None,
     ) -> "NonCollisionMode":
-        name = f"NON_COLL_{contact_location.idx}"
+        if name is None:
+            name = f"NON_COLL_{contact_location.idx}"
         return cls(
             name,
             specs.num_knot_points_non_collision,
@@ -184,14 +184,17 @@ class NonCollisionMode(AbstractContactMode):
         self.prog.AddCost(squared_eucl_dist)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
+        self.slider_pose = pose
         self.prog.AddLinearConstraint(self.variables.cos_th == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_th == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WB, pose.pos()))
 
     def set_finger_initial_pos(self, pos: npt.NDArray[np.float64]) -> None:
+        self.p_BF_initial = pos
         self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pos))
 
     def set_finger_final_pos(self, pos: npt.NDArray[np.float64]) -> None:
+        self.p_BF_final = pos
         self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pos))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:

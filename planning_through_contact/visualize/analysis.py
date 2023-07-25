@@ -1,13 +1,29 @@
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import pydrake.geometry.optimization as opt
+from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
     ContactFrameConstraints,
 )
+
+
+def save_gcs_graph_diagram(
+    gcs: opt.GraphOfConvexSets,
+    filepath: Path,
+    result: Optional[MathematicalProgramResult] = None,
+) -> None:
+    graphviz = gcs.GetGraphvizString(result, precision=1)
+    import pydot
+
+    data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
+    data.write_svg(str(filepath))
+
 
 PLOT_WIDTH_INCH = 7
 PLOT_HEIGHT_INCH = 4.5
