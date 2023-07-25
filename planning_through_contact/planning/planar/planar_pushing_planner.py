@@ -1,7 +1,6 @@
-from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Dict, List, Literal, NamedTuple, Tuple
+from typing import List, Literal, Tuple
 
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
@@ -18,8 +17,10 @@ from pydrake.solvers import (
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
 )
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    NonCollisionSubGraph,
+)
 from planning_through_contact.geometry.planar.planar_contact_modes import (
-    AbstractModeVariables,
     FaceContactMode,
     FaceContactVariables,
     NonCollisionMode,
@@ -36,116 +37,6 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
-
-
-class VertexModePair(NamedTuple):
-    vertex: GcsVertex
-    mode: FaceContactMode | NonCollisionMode
-
-
-@dataclass
-class NonCollisionSubGraph:
-    sets: List[opt.ConvexSet]
-    modes: List[NonCollisionMode]
-    vertices: List[GcsVertex]
-    edges: Dict[Tuple[int, int], BidirGcsEdge]
-    graph_connections: Dict[int, BidirGcsEdge]
-
-    @classmethod
-    def from_modes(
-        cls,
-        modes: List[NonCollisionMode],
-        gcs: opt.GraphOfConvexSets,
-        mode_i: int,
-        mode_j: int,
-    ) -> "NonCollisionSubGraph":
-        """
-        Constructs a subgraph of non-collision modes, based on the given modes. This constructor takes in the GCS instance,
-        as well as the modes. The modes each has the option to get a convex set from its underlying mathematical program,
-        which is added as vertices to the GCS instance.
-
-        An edge is added between any two overlapping position modes, as well as between the incoming and outgoing
-        nodes to the bigger graph.
-
-        @param mode_i: Index of first contact mode where this subgraph is connected
-        @param mode_j: Index of second contact mode where this subgraph is connected
-        """
-
-        sets = [mode.get_convex_set() for mode in modes]
-
-        vertex_names = [f"{mode_i}_TO_{mode_j}_{mode.name}" for mode in modes]
-        vertices = [gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)]
-
-        edge_idxs = cls._get_edge_idxs(modes)
-        # Add bi-directional edges
-        edges = {
-            (i, j): (
-                gcs.AddEdge(vertices[i], vertices[j]),
-                gcs.AddEdge(vertices[j], vertices[i]),
-            )
-            for i, j in edge_idxs
-        }
-
-        return cls(sets, modes, vertices, edges, {})
-
-    @staticmethod
-    def _get_edge_idxs(modes: List[NonCollisionMode]) -> List[Tuple[int, int]]:
-        """
-        Returns all edges between any overlapping regions in the two-dimensional
-        space of positions as a tuple of vertices
-        """
-
-        position_sets = [mode.get_convex_set_in_positions() for mode in modes]
-        edge_idxs = [
-            (i, j)
-            for (i, u), (j, v) in combinations(enumerate(position_sets), 2)
-            if u.IntersectsWith(v)
-        ]
-        return edge_idxs
-
-    def __post_init__(self) -> None:
-        for (i, j), (first_edge, second_edge) in self.edges.items():
-            # Bi-directional edges
-            self._add_continuity_constraints(i, j, first_edge)
-            self._add_continuity_constraints(j, i, second_edge)
-
-    def _add_continuity_constraints(
-        self, outgoing_idx: int, incoming_idx: int, edge: GcsEdge
-    ):
-        first_vars = self.modes[incoming_idx].get_continuity_vars("first").vector
-        first_var_idxs = self.modes[incoming_idx].get_variable_indices_in_gcs_vertex(
-            first_vars
-        )
-
-        last_vars = self.modes[outgoing_idx].get_continuity_vars("last").vector
-        last_var_idxs = self.modes[outgoing_idx].get_variable_indices_in_gcs_vertex(
-            last_vars
-        )
-
-        constraint = eq(edge.xu()[last_var_idxs], edge.xv()[first_var_idxs])
-        for c in constraint:
-            edge.AddConstraint(c)
-
-    def add_connection_to_full_graph(
-        self,
-        gcs: opt.GraphOfConvexSets,
-        connection_vertex: GcsVertex,
-        connection_idx: int,
-    ) -> None:
-        """
-        Adds a bi-directional edge between the provided connection vertex and the subgraph vertex with index connection_idx in this subgraph.
-        """
-
-        self.graph_connections[connection_idx] = (
-            gcs.AddEdge(connection_vertex, self.vertices[connection_idx]),
-            gcs.AddEdge(self.vertices[connection_idx], connection_vertex),
-        )
-
-    def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
-        return {
-            v.name(): VertexModePair(vertex=v, mode=m)
-            for v, m in zip(self.vertices, self.modes)
-        }
 
 
 def _find_path_to_target(
@@ -209,7 +100,7 @@ class PlanarPushingPlanner:
         ]
 
         self.subgraphs = [
-            self._build_subgraph(mode_i, mode_j)
+            self._build_subgraph_between_contact_modes(mode_i, mode_j)
             for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
         ]
 
@@ -230,15 +121,17 @@ class PlanarPushingPlanner:
                 binding = Binding[QuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
 
-    def _build_subgraph(self, mode_i: int, mode_j: int) -> NonCollisionSubGraph:
+    def _build_subgraph_between_contact_modes(
+        self, first_contact_mode: int, second_contact_mode: int
+    ) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.from_modes(
-            self.non_collision_modes, self.gcs, mode_i, mode_j
+            self.non_collision_modes, self.gcs, first_contact_mode, second_contact_mode
         )
         subgraph.add_connection_to_full_graph(
-            self.gcs, self.contact_vertices[mode_i], mode_i
+            self.gcs, self.contact_vertices[first_contact_mode], first_contact_mode
         )
         subgraph.add_connection_to_full_graph(
-            self.gcs, self.contact_vertices[mode_j], mode_j
+            self.gcs, self.contact_vertices[second_contact_mode], second_contact_mode
         )
         return subgraph
 
