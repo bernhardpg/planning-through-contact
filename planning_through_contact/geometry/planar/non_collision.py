@@ -41,6 +41,39 @@ class NonCollisionVariables(AbstractModeVariables):
     cos_th: sym.Variable | float
     sin_th: sym.Variable | float
 
+    @classmethod
+    def from_prog(
+        cls, prog: MathematicalProgram, num_knot_points: int, time_in_mode: float
+    ) -> "NonCollisionVariables":
+        if not num_knot_points == 2:
+            raise NotImplementedError(
+                "Currently only two knot points are supported for NonCollisionModes"
+            )
+
+        # Finger location
+        p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
+        p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
+
+        # We only need one variable for the pose of the object
+        p_WB_x = prog.NewContinuousVariables(1, "p_WB_x").item()
+        p_WB_y = prog.NewContinuousVariables(1, "p_WB_y").item()
+        cos_th = prog.NewContinuousVariables(1, "cos_th").item()
+        sin_th = prog.NewContinuousVariables(1, "sin_th").item()
+
+        dt = time_in_mode / num_knot_points
+
+        return NonCollisionVariables(
+            num_knot_points,
+            time_in_mode,
+            dt,
+            p_BF_xs,
+            p_BF_ys,
+            p_WB_x,
+            p_WB_y,
+            cos_th,
+            sin_th,
+        )
+
     @property
     def p_BFs(self):
         return [
@@ -66,11 +99,11 @@ class NonCollisionVariables(AbstractModeVariables):
     @property
     def v_WBs(self):
         NUM_DIMS = 2
-        return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
+        return [np.zeros((NUM_DIMS, 1))] * (self.num_knot_points - 1)
 
     @property
     def omega_WBs(self):
-        return [0] * self.num_knot_points
+        return [0.0] * (self.num_knot_points - 1)
 
     @property
     def p_c_Ws(self):
@@ -110,32 +143,11 @@ class NonCollisionMode(AbstractContactMode):
             self.contact_location
         )
         self.prog = MathematicalProgram()
-        self.variables = self._define_variables()
+        self.variables = NonCollisionVariables.from_prog(
+            self.prog, self.num_knot_points, self.time_in_mode
+        )
         self._define_constraints()
         self._define_cost()
-
-    def _define_variables(self) -> NonCollisionVariables:
-        # Finger location
-        p_BF_xs = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_x")
-        p_BF_ys = self.prog.NewContinuousVariables(self.num_knot_points, "p_BF_y")
-
-        # We only need one variable for the pose of the object
-        p_WB_x = self.prog.NewContinuousVariables(1, "p_WB_x").item()
-        p_WB_y = self.prog.NewContinuousVariables(1, "p_WB_y").item()
-        cos_th = self.prog.NewContinuousVariables(1, "cos_th").item()
-        sin_th = self.prog.NewContinuousVariables(1, "sin_th").item()
-
-        return NonCollisionVariables(
-            self.num_knot_points,
-            self.time_in_mode,
-            self.dt,
-            p_BF_xs,
-            p_BF_ys,
-            p_WB_x,
-            p_WB_y,
-            cos_th,
-            sin_th,
-        )
 
     def _define_constraints(self) -> None:
         for k in range(self.num_knot_points):
