@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from pydrake.math import RigidTransform, RollPitchYaw
 
-from geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
 @pytest.fixture
