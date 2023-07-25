@@ -202,6 +202,7 @@ class FaceContactMode(AbstractContactMode):
 
     def __post_init__(self) -> None:
         self.prog = MathematicalProgram()
+        self.relaxed_prog = None
         self.variables = FaceContactVariables.from_prog(
             self.prog,
             self.object.geometry,
@@ -291,9 +292,7 @@ class FaceContactMode(AbstractContactMode):
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
-            raise RuntimeError(
-                "Relaxed program must be constructed before convex set can be retrieved"
-            )
+            self.formulate_convex_relaxation()
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
