@@ -28,6 +28,10 @@ class AbstractModeVariables(ABC):
     time_in_mode: float
     dt: float
 
+    @abstractmethod
+    def eval_result(self, result: MathematicalProgramResult) -> "AbstractModeVariables":
+        pass
+
     @property
     @abstractmethod
     def R_WBs(self):
