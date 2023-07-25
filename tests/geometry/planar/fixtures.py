@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import pytest
 from pydrake.solvers import MathematicalProgram
 
@@ -15,6 +17,7 @@ from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -82,3 +85,31 @@ def face_contact_mode(rigid_body_box: RigidBody) -> FaceContactMode:
         contact_location, specs, rigid_body_box
     )
     return mode
+
+
+@pytest.fixture
+def initial_and_final_non_collision_mode(
+    rigid_body_box: RigidBody,
+) -> Tuple[NonCollisionMode, NonCollisionMode]:
+    plan_specs = PlanarPlanSpecs()
+
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    source_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_start, plan_specs, rigid_body_box, "source"
+    )
+    target_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_end, plan_specs, rigid_body_box, "target"
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    source_mode.set_slider_pose(slider_pose)
+    target_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0, 0)
+    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(0.05, 0.5, 0)
+    target_mode.set_finger_final_pos(finger_final_pose.pos())
+
+    return source_mode, target_mode

@@ -1,6 +1,6 @@
 from itertools import combinations
 from pathlib import Path
-from typing import List, Literal, Tuple
+from typing import List, Tuple
 
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
@@ -33,24 +33,11 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
-
-
-def _find_path_to_target(
-    edges: List[opt.GraphOfConvexSets.Edge],
-    target: opt.GraphOfConvexSets.Vertex,
-    u: opt.GraphOfConvexSets.Vertex,
-) -> List[opt.GraphOfConvexSets.Vertex]:
-    current_edge = next(e for e in edges if e.u() == u)
-    v = current_edge.v()
-    target_reached = v == target
-    if target_reached:
-        return [u] + [v]
-    else:
-        return [u] + _find_path_to_target(edges, target, v)
 
 
 class PlanarPushingPlanner:
@@ -88,11 +75,6 @@ class PlanarPushingPlanner:
             for loc in contact_locations
         ]
 
-        self.non_collision_modes = [
-            NonCollisionMode.create_from_plan_spec(loc, self.plan_specs, self.slider)
-            for loc in contact_locations
-        ]
-
     def _build_graph(self):
         self.contact_vertices = [
             self.gcs.AddVertex(mode.get_convex_set(), mode.name)
@@ -124,93 +106,18 @@ class PlanarPushingPlanner:
     def _build_subgraph_between_contact_modes(
         self, first_contact_mode: int, second_contact_mode: int
     ) -> NonCollisionSubGraph:
+        # TODO(bernhardpg): Fix this part!
         subgraph = NonCollisionSubGraph.from_modes(
             self.non_collision_modes, self.gcs, first_contact_mode, second_contact_mode
         )
         # TODO(bernhardpg): this is confusing and should be refactored to be a part of NonCollisionSubGraph
-        subgraph.add_connection_to_full_graph(
+        subgraph.connect_to_contact_vertex(
             self.gcs, self.contact_vertices[first_contact_mode], first_contact_mode
         )
-        subgraph.add_connection_to_full_graph(
+        subgraph.connect_to_contact_vertex(
             self.gcs, self.contact_vertices[second_contact_mode], second_contact_mode
         )
         return subgraph
-
-    def _add_continuity_constraints_for_transitions(self) -> None:
-        for subgraph in self.subgraphs:
-            for mode_idx, (
-                first_edge,
-                second_edge,
-            ) in subgraph.graph_connections.items():
-                # bi-directional edges
-                self._add_cont_const_btwn_contact_and_non_collision(
-                    self.contact_modes[mode_idx],
-                    subgraph.modes[mode_idx],
-                    first_edge,  # from contact mode to non-collision
-                    "outgoing",
-                )
-                self._add_cont_const_btwn_contact_and_non_collision(
-                    self.contact_modes[mode_idx],
-                    subgraph.modes[mode_idx],
-                    second_edge,  # from non-collision to contact mode
-                    "incoming",
-                )
-
-    @staticmethod
-    def _add_cont_const_btwn_contact_and_non_collision(
-        contact_mode: FaceContactMode,
-        non_collision_mode: NonCollisionMode,
-        edge: GcsEdge,
-        incoming_or_outgoing: Literal["incoming", "outgoing"],
-    ):
-        """
-        @param incoming_or_outgoing: Whether the edge is from a contact mode to a non_collision mode, or the other way around:
-            "outgoing": contact_mode -> non_collision_mode
-            "incoming": contact_mode <- non_collision_mode
-        """
-        if incoming_or_outgoing == "incoming":
-            non_collision_vars_last = non_collision_mode.get_continuity_vars(
-                "last"
-            ).vector
-            last_var_idxs = non_collision_mode.get_variable_indices_in_gcs_vertex(
-                non_collision_vars_last
-            )
-            lhs = edge.xu()[last_var_idxs]
-
-            contact_vars_first = contact_mode.get_continuity_vars("first")
-            A, b = sym.DecomposeAffineExpressions(
-                contact_vars_first.vector, contact_vars_first.get_pure_variables()
-            )
-
-            first_var_idxs = contact_mode.get_variable_indices_in_gcs_vertex(
-                contact_vars_first.get_pure_variables()
-            )
-
-            rhs = A.dot(edge.xv()[first_var_idxs]) + b
-
-        else:
-            contact_vars_last = contact_mode.get_continuity_vars("last")
-            A, b = sym.DecomposeAffineExpressions(
-                contact_vars_last.vector, contact_vars_last.get_pure_variables()
-            )
-
-            last_var_idxs = contact_mode.get_variable_indices_in_gcs_vertex(
-                contact_vars_last.get_pure_variables()
-            )
-
-            lhs = A.dot(edge.xu()[last_var_idxs]) + b
-
-            non_collision_vars_first = non_collision_mode.get_continuity_vars(
-                "first"
-            ).vector
-            first_var_idxs = non_collision_mode.get_variable_indices_in_gcs_vertex(
-                non_collision_vars_first
-            )
-            rhs = edge.xv()[first_var_idxs]
-
-        constraint = eq(lhs, rhs)
-        for c in constraint:
-            edge.AddConstraint(c)
 
     def _collect_all_vertex_mode_pairs(self) -> None:
         all_pairs = {
@@ -290,21 +197,14 @@ class PlanarPushingPlanner:
         )
         return result
 
-    def _get_path(
+    def _get_gcs_solution_path(
         self,
         result: MathematicalProgramResult,
         flow_treshold: float = 0.55,
         print_path: bool = False,
     ) -> List[FaceContactVariables | NonCollisionVariables]:
-        flow_variables = [e.phi() for e in self.gcs.Edges()]
-        flow_results = [result.GetSolution(p) for p in flow_variables]
-        active_edges = [
-            edge
-            for edge, flow in zip(self.gcs.Edges(), flow_results)
-            if flow >= flow_treshold
-        ]
-        vertex_path = _find_path_to_target(
-            active_edges, self.target_vertex, self.source_vertex
+        vertex_path = get_gcs_solution_path(
+            self.gcs, result, self.source_vertex, self.target_vertex, flow_treshold
         )
         pairs_on_path = [
             self.all_pairs[v.name()]
@@ -312,7 +212,7 @@ class PlanarPushingPlanner:
             if v.name() not in ["source", "target"]
         ]
         full_path = [
-            pair.mode.get_variable_solutions(pair.vertex, result)
+            pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
             for pair in pairs_on_path
         ]
 
@@ -342,7 +242,7 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        path = self._get_path(result, print_path=print_path)
+        path = self._get_gcs_solution_path(result, print_path=print_path)
         traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=interpolate)
 
         return traj
