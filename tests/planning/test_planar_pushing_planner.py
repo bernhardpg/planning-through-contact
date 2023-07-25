@@ -1,14 +1,8 @@
 import pytest
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.planar.planar_contact_modes import (
-    PlanarPlanSpecs,
-)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar_pushing_planner import (
-    PlanarPushingPlanner,
-)
 from tests.geometry.collision_geometry.test_box2d import box_geometry
 
 # @pytest.fixture

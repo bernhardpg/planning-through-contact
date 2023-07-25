@@ -5,10 +5,8 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.geometry.planar.planar_contact_modes import (
-    FaceContactVariables,
-    NonCollisionVariables,
-)
+from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.utilities import from_so2_to_so3
 
 
