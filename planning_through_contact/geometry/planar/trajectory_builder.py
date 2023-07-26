@@ -129,15 +129,23 @@ class PlanarTrajectoryBuilder:
         """
 
         Rs_in_SO3 = [from_so2_to_so3(R) for R in Rs]
-        knot_point_times = np.linspace(start_time, end_time, len(Rs))
-        quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
 
-        traj_times = np.arange(start_time, end_time, dt)
-        R_traj_in_SO2 = [
-            quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
-        ]
+        # repeat the same rotation for one knot point
+        if len(Rs_in_SO3) == 1:
+            num_times = int(np.ceil(end_time - start_time) / dt)
+            R_in_SO2 = Rs_in_SO3[0][0:2, 0:2]
+            R_traj_in_SO2 = [R_in_SO2] * num_times
+            return R_traj_in_SO2
+        else:
+            knot_point_times = np.linspace(start_time, end_time, len(Rs))
+            quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
 
-        return R_traj_in_SO2
+            traj_times = np.arange(start_time, end_time, dt)
+            R_traj_in_SO2 = [
+                quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
+            ]
+
+            return R_traj_in_SO2
 
     @staticmethod
     def interpolate_w_first_order_hold(
@@ -152,15 +160,20 @@ class PlanarTrajectoryBuilder:
         @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
         """
 
-        knot_point_times = np.linspace(start_time, end_time, len(values))
+        if len(values) == 1:
+            num_times = int(np.ceil(end_time - start_time) / dt)
+            traj = values.repeat(num_times, axis=0)  # (num_times, num_dims)
+            return traj
+        else:
+            knot_point_times = np.linspace(start_time, end_time, len(values))
 
-        # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
-        first_order_hold = PiecewisePolynomial.FirstOrderHold(
-            knot_point_times, values.T
-        )
-        traj_times = np.arange(start_time, end_time, dt)
-        traj = np.hstack(
-            [first_order_hold.value(t) for t in traj_times]
-        ).T  # (traj_length, num_dims)
+            # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
+            first_order_hold = PiecewisePolynomial.FirstOrderHold(
+                knot_point_times, values.T
+            )
+            traj_times = np.arange(start_time, end_time, dt)
+            traj = np.hstack(
+                [first_order_hold.value(t) for t in traj_times]
+            ).T  # (traj_length, num_dims)
 
         return traj

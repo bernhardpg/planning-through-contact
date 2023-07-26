@@ -25,7 +25,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -44,9 +44,9 @@ class NonCollisionVariables(AbstractModeVariables):
     def from_prog(
         cls, prog: MathematicalProgram, num_knot_points: int, time_in_mode: float
     ) -> "NonCollisionVariables":
-        if not num_knot_points == 2:
+        if not num_knot_points <= 2:
             raise NotImplementedError(
-                "Currently only two knot points are supported for NonCollisionModes"
+                "Currently only one or two knot points are supported for NonCollisionModes"
             )
 
         # Finger location
