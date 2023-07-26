@@ -162,6 +162,7 @@ class PlanarPushingPlanner:
         self.source = self._add_source_or_target_vertex(
             finger_pos, slider_pose, contact_location_start, "source"
         )
+        self.all_pairs[self.source.vertex.name()] = self.source
 
     def set_target_poses(
         self,
@@ -172,6 +173,7 @@ class PlanarPushingPlanner:
         self.target = self._add_source_or_target_vertex(
             finger_pos, slider_pose, contact_location_end, "target"
         )
+        self.all_pairs[self.target.vertex.name()] = self.target
 
     def _add_source_or_target_vertex(
         self,
@@ -213,13 +215,15 @@ class PlanarPushingPlanner:
 
         return pair
 
-    def _solve(self, print_output: bool = False) -> MathematicalProgramResult:
+    def _solve(
+        self, print_output: bool = False, convex_relaxation: bool = True
+    ) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = True
         if print_output:
             options.solver_options = SolverOptions()
             options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
+        options.convex_relaxation = convex_relaxation
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 1
