@@ -133,16 +133,3 @@ class NonCollisionSubGraph:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.non_collision_vertices, self.non_collision_modes)
         }
-
-    def connect_with_continuity_constraints_to_point(
-        self,
-        subgraph_connection_idx: int,
-        external_connection: VertexModePair,
-    ) -> None:
-        subgraph_connection = VertexModePair(
-            self.non_collision_vertices[subgraph_connection_idx],
-            self.non_collision_modes[subgraph_connection_idx],
-        )
-        # bi-directional edges
-        gcs_add_edge_with_continuity(self.gcs, external_connection, subgraph_connection)
-        gcs_add_edge_with_continuity(self.gcs, subgraph_connection, external_connection)
