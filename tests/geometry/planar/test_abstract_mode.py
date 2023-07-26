@@ -20,16 +20,18 @@ from planning_through_contact.visualize.planar import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    initial_and_final_non_collision_mode,
+    initial_and_final_non_collision_mode_one_two_knot_points,
     rigid_body_box,
 )
 
 
 def test_add_continuity_constraints_between_modes(
-    initial_and_final_non_collision_mode: Tuple[NonCollisionMode, NonCollisionMode],
+    initial_and_final_non_collision_mode_one_two_knot_points: Tuple[
+        NonCollisionMode, NonCollisionMode
+    ],
     rigid_body_box: RigidBody,
 ) -> None:
-    source_mode, target_mode = initial_and_final_non_collision_mode
+    source_mode, target_mode = initial_and_final_non_collision_mode_one_two_knot_points
 
     gcs = opt.GraphOfConvexSets()
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)

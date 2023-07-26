@@ -6,7 +6,6 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import Binding, QuadraticCost
 
 from planning_through_contact.geometry.planar.abstract_mode import (
-    PointMode,
     add_continuity_constraints_btwn_modes,
 )
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -21,7 +20,7 @@ BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 class VertexModePair(NamedTuple):
     vertex: GcsVertex
-    mode: FaceContactMode | NonCollisionMode | PointMode
+    mode: FaceContactMode | NonCollisionMode
 
 
 def gcs_add_edge_with_continuity(
@@ -47,15 +46,12 @@ class NonCollisionSubGraph:
         subgraph_name: str,
     ) -> "NonCollisionSubGraph":
         """
-        Constructs a subgraph of non-collision modes, based on the given modes. This constructor takes in the GCS instance,
-        as well as the modes. The modes each has the option to get a convex set from its underlying mathematical program,
-        which is added as vertices to the GCS instance.
+        Constructs a subgraph of non-collision modes. An edge is added to
+        the given gcs instance between any two overlapping position modes,
+        with constraints that enforce continuity on poses.
 
-        An edge is added between any two overlapping position modes, as well as between the incoming and outgoing
-        nodes to the bigger graph.
-
-        @param first_contact_mode: First contact mode where this subgraph is connected
-        @param second_contact_mode: Second contact mode where this subgraph is connected
+        Squared euclidean distance is added as the cost on the finger position
+        in all of the non-collision modes.
         """
 
         non_collision_modes = [

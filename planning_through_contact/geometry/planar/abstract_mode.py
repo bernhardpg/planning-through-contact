@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Literal, Union
+from typing import List, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -20,28 +20,9 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
-@dataclass
-class PointMode:
-    """
-    A contact mode that represents a single position for the finger and slider.
-    Useful for setting source and target conditions in a GCS plan.
-    """
-
-    p_BF: npt.NDArray[np.float64]
-    p_WB: npt.NDArray[np.float64]
-    cos_th: float
-    sin_th: float
-
-    def get_continuity_terms(
-        self, edge: GcsEdge, first_or_last: Literal["first", "last"]
-    ) -> npt.NDArray[np.float64]:
-        # TODO(bernhardpg):
-        ...
-
-
 def add_continuity_constraints_btwn_modes(
-    outgoing_mode: Union["AbstractContactMode", PointMode],
-    incoming_mode: Union["AbstractContactMode", PointMode],
+    outgoing_mode: "AbstractContactMode",
+    incoming_mode: "AbstractContactMode",
     edge: GcsEdge,
 ):
     lhs = outgoing_mode.get_continuity_terms(edge, "last")
