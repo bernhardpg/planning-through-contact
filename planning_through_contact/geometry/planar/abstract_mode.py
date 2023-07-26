@@ -133,7 +133,7 @@ class AbstractContactMode(ABC):
     object: RigidBody
 
     @abstractmethod
-    def get_convex_set(self) -> opt.ConvexSet:
+    def get_convex_set(self, make_bounded: bool) -> opt.ConvexSet:
         pass
 
     @abstractmethod

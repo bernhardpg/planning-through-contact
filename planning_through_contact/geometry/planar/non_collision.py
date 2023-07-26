@@ -222,7 +222,7 @@ class NonCollisionMode(AbstractContactMode):
             sin_th,
         )
 
-    def get_convex_set(self) -> opt.Spectrahedron:
+    def get_convex_set(self, make_bounded: bool = True) -> opt.Spectrahedron:
         # Create a temp program without a quadratic cost that we can use to create a polyhedron
         temp_prog = MathematicalProgram()
         x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
@@ -237,6 +237,12 @@ class NonCollisionMode(AbstractContactMode):
             idxs = self.get_variable_indices_in_gcs_vertex(c.variables())
             vars = x[idxs]
             temp_prog.AddConstraint(c.evaluator(), vars)
+
+        # GCS requires the sets to be bounded
+        if make_bounded:
+            BOUND = 999
+            ub = np.full((temp_prog.num_vars(),), BOUND)
+            temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
