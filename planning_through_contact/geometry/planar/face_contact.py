@@ -285,12 +285,21 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.sin_ths[-1] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[-1], pose.pos()))
 
-    def formulate_convex_relaxation(self) -> None:
+    def formulate_convex_relaxation(self, make_bounded: bool = False) -> None:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
-    def get_convex_set(self) -> opt.Spectrahedron:
+        # GCS requires the sets to be bounded
+        if make_bounded:
+            BOUND = 999
+            ub = np.full((self.relaxed_prog.num_vars(),), BOUND)
+            self.relaxed_prog.AddBoundingBoxConstraint(
+                -ub, ub, self.relaxed_prog.decision_variables()
+            )
+
+    def get_convex_set(self, make_bounded: bool = True) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
-            self.formulate_convex_relaxation()
+            self.formulate_convex_relaxation(make_bounded)
+
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
