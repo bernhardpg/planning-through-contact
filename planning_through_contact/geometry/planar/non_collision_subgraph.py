@@ -35,7 +35,7 @@ class NonCollisionSubGraph:
     gcs: opt.GraphOfConvexSets
     sets: List[opt.ConvexSet]
     non_collision_modes: List[NonCollisionMode]
-    vertices: List[GcsVertex]
+    non_collision_vertices: List[GcsVertex]
 
     @classmethod
     def create_with_gcs(
@@ -62,26 +62,22 @@ class NonCollisionSubGraph:
             for loc in body.geometry.contact_locations
         ]
 
-        sets = [mode.get_convex_set() for mode in non_collision_modes]
-
         vertex_names = [f"{subgraph_name}_{mode.name}" for mode in non_collision_modes]
+        sets = [mode.get_convex_set() for mode in non_collision_modes]
         vertices = [gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)]
 
-        edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         # Add bi-directional edges
-        edges = {
-            (i, j): (
-                gcs.AddEdge(vertices[i], vertices[j]),
-                gcs.AddEdge(vertices[j], vertices[i]),
+        edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
+        for i, j in edge_idxs:
+            gcs_add_edge_with_continuity(
+                gcs,
+                VertexModePair(vertices[i], non_collision_modes[i]),
+                VertexModePair(vertices[j], non_collision_modes[j]),
             )
-            for i, j in edge_idxs
-        }
-        for (i, j), (first_edge, second_edge) in edges.items():
-            add_continuity_constraints_btwn_modes(
-                non_collision_modes[i], non_collision_modes[j], first_edge
-            )
-            add_continuity_constraints_btwn_modes(
-                non_collision_modes[j], non_collision_modes[j], second_edge
+            gcs_add_edge_with_continuity(
+                gcs,
+                VertexModePair(vertices[j], non_collision_modes[j]),
+                VertexModePair(vertices[i], non_collision_modes[i]),
             )
 
         return cls(
@@ -114,7 +110,7 @@ class NonCollisionSubGraph:
         external_connection: VertexModePair,
     ) -> None:
         subgraph_connection = VertexModePair(
-            self.vertices[subgraph_connection_idx],
+            self.non_collision_vertices[subgraph_connection_idx],
             self.non_collision_modes[subgraph_connection_idx],
         )
         # bi-directional edges
@@ -124,5 +120,5 @@ class NonCollisionSubGraph:
     def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
         return {
             v.name(): VertexModePair(vertex=v, mode=m)
-            for v, m in zip(self.vertices, self.non_collision_modes)
+            for v, m in zip(self.non_collision_vertices, self.non_collision_modes)
         }
