@@ -1,7 +1,9 @@
 from itertools import combinations
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
+import numpy as np
+import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.math import eq
 from pydrake.solvers import (
@@ -9,21 +11,25 @@ from pydrake.solvers import (
     CommonSolverOption,
     LinearCost,
     MathematicalProgramResult,
-    QuadraticCost,
     SolverOptions,
 )
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
+    PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
 )
-from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from planning_through_contact.geometry.planar.non_collision import (
+    NonCollisionMode,
+    NonCollisionVariables,
+)
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
     VertexModePair,
+    gcs_add_edge_with_continuity,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -85,6 +91,9 @@ class PlanarPushingPlanner:
             for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
         ]
 
+        self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
+        self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+
     def _add_contact_mode_costs(self):
         for mode, vertex in zip(self.contact_modes, self.contact_vertices):
             var_idxs, evaluators = mode.get_cost_terms()
@@ -122,58 +131,87 @@ class PlanarPushingPlanner:
 
         self.all_pairs = all_pairs
 
-    def set_pusher_initial_pose(
-        self, pose: PlanarPose, disregard_rotation: bool = True
+    def _create_entry_or_exit_subgraph(
+        self, entry_or_exit: Literal["entry", "exit"]
+    ) -> NonCollisionSubGraph:
+        if entry_or_exit == "entry":
+            name = "ENTRY"
+            kwargs = {"outgoing": True, "incoming": False}
+        else:
+            name = "EXIT"
+            kwargs = {"outgoing": False, "incoming": True}
+
+        subgraph = NonCollisionSubGraph.create_with_gcs(
+            self.gcs, self.slider, self.plan_specs, name
+        )
+
+        for idx, (vertex, mode) in enumerate(
+            zip(self.contact_vertices, self.contact_modes)
+        ):
+            subgraph.connect_with_continuity_constraints(
+                idx, VertexModePair(vertex, mode), **kwargs
+            )
+        return subgraph
+
+    def set_initial_poses(
+        self,
+        finger_pos: npt.NDArray[np.float64],
+        slider_pose: PlanarPose,
+        contact_location_start: PolytopeContactLocation,
     ) -> None:
-        raise NotImplementedError("Setting the pose of the pusher is not yet supported")
+        self.source = self._add_source_or_target_vertex(
+            finger_pos, slider_pose, contact_location_start, "source"
+        )
 
-    def set_pusher_final_pose(
-        self, pose: PlanarPose, disregard_rotation: bool = True
+    def set_target_poses(
+        self,
+        finger_pos: npt.NDArray[np.float64],
+        slider_pose: PlanarPose,
+        contact_location_end: PolytopeContactLocation,
     ) -> None:
-        raise NotImplementedError("Setting the pose of the pusher is not yet supported")
+        self.target = self._add_source_or_target_vertex(
+            finger_pos, slider_pose, contact_location_end, "target"
+        )
 
-    def set_slider_initial_pose(self, pose: PlanarPose) -> None:
-        point = opt.Point(pose.full_vector())
-        self.source_vertex = self.gcs.AddVertex(point, name="source")
-        self.source_edges = [
-            self.gcs.AddEdge(self.source_vertex, v) for v in self.contact_vertices
-        ]
-        self._add_continuity_constraint_with_source()
-        # TODO: Cartesian product between slider and pusher initial pose
+    def _add_source_or_target_vertex(
+        self,
+        finger_pos: npt.NDArray[np.float64],
+        slider_pose: PlanarPose,
+        loc: PolytopeContactLocation,
+        source_or_target: Literal["source", "target"],
+    ) -> VertexModePair:
+        mode = NonCollisionMode.create_from_plan_spec(
+            loc,
+            self.plan_specs,
+            self.slider,
+            source_or_target,
+            is_source_or_target_mode=True,
+        )
+        mode.set_finger_initial_pos(finger_pos)
+        mode.set_slider_pose(slider_pose)
+        vertex = self.gcs.AddVertex(mode.get_convex_set(), source_or_target)
+        pair = VertexModePair(vertex, mode)
 
-    def _add_continuity_constraint_with_source(self) -> None:
-        # TODO(bernhardpg): remove
-        for edge, mode in zip(self.source_edges, self.contact_modes):
-            source_vars = edge.xu()
+        if source_or_target == "source":
+            gcs_add_edge_with_continuity(
+                self.gcs,
+                pair,
+                VertexModePair(
+                    self.source_subgraph.non_collision_vertices[loc.idx],
+                    self.source_subgraph.non_collision_modes[loc.idx],
+                ),
+            )
+        else:
+            gcs_add_edge_with_continuity(
+                self.gcs,
+                VertexModePair(
+                    self.target_subgraph.non_collision_vertices[loc.idx],
+                    self.target_subgraph.non_collision_modes[loc.idx],
+                ),
+                pair,
+            )
 
-            # TODO: also incorporate continuity constraints on the finger
-            first_vars = mode.get_continuity_vars("first").vector[2:]
-            first_var_idxs = mode.get_variable_indices_in_gcs_vertex(first_vars)
-
-            constraint = eq(source_vars, edge.xv()[first_var_idxs])
-            for c in constraint:
-                edge.AddConstraint(c)
-
-    def set_slider_target_pose(self, pose: PlanarPose) -> None:
-        point = opt.Point(pose.full_vector())
-        self.target_vertex = self.gcs.AddVertex(point, name="target")
-        self.target_edges = [
-            self.gcs.AddEdge(v, self.target_vertex) for v in self.contact_vertices
-        ]
-        self._add_continuity_constraint_with_target()
-        # TODO: Cartesian product between slider and pusher target pose
-
-    def _add_continuity_constraint_with_target(self) -> None:
-        for edge, mode in zip(self.target_edges, self.contact_modes):
-            target_vars = edge.xv()
-
-            # TODO: also incorporate continuity constraints on the finger
-            last_vars = mode.get_continuity_vars("last").vector[2:]
-            last_var_idxs = mode.get_variable_indices_in_gcs_vertex(last_vars)
-
-            constraint = eq(edge.xu()[last_var_idxs], target_vars)
-            for c in constraint:
-                edge.AddConstraint(c)
+        return pair
 
     def _solve(self, print_output: bool = False) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
@@ -187,7 +225,7 @@ class PlanarPushingPlanner:
             options.max_rounded_paths = 1
 
         result = self.gcs.SolveShortestPath(
-            self.source_vertex, self.target_vertex, options
+            self.source.vertex, self.target.vertex, options
         )
         return result
 
@@ -198,7 +236,7 @@ class PlanarPushingPlanner:
         print_path: bool = False,
     ) -> List[FaceContactVariables | NonCollisionVariables]:
         vertex_path = get_gcs_solution_path(
-            self.gcs, result, self.source_vertex, self.target_vertex, flow_treshold
+            self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
         )
         pairs_on_path = [
             self.all_pairs[v.name()]
