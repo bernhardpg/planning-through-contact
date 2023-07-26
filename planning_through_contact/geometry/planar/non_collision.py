@@ -139,12 +139,18 @@ class NonCollisionMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
         name: Optional[str] = None,
+        is_source_or_target_mode: bool = False,
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
+
+        num_knot_points = (
+            1 if is_source_or_target_mode else specs.num_knot_points_non_collision
+        )
+
         return cls(
             name,
-            specs.num_knot_points_non_collision,
+            num_knot_points,
             specs.time_non_collision,
             contact_location,
             object,
