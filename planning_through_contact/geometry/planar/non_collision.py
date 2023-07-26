@@ -25,7 +25,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge

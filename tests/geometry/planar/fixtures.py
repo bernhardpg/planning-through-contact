@@ -21,12 +21,12 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
-@pytest.fixture
+# @pytest.fixture
 def box_geometry() -> Box2d:
     return Box2d(width=0.3, height=0.3)
 
 
-@pytest.fixture
+# @pytest.fixture
 def rigid_body_box(box_geometry: Box2d) -> RigidBody:
     mass = 0.3
     box = RigidBody("box", box_geometry, mass)
@@ -87,7 +87,7 @@ def face_contact_mode(rigid_body_box: RigidBody) -> FaceContactMode:
     return mode
 
 
-@pytest.fixture
+# @pytest.fixture
 def initial_and_final_non_collision_mode(
     rigid_body_box: RigidBody,
 ) -> Tuple[NonCollisionMode, NonCollisionMode]:
@@ -109,7 +109,7 @@ def initial_and_final_non_collision_mode(
 
     finger_initial_pose = PlanarPose(-0.2, 0, 0)
     source_mode.set_finger_initial_pos(finger_initial_pose.pos())
-    finger_final_pose = PlanarPose(0.05, 0.5, 0)
+    finger_final_pose = PlanarPose(0.3, 0.5, 0)
     target_mode.set_finger_final_pos(finger_final_pose.pos())
 
     return source_mode, target_mode

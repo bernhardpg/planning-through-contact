@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Literal
+from typing import List, Literal, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -20,20 +20,32 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
+@dataclass
+class PointMode:
+    """
+    A contact mode that represents a single position for the finger and slider.
+    Useful for setting source and target conditions in a GCS plan.
+    """
+
+    p_BF: npt.NDArray[np.float64]
+    p_WB: npt.NDArray[np.float64]
+    cos_th: float
+    sin_th: float
+
+    def get_continuity_terms(
+        self, edge: GcsEdge, first_or_last: Literal["first", "last"]
+    ) -> npt.NDArray[np.float64]:
+        # TODO(bernhardpg):
+        ...
+
+
 def add_continuity_constraints_btwn_modes(
-    outgoing_mode: "AbstractContactMode",
-    incoming_mode: "AbstractContactMode",
+    outgoing_mode: Union["AbstractContactMode", PointMode],
+    incoming_mode: Union["AbstractContactMode", PointMode],
     edge: GcsEdge,
 ):
-    outgoing_vars_last = outgoing_mode.get_continuity_vars("last")
-    lhs = outgoing_vars_last.create_expressions_with_vertex_variables(
-        edge.xu(), outgoing_mode
-    )
-
-    incoming_vars_first = incoming_mode.get_continuity_vars("first")
-    rhs = incoming_vars_first.create_expressions_with_vertex_variables(
-        edge.xv(), incoming_mode
-    )
+    lhs = outgoing_mode.get_continuity_terms(edge, "last")
+    rhs = incoming_mode.get_continuity_terms(edge, "first")
 
     constraint = eq(lhs, rhs)
     for c in constraint:
@@ -69,7 +81,9 @@ class ContinuityVariables:
             return self.vector()
 
     def create_expressions_with_vertex_variables(
-        self, vertex_vars: NpVariableArray, mode: "AbstractContactMode"
+        self,
+        vertex_vars: NpVariableArray,
+        mode: "AbstractContactMode",
     ) -> NpExpressionArray:
         A, b = sym.DecomposeAffineExpressions(self.vector(), self.get_pure_variables())
         var_idxs = mode.get_variable_indices_in_gcs_vertex(self.get_pure_variables())
@@ -181,3 +195,11 @@ class AbstractContactMode(ABC):
         return result.GetSolution(
             vertex_vars[self.get_variable_indices_in_gcs_vertex(np.array([var]))]
         ).item()
+
+    def get_continuity_terms(
+        self, edge: GcsEdge, first_or_last: Literal["first", "last"]
+    ) -> NpExpressionArray | NpVariableArray:
+        vars = self.get_continuity_vars(first_or_last)
+        edge_vars = edge.xu() if first_or_last == "last" else edge.xv()
+        terms = vars.create_expressions_with_vertex_variables(edge_vars, self)
+        return terms

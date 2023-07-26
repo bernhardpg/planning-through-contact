@@ -3,9 +3,10 @@ from itertools import combinations
 from typing import Dict, List, NamedTuple, Tuple
 
 import pydrake.geometry.optimization as opt
-from pydrake.math import eq
+from pydrake.solvers import Binding, QuadraticCost
 
 from planning_through_contact.geometry.planar.abstract_mode import (
+    PointMode,
     add_continuity_constraints_btwn_modes,
 )
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -20,7 +21,7 @@ BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 class VertexModePair(NamedTuple):
     vertex: GcsVertex
-    mode: FaceContactMode | NonCollisionMode
+    mode: FaceContactMode | NonCollisionMode | PointMode
 
 
 def gcs_add_edge_with_continuity(
@@ -80,6 +81,13 @@ class NonCollisionSubGraph:
                 VertexModePair(vertices[i], non_collision_modes[i]),
             )
 
+        # Add cost to vertices
+        for mode, vertex in zip(non_collision_modes, vertices):
+            var_idxs, evaluator = mode.get_cost_term()
+            vars = vertex.x()[var_idxs]
+            binding = Binding[QuadraticCost](evaluator, vars)
+            vertex.AddCost(binding)
+
         return cls(
             gcs,
             sets,
@@ -122,3 +130,16 @@ class NonCollisionSubGraph:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.non_collision_vertices, self.non_collision_modes)
         }
+
+    def connect_with_continuity_constraints_to_point(
+        self,
+        subgraph_connection_idx: int,
+        external_connection: VertexModePair,
+    ) -> None:
+        subgraph_connection = VertexModePair(
+            self.non_collision_vertices[subgraph_connection_idx],
+            self.non_collision_modes[subgraph_connection_idx],
+        )
+        # bi-directional edges
+        gcs_add_edge_with_continuity(self.gcs, external_connection, subgraph_connection)
+        gcs_add_edge_with_continuity(self.gcs, subgraph_connection, external_connection)
