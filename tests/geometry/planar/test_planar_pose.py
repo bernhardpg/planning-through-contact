@@ -93,3 +93,8 @@ def test_full_vector(planar_pose: PlanarPose) -> None:
 def test_two_d_rot_matrix(planar_pose: PlanarPose) -> None:
     R_target = np.array([[0.9553364891, -0.2955202067], [0.2955202067, 0.9553364891]])
     assert np.allclose(planar_pose.two_d_rot_matrix(), R_target)
+
+
+def test_cos_and_sin(planar_pose: PlanarPose) -> None:
+    assert planar_pose.cos() == np.cos(planar_pose.theta)
+    assert planar_pose.sin() == np.sin(planar_pose.theta)
