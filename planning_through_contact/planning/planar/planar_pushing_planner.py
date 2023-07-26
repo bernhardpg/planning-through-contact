@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import List, Tuple
 
 import pydrake.geometry.optimization as opt
-import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
@@ -23,7 +22,6 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 from planning_through_contact.geometry.planar.planar_contact_modes import (
     FaceContactMode,
     FaceContactVariables,
-    NonCollisionMode,
     NonCollisionVariables,
     PlanarPlanSpecs,
 )
@@ -55,7 +53,6 @@ class PlanarPushingPlanner:
         self._formulate_contact_modes()
         self._build_graph()
         self._add_costs()
-        self._add_continuity_constraints_for_transitions()
         self._collect_all_vertex_mode_pairs()
 
     @property
@@ -63,9 +60,9 @@ class PlanarPushingPlanner:
         return len(self.contact_modes)
 
     def _formulate_contact_modes(self):
+        # TODO(bernhardpg): should just extract faces, rather than relying on the
+        # object to only pass faces as contact locations
         contact_locations = self.slider.geometry.contact_locations
-        # TODO: should just extract faces, rather than relying on the object to only pass faces as
-        # contact locations
 
         if not all([loc.pos == ContactLocation.FACE for loc in contact_locations]):
             raise RuntimeError("Only face contacts are supported for planar pushing.")
@@ -97,7 +94,9 @@ class PlanarPushingPlanner:
 
         # Non collision modes
         for subgraph in self.subgraphs:
-            for mode, vertex in zip(subgraph.modes, subgraph.non_collision_vertices):
+            for mode, vertex in zip(
+                subgraph.non_collision_modes, subgraph.non_collision_vertices
+            ):
                 var_idxs, evaluator = mode.get_cost_term()
                 vars = vertex.x()[var_idxs]
                 binding = Binding[QuadraticCost](evaluator, vars)
