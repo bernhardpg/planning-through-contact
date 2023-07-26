@@ -166,7 +166,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_final_pose(final_pose)
 
     face_contact_mode.formulate_convex_relaxation()
-    result = Solve(face_contact_mode.relaxed_prog)
+    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)

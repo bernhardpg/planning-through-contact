@@ -16,14 +16,14 @@ from pydrake.solvers import (
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
 )
-from planning_through_contact.geometry.planar.non_collision_subgraph import (
-    NonCollisionSubGraph,
-)
-from planning_through_contact.geometry.planar.planar_contact_modes import (
+from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
-    NonCollisionVariables,
-    PlanarPlanSpecs,
+)
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    NonCollisionSubGraph,
+    VertexModePair,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -31,6 +31,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -52,7 +53,8 @@ class PlanarPushingPlanner:
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
         self._build_graph()
-        self._add_costs()
+        # costs for non-collisions are added by each of the separate subgraphs
+        self._add_contact_mode_costs()
         self._collect_all_vertex_mode_pairs()
 
     @property
@@ -83,8 +85,7 @@ class PlanarPushingPlanner:
             for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
         ]
 
-    def _add_costs(self):
-        # Contact modes
+    def _add_contact_mode_costs(self):
         for mode, vertex in zip(self.contact_modes, self.contact_vertices):
             var_idxs, evaluators = mode.get_cost_terms()
             vars = vertex.x()[var_idxs]
@@ -92,30 +93,23 @@ class PlanarPushingPlanner:
             for b in bindings:
                 vertex.AddCost(b)
 
-        # Non collision modes
-        for subgraph in self.subgraphs:
-            for mode, vertex in zip(
-                subgraph.non_collision_modes, subgraph.non_collision_vertices
-            ):
-                var_idxs, evaluator = mode.get_cost_term()
-                vars = vertex.x()[var_idxs]
-                binding = Binding[QuadraticCost](evaluator, vars)
-                vertex.AddCost(binding)
-
     def _build_subgraph_between_contact_modes(
-        self, first_contact_mode: int, second_contact_mode: int
+        self, first_contact_mode_idx: int, second_contact_mode_idx: int
     ) -> NonCollisionSubGraph:
-        # TODO(bernhardpg): Fix this part!
-        subgraph = NonCollisionSubGraph.from_modes(
-            self.non_collision_modes, self.gcs, first_contact_mode, second_contact_mode
+        subgraph = NonCollisionSubGraph.create_with_gcs(
+            self.gcs,
+            self.slider,
+            self.plan_specs,
+            f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
         )
-        # TODO(bernhardpg): this is confusing and should be refactored to be a part of NonCollisionSubGraph
-        subgraph.connect_to_contact_vertex(
-            self.gcs, self.contact_vertices[first_contact_mode], first_contact_mode
-        )
-        subgraph.connect_to_contact_vertex(
-            self.gcs, self.contact_vertices[second_contact_mode], second_contact_mode
-        )
+        for idx in (first_contact_mode_idx, second_contact_mode_idx):
+            subgraph.connect_with_continuity_constraints(
+                idx,
+                VertexModePair(
+                    self.contact_vertices[idx],
+                    self.contact_modes[idx],
+                ),
+            )
         return subgraph
 
     def _collect_all_vertex_mode_pairs(self) -> None:
@@ -148,6 +142,7 @@ class PlanarPushingPlanner:
         # TODO: Cartesian product between slider and pusher initial pose
 
     def _add_continuity_constraint_with_source(self) -> None:
+        # TODO(bernhardpg): remove
         for edge, mode in zip(self.source_edges, self.contact_modes):
             source_vars = edge.xu()
 
