@@ -97,7 +97,7 @@ class PlanarPushingPlanner:
 
         # Non collision modes
         for subgraph in self.subgraphs:
-            for mode, vertex in zip(subgraph.modes, subgraph.vertices):
+            for mode, vertex in zip(subgraph.modes, subgraph.non_collision_vertices):
                 var_idxs, evaluator = mode.get_cost_term()
                 vars = vertex.x()[var_idxs]
                 binding = Binding[QuadraticCost](evaluator, vars)

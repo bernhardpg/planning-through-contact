@@ -25,14 +25,14 @@ def add_continuity_constraints_btwn_modes(
     incoming_mode: "AbstractContactMode",
     edge: GcsEdge,
 ):
-    incoming_vars_first = incoming_mode.get_continuity_vars("first")
-    rhs = incoming_vars_first.create_expressions_with_vertex_variables(
-        edge.xv(), incoming_mode
-    )
-
     outgoing_vars_last = outgoing_mode.get_continuity_vars("last")
     lhs = outgoing_vars_last.create_expressions_with_vertex_variables(
         edge.xu(), outgoing_mode
+    )
+
+    incoming_vars_first = incoming_mode.get_continuity_vars("first")
+    rhs = incoming_vars_first.create_expressions_with_vertex_variables(
+        edge.xv(), incoming_mode
     )
 
     constraint = eq(lhs, rhs)
