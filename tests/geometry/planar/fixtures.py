@@ -21,12 +21,12 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
-# @pytest.fixture
+@pytest.fixture
 def box_geometry() -> Box2d:
     return Box2d(width=0.3, height=0.3)
 
 
-# @pytest.fixture
+@pytest.fixture
 def rigid_body_box(box_geometry: Box2d) -> RigidBody:
     mass = 0.3
     box = RigidBody("box", box_geometry, mass)

@@ -60,7 +60,9 @@ class PlanarPushingPlanner:
         self._formulate_contact_modes()
         self._build_graph()
         # costs for non-collisions are added by each of the separate subgraphs
-        self._add_contact_mode_costs()
+        for m, v in zip(self.contact_modes, self.contact_vertices):
+            m.add_cost_to_vertex(v)
+
         self._collect_all_vertex_mode_pairs()
 
     @property
@@ -93,14 +95,6 @@ class PlanarPushingPlanner:
 
         self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
         self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
-
-    def _add_contact_mode_costs(self):
-        for mode, vertex in zip(self.contact_modes, self.contact_vertices):
-            var_idxs, evaluators = mode.get_cost_terms()
-            vars = vertex.x()[var_idxs]
-            bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
-            for b in bindings:
-                vertex.AddCost(b)
 
     def _build_subgraph_between_contact_modes(
         self, first_contact_mode_idx: int, second_contact_mode_idx: int

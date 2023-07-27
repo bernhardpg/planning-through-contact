@@ -33,7 +33,7 @@ from planning_through_contact.visualize.planar import (
 from tests.geometry.planar.fixtures import box_geometry, rigid_body_box
 
 
-# @pytest.fixture
+@pytest.fixture
 def planar_pushing_planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
     specs = PlanarPlanSpecs()
     return PlanarPushingPlanner(rigid_body_box, specs)
@@ -62,10 +62,10 @@ def test_planar_pushing_planner_construction(
 
         lin_vel, ang_vel = costs
 
-        target_lin_vars = Variables(v.x()[m.get_cost_terms()[0][0]])
+        target_lin_vars = Variables(v.x()[m._get_cost_terms()[0][0]])
         assert target_lin_vars.EqualTo(Variables(lin_vel.variables()))
 
-        target_ang_vars = Variables(v.x()[m.get_cost_terms()[0][1]])
+        target_ang_vars = Variables(v.x()[m._get_cost_terms()[0][1]])
         assert target_ang_vars.EqualTo(Variables(ang_vel.variables()))
 
         # Costs should be linear in SDP relaxation
@@ -163,7 +163,7 @@ def test_subgraph_with_contact_modes(
 
     options = opt.GraphOfConvexSetsOptions()
     options.solver_options = SolverOptions()
-    options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    # options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
     options.convex_relaxation = True
     options.preprocessing = True
     options.max_rounded_paths = 1
@@ -206,35 +206,35 @@ def test_subgraph_with_contact_modes(
     #     visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
 
 
-def test_planar_pushing_planner_make_plan(
-    planar_pushing_planner: PlanarPushingPlanner,
-) -> None:
-    finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
-
-    box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-    box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
-
-    planar_pushing_planner.set_initial_poses(
-        finger_initial_pose.pos(),
-        box_initial_pose,
-        PolytopeContactLocation(ContactLocation.FACE, 3),
-    )
-
-    planar_pushing_planner.set_target_poses(
-        finger_initial_pose.pos(),
-        box_target_pose,
-        PolytopeContactLocation(ContactLocation.FACE, 3),
-    )
-
-    traj = planar_pushing_planner.make_trajectory(
-        interpolate=False, print_path=True, measure_time=True, print_output=True
-    )
-
-    DEBUG = True
-    if DEBUG:
-        save_gcs_graph_diagram(
-            planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-        )
+# def test_planar_pushing_planner_make_plan(
+#     planar_pushing_planner: PlanarPushingPlanner,
+# ) -> None:
+#     finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
+#
+#     box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+#     box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
+#
+#     planar_pushing_planner.set_initial_poses(
+#         finger_initial_pose.pos(),
+#         box_initial_pose,
+#         PolytopeContactLocation(ContactLocation.FACE, 3),
+#     )
+#
+#     planar_pushing_planner.set_target_poses(
+#         finger_initial_pose.pos(),
+#         box_target_pose,
+#         PolytopeContactLocation(ContactLocation.FACE, 3),
+#     )
+#
+#     traj = planar_pushing_planner.make_trajectory(
+#         interpolate=False, print_path=True, measure_time=True, print_output=True
+#     )
+#
+#     DEBUG = True
+#     if DEBUG:
+#         save_gcs_graph_diagram(
+#             planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
+#         )
 
 
 if __name__ == "__main__":

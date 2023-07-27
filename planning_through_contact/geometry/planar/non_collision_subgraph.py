@@ -61,34 +61,32 @@ class NonCollisionSubGraph:
 
         vertex_names = [f"{subgraph_name}_{mode.name}" for mode in non_collision_modes]
         sets = [mode.get_convex_set() for mode in non_collision_modes]
-        vertices = [gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)]
+        non_collision_vertices = [
+            gcs.AddVertex(s, name) for s, name in zip(sets, vertex_names)
+        ]
+
+        for m, v in zip(non_collision_modes, non_collision_vertices):
+            m.add_cost_to_vertex(v)
 
         # Add bi-directional edges
         edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         for i, j in edge_idxs:
             gcs_add_edge_with_continuity(
                 gcs,
-                VertexModePair(vertices[i], non_collision_modes[i]),
-                VertexModePair(vertices[j], non_collision_modes[j]),
+                VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
+                VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
             )
             gcs_add_edge_with_continuity(
                 gcs,
-                VertexModePair(vertices[j], non_collision_modes[j]),
-                VertexModePair(vertices[i], non_collision_modes[i]),
+                VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
+                VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
             )
-
-        # Add cost to vertices
-        for mode, vertex in zip(non_collision_modes, vertices):
-            var_idxs, evaluator = mode.get_cost_term()
-            vars = vertex.x()[var_idxs]
-            binding = Binding[QuadraticCost](evaluator, vars)
-            vertex.AddCost(binding)
 
         return cls(
             gcs,
             sets,
             non_collision_modes,
-            vertices,
+            non_collision_vertices,
         )
 
     @staticmethod
