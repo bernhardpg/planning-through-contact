@@ -25,6 +25,7 @@ from planning_through_contact.geometry.planar.face_contact import (
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
+    check_pos_in_contact_location,
 )
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
@@ -132,6 +133,9 @@ class PlanarPushingPlanner:
         for subgraph in self.subgraphs:
             all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
+        for subgraph in (self.source_subgraph, self.target_subgraph):
+            all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+
         self.all_pairs = all_pairs
 
     def _create_entry_or_exit_subgraph(
@@ -156,14 +160,27 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
+    def _find_first_matching_location(
+        self,
+        finger_pos: npt.NDArray[np.float64],
+        slider_pose: PlanarPose,
+    ) -> PolytopeContactLocation:
+        assert self.contact_locations is not None
+        matching_locs = [
+            loc
+            for loc in self.contact_locations
+            if check_pos_in_contact_location(finger_pos, loc, self.slider, slider_pose)
+        ]
+        return matching_locs[0]
+
     def set_initial_poses(
         self,
         finger_pos: npt.NDArray[np.float64],
         slider_pose: PlanarPose,
-        contact_location_start: PolytopeContactLocation,
     ) -> None:
+        loc = self._find_first_matching_location(finger_pos, slider_pose)
         self.source = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, contact_location_start, "source"
+            finger_pos, slider_pose, loc, "source"
         )
         self.all_pairs[self.source.vertex.name()] = self.source
 
@@ -171,10 +188,10 @@ class PlanarPushingPlanner:
         self,
         finger_pos: npt.NDArray[np.float64],
         slider_pose: PlanarPose,
-        contact_location_end: PolytopeContactLocation,
     ) -> None:
+        loc = self._find_first_matching_location(finger_pos, slider_pose)
         self.target = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, contact_location_end, "target"
+            finger_pos, slider_pose, loc, "target"
         )
         self.all_pairs[self.target.vertex.name()] = self.target
 
