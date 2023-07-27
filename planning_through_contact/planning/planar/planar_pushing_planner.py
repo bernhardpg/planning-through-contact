@@ -181,7 +181,7 @@ class PlanarPushingPlanner:
             self.plan_specs,
             self.slider,
             source_or_target,
-            is_source_or_target_mode=True,
+            one_knot_point=True,
         )
         mode.set_finger_initial_pos(finger_pos)
         mode.set_slider_pose(slider_pose)
