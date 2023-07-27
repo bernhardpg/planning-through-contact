@@ -304,16 +304,10 @@ class FaceContactMode(AbstractContactMode):
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
-        # TODO(bernhardpg): Make this work with Drake SDP relaxation
-
+        return self.prog.FindDecisionVariableIndices(vars)
         # NOTE: This function relies on the fact that the sdp relaxation
         # returns an ordering of variables [1, x1, x2, ...],
         # where [x1, x2, ...] is the original ordering in self.prog
-        idxs = self.prog.FindDecisionVariableIndices(vars)
-        idxs_shifted = [
-            i + 1 for i in idxs
-        ]  # We must shift the indices by one because of the SDP relaxation which adds a 1 as the first variable
-        return idxs_shifted
 
     def get_variable_solutions_for_vertex(
         self, vertex: GcsVertex, result: MathematicalProgramResult
