@@ -291,7 +291,7 @@ class FaceContactMode(AbstractContactMode):
 
         # GCS requires the sets to be bounded
         if make_bounded:
-            BOUND = 5
+            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
             ub = np.full((self.relaxed_prog.num_vars(),), BOUND)
             self.relaxed_prog.AddBoundingBoxConstraint(
                 -ub, ub, self.relaxed_prog.decision_variables()

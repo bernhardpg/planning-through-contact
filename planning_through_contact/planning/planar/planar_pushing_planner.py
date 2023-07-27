@@ -165,12 +165,18 @@ class PlanarPushingPlanner:
         finger_pos: npt.NDArray[np.float64],
         slider_pose: PlanarPose,
     ) -> PolytopeContactLocation:
-        assert self.contact_locations is not None
+        # we always add all non-collision modes, even when we don't add all contact modes
+        # (think of maneuvering around the object etc)
+        locations = self.slider.geometry.contact_locations
         matching_locs = [
             loc
-            for loc in self.contact_locations
+            for loc in locations
             if check_pos_in_contact_location(finger_pos, loc, self.slider, slider_pose)
         ]
+        if len(matching_locs) == 0:
+            raise ValueError(
+                "No valid configurations found for specified initial or target poses"
+            )
         return matching_locs[0]
 
     def set_initial_poses(

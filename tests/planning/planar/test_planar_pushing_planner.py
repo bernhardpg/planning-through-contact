@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 from pydrake.solvers import LinearCost
 from pydrake.symbolic import Variables
@@ -12,6 +13,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarTrajectoryBuilder,
+)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.planning.planar.planar_pushing_planner import (
@@ -197,33 +201,62 @@ def test_planar_pushing_planner_without_initial_conds_2(
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
-# def test_planar_pushing_planner_make_plan(
-#     planar_pushing_planner: PlanarPushingPlanner,
-# ) -> None:
-#     finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
-#
-#     box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-#     box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
-#
-#     planar_pushing_planner.set_initial_poses(
-#         finger_initial_pose.pos(),
-#         box_initial_pose,
-#         PolytopeContactLocation(ContactLocation.FACE, 3),
-#     )
-#
-#     planar_pushing_planner.set_target_poses(
-#         finger_initial_pose.pos(),
-#         box_target_pose,
-#         PolytopeContactLocation(ContactLocation.FACE, 3),
-#     )
-#
-#     traj = planar_pushing_planner.make_trajectory(
-#         interpolate=False, print_path=True, measure_time=True, print_output=True
-#     )
-#
-#     DEBUG = True
-#     if DEBUG:
-#         save_gcs_graph_diagram(
-#             planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-#         )
-#         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+def test_planar_pushing_planner_make_plan(
+    partial_planar_pushing_planner: PlanarPushingPlanner,
+) -> None:
+    planner = partial_planar_pushing_planner
+    finger_initial_pose = PlanarPose(x=0.5, y=0, theta=0.0)
+    finger_target_pose = PlanarPose(x=0.5, y=-0.2, theta=0.0)
+
+    box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+    box_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.4)
+
+    planner.set_initial_poses(
+        finger_initial_pose.pos(),
+        box_initial_pose,
+    )
+    planner.set_target_poses(
+        finger_target_pose.pos(),
+        box_target_pose,
+    )
+
+    DEBUG = True
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+
+    result = planner._solve(True)
+    assert result.is_success()
+
+    vertex_path = planner.get_vertex_solution_path(result)
+    target_path = [
+        "source",
+        "ENTRY_NON_COLL_1",
+        "ENTRY_NON_COLL_0",
+        "FACE_0",
+        "FACE_0_to_FACE_1_NON_COLL_0",
+        "FACE_0_to_FACE_1_NON_COLL_1",
+        "FACE_1",
+        "EXIT_NON_COLL_1",
+        "target",
+    ]
+    for v, target in zip(vertex_path, target_path):
+        assert v.name() == target
+
+    path = planner._get_gcs_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=True)
+
+    p_c_W_initial = box_initial_pose.pos() + finger_initial_pose.pos()
+    assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_initial)
+
+    p_c_W_final = box_target_pose.pos() + box_target_pose.two_d_rot_matrix().dot(
+        finger_target_pose.pos()
+    )
+    assert np.allclose(traj.p_c_W[:, -1:], p_c_W_final)
+
+    # Make sure we are not leaving the object
+    assert np.all(np.abs(traj.p_c_W) <= 1.0)
+
+    DEBUG = True
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
