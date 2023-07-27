@@ -94,9 +94,8 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
-    # v_c_B == 0 and x and y quasi-static dynamics
-    # TODO(bernhardpg): Will get fewer linear equality constraints once the wrench is rotated to the world frame
-    num_lin_eq = (num_knot_points - 1) * 3
+    # v_c_B == 0
+    num_lin_eq = num_knot_points - 1
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
@@ -107,8 +106,8 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     # for each knot point:
     # c**2 + s**2 == 1
     # for each finite diff point:
-    # omega_WB == torque_W
-    num_quad = num_knot_points + (num_knot_points - 1)
+    # quasi_static_dynamics (3 constraints)
+    num_quad = num_knot_points + (num_knot_points - 1) * 3
     assert len(mode.prog.quadratic_constraints()) == num_quad
 
     tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
@@ -147,8 +146,24 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
     check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))
-    assert check_vars_eq(dyn[0, 0], [face_contact_vars.normal_forces[0]])
-    assert check_vars_eq(dyn[1, 0], [face_contact_vars.friction_forces[0]])
+    assert check_vars_eq(
+        dyn[0, 0],
+        [
+            face_contact_vars.sin_ths[0],
+            face_contact_vars.cos_ths[0],
+            face_contact_vars.normal_forces[0],
+            face_contact_vars.friction_forces[0],
+        ],
+    )
+    assert check_vars_eq(
+        dyn[1, 0],
+        [
+            face_contact_vars.sin_ths[0],
+            face_contact_vars.cos_ths[0],
+            face_contact_vars.normal_forces[0],
+            face_contact_vars.friction_forces[0],
+        ],
+    )
     assert check_vars_eq(
         dyn[2, 0],
         [
