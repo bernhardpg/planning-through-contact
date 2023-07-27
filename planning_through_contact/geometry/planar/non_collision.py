@@ -13,6 +13,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     QuadraticCost,
+    Solve,
 )
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -30,6 +31,22 @@ from planning_through_contact.tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
+
+
+def check_pos_in_contact_location(
+    pos: npt.NDArray[np.float64],
+    loc: PolytopeContactLocation,
+    body: RigidBody,
+    body_pose: PlanarPose,
+) -> bool:
+    specs = PlanarPlanSpecs()
+    mode = NonCollisionMode.create_from_plan_spec(loc, specs, body, one_knot_point=True)
+
+    mode.set_finger_initial_pos(pos)
+    mode.set_slider_pose(body_pose)
+
+    result = Solve(mode.prog)
+    return result.is_success()
 
 
 @dataclass
