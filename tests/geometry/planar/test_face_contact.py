@@ -1,62 +1,26 @@
 import numpy as np
-import pytest
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import Solve
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    ContactLocation,
-    PolytopeContactLocation,
-)
-from planning_through_contact.geometry.planar.planar_contact_modes import (
+from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
-    PlanarPlanSpecs,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-
-
-@pytest.fixture
-def box_geometry() -> Box2d:
-    return Box2d(width=0.3, height=0.3)
-
-
-@pytest.fixture
-def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
-    prog = MathematicalProgram()
-    contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-
-    num_knot_points = 4
-    time_in_contact = 2
-
-    vars = FaceContactVariables.from_prog(
-        prog,
-        box_geometry,
-        contact_location,
-        num_knot_points,
-        time_in_contact,
-    )
-    return vars
-
-
-@pytest.fixture
-def face_contact_mode(box_geometry: Box2d) -> FaceContactMode:
-    mass = 0.3
-    box = RigidBody("box", box_geometry, mass)
-    contact_location = PolytopeContactLocation(
-        ContactLocation.FACE, 3
-    )  # We use the same face as in the T-pusher demo to make it simple to write tests
-    specs = PlanarPlanSpecs()
-    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, box)
-    return mode
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    face_contact_mode,
+    face_contact_vars,
+    rigid_body_box,
+)
 
 
 def test_face_contact_variables(
@@ -202,7 +166,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_final_pose(final_pose)
 
     face_contact_mode.formulate_convex_relaxation()
-    result = Solve(face_contact_mode.relaxed_prog)
+    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)
@@ -216,7 +180,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     DEBUG = False
     if DEBUG:
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)

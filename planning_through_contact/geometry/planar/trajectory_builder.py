@@ -1,15 +1,22 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.geometry.optimization as opt
+from pydrake.solvers import MathematicalProgramResult
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.geometry.planar.planar_contact_modes import (
-    FaceContactVariables,
-    NonCollisionVariables,
+from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    VertexModePair,
 )
 from planning_through_contact.geometry.utilities import from_so2_to_so3
+from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
+
+GcsVertex = opt.GraphOfConvexSets.Vertex
+GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 @dataclass
@@ -25,9 +32,11 @@ class PlanarTrajectory:
         if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
             raise ValueError("Rotations do not have determinant 1.")
 
-        traj_lengths_equal = all(
-            [traj.shape[1] for traj in [self.p_WB, self.p_c_W, self.f_c_W]]
-        ) and (len(self.R_WB) == self.p_WB.shape[1])
+        all_traj_lenths = np.array(
+            [traj.shape[1] for traj in (self.p_WB, self.p_c_W, self.f_c_W)]
+            + [len(self.R_WB)]
+        )
+        traj_lengths_equal = np.all(all_traj_lenths == all_traj_lenths[0])
         if not traj_lengths_equal:
             raise ValueError("Trajectories are not of equal length.")
 
@@ -39,6 +48,23 @@ class PlanarTrajectory:
 class PlanarTrajectoryBuilder:
     def __init__(self, path: List[FaceContactVariables | NonCollisionVariables]):
         self.path = path
+
+    @classmethod
+    def from_result(
+        cls,
+        result: MathematicalProgramResult,
+        gcs: opt.GraphOfConvexSets,
+        source_vertex: GcsVertex,
+        target_vertex: GcsVertex,
+        pairs: Dict[str, VertexModePair],
+    ):
+        vertex_path = get_gcs_solution_path(gcs, result, source_vertex, target_vertex)
+        pairs_on_path = [pairs[v.name()] for v in vertex_path]
+        path = [
+            pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
+            for pair in pairs_on_path
+        ]
+        return cls(path)
 
     def get_trajectory(
         self, dt: float = 0.01, interpolate: bool = True
@@ -53,19 +79,19 @@ class PlanarTrajectoryBuilder:
             )
             p_WB = np.vstack(
                 [self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]  # type: ignore
-            )
+            ).T
             p_c_W = np.vstack(
                 [
                     self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
                     for p in self.path
                 ]
-            )
+            ).T
             f_c_W = np.vstack(
                 [
                     self._get_traj_by_interpolation(p.f_c_Ws, dt, p.time_in_mode)
                     for p in self.path
                 ]
-            )
+            ).T
         else:
             R_WB = sum(
                 [p.R_WBs for p in self.path],
@@ -103,15 +129,23 @@ class PlanarTrajectoryBuilder:
         """
 
         Rs_in_SO3 = [from_so2_to_so3(R) for R in Rs]
-        knot_point_times = np.linspace(start_time, end_time, len(Rs))
-        quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
 
-        traj_times = np.arange(start_time, end_time, dt)
-        R_traj_in_SO2 = [
-            quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
-        ]
+        # repeat the same rotation for one knot point
+        if len(Rs_in_SO3) == 1:
+            num_times = int(np.ceil(end_time + dt - start_time) / dt)
+            R_in_SO2 = Rs_in_SO3[0][0:2, 0:2]
+            R_traj_in_SO2 = [R_in_SO2] * num_times
+            return R_traj_in_SO2
+        else:
+            knot_point_times = np.linspace(start_time, end_time, len(Rs))
+            quat_slerp_traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
 
-        return R_traj_in_SO2
+            traj_times = np.arange(start_time, end_time + dt, dt)
+            R_traj_in_SO2 = [
+                quat_slerp_traj.orientation(t).rotation()[0:2, 0:2] for t in traj_times
+            ]
+
+            return R_traj_in_SO2
 
     @staticmethod
     def interpolate_w_first_order_hold(
@@ -126,15 +160,20 @@ class PlanarTrajectoryBuilder:
         @return: trajectory evaluated evenly at every dt-th step, starting at start_time and ending at specified end_time.
         """
 
-        knot_point_times = np.linspace(start_time, end_time, len(values))
+        if len(values) == 1:
+            num_times = int(np.ceil(end_time + dt - start_time) / dt)
+            traj = values.repeat(num_times, axis=0)  # (num_times, num_dims)
+            return traj
+        else:
+            knot_point_times = np.linspace(start_time, end_time, len(values))
 
-        # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
-        first_order_hold = PiecewisePolynomial.FirstOrderHold(
-            knot_point_times, values.T
-        )
-        traj_times = np.arange(start_time, end_time, dt)
-        traj = np.hstack(
-            [first_order_hold.value(t) for t in traj_times]
-        ).T  # (traj_length, num_dims)
+            # Drake expects the values to be (NUM_DIMS, NUM_SAMPLES)
+            first_order_hold = PiecewisePolynomial.FirstOrderHold(
+                knot_point_times, values.T
+            )
+            traj_times = np.arange(start_time, end_time + dt, dt)
+            traj = np.hstack(
+                [first_order_hold.value(t) for t in traj_times]
+            ).T  # (traj_length, num_dims)
 
         return traj

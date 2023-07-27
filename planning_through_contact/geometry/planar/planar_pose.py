@@ -85,3 +85,9 @@ class PlanarPose:
             ]
         )
         return R
+
+    def cos(self) -> float:
+        return np.cos(self.theta)
+
+    def sin(self) -> float:
+        return np.sin(self.theta)
