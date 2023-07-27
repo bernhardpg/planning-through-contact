@@ -1,7 +1,8 @@
 from typing import Tuple
 
+import pydrake.geometry.optimization as opt
 import pytest
-from pydrake.solvers import MathematicalProgram
+from pydrake.solvers import MathematicalProgram, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -141,3 +142,18 @@ def initial_and_final_non_collision_mode_one_knot_point(
     target_mode.set_finger_final_pos(finger_final_pose.pos())
 
     return source_mode, target_mode
+
+
+@pytest.fixture
+def gcs_options() -> opt.GraphOfConvexSetsOptions:
+    options = opt.GraphOfConvexSetsOptions()
+    options.solver_options = SolverOptions()
+    options.convex_relaxation = True
+    options.preprocessing = True
+    options.max_rounded_paths = 1
+
+    DEBUG = False
+    if DEBUG:
+        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    return options

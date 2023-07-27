@@ -180,7 +180,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     DEBUG = False
     if DEBUG:
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
