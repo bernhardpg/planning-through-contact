@@ -203,8 +203,8 @@ def test_planar_pushing_planner_make_plan(
     partial_planar_pushing_planner: PlanarPushingPlanner,
 ) -> None:
     planner = partial_planar_pushing_planner
-    finger_initial_pose = PlanarPose(x=0.5, y=0, theta=0.0)
-    finger_target_pose = PlanarPose(x=0.5, y=-0.2, theta=0.0)
+    finger_initial_pose = PlanarPose(x=0, y=-0.5, theta=0.0)
+    finger_target_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
 
     box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
     box_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.4)
@@ -224,13 +224,16 @@ def test_planar_pushing_planner_make_plan(
     vertex_path = planner.get_vertex_solution_path(result)
     target_path = [
         "source",
-        "ENTRY_NON_COLL_1",
+        "ENTRY_NON_COLL_2",
+        "ENTRY_NON_COLL_3",
         "ENTRY_NON_COLL_0",
-        "FACE_0",
-        "FACE_0_to_FACE_1_NON_COLL_0",
-        "FACE_0_to_FACE_1_NON_COLL_1",
+        "ENTRY_NON_COLL_1",
         "FACE_1",
-        "EXIT_NON_COLL_1",
+        "FACE_0_to_FACE_1_NON_COLL_1",
+        "FACE_0_to_FACE_1_NON_COLL_0",
+        "FACE_0",
+        "EXIT_NON_COLL_0",
+        "EXIT_NON_COLL_3",
         "target",
     ]
     for v, target in zip(vertex_path, target_path):
