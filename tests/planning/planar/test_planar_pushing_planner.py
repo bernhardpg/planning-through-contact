@@ -30,7 +30,7 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, rigid_body_box
+from tests.geometry.planar.fixtures import box_geometry, gcs_options, rigid_body_box
 
 
 @pytest.fixture
@@ -129,7 +129,7 @@ def test_planar_pushing_planner_set_initial_and_final(
 
 
 def test_subgraph_with_contact_modes(
-    rigid_body_box: RigidBody,
+    rigid_body_box: RigidBody, gcs_options: opt.GraphOfConvexSetsOptions
 ):
     plan_specs = PlanarPlanSpecs()
     gcs = opt.GraphOfConvexSets()
@@ -139,7 +139,7 @@ def test_subgraph_with_contact_modes(
     )
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
-    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 1)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 2)
 
     source_mode = FaceContactMode.create_from_plan_spec(
         contact_location_start, plan_specs, rigid_body_box
@@ -151,27 +151,24 @@ def test_subgraph_with_contact_modes(
     slider_initial_pose = PlanarPose(0.3, 0, 0)
     source_mode.set_slider_initial_pose(slider_initial_pose)
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), "source")
+    source_mode.add_cost_to_vertex(source_vertex)
+
     source = VertexModePair(source_vertex, source_mode)
 
-    slider_final_pose = PlanarPose(0.5, 0, 0)
+    slider_final_pose = PlanarPose(0.5, 0.3, 0.4)
     target_mode.set_slider_final_pose(slider_final_pose)
     target_vertex = gcs.AddVertex(target_mode.get_convex_set(), "target")
+    target_mode.add_cost_to_vertex(target_vertex)
     target = VertexModePair(target_vertex, target_mode)
 
-    subgraph.connect_with_continuity_constraints(3, source)
-    subgraph.connect_with_continuity_constraints(1, target)
+    subgraph.connect_with_continuity_constraints(
+        contact_location_start.idx, source, outgoing=False
+    )
+    subgraph.connect_with_continuity_constraints(
+        contact_location_end.idx, target, incoming=False
+    )
 
-    options = opt.GraphOfConvexSetsOptions()
-    options.solver_options = SolverOptions()
-    # options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-    options.convex_relaxation = True
-    options.preprocessing = True
-    options.max_rounded_paths = 1
-
-    # target_vertex = subgraph.non_collision_vertices[
-    #     2
-    # ]  # fails for 1 and 2 for some reason?
-    result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
+    result = gcs.SolveShortestPath(source_vertex, target_vertex, gcs_options)
     assert result.is_success()
 
     pairs = subgraph.get_all_vertex_mode_pairs()
@@ -180,16 +177,20 @@ def test_subgraph_with_contact_modes(
 
     traj = PlanarTrajectoryBuilder.from_result(
         result, gcs, source_vertex, target_vertex, pairs
-    ).get_trajectory(interpolate=True)
-    # breakpoint()
+    ).get_trajectory(interpolate=False)
 
-    # p_c_W_initial = slider_initial_pose.pos() +
-    # assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_initial)
+    assert np.allclose(traj.p_WB[:, 0:1], slider_initial_pose.pos())
+    assert np.allclose(traj.R_WB[0], slider_initial_pose.two_d_rot_matrix())
+
+    assert np.allclose(traj.p_WB[:, -1:], slider_final_pose.pos())
+    assert np.allclose(traj.R_WB[-1], slider_final_pose.two_d_rot_matrix())
+
+    # Make sure we are not leaving the object
+    assert np.all(np.abs(traj.p_c_W) <= 1.0)
 
     DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("subgraph_w_contact.svg"))
-        save_gcs_graph_diagram(gcs, Path("subgraph_w_contact_result.svg"), result)
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
 
     # breakpoint()
@@ -239,19 +240,3 @@ def test_subgraph_with_contact_modes(
 #         save_gcs_graph_diagram(
 #             planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
 #         )
-
-
-if __name__ == "__main__":
-    # test_planar_pushing_planner_construction(
-    #     planar_pushing_planner(rigid_body_box(box_geometry()))
-    # )
-    #
-    # test_planar_pushing_planner_set_initial_and_final(
-    #     planar_pushing_planner(rigid_body_box(box_geometry()))
-    # )
-
-    # test_planar_pushing_planner_make_plan(
-    #     planar_pushing_planner(rigid_body_box(box_geometry()))
-    # )
-
-    test_subgraph_with_contact_modes(rigid_body_box(box_geometry()))

@@ -2,7 +2,7 @@ from typing import Tuple
 
 import pydrake.geometry.optimization as opt
 import pytest
-from pydrake.solvers import MathematicalProgram, SolverOptions
+from pydrake.solvers import CommonSolverOption, MathematicalProgram, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
