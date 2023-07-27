@@ -247,7 +247,7 @@ class NonCollisionMode(AbstractContactMode):
 
         # GCS requires the sets to be bounded
         if make_bounded:
-            BOUND = 999
+            BOUND = 5
             ub = np.full((temp_prog.num_vars(),), BOUND)
             temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
