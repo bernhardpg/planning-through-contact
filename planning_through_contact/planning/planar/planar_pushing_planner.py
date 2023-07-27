@@ -1,6 +1,6 @@
 from itertools import combinations
 from pathlib import Path
-from typing import List, Literal, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -52,9 +52,20 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
-    def __init__(self, slider: RigidBody, plan_specs: PlanarPlanSpecs):
+    def __init__(
+        self,
+        slider: RigidBody,
+        plan_specs: PlanarPlanSpecs,
+        contact_locations: Optional[List[PolytopeContactLocation]] = None,
+    ):
         self.slider = slider
         self.plan_specs = plan_specs
+
+        # TODO(bernhardpg): should just extract faces, rather than relying on the
+        # object to only pass faces as contact locations
+        self.contact_locations = contact_locations
+        if self.contact_locations is None:
+            self.contact_locations = slider.geometry.contact_locations
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -70,16 +81,14 @@ class PlanarPushingPlanner:
         return len(self.contact_modes)
 
     def _formulate_contact_modes(self):
-        # TODO(bernhardpg): should just extract faces, rather than relying on the
-        # object to only pass faces as contact locations
-        contact_locations = self.slider.geometry.contact_locations
+        assert self.contact_locations is not None
 
-        if not all([loc.pos == ContactLocation.FACE for loc in contact_locations]):
+        if not all([loc.pos == ContactLocation.FACE for loc in self.contact_locations]):
             raise RuntimeError("Only face contacts are supported for planar pushing.")
 
         self.contact_modes = [
             FaceContactMode.create_from_plan_spec(loc, self.plan_specs, self.slider)
-            for loc in contact_locations
+            for loc in self.contact_locations
         ]
 
     def _build_graph(self):
@@ -189,6 +198,7 @@ class PlanarPushingPlanner:
         pair = VertexModePair(vertex, mode)
 
         if source_or_target == "source":
+            # edge from source to source subgraph
             gcs_add_edge_with_continuity(
                 self.gcs,
                 pair,
@@ -198,6 +208,7 @@ class PlanarPushingPlanner:
                 ),
             )
         else:
+            # edge from target subgraph to target
             gcs_add_edge_with_continuity(
                 self.gcs,
                 VertexModePair(

@@ -21,17 +21,26 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    initial_and_final_non_collision_mode_one_knot_point,
-    rigid_body_box,
-)
+from tests.geometry.planar.fixtures import box_geometry, rigid_body_box
 
 
 @pytest.fixture
 def planar_pushing_planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
     specs = PlanarPlanSpecs()
     return PlanarPushingPlanner(rigid_body_box, specs)
+
+
+@pytest.fixture
+def partial_planar_pushing_planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
+    """
+    Planar pushing planner that does not consider all the contact locations, in order
+    for tests to be a bit quicker
+    """
+    specs = PlanarPlanSpecs()
+    contact_locations = rigid_body_box.geometry.contact_locations[0:2]
+    return PlanarPushingPlanner(
+        rigid_body_box, specs, contact_locations=contact_locations
+    )
 
 
 def test_planar_pushing_planner_construction(
@@ -124,22 +133,23 @@ def test_planar_pushing_planner_set_initial_and_final(
 
 
 def test_planar_pushing_planner_without_initial_conds(
-    planar_pushing_planner: PlanarPushingPlanner,
+    partial_planar_pushing_planner: PlanarPushingPlanner,
 ) -> None:
-    planar_pushing_planner.source = VertexModePair(
-        planar_pushing_planner.contact_vertices[0],
-        planar_pushing_planner.contact_modes[0],
+    planner = partial_planar_pushing_planner
+    planner.source = VertexModePair(
+        planner.contact_vertices[0],
+        planner.contact_modes[0],
     )
-    planar_pushing_planner.target = VertexModePair(
-        planar_pushing_planner.contact_vertices[1],
-        planar_pushing_planner.contact_modes[1],
+    planner.target = VertexModePair(
+        planner.contact_vertices[1],
+        planner.contact_modes[1],
     )
 
-    result = planar_pushing_planner._solve()
+    result = planner._solve()
     # should find a solution when there are no initial conditions
     assert result.is_success()
 
-    vertex_path = planar_pushing_planner.get_vertex_solution_path(result)
+    vertex_path = planner.get_vertex_solution_path(result)
     target_path = [
         "FACE_0",
         "FACE_0_to_FACE_1_NON_COLL_0",
@@ -151,42 +161,40 @@ def test_planar_pushing_planner_without_initial_conds(
 
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(
-            planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-        )
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
 def test_planar_pushing_planner_without_initial_conds_2(
-    planar_pushing_planner: PlanarPushingPlanner,
+    partial_planar_pushing_planner: PlanarPushingPlanner,
 ) -> None:
-    planar_pushing_planner.source = VertexModePair(
-        planar_pushing_planner.source_subgraph.non_collision_vertices[0],
-        planar_pushing_planner.source_subgraph.non_collision_modes[0],
+    planner = partial_planar_pushing_planner
+    planner.source = VertexModePair(
+        planner.source_subgraph.non_collision_vertices[2],
+        planner.source_subgraph.non_collision_modes[2],
     )
-    planar_pushing_planner.target = VertexModePair(
-        planar_pushing_planner.target_subgraph.non_collision_vertices[0],
-        planar_pushing_planner.target_subgraph.non_collision_modes[0],
+    planner.target = VertexModePair(
+        planner.target_subgraph.non_collision_vertices[3],
+        planner.target_subgraph.non_collision_modes[3],
     )
 
-    result = planar_pushing_planner._solve()
+    result = planner._solve()
     assert result.is_success()
 
-    vertex_path = planar_pushing_planner.get_vertex_solution_path(result)
+    vertex_path = planner.get_vertex_solution_path(result)
     target_path = [
-        "ENTRY_NON_COLL_0",
-        "ENTRY_NON_COLL_3",
-        "FACE_3",
+        "ENTRY_NON_COLL_2",
+        "ENTRY_NON_COLL_1",
+        "FACE_1",
+        "EXIT_NON_COLL_1",
+        "EXIT_NON_COLL_2",
         "EXIT_NON_COLL_3",
-        "EXIT_NON_COLL_0",
     ]
     for v, target in zip(vertex_path, target_path):
         assert v.name() == target
 
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(
-            planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-        )
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
 # def test_planar_pushing_planner_make_plan(
