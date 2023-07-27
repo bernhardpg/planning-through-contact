@@ -400,25 +400,21 @@ class FaceContactMode(AbstractContactMode):
             [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
         )  # Ellipsoidal Limit surface approximation
 
-        # We need to add an entry for multiplication with the wrench, see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
-        # R = np.zeros((3, 3), dtype="O")
-        # R[2, 2] = 1
-        # R[0:2, 0:2] = R_WB
+        # We need to add an entry for multiplication with the wrench,
+        # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
+        R = np.zeros((3, 3), dtype="O")
+        R[2, 2] = 1
+        R[0:2, 0:2] = R_WB
 
         # Contact torques
         tau_c_B = cross_2d(p_c_B, f_c_B)
 
         x_dot = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
+        wrench_W = R.dot(wrench_B)
         dynamics = A.dot(
-            wrench_B
+            wrench_W
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
-
-        # TODO(bernhardpg): Use wrench in world frame after writing unit tests
-        # wrench_W = R.dot(wrench_B)
-        # dynamics = A.dot(
-        #     wrench_@
-        # )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
         # x_dot, f(x,u)
         return x_dot, dynamics  # (3,1), (3,1)
