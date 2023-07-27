@@ -101,16 +101,14 @@ def test_planar_pushing_planner_set_initial_and_final(
     planar_pushing_planner.set_initial_poses(
         finger_initial_pose.pos(),
         box_initial_pose,
-        PolytopeContactLocation(ContactLocation.FACE, 3),
     )
 
     planar_pushing_planner.set_target_poses(
         finger_initial_pose.pos(),
         box_target_pose,
-        PolytopeContactLocation(ContactLocation.FACE, 3),
     )
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(
             planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
@@ -220,11 +218,7 @@ def test_planar_pushing_planner_make_plan(
         box_target_pose,
     )
 
-    DEBUG = True
-    if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-
-    result = planner._solve(True)
+    result = planner._solve()
     assert result.is_success()
 
     vertex_path = planner.get_vertex_solution_path(result)
@@ -256,7 +250,7 @@ def test_planar_pushing_planner_make_plan(
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
