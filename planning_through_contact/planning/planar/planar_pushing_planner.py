@@ -227,6 +227,20 @@ class PlanarPushingPlanner:
         )
         return result
 
+    def get_vertex_solution_path(
+        self,
+        result: MathematicalProgramResult,
+        flow_treshold: float = 0.55,
+    ) -> List[GcsVertex]:
+        """
+        Returns the vertices on the solution path in the correct order,
+        given a MathematicalProgramResult.
+        """
+        vertex_path = get_gcs_solution_path(
+            self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
+        )
+        return vertex_path
+
     def _get_gcs_solution_path(
         self,
         result: MathematicalProgramResult,
@@ -254,7 +268,7 @@ class PlanarPushingPlanner:
 
         return full_path
 
-    def make_trajectory(
+    def plan_trajectory(
         self,
         print_path: bool = False,
         print_output: bool = False,
