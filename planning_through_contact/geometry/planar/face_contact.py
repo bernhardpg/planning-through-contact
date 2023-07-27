@@ -6,6 +6,7 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.math import eq
 from pydrake.solvers import (
+    Binding,
     LinearCost,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
@@ -365,7 +366,7 @@ class FaceContactMode(AbstractContactMode):
                 self.variables.sin_ths[-1],
             )
 
-    def get_cost_terms(self) -> Tuple[List[List[int]], List[LinearCost]]:
+    def _get_cost_terms(self) -> Tuple[List[List[int]], List[LinearCost]]:
         if self.relaxed_prog is None:
             raise RuntimeError(
                 "Relaxed program must be constructed before cost can be formulated for vertex."
@@ -379,6 +380,13 @@ class FaceContactMode(AbstractContactMode):
             for cost in costs
         ]
         return var_idxs, evaluators
+
+    def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
+        var_idxs, evaluators = self._get_cost_terms()
+        vars = vertex.x()[var_idxs]
+        bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
+        for b in bindings:
+            vertex.AddCost(b)
 
     @staticmethod
     def _get_midpoint(vals, k: int):

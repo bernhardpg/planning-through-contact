@@ -7,6 +7,7 @@ import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge
 from pydrake.solvers import (
+    Binding,
     BoundingBoxConstraint,
     LinearConstraint,
     MathematicalProgram,
@@ -295,10 +296,16 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.sin_th,  # type: ignore
             )
 
-    def get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
+    def _get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
         assert len(self.prog.quadratic_costs()) == 1
 
         cost = self.prog.quadratic_costs()[0]  # only one cost term for these modes
 
         var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
         return var_idxs, cost.evaluator()
+
+    def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
+        var_idxs, evaluator = self._get_cost_term()
+        vars = vertex.x()[var_idxs]
+        binding = Binding[QuadraticCost](evaluator, vars)
+        vertex.AddCost(binding)
