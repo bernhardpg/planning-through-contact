@@ -209,7 +209,7 @@ class NonCollisionMode(AbstractContactMode):
         else:
             position_diffs = np.vstack(position_diffs)
         # position_diffs is now one long vector with diffs in each entry
-        squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
+        squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
         self.prog.AddQuadraticCost(squared_eucl_dist, is_convex=True)
 
         if self.avoid_object:
