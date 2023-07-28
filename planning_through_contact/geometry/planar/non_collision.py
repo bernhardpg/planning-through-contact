@@ -149,14 +149,18 @@ class NonCollisionVariables(AbstractModeVariables):
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
+    avoid_object: bool = False
+    avoidance_term: float = 0.1
+
     @classmethod
     def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
-        object: RigidBody,
+        slider: RigidBody,
         name: Optional[str] = None,
         one_knot_point: bool = False,
+        avoid_object: bool = False,
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -168,7 +172,8 @@ class NonCollisionMode(AbstractContactMode):
             num_knot_points,
             specs.time_non_collision,
             contact_location,
-            object,
+            slider,
+            avoid_object,
         )
 
     def __post_init__(self) -> None:
@@ -189,8 +194,7 @@ class NonCollisionMode(AbstractContactMode):
             p_BF = self.variables.p_BFs[k]
 
             for plane in self.planes:
-                dist_to_face = (plane.a.T.dot(p_BF) - plane.b).item()  # a'x >= b
-                self.prog.AddLinearConstraint(dist_to_face >= 0)
+                self.prog.AddLinearConstraint(plane.dist_to(p_BF) >= 0)
 
     def _define_cost(self) -> None:
         position_diffs = [
@@ -207,6 +211,11 @@ class NonCollisionMode(AbstractContactMode):
         # position_diffs is now one long vector with diffs in each entry
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
         self.prog.AddQuadraticCost(squared_eucl_dist, is_convex=True)
+
+        if self.avoid_object:
+            plane = self.object.geometry.faces[self.contact_location.idx]
+            dists = np.sum([plane.dist_to(p_BF) for p_BF in self.variables.p_BFs])
+            self.prog.AddLinearCost(-self.avoidance_term * dists)  # maximize distances
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose

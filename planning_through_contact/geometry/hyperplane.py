@@ -11,6 +11,10 @@ class Hyperplane(NamedTuple):
     def __eq__(self, other: "Hyperplane") -> bool:
         return np.allclose(self.a, other.a) and np.allclose(self.b, other.b)
 
+    def dist_to(self, point: npt.NDArray[np.float64]):
+        assert self.a.shape[0] == point.shape[0]
+        return (self.a.T.dot(point) - self.b).item()  # a'x >= b
+
 
 def get_angle_between_planes(plane_A: Hyperplane, plane_B: Hyperplane) -> float:
     theta = np.arccos(plane_B.a.T.dot(plane_A.a))[0, 0]

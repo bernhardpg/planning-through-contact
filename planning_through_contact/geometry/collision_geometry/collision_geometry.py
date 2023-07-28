@@ -29,6 +29,16 @@ class CollisionGeometry(ABC):
     with all of the helper functions required by the planner.
     """
 
+    @property
+    @abstractmethod
+    def vertices(self) -> List[npt.NDArray[np.float64]]:
+        ...
+
+    @property
+    @abstractmethod
+    def faces(self) -> List[Hyperplane]:
+        ...
+
     @abstractmethod
     def get_proximate_vertices_from_location(
         self, location: PolytopeContactLocation

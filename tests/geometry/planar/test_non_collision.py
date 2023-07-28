@@ -209,3 +209,42 @@ def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
     DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, mode.object.geometry)
+
+
+def test_avoid_object(rigid_body_box: RigidBody) -> None:
+    NUM_KNOT_POINTS = 5
+    specs = PlanarPlanSpecs(
+        num_knot_points_non_collision=NUM_KNOT_POINTS, time_non_collision=3
+    )
+    loc = PolytopeContactLocation(ContactLocation.FACE, 3)
+
+    mode = NonCollisionMode.create_from_plan_spec(
+        loc, specs, rigid_body_box, avoid_object=True
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.15, 0.13, 0)
+    mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(-0.15, -0.13, 0)
+    mode.set_finger_final_pos(finger_final_pose.pos())
+
+    result = Solve(mode.prog)
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses(
+        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+    )
+
+    plane = rigid_body_box.geometry.faces[loc.idx]
+    CONST = 0.05
+    for p_BF in traj.p_c_B.T[1:-2]:
+        assert plane.dist_to(p_BF) >= CONST
+
+    DEBUG = False
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, mode.object.geometry)
