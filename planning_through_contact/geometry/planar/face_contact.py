@@ -276,6 +276,19 @@ class FaceContactMode(AbstractContactMode):
         )
         self.prog.AddQuadraticCost(sq_angular_vels)  # type: ignore
 
+    def set_finger_pos(self, lam: float) -> None:
+        """
+        Set finger position along the contact face.
+        As the finger position is constant, there is no difference between
+        initial and target value.
+
+        @param lam: Position along face, value 0 to 1.
+        """
+        if lam >= 1 or lam <= 0:
+            raise ValueError("The finger position should be set between 0 and 1")
+
+        self.prog.AddLinearConstraint(self.variables.lams[0] == lam)
+
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))

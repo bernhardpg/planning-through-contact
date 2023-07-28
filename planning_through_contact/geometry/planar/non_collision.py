@@ -152,7 +152,7 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     avoid_object: bool = False
-    avoidance_term: float = 0.4
+    avoidance_term: float = 0.1
 
     @classmethod
     def create_from_plan_spec(
