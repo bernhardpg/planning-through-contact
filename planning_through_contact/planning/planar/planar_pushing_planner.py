@@ -46,6 +46,27 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 
+# TODO(bernhardpg): refactor to a better location
+def find_first_matching_location(
+    finger_pos: npt.NDArray[np.float64],
+    slider_pose: PlanarPose,
+    slider: RigidBody,
+) -> PolytopeContactLocation:
+    # we always add all non-collision modes, even when we don't add all contact modes
+    # (think of maneuvering around the object etc)
+    locations = slider.geometry.contact_locations
+    matching_locs = [
+        loc
+        for loc in locations
+        if check_pos_in_contact_location(finger_pos, loc, slider, slider_pose)
+    ]
+    if len(matching_locs) == 0:
+        raise ValueError(
+            "No valid configurations found for specified initial or target poses"
+        )
+    return matching_locs[0]
+
+
 class PlanarPushingPlanner:
     """
     A planner that generates motion plans for pushing an object (the "slider") with a point finger (the "pusher").
@@ -160,31 +181,12 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def _find_first_matching_location(
-        self,
-        finger_pos: npt.NDArray[np.float64],
-        slider_pose: PlanarPose,
-    ) -> PolytopeContactLocation:
-        # we always add all non-collision modes, even when we don't add all contact modes
-        # (think of maneuvering around the object etc)
-        locations = self.slider.geometry.contact_locations
-        matching_locs = [
-            loc
-            for loc in locations
-            if check_pos_in_contact_location(finger_pos, loc, self.slider, slider_pose)
-        ]
-        if len(matching_locs) == 0:
-            raise ValueError(
-                "No valid configurations found for specified initial or target poses"
-            )
-        return matching_locs[0]
-
     def set_initial_poses(
         self,
         finger_pos: npt.NDArray[np.float64],
         slider_pose: PlanarPose,
     ) -> None:
-        loc = self._find_first_matching_location(finger_pos, slider_pose)
+        loc = find_first_matching_location(finger_pos, slider_pose, self.slider)
         self.source = self._add_source_or_target_vertex(
             finger_pos, slider_pose, loc, "source"
         )
@@ -195,7 +197,7 @@ class PlanarPushingPlanner:
         finger_pos: npt.NDArray[np.float64],
         slider_pose: PlanarPose,
     ) -> None:
-        loc = self._find_first_matching_location(finger_pos, slider_pose)
+        loc = find_first_matching_location(finger_pos, slider_pose, self.slider)
         self.target = self._add_source_or_target_vertex(
             finger_pos, slider_pose, loc, "target"
         )
