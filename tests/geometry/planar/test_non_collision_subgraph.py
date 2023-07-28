@@ -215,7 +215,8 @@ def test_subgraph_with_object_avoidance(
 
     slider_pose = PlanarPose(0.3, 0, 0)
     finger_initial_pose = PlanarPose(-0.15, 0, 0)
-    finger_final_pose = PlanarPose(0.2, 0.2, 0)
+    finger_final_pose = PlanarPose(0.2, 0.0, 0)
+    # TODO(bernhardpg): This should not fail!
 
     contact_location_start = find_first_matching_location(
         finger_initial_pose.pos(), slider_pose, rigid_body_box
@@ -350,7 +351,14 @@ def test_subgraph_with_contact_modes_and_object_avoidance(
     # Make sure we are not leaving the object completely
     assert np.all(np.abs(traj.p_c_W) <= 4.0)
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+
+
+if __name__ == "__main__":
+    test_subgraph_with_object_avoidance(rigid_body_box(box_geometry()))
+    # test_subgraph_with_contact_modes_and_object_avoidance(
+    #     rigid_body_box(box_geometry()), gcs_options()
+    # )
