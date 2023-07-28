@@ -152,7 +152,9 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     avoid_object: bool = False
-    avoidance_term: float = 0.1
+    avoidance_cost: Literal["linear", "quadratic"] = "quadratic"
+    avoidance_param_linear: float = 0.1
+    avoidance_param_quadratic: float = 0.2
 
     @classmethod
     def create_from_plan_spec(
@@ -216,8 +218,16 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.avoid_object:
             plane = self.object.geometry.faces[self.contact_location.idx]
-            dists = np.sum([plane.dist_to(p_BF) for p_BF in self.variables.p_BFs])
-            self.prog.AddLinearCost(-self.avoidance_term * dists)  # maximize distances
+            dists = [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
+            if self.avoidance_cost == "linear":
+                self.prog.AddLinearCost(
+                    -self.avoidance_param_linear * np.sum(dists)
+                )  # maximize distances
+            else:  # quadratic
+                squared_dists = [
+                    (d - self.avoidance_param_quadratic) ** 2 for d in dists
+                ]
+                self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -327,15 +337,26 @@ class NonCollisionMode(AbstractContactMode):
 
     # TODO(bernhardpg): refactor common code
     def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        assert len(self.prog.quadratic_costs()) == 1
+        if self.avoid_object and self.avoidance_cost == "quadratic":
+            assert len(self.prog.quadratic_costs()) == 2
+        else:
+            assert len(self.prog.quadratic_costs()) == 1
+
         eucl_dist_cost = self.prog.quadratic_costs()[0]  # should only be one cost
         var_idxs = self.get_variable_indices_in_gcs_vertex(eucl_dist_cost.variables())
         return var_idxs, eucl_dist_cost.evaluator()
 
     # TODO(bernhardpg): refactor common code
-    def _get_object_avoidance_cost_term(self) -> Tuple[List[int], LinearCost]:
-        assert len(self.prog.linear_costs()) == 1  # should only be one cost
-        object_avoidance_cost = self.prog.linear_costs()[0]
+    def _get_object_avoidance_cost_term(
+        self,
+    ) -> Tuple[List[int], LinearCost | QuadraticCost]:
+        if self.avoidance_cost == "linear":
+            assert len(self.prog.linear_costs()) == 1
+            object_avoidance_cost = self.prog.linear_costs()[0]
+        else:  # quadratic
+            assert len(self.prog.quadratic_costs()) == 2
+            object_avoidance_cost = self.prog.quadratic_costs()[1]
+
         var_idxs = self.get_variable_indices_in_gcs_vertex(
             object_avoidance_cost.variables()
         )
@@ -351,5 +372,6 @@ class NonCollisionMode(AbstractContactMode):
         if self.avoid_object:
             var_idxs, evaluator = self._get_object_avoidance_cost_term()
             vars = vertex.x()[var_idxs]
-            binding = Binding[LinearCost](evaluator, vars)
+            cost_type = LinearCost if self.avoidance_cost == "linear" else QuadraticCost
+            binding = Binding[cost_type](evaluator, vars)
             vertex.AddCost(binding)

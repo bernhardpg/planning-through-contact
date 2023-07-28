@@ -206,7 +206,7 @@ def test_subgraph_with_contact_modes(
 def test_subgraph_with_object_avoidance(
     rigid_body_box: RigidBody,
 ) -> None:
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=3)
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
@@ -214,8 +214,8 @@ def test_subgraph_with_object_avoidance(
     )
 
     slider_pose = PlanarPose(0.3, 0, 0)
-    finger_initial_pose = PlanarPose(-0.2, 0, 0)
-    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+    finger_initial_pose = PlanarPose(-0.15, 0, 0)
+    finger_final_pose = PlanarPose(0.2, 0.2, 0)
 
     contact_location_start = find_first_matching_location(
         finger_initial_pose.pos(), slider_pose, rigid_body_box
@@ -263,7 +263,7 @@ def test_subgraph_with_object_avoidance(
         assert isinstance(costs[0].evaluator(), QuadraticCost)
 
         # maximize distance cost
-        assert isinstance(costs[1].evaluator(), LinearCost)
+        assert isinstance(costs[1].evaluator(), QuadraticCost)
 
     result = gcs.SolveShortestPath(source_vertex, target_vertex)
     assert result.is_success()

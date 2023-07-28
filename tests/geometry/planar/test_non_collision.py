@@ -222,7 +222,7 @@ def test_avoid_object(rigid_body_box: RigidBody) -> None:
         loc, specs, rigid_body_box, avoid_object=True
     )
 
-    assert len(mode.prog.linear_costs()) == 1
+    assert len(mode.prog.quadratic_costs()) == 2
 
     slider_pose = PlanarPose(0.3, 0, 0)
     mode.set_slider_pose(slider_pose)
