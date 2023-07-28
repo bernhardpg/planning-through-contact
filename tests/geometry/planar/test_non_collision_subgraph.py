@@ -73,16 +73,18 @@ def test_non_collision_subgraph_planning(
         gcs, rigid_body_box, plan_specs, "Subgraph_TEST"
     )
 
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=1)
-
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
 
     source_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_start, plan_specs, rigid_body_box, "source"
+        contact_location_start,
+        plan_specs,
+        rigid_body_box,
+        "source",
+        one_knot_point=True,
     )
     target_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_end, plan_specs, rigid_body_box, "target"
+        contact_location_end, plan_specs, rigid_body_box, "target", one_knot_point=True
     )
 
     slider_pose = PlanarPose(0.3, 0, 0)
