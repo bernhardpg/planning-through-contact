@@ -26,6 +26,7 @@ class PlanarTrajectory:
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
     p_c_W: npt.NDArray[np.float64]  # (2, traj_length)
     f_c_W: npt.NDArray[np.float64]  # (2, traj_length)
+    p_c_B: npt.NDArray[np.float64]  # (2, traj_length)
 
     def __post_init__(self) -> None:
         dets = np.array([np.linalg.det(R) for R in self.R_WB])
@@ -92,6 +93,12 @@ class PlanarTrajectoryBuilder:
                     for p in self.path
                 ]
             ).T
+            p_c_B = np.vstack(
+                [
+                    self._get_traj_by_interpolation(p.p_c_Bs, dt, p.time_in_mode)
+                    for p in self.path
+                ]
+            ).T
         else:
             R_WB = sum(
                 [p.R_WBs for p in self.path],
@@ -100,11 +107,12 @@ class PlanarTrajectoryBuilder:
             p_WB = np.hstack(sum([p.p_WBs for p in self.path], []))
             p_c_W = np.hstack(sum([p.p_c_Ws for p in self.path], []))
             f_c_W = np.hstack(sum([p.f_c_Ws for p in self.path], []))
+            p_c_B = np.hstack(sum([p.p_c_Bs for p in self.path], []))
 
             # Fixed dt when replaying knot points
             dt = 0.8
 
-        return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W)
+        return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
 
     def _get_traj_by_interpolation(
         self,

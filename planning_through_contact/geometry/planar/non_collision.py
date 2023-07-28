@@ -62,11 +62,6 @@ class NonCollisionVariables(AbstractModeVariables):
     def from_prog(
         cls, prog: MathematicalProgram, num_knot_points: int, time_in_mode: float
     ) -> "NonCollisionVariables":
-        if not num_knot_points <= 2:
-            raise NotImplementedError(
-                "Currently only one or two knot points are supported for NonCollisionModes"
-            )
-
         # Finger location
         p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
         p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
@@ -147,6 +142,10 @@ class NonCollisionVariables(AbstractModeVariables):
         NUM_DIMS = 2
         return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
 
+    @property
+    def p_c_Bs(self):
+        return self.p_BFs
+
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
@@ -194,16 +193,20 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearConstraint(dist_to_face >= 0)
 
     def _define_cost(self) -> None:
-        position_diffs = np.array(
-            [
-                p_next - p_curr
-                for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
-                )
-            ]
-        )
+        position_diffs = [
+            p_next - p_curr
+            for p_next, p_curr in zip(
+                self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+            )
+        ]
+        if self.num_knot_points == 1:
+            # Can't vstack only one array
+            position_diffs = np.array(position_diffs)
+        else:
+            position_diffs = np.vstack(position_diffs)
+        # position_diffs is now one long vector with diffs in each entry
         squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
-        self.prog.AddCost(squared_eucl_dist)
+        self.prog.AddQuadraticCost(squared_eucl_dist, is_convex=True)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose

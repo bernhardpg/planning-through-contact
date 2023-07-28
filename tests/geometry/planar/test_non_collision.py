@@ -168,3 +168,44 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
         finger_pos_4, loc_2, rigid_body_box, body_pose_2
     )
     assert res_4 == True
+
+
+def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
+    NUM_KNOT_POINTS = 5
+    specs = PlanarPlanSpecs(
+        num_knot_points_non_collision=NUM_KNOT_POINTS, time_non_collision=3
+    )
+    loc = PolytopeContactLocation(ContactLocation.FACE, 3)
+
+    mode = NonCollisionMode.create_from_plan_spec(loc, specs, rigid_body_box)
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
+    mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(-0.4, -0.2, 0)
+    mode.set_finger_final_pos(finger_final_pose.pos())
+
+    result = Solve(mode.prog)
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses(
+        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+    )
+
+    target_pos = [
+        v.squeeze()
+        for v in np.linspace(
+            finger_initial_pose.pos(), finger_final_pose.pos(), num=NUM_KNOT_POINTS
+        )
+    ]  # t.shape = (2,)
+    for p, t in zip(traj.p_c_B.T, target_pos):  # p.shape = (2,)
+        assert np.allclose(p, t)
+
+    DEBUG = False
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, mode.object.geometry)

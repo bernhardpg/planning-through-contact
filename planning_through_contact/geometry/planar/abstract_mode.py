@@ -112,6 +112,11 @@ class AbstractModeVariables(ABC):
     def f_c_Ws(self):
         pass
 
+    @property
+    @abstractmethod
+    def p_c_Bs(self):
+        pass
+
 
 @dataclass
 class AbstractContactMode(ABC):
