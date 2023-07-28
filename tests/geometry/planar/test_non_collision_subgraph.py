@@ -287,3 +287,70 @@ def test_subgraph_with_object_avoidance(
         save_gcs_graph_diagram(gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(gcs, Path("subgraph_result.svg"), result)
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+
+
+def test_subgraph_with_contact_modes_and_object_avoidance(
+    rigid_body_box: RigidBody, gcs_options: opt.GraphOfConvexSetsOptions
+):
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
+    gcs = opt.GraphOfConvexSets()
+
+    subgraph = NonCollisionSubGraph.create_with_gcs(
+        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=True
+    )
+
+    slider_initial_pose = PlanarPose(0.3, 0, 0)
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+
+    slider_final_pose = PlanarPose(0.5, -0.3, 0.5)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    source_mode = FaceContactMode.create_from_plan_spec(
+        contact_location_start, plan_specs, rigid_body_box
+    )
+    target_mode = FaceContactMode.create_from_plan_spec(
+        contact_location_end, plan_specs, rigid_body_box
+    )
+
+    source_mode.set_finger_pos(0.5)
+    source_mode.set_slider_initial_pose(slider_initial_pose)
+    source_vertex = gcs.AddVertex(source_mode.get_convex_set(), "source")
+    source_mode.add_cost_to_vertex(source_vertex)
+
+    source = VertexModePair(source_vertex, source_mode)
+
+    target_mode.set_slider_final_pose(slider_final_pose)
+    target_mode.set_finger_pos(0.5)
+    target_vertex = gcs.AddVertex(target_mode.get_convex_set(), "target")
+    target_mode.add_cost_to_vertex(target_vertex)
+    target = VertexModePair(target_vertex, target_mode)
+
+    subgraph.connect_with_continuity_constraints(
+        contact_location_start.idx, source, outgoing=False
+    )
+    subgraph.connect_with_continuity_constraints(
+        contact_location_end.idx, target, incoming=False
+    )
+
+    result = gcs.SolveShortestPath(source_vertex, target_vertex, gcs_options)
+    assert result.is_success()
+
+    pairs = subgraph.get_all_vertex_mode_pairs()
+    pairs["source"] = source
+    pairs["target"] = target
+
+    traj = PlanarTrajectoryBuilder.from_result(
+        result, gcs, source_vertex, target_vertex, pairs
+    ).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses(
+        traj, slider_initial_pose, None, slider_final_pose, None
+    )
+
+    # Make sure we are not leaving the object completely
+    assert np.all(np.abs(traj.p_c_W) <= 4.0)
+
+    DEBUG = False
+    if DEBUG:
+        save_gcs_graph_diagram(gcs, Path("subgraph_w_contact.svg"))
+        visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
