@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import pydrake.geometry.optimization as opt
@@ -25,12 +24,8 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    gcs_options,
-    initial_and_final_non_collision_mode_one_knot_point,
-    rigid_body_box,
-)
+from tests.geometry.planar.fixtures import box_geometry, gcs_options, rigid_body_box
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 
 def test_non_collision_subgraph(
@@ -70,9 +65,6 @@ def test_non_collision_subgraph(
 
 def test_non_collision_subgraph_planning(
     rigid_body_box: RigidBody,
-    initial_and_final_non_collision_mode_one_knot_point: Tuple[
-        NonCollisionMode, NonCollisionMode
-    ],
 ):
     plan_specs = PlanarPlanSpecs()
     gcs = opt.GraphOfConvexSets()
@@ -80,7 +72,28 @@ def test_non_collision_subgraph_planning(
     subgraph = NonCollisionSubGraph.create_with_gcs(
         gcs, rigid_body_box, plan_specs, "Subgraph_TEST"
     )
-    source_mode, target_mode = initial_and_final_non_collision_mode_one_knot_point
+
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=1)
+
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    source_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_start, plan_specs, rigid_body_box, "source"
+    )
+    target_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_end, plan_specs, rigid_body_box, "target"
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    source_mode.set_slider_pose(slider_pose)
+    target_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0, 0)
+    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+    target_mode.set_finger_final_pos(finger_final_pose.pos())
+
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
     target_vertex = gcs.AddVertex(target_mode.get_convex_set(), target_mode.name)
 
@@ -107,11 +120,9 @@ def test_non_collision_subgraph_planning(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=True)
 
-    p_c_W_initial = source_mode.slider_pose.pos() + source_mode.p_BF_initial
-    assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_initial)
-
-    p_c_W_final = target_mode.slider_pose.pos() + target_mode.p_BF_final
-    assert np.allclose(traj.p_c_W[:, -1:], p_c_W_final)
+    assert_initial_and_final_poses(
+        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+    )
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
@@ -174,11 +185,9 @@ def test_subgraph_with_contact_modes(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert np.allclose(traj.p_WB[:, 0:1], slider_initial_pose.pos())
-    assert np.allclose(traj.R_WB[0], slider_initial_pose.two_d_rot_matrix())
-
-    assert np.allclose(traj.p_WB[:, -1:], slider_final_pose.pos())
-    assert np.allclose(traj.R_WB[-1], slider_final_pose.two_d_rot_matrix())
+    assert_initial_and_final_poses(
+        traj, slider_initial_pose, None, slider_final_pose, None
+    )
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)

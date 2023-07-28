@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 import pydrake.geometry.optimization as opt
@@ -26,21 +25,33 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    gcs_options,
-    initial_and_final_non_collision_mode_one_two_knot_points,
-    rigid_body_box,
-)
+from tests.geometry.planar.fixtures import box_geometry, gcs_options, rigid_body_box
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 
-def test_add_continuity_constraints_between_modes(
-    initial_and_final_non_collision_mode_one_two_knot_points: Tuple[
-        NonCollisionMode, NonCollisionMode
-    ],
+def test_add_continuity_constraints_between_non_collision_modes(
     rigid_body_box: RigidBody,
 ) -> None:
-    source_mode, target_mode = initial_and_final_non_collision_mode_one_two_knot_points
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=2)
+
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    source_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_start, plan_specs, rigid_body_box, "source"
+    )
+    target_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_end, plan_specs, rigid_body_box, "target"
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    source_mode.set_slider_pose(slider_pose)
+    target_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0, 0)
+    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+    target_mode.set_finger_final_pos(finger_final_pose.pos())
 
     gcs = opt.GraphOfConvexSets()
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
@@ -69,11 +80,13 @@ def test_add_continuity_constraints_between_modes(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    p_c_W_initial = source_mode.slider_pose.pos() + source_mode.p_BF_initial
-    assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_initial)
-
-    p_c_W_final = target_mode.slider_pose.pos() + target_mode.p_BF_final
-    assert np.allclose(traj.p_c_W[:, -1:], p_c_W_final)
+    assert_initial_and_final_poses(
+        traj,
+        slider_pose,
+        finger_initial_pose,
+        slider_pose,
+        finger_final_pose,
+    )
 
     DEBUG = False
     if DEBUG:
@@ -120,16 +133,13 @@ def test_add_continuity_between_non_coll_and_face_contact(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert np.allclose(traj.p_WB[:, 0:1], slider_initial_pose.pos())
-    assert np.allclose(traj.R_WB[0], slider_initial_pose.two_d_rot_matrix())
-
-    assert np.allclose(traj.p_WB[:, -1:], slider_final_pose.pos())
-    assert np.allclose(traj.R_WB[-1], slider_final_pose.two_d_rot_matrix())
-
-    p_c_W_final = slider_final_pose.pos() + slider_final_pose.two_d_rot_matrix().dot(
-        finger_final_pose.pos()
+    assert_initial_and_final_poses(
+        traj,
+        slider_initial_pose,
+        None,
+        slider_final_pose,
+        finger_final_pose,
     )
-    assert np.allclose(traj.p_c_W[:, -1:], p_c_W_final)
 
     DEBUG = False
     if DEBUG:

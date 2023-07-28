@@ -16,6 +16,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
@@ -25,6 +26,7 @@ from tests.geometry.planar.fixtures import (
     non_collision_vars,
     rigid_body_box,
 )
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -121,16 +123,9 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     vars = non_collision_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert np.allclose(traj.R_WB[0], slider_pose.two_d_rot_matrix(), atol=1e-2)
-    assert np.allclose(traj.p_WB[:, 0:1], slider_pose.pos(), atol=1e-2)
-
-    assert np.allclose(traj.R_WB[-1], slider_pose.two_d_rot_matrix(), atol=1e-2)
-    assert np.allclose(traj.p_WB[:, -1:1], slider_pose.pos(), atol=1e-2)
-
-    assert np.allclose(
-        traj.p_c_W[:, 0:1], slider_pose.pos() + finger_initial_pose.pos()
+    assert_initial_and_final_poses(
+        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
     )
-    assert np.allclose(traj.p_c_W[:, -1:], slider_pose.pos() + finger_final_pose.pos())
 
     DEBUG = False
     if DEBUG:
