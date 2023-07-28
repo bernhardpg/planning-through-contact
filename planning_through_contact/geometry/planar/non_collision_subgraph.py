@@ -44,6 +44,7 @@ class NonCollisionSubGraph:
         body: RigidBody,
         plan_specs: PlanarPlanSpecs,
         subgraph_name: str,
+        avoid_object: bool = False,
     ) -> "NonCollisionSubGraph":
         """
         Constructs a subgraph of non-collision modes. An edge is added to
@@ -55,7 +56,9 @@ class NonCollisionSubGraph:
         """
 
         non_collision_modes = [
-            NonCollisionMode.create_from_plan_spec(loc, plan_specs, body)
+            NonCollisionMode.create_from_plan_spec(
+                loc, plan_specs, body, avoid_object=avoid_object
+            )
             for loc in body.geometry.contact_locations
         ]
 

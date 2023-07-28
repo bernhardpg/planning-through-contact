@@ -9,7 +9,9 @@ from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
+    Cost,
     LinearConstraint,
+    LinearCost,
     MathematicalProgram,
     MathematicalProgramResult,
     QuadraticCost,
@@ -150,7 +152,7 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     avoid_object: bool = False
-    avoidance_term: float = 0.1
+    avoidance_term: float = 0.4
 
     @classmethod
     def create_from_plan_spec(
@@ -323,16 +325,31 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.sin_th,  # type: ignore
             )
 
-    def _get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
+    # TODO(bernhardpg): refactor common code
+    def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
         assert len(self.prog.quadratic_costs()) == 1
+        eucl_dist_cost = self.prog.quadratic_costs()[0]  # should only be one cost
+        var_idxs = self.get_variable_indices_in_gcs_vertex(eucl_dist_cost.variables())
+        return var_idxs, eucl_dist_cost.evaluator()
 
-        cost = self.prog.quadratic_costs()[0]  # only one cost term for these modes
-
-        var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
-        return var_idxs, cost.evaluator()
+    # TODO(bernhardpg): refactor common code
+    def _get_object_avoidance_cost_term(self) -> Tuple[List[int], LinearCost]:
+        assert len(self.prog.linear_costs()) == 1  # should only be one cost
+        object_avoidance_cost = self.prog.linear_costs()[0]
+        var_idxs = self.get_variable_indices_in_gcs_vertex(
+            object_avoidance_cost.variables()
+        )
+        return var_idxs, object_avoidance_cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
-        var_idxs, evaluator = self._get_cost_term()
+        # euclidean distance cost
+        var_idxs, evaluator = self._get_eucl_dist_cost_term()
         vars = vertex.x()[var_idxs]
         binding = Binding[QuadraticCost](evaluator, vars)
         vertex.AddCost(binding)
+
+        if self.avoid_object:
+            var_idxs, evaluator = self._get_object_avoidance_cost_term()
+            vars = vertex.x()[var_idxs]
+            binding = Binding[LinearCost](evaluator, vars)
+            vertex.AddCost(binding)
