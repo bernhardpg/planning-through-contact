@@ -109,7 +109,7 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
 def subgraph(
     rigid_body_box: RigidBody, request: FixtureRequest
 ) -> NonCollisionSubGraph:
-    num_knot_points = 5 if request.param["avoid_object"] else 2
+    num_knot_points = 4 if request.param["avoid_object"] else 2
 
     plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=num_knot_points)
     gcs = opt.GraphOfConvexSets()

@@ -64,7 +64,7 @@ def assert_initial_and_final_poses(
 
 def assert_object_is_avoided(
     object_geometry: CollisionGeometry,
-    traj: PlanarTrajectory,
+    finger_traj: npt.NDArray[np.float64],  # (num_dims, traj_length)
     min_distance: float = 0.05,
     start_idx: int = 1,
     end_idx: int = -1,
@@ -78,6 +78,6 @@ def assert_object_is_avoided(
     outside_faces = [
         # each point must be outside one face
         any([face.dist_to(p_BF) >= min_distance for face in object_geometry.faces])
-        for p_BF in traj.p_c_B.T[start_idx:end_idx]
+        for p_BF in finger_traj.T[start_idx:end_idx]
     ]
     assert all(outside_faces)

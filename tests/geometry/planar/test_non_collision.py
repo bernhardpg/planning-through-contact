@@ -253,7 +253,7 @@ def test_avoid_object(rigid_body_box: RigidBody) -> None:
         traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
     )
 
-    assert_object_is_avoided(rigid_body_box.geometry, traj)
+    assert_object_is_avoided(rigid_body_box.geometry, traj.p_c_B)
 
     DEBUG = False
     if DEBUG:
