@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pydrake.geometry.optimization as opt
+import pytest
 from pydrake.solvers import LinearCost, QuadraticCost
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -20,15 +21,23 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.planning.planar.planar_pushing_planner import (
-    find_first_matching_location,
-)
+from planning_through_contact.planning.planar.tools import find_first_matching_location
+from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, gcs_options, rigid_body_box
-from tests.geometry.planar.tools import assert_initial_and_final_poses
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    gcs_options,
+    rigid_body_box,
+    subgraph_with_initial_and_final_cond,
+    subgraph_with_initial_and_final_cond_and_avoidance,
+)
+from tests.geometry.planar.tools import (
+    assert_initial_and_final_poses,
+    assert_object_is_avoided,
+)
 
 
 def test_non_collision_subgraph(
@@ -66,67 +75,57 @@ def test_non_collision_subgraph(
         assert isinstance(cost.evaluator(), QuadraticCost)
 
 
-def test_non_collision_subgraph_planning(
-    rigid_body_box: RigidBody,
+def test_non_collision_subgraph_initial_and_final(
+    subgraph_with_initial_and_final_cond: NonCollisionSubGraph,
 ):
-    plan_specs = PlanarPlanSpecs()
-    gcs = opt.GraphOfConvexSets()
+    subgraph = subgraph_with_initial_and_final_cond
+    source_mode = subgraph.source.mode
 
-    subgraph = NonCollisionSubGraph.create_with_gcs(
-        gcs, rigid_body_box, plan_specs, "Subgraph_TEST"
+    assert isinstance(source_mode, NonCollisionMode)
+
+    assert source_mode.contact_location == find_first_matching_location(
+        source_mode.finger_initial_pose, source_mode.slider_pose, subgraph.body
     )
 
-    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
-    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+    target_mode = subgraph.target.mode
 
-    source_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_start,
-        plan_specs,
-        rigid_body_box,
-        "source",
-        one_knot_point=True,
-    )
-    target_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_end, plan_specs, rigid_body_box, "target", one_knot_point=True
+    assert isinstance(target_mode, NonCollisionMode)
+
+    assert target_mode.contact_location == find_first_matching_location(
+        target_mode.finger_final_pose, target_mode.slider_pose, subgraph.body
     )
 
-    slider_pose = PlanarPose(0.3, 0, 0)
-    source_mode.set_slider_pose(slider_pose)
-    target_mode.set_slider_pose(slider_pose)
+    # We should have added 2 more edges with initial and final modes
+    assert len(subgraph.gcs.Edges()) == len(subgraph.non_collision_modes) * 2 + 2
 
-    finger_initial_pose = PlanarPose(-0.2, 0, 0)
-    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
-    finger_final_pose = PlanarPose(0.3, 0.5, 0)
-    target_mode.set_finger_final_pos(finger_final_pose.pos())
 
-    source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
-    target_vertex = gcs.AddVertex(target_mode.get_convex_set(), target_mode.name)
-
-    subgraph.connect_with_continuity_constraints(
-        3, VertexModePair(source_vertex, source_mode)
+def test_non_collision_subgraph_planning(
+    subgraph_with_initial_and_final_cond: NonCollisionSubGraph,
+):
+    subgraph = subgraph_with_initial_and_final_cond
+    result = subgraph.gcs.SolveShortestPath(
+        subgraph.source.vertex, subgraph.target.vertex
     )
-    subgraph.connect_with_continuity_constraints(
-        0, VertexModePair(target_vertex, target_mode)
-    )
-
-    # We should have added 4 more edges
-    assert len(gcs.Edges()) == len(subgraph.non_collision_modes) * 2 + 4
-
-    result = gcs.SolveShortestPath(source_vertex, target_vertex)
     assert result.is_success()
 
     # TODO(bernhardpg): use new Drake function:
     # edges = gcs.GetSolutionPath(source, target, result)
 
     pairs = subgraph.get_all_vertex_mode_pairs()
-    pairs["source"] = VertexModePair(source_vertex, source_mode)
-    pairs["target"] = VertexModePair(target_vertex, target_mode)
+    pairs["source"] = subgraph.source
+    pairs["target"] = subgraph.target
     traj = PlanarTrajectoryBuilder.from_result(
-        result, gcs, source_vertex, target_vertex, pairs
+        result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
     ).get_trajectory(interpolate=True)
 
+    assert isinstance(subgraph.source.mode, NonCollisionMode)
+    assert isinstance(subgraph.target.mode, NonCollisionMode)
     assert_initial_and_final_poses(
-        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+        traj,
+        subgraph.source.mode.slider_pose,
+        subgraph.source.mode.finger_initial_pose,
+        subgraph.target.mode.slider_pose,
+        subgraph.target.mode.finger_final_pose,
     )
 
     # Make sure we are not leaving the object
@@ -134,9 +133,9 @@ def test_non_collision_subgraph_planning(
 
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(gcs, Path("subgraph.svg"))
-        save_gcs_graph_diagram(gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
+        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
+        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)
 
 
 def test_subgraph_with_contact_modes(
@@ -204,56 +203,12 @@ def test_subgraph_with_contact_modes(
 
 
 def test_subgraph_with_object_avoidance(
-    rigid_body_box: RigidBody,
+    subgraph_with_initial_and_final_cond_and_avoidance: NonCollisionSubGraph,
 ) -> None:
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
-    gcs = opt.GraphOfConvexSets()
-
-    subgraph = NonCollisionSubGraph.create_with_gcs(
-        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=True
-    )
-
-    slider_pose = PlanarPose(0.3, 0, 0)
-    finger_initial_pose = PlanarPose(-0.15, 0, 0)
-    finger_final_pose = PlanarPose(0.2, 0.0, 0)
-    # TODO(bernhardpg): This should not fail!
-
-    contact_location_start = find_first_matching_location(
-        finger_initial_pose.pos(), slider_pose, rigid_body_box
-    )
-    contact_location_end = find_first_matching_location(
-        finger_final_pose.pos(), slider_pose, rigid_body_box
-    )
-
-    source_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_start,
-        plan_specs,
-        rigid_body_box,
-        "source",
-        one_knot_point=True,
-    )
-    target_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_end, plan_specs, rigid_body_box, "target", one_knot_point=True
-    )
-
-    source_mode.set_slider_pose(slider_pose)
-    target_mode.set_slider_pose(slider_pose)
-
-    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
-    target_mode.set_finger_final_pos(finger_final_pose.pos())
-
-    source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
-    target_vertex = gcs.AddVertex(target_mode.get_convex_set(), target_mode.name)
-
-    subgraph.connect_with_continuity_constraints(
-        3, VertexModePair(source_vertex, source_mode), outgoing=False
-    )
-    subgraph.connect_with_continuity_constraints(
-        0, VertexModePair(target_vertex, target_mode), incoming=False
-    )
+    subgraph = subgraph_with_initial_and_final_cond_and_avoidance
 
     # Check costs are correctly added to GCS instance
-    for v in gcs.Vertices():
+    for v in subgraph.gcs.Vertices():
         if v.name() in ("source", "target"):
             continue
 
@@ -266,28 +221,41 @@ def test_subgraph_with_object_avoidance(
         # maximize distance cost
         assert isinstance(costs[1].evaluator(), QuadraticCost)
 
-    result = gcs.SolveShortestPath(source_vertex, target_vertex)
+    result = subgraph.gcs.SolveShortestPath(
+        subgraph.source.vertex, subgraph.target.vertex
+    )
     assert result.is_success()
 
     pairs = subgraph.get_all_vertex_mode_pairs()
-    pairs["source"] = VertexModePair(source_vertex, source_mode)
-    pairs["target"] = VertexModePair(target_vertex, target_mode)
+    pairs["source"] = subgraph.source
+    pairs["target"] = subgraph.target
     traj = PlanarTrajectoryBuilder.from_result(
-        result, gcs, source_vertex, target_vertex, pairs
+        result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
     ).get_trajectory(interpolate=False)
 
+    assert isinstance(subgraph.source.mode, NonCollisionMode)
+    assert isinstance(subgraph.target.mode, NonCollisionMode)
     assert_initial_and_final_poses(
-        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+        traj,
+        subgraph.source.mode.slider_pose,
+        subgraph.source.mode.finger_initial_pose,
+        subgraph.target.mode.slider_pose,
+        subgraph.target.mode.finger_final_pose,
     )
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 3.0)
 
+    # check that all trajectory points (after source and target modes) don't collide
+    assert_object_is_avoided(
+        subgraph.body.geometry, traj, min_distance=0.001, start_idx=2, end_idx=-2
+    )
+
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(gcs, Path("subgraph.svg"))
-        save_gcs_graph_diagram(gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
+        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
+        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)
 
 
 def test_subgraph_with_contact_modes_and_object_avoidance(
@@ -351,14 +319,7 @@ def test_subgraph_with_contact_modes_and_object_avoidance(
     # Make sure we are not leaving the object completely
     assert np.all(np.abs(traj.p_c_W) <= 4.0)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
-
-
-if __name__ == "__main__":
-    test_subgraph_with_object_avoidance(rigid_body_box(box_geometry()))
-    # test_subgraph_with_contact_modes_and_object_avoidance(
-    #     rigid_body_box(box_geometry()), gcs_options()
-    # )

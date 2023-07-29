@@ -25,7 +25,6 @@ from planning_through_contact.geometry.planar.face_contact import (
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
-    check_pos_in_contact_location,
 )
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
@@ -39,32 +38,12 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.tools import find_first_matching_location
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
-
-
-# TODO(bernhardpg): refactor to a better location
-def find_first_matching_location(
-    finger_pos: npt.NDArray[np.float64],
-    slider_pose: PlanarPose,
-    slider: RigidBody,
-) -> PolytopeContactLocation:
-    # we always add all non-collision modes, even when we don't add all contact modes
-    # (think of maneuvering around the object etc)
-    locations = slider.geometry.contact_locations
-    matching_locs = [
-        loc
-        for loc in locations
-        if check_pos_in_contact_location(finger_pos, loc, slider, slider_pose)
-    ]
-    if len(matching_locs) == 0:
-        raise ValueError(
-            "No valid configurations found for specified initial or target poses"
-        )
-    return matching_locs[0]
 
 
 class PlanarPushingPlanner:
@@ -183,29 +162,29 @@ class PlanarPushingPlanner:
 
     def set_initial_poses(
         self,
-        finger_pos: npt.NDArray[np.float64],
+        finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = find_first_matching_location(finger_pos, slider_pose, self.slider)
+        loc = find_first_matching_location(finger_pose, slider_pose, self.slider)
         self.source = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, loc, "source"
+            finger_pose, slider_pose, loc, "source"
         )
         self.all_pairs[self.source.vertex.name()] = self.source
 
     def set_target_poses(
         self,
-        finger_pos: npt.NDArray[np.float64],
+        finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = find_first_matching_location(finger_pos, slider_pose, self.slider)
+        loc = find_first_matching_location(finger_pose, slider_pose, self.slider)
         self.target = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, loc, "target"
+            finger_pose, slider_pose, loc, "target"
         )
         self.all_pairs[self.target.vertex.name()] = self.target
 
     def _add_source_or_target_vertex(
         self,
-        finger_pos: npt.NDArray[np.float64],
+        finger_pose: PlanarPose,
         slider_pose: PlanarPose,
         loc: PolytopeContactLocation,
         source_or_target: Literal["source", "target"],
@@ -217,7 +196,7 @@ class PlanarPushingPlanner:
             source_or_target,
             one_knot_point=True,
         )
-        mode.set_finger_initial_pos(finger_pos)
+        mode.set_finger_initial_pose(finger_pose)
         mode.set_slider_pose(slider_pose)
         vertex = self.gcs.AddVertex(mode.get_convex_set(), source_or_target)
         pair = VertexModePair(vertex, mode)

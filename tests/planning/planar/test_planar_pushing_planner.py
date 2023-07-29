@@ -99,12 +99,12 @@ def test_planar_pushing_planner_set_initial_and_final(
     box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
 
     planar_pushing_planner.set_initial_poses(
-        finger_initial_pose.pos(),
+        finger_initial_pose,
         box_initial_pose,
     )
 
     planar_pushing_planner.set_target_poses(
-        finger_initial_pose.pos(),
+        finger_initial_pose,
         box_target_pose,
     )
 
@@ -210,11 +210,11 @@ def test_planar_pushing_planner_make_plan(
     box_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.4)
 
     planner.set_initial_poses(
-        finger_initial_pose.pos(),
+        finger_initial_pose,
         box_initial_pose,
     )
     planner.set_target_poses(
-        finger_target_pose.pos(),
+        finger_target_pose,
         box_target_pose,
     )
 

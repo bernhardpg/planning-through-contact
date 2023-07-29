@@ -49,9 +49,9 @@ def test_add_continuity_constraints_between_non_collision_modes(
     target_mode.set_slider_pose(slider_pose)
 
     finger_initial_pose = PlanarPose(-0.2, 0, 0)
-    source_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    source_mode.set_finger_initial_pose(finger_initial_pose)
     finger_final_pose = PlanarPose(0.3, 0.5, 0)
-    target_mode.set_finger_final_pos(finger_final_pose.pos())
+    target_mode.set_finger_final_pose(finger_final_pose)
 
     gcs = opt.GraphOfConvexSets()
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
@@ -112,7 +112,7 @@ def test_add_continuity_between_non_coll_and_face_contact(
         loc, plan_specs, rigid_body_box
     )
     target_mode.set_slider_pose(slider_final_pose)
-    target_mode.set_finger_final_pos(finger_final_pose.pos())
+    target_mode.set_finger_final_pose(finger_final_pose)
 
     gcs = opt.GraphOfConvexSets()
     source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)

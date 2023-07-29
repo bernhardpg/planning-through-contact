@@ -9,7 +9,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
-    check_pos_in_contact_location,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -17,6 +16,9 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.tools import (
+    check_finger_pose_in_contact_location,
+)
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
@@ -26,7 +28,10 @@ from tests.geometry.planar.fixtures import (
     non_collision_vars,
     rigid_body_box,
 )
-from tests.geometry.planar.tools import assert_initial_and_final_poses
+from tests.geometry.planar.tools import (
+    assert_initial_and_final_poses,
+    assert_object_is_avoided,
+)
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -113,9 +118,9 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     non_collision_mode.set_slider_pose(slider_pose)
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
-    non_collision_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    non_collision_mode.set_finger_initial_pose(finger_initial_pose)
     finger_final_pose = PlanarPose(-0.15, 0, 0)
-    non_collision_mode.set_finger_final_pos(finger_final_pose.pos())
+    non_collision_mode.set_finger_final_pose(finger_final_pose)
 
     result = Solve(non_collision_mode.prog)
     assert result.is_success()
@@ -137,9 +142,9 @@ def test_infeasible_non_collision_mode(non_collision_mode: NonCollisionMode) -> 
     non_collision_mode.set_slider_pose(slider_pose)
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
-    non_collision_mode.set_finger_initial_pos(finger_initial_pose.pos())
+    non_collision_mode.set_finger_initial_pose(finger_initial_pose)
     finger_final_pose = PlanarPose(0, 0, 0)  # Will cause penetration
-    non_collision_mode.set_finger_final_pos(finger_final_pose.pos())
+    non_collision_mode.set_finger_final_pose(finger_final_pose)
 
     result = Solve(non_collision_mode.prog)
     assert not result.is_success()
@@ -149,23 +154,29 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 2)
     body_pose = PlanarPose(0, 0, 0)
 
-    finger_pos_1 = PlanarPose(0, 0, 0).pos()
-    res_1 = check_pos_in_contact_location(finger_pos_1, loc, rigid_body_box, body_pose)
+    finger_pose_1 = PlanarPose(0, 0, 0)
+    res_1 = check_finger_pose_in_contact_location(
+        finger_pose_1, loc, rigid_body_box, body_pose
+    )
     assert res_1 == False  # penetrates the box
 
-    finger_pos_2 = PlanarPose(0, -0.6, 0).pos()
-    res_2 = check_pos_in_contact_location(finger_pos_2, loc, rigid_body_box, body_pose)
+    finger_pose_2 = PlanarPose(0, -0.6, 0)
+    res_2 = check_finger_pose_in_contact_location(
+        finger_pose_2, loc, rigid_body_box, body_pose
+    )
     assert res_2 == True
 
-    finger_pos_3 = PlanarPose(0.1, -0.6, 0).pos()
-    res_3 = check_pos_in_contact_location(finger_pos_3, loc, rigid_body_box, body_pose)
+    finger_pose_3 = PlanarPose(0.1, -0.6, 0)
+    res_3 = check_finger_pose_in_contact_location(
+        finger_pose_3, loc, rigid_body_box, body_pose
+    )
     assert res_3 == True
 
     loc_2 = PolytopeContactLocation(ContactLocation.FACE, 3)
     body_pose_2 = PlanarPose(0.1, 0, 0)
-    finger_pos_4 = PlanarPose(-0.4, 0, 0).pos()
-    res_4 = check_pos_in_contact_location(
-        finger_pos_4, loc_2, rigid_body_box, body_pose_2
+    finger_pose_4 = PlanarPose(-0.4, 0, 0)
+    res_4 = check_finger_pose_in_contact_location(
+        finger_pose_4, loc_2, rigid_body_box, body_pose_2
     )
     assert res_4 == True
 
@@ -183,9 +194,9 @@ def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
     mode.set_slider_pose(slider_pose)
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
-    mode.set_finger_initial_pos(finger_initial_pose.pos())
+    mode.set_finger_initial_pose(finger_initial_pose)
     finger_final_pose = PlanarPose(-0.4, -0.2, 0)
-    mode.set_finger_final_pos(finger_final_pose.pos())
+    mode.set_finger_final_pose(finger_final_pose)
 
     result = Solve(mode.prog)
     assert result.is_success()
@@ -228,9 +239,9 @@ def test_avoid_object(rigid_body_box: RigidBody) -> None:
     mode.set_slider_pose(slider_pose)
 
     finger_initial_pose = PlanarPose(-0.15, 0.13, 0)
-    mode.set_finger_initial_pos(finger_initial_pose.pos())
+    mode.set_finger_initial_pose(finger_initial_pose)
     finger_final_pose = PlanarPose(-0.15, -0.13, 0)
-    mode.set_finger_final_pos(finger_final_pose.pos())
+    mode.set_finger_final_pose(finger_final_pose)
 
     result = Solve(mode.prog)
     assert result.is_success()
@@ -242,10 +253,7 @@ def test_avoid_object(rigid_body_box: RigidBody) -> None:
         traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
     )
 
-    plane = rigid_body_box.geometry.faces[loc.idx]
-    CONST = 0.05
-    for p_BF in traj.p_c_B.T[1:-2]:
-        assert plane.dist_to(p_BF) >= CONST
+    assert_object_is_avoided(rigid_body_box.geometry, traj)
 
     DEBUG = False
     if DEBUG:

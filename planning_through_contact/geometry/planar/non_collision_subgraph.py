@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, Literal, NamedTuple, Tuple
 
+import numpy as np
+import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import Binding, QuadraticCost
 
@@ -10,8 +12,10 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 )
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.tools import find_first_matching_location
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -36,6 +40,8 @@ class NonCollisionSubGraph:
     sets: List[opt.ConvexSet]
     non_collision_modes: List[NonCollisionMode]
     non_collision_vertices: List[GcsVertex]
+    body: RigidBody
+    plan_specs: PlanarPlanSpecs
 
     @classmethod
     def create_with_gcs(
@@ -86,10 +92,7 @@ class NonCollisionSubGraph:
             )
 
         return cls(
-            gcs,
-            sets,
-            non_collision_modes,
-            non_collision_vertices,
+            gcs, sets, non_collision_modes, non_collision_vertices, body, plan_specs
         )
 
     @staticmethod
@@ -128,6 +131,58 @@ class NonCollisionSubGraph:
             gcs_add_edge_with_continuity(
                 self.gcs, subgraph_connection, external_connection
             )
+
+    def _set_initial_or_final_poses(
+        self,
+        pusher_pose: PlanarPose,
+        slider_pose: PlanarPose,
+        initial_or_final: Literal["initial", "final"],
+    ) -> None:
+        loc = find_first_matching_location(pusher_pose, slider_pose, self.body)
+        mode_name = "source" if initial_or_final == "initial" else "target"
+        mode = NonCollisionMode.create_from_plan_spec(
+            loc,
+            self.plan_specs,
+            self.body,
+            mode_name,
+            one_knot_point=True,
+        )
+        mode.set_slider_pose(slider_pose)
+
+        if initial_or_final == "initial":
+            mode.set_finger_initial_pose(pusher_pose)
+        else:  # final
+            mode.set_finger_final_pose(pusher_pose)
+
+        vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
+
+        pair = VertexModePair(vertex, mode)
+        if initial_or_final == "initial":
+            kwargs = {"outgoing": False, "incoming": True}
+        else:
+            kwargs = {"outgoing": True, "incoming": False}
+        self.connect_with_continuity_constraints(loc.idx, pair, **kwargs)
+
+        if initial_or_final == "initial":
+            self.source = pair
+        else:  # final
+            self.target = pair
+
+    def set_initial_poses(
+        self,
+        pusher_initial_pose: PlanarPose,
+        slider_initial_pose: PlanarPose,
+    ) -> None:
+        self._set_initial_or_final_poses(
+            pusher_initial_pose, slider_initial_pose, "initial"
+        )
+
+    def set_final_poses(
+        self,
+        pusher_final_pose: PlanarPose,
+        slider_final_pose: PlanarPose,
+    ) -> None:
+        self._set_initial_or_final_poses(pusher_final_pose, slider_final_pose, "final")
 
     def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
         return {

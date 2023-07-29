@@ -35,22 +35,6 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
-def check_pos_in_contact_location(
-    pos: npt.NDArray[np.float64],
-    loc: PolytopeContactLocation,
-    body: RigidBody,
-    body_pose: PlanarPose,
-) -> bool:
-    specs = PlanarPlanSpecs()
-    mode = NonCollisionMode.create_from_plan_spec(loc, specs, body, one_knot_point=True)
-
-    mode.set_finger_initial_pos(pos)
-    mode.set_slider_pose(body_pose)
-
-    result = Solve(mode.prog)
-    return result.is_success()
-
-
 @dataclass
 class NonCollisionVariables(AbstractModeVariables):
     p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
@@ -235,13 +219,19 @@ class NonCollisionMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.sin_th == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WB, pose.pos()))
 
-    def set_finger_initial_pos(self, pos: npt.NDArray[np.float64]) -> None:
-        self.p_BF_initial = pos
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pos))
+    def set_finger_initial_pose(self, pose: PlanarPose) -> None:
+        """
+        NOTE: Only sets the position of the finger (a point finger has no rotation).
+        """
+        self.finger_initial_pose = pose
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pose.pos()))
 
-    def set_finger_final_pos(self, pos: npt.NDArray[np.float64]) -> None:
-        self.p_BF_final = pos
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pos))
+    def set_finger_final_pose(self, pose: PlanarPose) -> None:
+        """
+        NOTE: Only sets the position of the finger (a point finger has no rotation).
+        """
+        self.finger_final_pose = pose
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pose.pos()))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         return self.prog.FindDecisionVariableIndices(vars)

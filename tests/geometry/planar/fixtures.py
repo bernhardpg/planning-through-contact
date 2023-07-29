@@ -16,16 +16,19 @@ from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
 )
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    NonCollisionSubGraph,
+)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
-# @pytest.fixture
+@pytest.fixture
 def box_geometry() -> Box2d:
     return Box2d(width=0.3, height=0.3)
 
 
-# @pytest.fixture
+@pytest.fixture
 def rigid_body_box(box_geometry: Box2d) -> RigidBody:
     mass = 0.3
     box = RigidBody("box", box_geometry, mass)
@@ -86,7 +89,7 @@ def face_contact_mode(rigid_body_box: RigidBody) -> FaceContactMode:
     return mode
 
 
-# @pytest.fixture
+@pytest.fixture
 def gcs_options() -> opt.GraphOfConvexSetsOptions:
     options = opt.GraphOfConvexSetsOptions()
     options.solver_options = SolverOptions()
@@ -99,3 +102,47 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
         options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
     return options
+
+
+# TODO(bernhardpg): use pytest.mark.parametrize
+@pytest.fixture
+def subgraph_with_initial_and_final_cond(
+    rigid_body_box: RigidBody,
+) -> NonCollisionSubGraph:
+    plan_specs = PlanarPlanSpecs()
+    gcs = opt.GraphOfConvexSets()
+
+    subgraph = NonCollisionSubGraph.create_with_gcs(
+        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=False
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    finger_initial_pose = PlanarPose(-0.2, 0, 0)
+    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+
+    subgraph.set_initial_poses(finger_initial_pose, slider_pose)
+    subgraph.set_final_poses(finger_final_pose, slider_pose)
+
+    return subgraph
+
+
+# TODO(bernhardpg): use pytest.mark.parametrize
+@pytest.fixture
+def subgraph_with_initial_and_final_cond_and_avoidance(
+    rigid_body_box: RigidBody,
+) -> NonCollisionSubGraph:
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=5)
+    gcs = opt.GraphOfConvexSets()
+
+    subgraph = NonCollisionSubGraph.create_with_gcs(
+        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=True
+    )
+
+    slider_pose = PlanarPose(0.3, 0, 0)
+    finger_initial_pose = PlanarPose(-0.15, 0, 0)
+    finger_final_pose = PlanarPose(0.15, -0.1, 0)
+
+    subgraph.set_initial_poses(finger_initial_pose, slider_pose)
+    subgraph.set_final_poses(finger_final_pose, slider_pose)
+
+    return subgraph

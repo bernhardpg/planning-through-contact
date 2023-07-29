@@ -3,6 +3,11 @@ from typing import Literal, Optional
 import numpy as np
 import numpy.typing as npt
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.hyperplane import Hyperplane
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import PlanarTrajectory
 
@@ -55,3 +60,24 @@ def assert_initial_and_final_poses(
 
     if target_finger_pose and target_slider_pose:
         _assert_traj_finger_pos(traj, target_slider_pose, target_finger_pose, "end")
+
+
+def assert_object_is_avoided(
+    object_geometry: CollisionGeometry,
+    traj: PlanarTrajectory,
+    min_distance: float = 0.05,
+    start_idx: int = 1,
+    end_idx: int = -1,
+) -> None:
+    """
+    Checks that all finger positions in a trajectory is outside at least one face of the object.
+
+    @param start_idx: Where to start checking. By default, the first point is skipped (as it will often be in contact)
+    @param end_idx: Where to stop checking. By default, the last point is skipped (as it will often be in contact)
+    """
+    outside_faces = [
+        # each point must be outside one face
+        any([face.dist_to(p_BF) >= min_distance for face in object_geometry.faces])
+        for p_BF in traj.p_c_B.T[start_idx:end_idx]
+    ]
+    assert all(outside_faces)
