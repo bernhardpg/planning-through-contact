@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pytest
@@ -214,14 +214,24 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
                 "EXIT_NON_COLL_3",
                 "target",
             ],
-        )
+        ),
+        (
+            {"partial": False},
+            {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            None,
+        ),
     ],
     indirect=["planner"],
 )
 def test_make_plan(
     planner: PlanarPushingPlanner,
     boundary_conds: Dict[str, PlanarPose],
-    target_path: List[str],
+    target_path: Optional[List[str]],
 ) -> None:
     planner.set_initial_poses(
         boundary_conds["finger_initial_pose"],
@@ -235,7 +245,8 @@ def test_make_plan(
     result = planner._solve()
     assert result.is_success()
 
-    assert_planning_path_matches_target(planner, result, target_path)
+    if target_path:
+        assert_planning_path_matches_target(planner, result, target_path)
 
     path = planner._get_gcs_solution_path(result)
     traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=True)
@@ -251,7 +262,7 @@ def test_make_plan(
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
