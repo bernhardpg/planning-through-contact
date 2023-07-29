@@ -93,8 +93,18 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
 @pytest.mark.parametrize(
     "subgraph",
     [
-        {"boundary_conds": True, "avoid_object": False},
-        {"boundary_conds": True, "avoid_object": True},
+        {
+            "boundary_conds": True,
+            "avoid_object": False,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0, 0),
+        },
+        {
+            "boundary_conds": True,
+            "avoid_object": True,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0, 0),
+        },
     ],
     indirect=["subgraph"],
 )
@@ -124,8 +134,18 @@ def test_non_collision_subgraph_initial_and_final(
 @pytest.mark.parametrize(
     "subgraph",
     [
-        {"boundary_conds": True, "avoid_object": False},
-        {"boundary_conds": True, "avoid_object": True},
+        {
+            "boundary_conds": True,
+            "avoid_object": False,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0, 0),
+        },
+        {
+            "boundary_conds": True,
+            "avoid_object": True,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0, 0),
+        },
     ],
     indirect=["subgraph"],
 )
@@ -145,7 +165,7 @@ def test_non_collision_subgraph_planning(
     pairs["target"] = subgraph.target
     traj = PlanarTrajectoryBuilder.from_result(
         result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
-    ).get_trajectory(interpolate=True)
+    ).get_trajectory(interpolate=False)
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)

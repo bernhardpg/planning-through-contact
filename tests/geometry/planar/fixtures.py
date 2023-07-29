@@ -109,7 +109,9 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
 def subgraph(
     rigid_body_box: RigidBody, request: FixtureRequest
 ) -> NonCollisionSubGraph:
-    plan_specs = PlanarPlanSpecs()
+    num_knot_points = 5 if request.param["avoid_object"] else 2
+
+    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=num_knot_points)
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
@@ -122,8 +124,8 @@ def subgraph(
 
     if request.param["boundary_conds"]:
         slider_pose = PlanarPose(0.3, 0, 0)
-        finger_initial_pose = PlanarPose(-0.2, 0, 0)
-        finger_final_pose = PlanarPose(0.3, 0.5, 0)
+        finger_initial_pose = request.param["finger_initial"]
+        finger_final_pose = request.param["finger_final"]
 
         subgraph.set_initial_poses(finger_initial_pose, slider_pose)
         subgraph.set_final_poses(finger_final_pose, slider_pose)
