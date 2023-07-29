@@ -9,7 +9,9 @@ from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
+    Cost,
     LinearConstraint,
+    LinearCost,
     MathematicalProgram,
     MathematicalProgramResult,
     QuadraticCost,
@@ -33,22 +35,6 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
-def check_pos_in_contact_location(
-    pos: npt.NDArray[np.float64],
-    loc: PolytopeContactLocation,
-    body: RigidBody,
-    body_pose: PlanarPose,
-) -> bool:
-    specs = PlanarPlanSpecs()
-    mode = NonCollisionMode.create_from_plan_spec(loc, specs, body, one_knot_point=True)
-
-    mode.set_finger_initial_pos(pos)
-    mode.set_slider_pose(body_pose)
-
-    result = Solve(mode.prog)
-    return result.is_success()
-
-
 @dataclass
 class NonCollisionVariables(AbstractModeVariables):
     p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
@@ -62,11 +48,6 @@ class NonCollisionVariables(AbstractModeVariables):
     def from_prog(
         cls, prog: MathematicalProgram, num_knot_points: int, time_in_mode: float
     ) -> "NonCollisionVariables":
-        if not num_knot_points <= 2:
-            raise NotImplementedError(
-                "Currently only one or two knot points are supported for NonCollisionModes"
-            )
-
         # Finger location
         p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
         p_BF_ys = prog.NewContinuousVariables(num_knot_points, "p_BF_y")
@@ -147,17 +128,28 @@ class NonCollisionVariables(AbstractModeVariables):
         NUM_DIMS = 2
         return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
 
+    @property
+    def p_c_Bs(self):
+        return self.p_BFs
+
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
+    avoid_object: bool = False
+    avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
+    cost_param_avoidance_lin: float = 0.1
+    cost_param_avoidance_quad_dist: float = 0.2
+    cost_param_eucl: float = 1.0
+
     @classmethod
     def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
-        object: RigidBody,
+        slider: RigidBody,
         name: Optional[str] = None,
         one_knot_point: bool = False,
+        avoid_object: bool = False,
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -169,7 +161,8 @@ class NonCollisionMode(AbstractContactMode):
             num_knot_points,
             specs.time_non_collision,
             contact_location,
-            object,
+            slider,
+            avoid_object,
         )
 
     def __post_init__(self) -> None:
@@ -190,20 +183,38 @@ class NonCollisionMode(AbstractContactMode):
             p_BF = self.variables.p_BFs[k]
 
             for plane in self.planes:
-                dist_to_face = (plane.a.T.dot(p_BF) - plane.b).item()  # a'x >= b
-                self.prog.AddLinearConstraint(dist_to_face >= 0)
+                self.prog.AddLinearConstraint(plane.dist_to(p_BF) >= 0)
 
     def _define_cost(self) -> None:
-        position_diffs = np.array(
-            [
-                p_next - p_curr
-                for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
-                )
-            ]
+        position_diffs = [
+            p_next - p_curr
+            for p_next, p_curr in zip(
+                self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+            )
+        ]
+        if self.num_knot_points == 1:
+            # Can't vstack only one array
+            position_diffs = np.array(position_diffs)
+        else:
+            position_diffs = np.vstack(position_diffs)
+        # position_diffs is now one long vector with diffs in each entry
+        squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+        self.prog.AddQuadraticCost(
+            self.cost_param_eucl * squared_eucl_dist, is_convex=True
         )
-        squared_eucl_dist = np.sum([d.T.dot(d) for d in position_diffs.T])
-        self.prog.AddCost(squared_eucl_dist)
+
+        if self.avoid_object:
+            plane = self.object.geometry.faces[self.contact_location.idx]
+            dists = [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
+            if self.avoidance_cost_type == "linear":
+                self.prog.AddLinearCost(
+                    -self.cost_param_avoidance_lin * np.sum(dists)
+                )  # maximize distances
+            else:  # quadratic
+                squared_dists = [
+                    (d - self.cost_param_avoidance_quad_dist) ** 2 for d in dists
+                ]
+                self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -211,13 +222,19 @@ class NonCollisionMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.sin_th == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WB, pose.pos()))
 
-    def set_finger_initial_pos(self, pos: npt.NDArray[np.float64]) -> None:
-        self.p_BF_initial = pos
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pos))
+    def set_finger_initial_pose(self, pose: PlanarPose) -> None:
+        """
+        NOTE: Only sets the position of the finger (a point finger has no rotation).
+        """
+        self.finger_initial_pose = pose
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pose.pos()))
 
-    def set_finger_final_pos(self, pos: npt.NDArray[np.float64]) -> None:
-        self.p_BF_final = pos
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pos))
+    def set_finger_final_pose(self, pose: PlanarPose) -> None:
+        """
+        NOTE: Only sets the position of the finger (a point finger has no rotation).
+        """
+        self.finger_final_pose = pose
+        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pose.pos()))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         return self.prog.FindDecisionVariableIndices(vars)
@@ -311,16 +328,45 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.sin_th,  # type: ignore
             )
 
-    def _get_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        assert len(self.prog.quadratic_costs()) == 1
+    # TODO(bernhardpg): refactor common code
+    def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
+        if self.avoid_object and self.avoidance_cost_type == "quadratic":
+            assert len(self.prog.quadratic_costs()) == 2
+        else:
+            assert len(self.prog.quadratic_costs()) == 1
 
-        cost = self.prog.quadratic_costs()[0]  # only one cost term for these modes
+        eucl_dist_cost = self.prog.quadratic_costs()[0]  # should only be one cost
+        var_idxs = self.get_variable_indices_in_gcs_vertex(eucl_dist_cost.variables())
+        return var_idxs, eucl_dist_cost.evaluator()
 
-        var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
-        return var_idxs, cost.evaluator()
+    # TODO(bernhardpg): refactor common code
+    def _get_object_avoidance_cost_term(
+        self,
+    ) -> Tuple[List[int], LinearCost | QuadraticCost]:
+        if self.avoidance_cost_type == "linear":
+            assert len(self.prog.linear_costs()) == 1
+            object_avoidance_cost = self.prog.linear_costs()[0]
+        else:  # quadratic
+            assert len(self.prog.quadratic_costs()) == 2
+            object_avoidance_cost = self.prog.quadratic_costs()[1]
+
+        var_idxs = self.get_variable_indices_in_gcs_vertex(
+            object_avoidance_cost.variables()
+        )
+        return var_idxs, object_avoidance_cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
-        var_idxs, evaluator = self._get_cost_term()
+        # euclidean distance cost
+        var_idxs, evaluator = self._get_eucl_dist_cost_term()
         vars = vertex.x()[var_idxs]
         binding = Binding[QuadraticCost](evaluator, vars)
         vertex.AddCost(binding)
+
+        if self.avoid_object:
+            var_idxs, evaluator = self._get_object_avoidance_cost_term()
+            vars = vertex.x()[var_idxs]
+            cost_type = (
+                LinearCost if self.avoidance_cost_type == "linear" else QuadraticCost
+            )
+            binding = Binding[cost_type](evaluator, vars)
+            vertex.AddCost(binding)

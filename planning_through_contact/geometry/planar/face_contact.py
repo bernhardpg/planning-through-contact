@@ -183,6 +183,9 @@ class FaceContactVariables(AbstractModeVariables):
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
+    cost_param_lin_vels: float = 1.0
+    cost_param_ang_vels: float = 1.0
+
     @classmethod
     def create_from_plan_spec(
         cls,
@@ -264,7 +267,7 @@ class FaceContactMode(AbstractContactMode):
     def _define_costs(self) -> None:
         # Minimize kinetic energy through squared velocities
         sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in self.variables.v_WBs]).item()  # type: ignore
-        self.prog.AddQuadraticCost(sq_linear_vels)
+        self.prog.AddQuadraticCost(self.cost_param_lin_vels * sq_linear_vels)
 
         sq_angular_vels = np.sum(
             [
@@ -274,17 +277,34 @@ class FaceContactMode(AbstractContactMode):
                 )
             ]
         )
-        self.prog.AddQuadraticCost(sq_angular_vels)  # type: ignore
+        self.prog.AddQuadraticCost(self.cost_param_ang_vels * sq_angular_vels)  # type: ignore
+
+    def set_finger_pos(self, lam: float) -> None:
+        """
+        Set finger position along the contact face.
+        As the finger position is constant, there is no difference between
+        initial and target value.
+
+        @param lam: Position along face, value 0 to 1.
+        """
+        if lam >= 1 or lam <= 0:
+            raise ValueError("The finger position should be set between 0 and 1")
+
+        self.prog.AddLinearConstraint(self.variables.lams[0] == lam)
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[0], pose.pos()))
 
+        self.slider_initial_pose = pose
+
     def set_slider_final_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[-1] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[-1] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[-1], pose.pos()))
+
+        self.slider_final_pose = pose
 
     def formulate_convex_relaxation(self, make_bounded: bool = False) -> None:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)

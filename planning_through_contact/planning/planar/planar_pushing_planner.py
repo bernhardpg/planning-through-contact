@@ -25,7 +25,6 @@ from planning_through_contact.geometry.planar.face_contact import (
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
-    check_pos_in_contact_location,
 )
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
@@ -39,6 +38,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.tools import find_first_matching_location
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -58,9 +58,16 @@ class PlanarPushingPlanner:
         slider: RigidBody,
         plan_specs: PlanarPlanSpecs,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
+        avoid_object: bool = False,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
+        self.avoid_object = avoid_object
+
+        if self.avoid_object and plan_specs.num_knot_points_non_collision <= 2:
+            raise ValueError(
+                "It is not possible to avoid object with only 2 knot points."
+            )
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
@@ -114,6 +121,7 @@ class PlanarPushingPlanner:
             self.slider,
             self.plan_specs,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
+            avoid_object=self.avoid_object,
         )
         for idx in (first_contact_mode_idx, second_contact_mode_idx):
             subgraph.connect_with_continuity_constraints(
@@ -149,7 +157,7 @@ class PlanarPushingPlanner:
             kwargs = {"outgoing": False, "incoming": True}
 
         subgraph = NonCollisionSubGraph.create_with_gcs(
-            self.gcs, self.slider, self.plan_specs, name
+            self.gcs, self.slider, self.plan_specs, name, avoid_object=self.avoid_object
         )
 
         for idx, (vertex, mode) in enumerate(
@@ -160,88 +168,21 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def _find_first_matching_location(
-        self,
-        finger_pos: npt.NDArray[np.float64],
-        slider_pose: PlanarPose,
-    ) -> PolytopeContactLocation:
-        # we always add all non-collision modes, even when we don't add all contact modes
-        # (think of maneuvering around the object etc)
-        locations = self.slider.geometry.contact_locations
-        matching_locs = [
-            loc
-            for loc in locations
-            if check_pos_in_contact_location(finger_pos, loc, self.slider, slider_pose)
-        ]
-        if len(matching_locs) == 0:
-            raise ValueError(
-                "No valid configurations found for specified initial or target poses"
-            )
-        return matching_locs[0]
-
     def set_initial_poses(
         self,
-        finger_pos: npt.NDArray[np.float64],
+        finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = self._find_first_matching_location(finger_pos, slider_pose)
-        self.source = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, loc, "source"
-        )
-        self.all_pairs[self.source.vertex.name()] = self.source
+        self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+        self.source = self.source_subgraph.source
 
     def set_target_poses(
         self,
-        finger_pos: npt.NDArray[np.float64],
+        finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = self._find_first_matching_location(finger_pos, slider_pose)
-        self.target = self._add_source_or_target_vertex(
-            finger_pos, slider_pose, loc, "target"
-        )
-        self.all_pairs[self.target.vertex.name()] = self.target
-
-    def _add_source_or_target_vertex(
-        self,
-        finger_pos: npt.NDArray[np.float64],
-        slider_pose: PlanarPose,
-        loc: PolytopeContactLocation,
-        source_or_target: Literal["source", "target"],
-    ) -> VertexModePair:
-        mode = NonCollisionMode.create_from_plan_spec(
-            loc,
-            self.plan_specs,
-            self.slider,
-            source_or_target,
-            one_knot_point=True,
-        )
-        mode.set_finger_initial_pos(finger_pos)
-        mode.set_slider_pose(slider_pose)
-        vertex = self.gcs.AddVertex(mode.get_convex_set(), source_or_target)
-        pair = VertexModePair(vertex, mode)
-
-        if source_or_target == "source":
-            # edge from source to source subgraph
-            gcs_add_edge_with_continuity(
-                self.gcs,
-                pair,
-                VertexModePair(
-                    self.source_subgraph.non_collision_vertices[loc.idx],
-                    self.source_subgraph.non_collision_modes[loc.idx],
-                ),
-            )
-        else:
-            # edge from target subgraph to target
-            gcs_add_edge_with_continuity(
-                self.gcs,
-                VertexModePair(
-                    self.target_subgraph.non_collision_vertices[loc.idx],
-                    self.target_subgraph.non_collision_modes[loc.idx],
-                ),
-                pair,
-            )
-
-        return pair
+        self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+        self.target = self.target_subgraph.target
 
     def _solve(
         self, print_output: bool = False, convex_relaxation: bool = True
@@ -255,6 +196,9 @@ class PlanarPushingPlanner:
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 1
+
+        assert self.source is not None
+        assert self.target is not None
 
         result = self.gcs.SolveShortestPath(
             self.source.vertex, self.target.vertex, options

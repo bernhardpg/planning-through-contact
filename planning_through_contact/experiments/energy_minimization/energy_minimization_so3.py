@@ -5,8 +5,8 @@ import numpy.typing as npt
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.sdp import create_sdp_relaxation
-from visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 NUM_CTRL_POINTS = 6
 NUM_PARAMS = 9

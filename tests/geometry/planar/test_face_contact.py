@@ -21,6 +21,7 @@ from tests.geometry.planar.fixtures import (
     face_contact_vars,
     rigid_body_box,
 )
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 
 def test_face_contact_variables(
@@ -187,11 +188,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     vars = face_contact_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert np.allclose(traj.R_WB[0], initial_pose.two_d_rot_matrix())
-    assert np.allclose(traj.p_WB[:, 0:1], initial_pose.pos())
-
-    assert np.allclose(traj.R_WB[-1], final_pose.two_d_rot_matrix())
-    assert np.allclose(traj.p_WB[:, -1:-2], final_pose.pos())
+    assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
     DEBUG = False
     if DEBUG:
