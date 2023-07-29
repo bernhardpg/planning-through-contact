@@ -42,6 +42,7 @@ class NonCollisionSubGraph:
     non_collision_vertices: List[GcsVertex]
     body: RigidBody
     plan_specs: PlanarPlanSpecs
+    avoid_object: bool
 
     @classmethod
     def create_with_gcs(
@@ -92,7 +93,13 @@ class NonCollisionSubGraph:
             )
 
         return cls(
-            gcs, sets, non_collision_modes, non_collision_vertices, body, plan_specs
+            gcs,
+            sets,
+            non_collision_modes,
+            non_collision_vertices,
+            body,
+            plan_specs,
+            avoid_object,
         )
 
     @staticmethod

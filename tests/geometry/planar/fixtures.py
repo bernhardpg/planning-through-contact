@@ -1,5 +1,6 @@
 import pydrake.geometry.optimization as opt
 import pytest
+from _pytest.fixtures import FixtureRequest
 from pydrake.solvers import CommonSolverOption, MathematicalProgram, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -104,45 +105,27 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
     return options
 
 
-# TODO(bernhardpg): use pytest.mark.parametrize
 @pytest.fixture
-def subgraph_with_initial_and_final_cond(
-    rigid_body_box: RigidBody,
+def subgraph(
+    rigid_body_box: RigidBody, request: FixtureRequest
 ) -> NonCollisionSubGraph:
     plan_specs = PlanarPlanSpecs()
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
-        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=False
+        gcs,
+        rigid_body_box,
+        plan_specs,
+        "Subgraph_TEST",
+        avoid_object=request.param["avoid_object"],
     )
 
-    slider_pose = PlanarPose(0.3, 0, 0)
-    finger_initial_pose = PlanarPose(-0.2, 0, 0)
-    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+    if request.param["boundary_conds"]:
+        slider_pose = PlanarPose(0.3, 0, 0)
+        finger_initial_pose = PlanarPose(-0.2, 0, 0)
+        finger_final_pose = PlanarPose(0.3, 0.5, 0)
 
-    subgraph.set_initial_poses(finger_initial_pose, slider_pose)
-    subgraph.set_final_poses(finger_final_pose, slider_pose)
-
-    return subgraph
-
-
-# TODO(bernhardpg): use pytest.mark.parametrize
-@pytest.fixture
-def subgraph_with_initial_and_final_cond_and_avoidance(
-    rigid_body_box: RigidBody,
-) -> NonCollisionSubGraph:
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=5)
-    gcs = opt.GraphOfConvexSets()
-
-    subgraph = NonCollisionSubGraph.create_with_gcs(
-        gcs, rigid_body_box, plan_specs, "Subgraph_TEST", avoid_object=True
-    )
-
-    slider_pose = PlanarPose(0.3, 0, 0)
-    finger_initial_pose = PlanarPose(-0.15, 0, 0)
-    finger_final_pose = PlanarPose(0.15, -0.1, 0)
-
-    subgraph.set_initial_poses(finger_initial_pose, slider_pose)
-    subgraph.set_final_poses(finger_final_pose, slider_pose)
+        subgraph.set_initial_poses(finger_initial_pose, slider_pose)
+        subgraph.set_final_poses(finger_final_pose, slider_pose)
 
     return subgraph

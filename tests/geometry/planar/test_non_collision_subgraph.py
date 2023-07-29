@@ -31,8 +31,7 @@ from tests.geometry.planar.fixtures import (
     box_geometry,
     gcs_options,
     rigid_body_box,
-    subgraph_with_initial_and_final_cond,
-    subgraph_with_initial_and_final_cond_and_avoidance,
+    subgraph,
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
@@ -40,45 +39,68 @@ from tests.geometry.planar.tools import (
 )
 
 
-def test_non_collision_subgraph(
-    rigid_body_box: RigidBody,
-):
-    plan_specs = PlanarPlanSpecs()
-    gcs = opt.GraphOfConvexSets()
-
-    subgraph = NonCollisionSubGraph.create_with_gcs(
-        gcs, rigid_body_box, plan_specs, "Subgraph_TEST"
-    )
-
-    assert len(gcs.Vertices()) == len(subgraph.non_collision_modes)
+@pytest.mark.parametrize(
+    "subgraph",
+    [
+        {"boundary_conds": False, "avoid_object": False},
+        {"boundary_conds": False, "avoid_object": True},
+    ],
+    indirect=["subgraph"],
+)
+def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
+    assert len(subgraph.gcs.Vertices()) == len(subgraph.non_collision_modes)
 
     # Edges are bi-directional, one edge between each mode for box
-    assert len(gcs.Edges()) == len(subgraph.non_collision_modes) * 2
+    assert len(subgraph.gcs.Edges()) == len(subgraph.non_collision_modes) * 2
 
     num_continuity_variables = 6
-    for edge in gcs.Edges():
+    for edge in subgraph.gcs.Edges():
         assert len(edge.GetConstraints()) == num_continuity_variables
 
-    for vertex in gcs.Vertices():
-        # Squared eucl distance
-        costs = vertex.GetCosts()
-        assert len(costs) == 1
+    if subgraph.avoid_object:
+        # Check costs are correctly added to GCS instance
+        for v in subgraph.gcs.Vertices():
+            if v.name() in ("source", "target"):
+                continue
 
-        # p_BF for each knot point should be in the cost
-        cost = costs[0]
-        NUM_DIMS = 2
-        assert (
-            len(cost.variables()) == plan_specs.num_knot_points_non_collision * NUM_DIMS
-        )
+            costs = v.GetCosts()
+            assert len(costs) == 2
 
-        # Squared eucl distance
-        assert isinstance(cost.evaluator(), QuadraticCost)
+            # eucl distance cost
+            assert isinstance(costs[0].evaluator(), QuadraticCost)
+
+            # maximize distance cost
+            assert isinstance(costs[1].evaluator(), QuadraticCost)
+
+    else:
+        for vertex in subgraph.gcs.Vertices():
+            # Squared eucl distance
+            costs = vertex.GetCosts()
+            assert len(costs) == 1
+
+            # p_BF for each knot point should be in the cost
+            cost = costs[0]
+            NUM_DIMS = 2
+            assert (
+                len(cost.variables())
+                == subgraph.plan_specs.num_knot_points_non_collision * NUM_DIMS
+            )
+
+            # Squared eucl distance
+            assert isinstance(cost.evaluator(), QuadraticCost)
 
 
+@pytest.mark.parametrize(
+    "subgraph",
+    [
+        {"boundary_conds": True, "avoid_object": False},
+        {"boundary_conds": True, "avoid_object": True},
+    ],
+    indirect=["subgraph"],
+)
 def test_non_collision_subgraph_initial_and_final(
-    subgraph_with_initial_and_final_cond: NonCollisionSubGraph,
+    subgraph: NonCollisionSubGraph,
 ):
-    subgraph = subgraph_with_initial_and_final_cond
     source_mode = subgraph.source.mode
 
     assert isinstance(source_mode, NonCollisionMode)
@@ -99,10 +121,17 @@ def test_non_collision_subgraph_initial_and_final(
     assert len(subgraph.gcs.Edges()) == len(subgraph.non_collision_modes) * 2 + 2
 
 
+@pytest.mark.parametrize(
+    "subgraph",
+    [
+        {"boundary_conds": True, "avoid_object": False},
+        {"boundary_conds": True, "avoid_object": True},
+    ],
+    indirect=["subgraph"],
+)
 def test_non_collision_subgraph_planning(
-    subgraph_with_initial_and_final_cond: NonCollisionSubGraph,
+    subgraph: NonCollisionSubGraph,
 ):
-    subgraph = subgraph_with_initial_and_final_cond
     result = subgraph.gcs.SolveShortestPath(
         subgraph.source.vertex, subgraph.target.vertex
     )
@@ -130,6 +159,12 @@ def test_non_collision_subgraph_planning(
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
+
+    if subgraph.avoid_object:
+        # check that all trajectory points (after source and target modes) don't collide
+        assert_object_is_avoided(
+            subgraph.body.geometry, traj, min_distance=0.001, start_idx=2, end_idx=-2
+        )
 
     DEBUG = False
     if DEBUG:
@@ -200,62 +235,6 @@ def test_subgraph_with_contact_modes(
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
-
-
-def test_subgraph_with_object_avoidance(
-    subgraph_with_initial_and_final_cond_and_avoidance: NonCollisionSubGraph,
-) -> None:
-    subgraph = subgraph_with_initial_and_final_cond_and_avoidance
-
-    # Check costs are correctly added to GCS instance
-    for v in subgraph.gcs.Vertices():
-        if v.name() in ("source", "target"):
-            continue
-
-        costs = v.GetCosts()
-        assert len(costs) == 2
-
-        # eucl distance cost
-        assert isinstance(costs[0].evaluator(), QuadraticCost)
-
-        # maximize distance cost
-        assert isinstance(costs[1].evaluator(), QuadraticCost)
-
-    result = subgraph.gcs.SolveShortestPath(
-        subgraph.source.vertex, subgraph.target.vertex
-    )
-    assert result.is_success()
-
-    pairs = subgraph.get_all_vertex_mode_pairs()
-    pairs["source"] = subgraph.source
-    pairs["target"] = subgraph.target
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
-    ).get_trajectory(interpolate=False)
-
-    assert isinstance(subgraph.source.mode, NonCollisionMode)
-    assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses(
-        traj,
-        subgraph.source.mode.slider_pose,
-        subgraph.source.mode.finger_initial_pose,
-        subgraph.target.mode.slider_pose,
-        subgraph.target.mode.finger_final_pose,
-    )
-
-    # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_W) <= 3.0)
-
-    # check that all trajectory points (after source and target modes) don't collide
-    assert_object_is_avoided(
-        subgraph.body.geometry, traj, min_distance=0.001, start_idx=2, end_idx=-2
-    )
-
-    DEBUG = False
-    if DEBUG:
-        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
-        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)
 
 
 def test_subgraph_with_contact_modes_and_object_avoidance(
