@@ -192,7 +192,7 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
 
 
 @pytest.mark.parametrize(
-    "planner, initial_poses, target_path",
+    "planner, boundary_conds, target_path",
     [
         (
             {"partial": True},
@@ -220,16 +220,16 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
 )
 def test_make_plan(
     planner: PlanarPushingPlanner,
-    initial_poses: Dict[str, PlanarPose],
+    boundary_conds: Dict[str, PlanarPose],
     target_path: List[str],
 ) -> None:
     planner.set_initial_poses(
-        initial_poses["finger_initial_pose"],
-        initial_poses["box_initial_pose"],
+        boundary_conds["finger_initial_pose"],
+        boundary_conds["box_initial_pose"],
     )
     planner.set_target_poses(
-        initial_poses["finger_target_pose"],
-        initial_poses["box_target_pose"],
+        boundary_conds["finger_target_pose"],
+        boundary_conds["box_target_pose"],
     )
 
     result = planner._solve()
@@ -242,16 +242,16 @@ def test_make_plan(
 
     assert_initial_and_final_poses(
         traj,
-        initial_poses["box_initial_pose"],
-        initial_poses["finger_initial_pose"],
-        initial_poses["box_target_pose"],
-        initial_poses["finger_target_pose"],
+        boundary_conds["box_initial_pose"],
+        boundary_conds["finger_initial_pose"],
+        boundary_conds["box_target_pose"],
+        boundary_conds["finger_target_pose"],
     )
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)

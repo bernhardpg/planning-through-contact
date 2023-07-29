@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Dict, List, Literal, NamedTuple, Tuple
+from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -43,6 +43,8 @@ class NonCollisionSubGraph:
     body: RigidBody
     plan_specs: PlanarPlanSpecs
     avoid_object: bool
+    source: Optional[VertexModePair] = None
+    target: Optional[VertexModePair] = None
 
     @classmethod
     def create_with_gcs(
@@ -192,7 +194,13 @@ class NonCollisionSubGraph:
         self._set_initial_or_final_poses(pusher_final_pose, slider_final_pose, "final")
 
     def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
-        return {
+        all_pairs = {
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.non_collision_vertices, self.non_collision_modes)
         }
+        if self.source:
+            all_pairs[self.source.mode.name] = self.source
+        if self.target:
+            all_pairs[self.target.mode.name] = self.target
+
+        return all_pairs

@@ -165,64 +165,16 @@ class PlanarPushingPlanner:
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = find_first_matching_location(finger_pose, slider_pose, self.slider)
-        self.source = self._add_source_or_target_vertex(
-            finger_pose, slider_pose, loc, "source"
-        )
-        self.all_pairs[self.source.vertex.name()] = self.source
+        self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+        self.source = self.source_subgraph.source
 
     def set_target_poses(
         self,
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        loc = find_first_matching_location(finger_pose, slider_pose, self.slider)
-        self.target = self._add_source_or_target_vertex(
-            finger_pose, slider_pose, loc, "target"
-        )
-        self.all_pairs[self.target.vertex.name()] = self.target
-
-    def _add_source_or_target_vertex(
-        self,
-        finger_pose: PlanarPose,
-        slider_pose: PlanarPose,
-        loc: PolytopeContactLocation,
-        source_or_target: Literal["source", "target"],
-    ) -> VertexModePair:
-        mode = NonCollisionMode.create_from_plan_spec(
-            loc,
-            self.plan_specs,
-            self.slider,
-            source_or_target,
-            one_knot_point=True,
-        )
-        mode.set_finger_initial_pose(finger_pose)
-        mode.set_slider_pose(slider_pose)
-        vertex = self.gcs.AddVertex(mode.get_convex_set(), source_or_target)
-        pair = VertexModePair(vertex, mode)
-
-        if source_or_target == "source":
-            # edge from source to source subgraph
-            gcs_add_edge_with_continuity(
-                self.gcs,
-                pair,
-                VertexModePair(
-                    self.source_subgraph.non_collision_vertices[loc.idx],
-                    self.source_subgraph.non_collision_modes[loc.idx],
-                ),
-            )
-        else:
-            # edge from target subgraph to target
-            gcs_add_edge_with_continuity(
-                self.gcs,
-                VertexModePair(
-                    self.target_subgraph.non_collision_vertices[loc.idx],
-                    self.target_subgraph.non_collision_modes[loc.idx],
-                ),
-                pair,
-            )
-
-        return pair
+        self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+        self.target = self.target_subgraph.target
 
     def _solve(
         self, print_output: bool = False, convex_relaxation: bool = True
@@ -236,6 +188,9 @@ class PlanarPushingPlanner:
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = 1
+
+        assert self.source is not None
+        assert self.target is not None
 
         result = self.gcs.SolveShortestPath(
             self.source.vertex, self.target.vertex, options
