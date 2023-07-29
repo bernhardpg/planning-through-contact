@@ -164,6 +164,10 @@ def test_non_collision_subgraph_initial_and_final(
 def test_subgraph_planning(
     subgraph: NonCollisionSubGraph,
 ):
+    # get rid of all LSP errors
+    assert subgraph.source is not None
+    assert subgraph.target is not None
+
     result = subgraph.gcs.SolveShortestPath(
         subgraph.source.vertex, subgraph.target.vertex
     )

@@ -136,9 +136,10 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     avoid_object: bool = False
-    avoidance_cost: Literal["linear", "quadratic"] = "quadratic"
-    avoidance_param_linear: float = 0.1
-    avoidance_param_quadratic: float = 0.2
+    avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
+    cost_param_avoidance_lin: float = 0.1
+    cost_param_avoidance_quad_dist: float = 0.2
+    cost_param_eucl: float = 1.0
 
     @classmethod
     def create_from_plan_spec(
@@ -198,18 +199,20 @@ class NonCollisionMode(AbstractContactMode):
             position_diffs = np.vstack(position_diffs)
         # position_diffs is now one long vector with diffs in each entry
         squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-        self.prog.AddQuadraticCost(squared_eucl_dist, is_convex=True)
+        self.prog.AddQuadraticCost(
+            self.cost_param_eucl * squared_eucl_dist, is_convex=True
+        )
 
         if self.avoid_object:
             plane = self.object.geometry.faces[self.contact_location.idx]
             dists = [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
-            if self.avoidance_cost == "linear":
+            if self.avoidance_cost_type == "linear":
                 self.prog.AddLinearCost(
-                    -self.avoidance_param_linear * np.sum(dists)
+                    -self.cost_param_avoidance_lin * np.sum(dists)
                 )  # maximize distances
             else:  # quadratic
                 squared_dists = [
-                    (d - self.avoidance_param_quadratic) ** 2 for d in dists
+                    (d - self.cost_param_avoidance_quad_dist) ** 2 for d in dists
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
@@ -327,7 +330,7 @@ class NonCollisionMode(AbstractContactMode):
 
     # TODO(bernhardpg): refactor common code
     def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        if self.avoid_object and self.avoidance_cost == "quadratic":
+        if self.avoid_object and self.avoidance_cost_type == "quadratic":
             assert len(self.prog.quadratic_costs()) == 2
         else:
             assert len(self.prog.quadratic_costs()) == 1
@@ -340,7 +343,7 @@ class NonCollisionMode(AbstractContactMode):
     def _get_object_avoidance_cost_term(
         self,
     ) -> Tuple[List[int], LinearCost | QuadraticCost]:
-        if self.avoidance_cost == "linear":
+        if self.avoidance_cost_type == "linear":
             assert len(self.prog.linear_costs()) == 1
             object_avoidance_cost = self.prog.linear_costs()[0]
         else:  # quadratic
@@ -362,6 +365,8 @@ class NonCollisionMode(AbstractContactMode):
         if self.avoid_object:
             var_idxs, evaluator = self._get_object_avoidance_cost_term()
             vars = vertex.x()[var_idxs]
-            cost_type = LinearCost if self.avoidance_cost == "linear" else QuadraticCost
+            cost_type = (
+                LinearCost if self.avoidance_cost_type == "linear" else QuadraticCost
+            )
             binding = Binding[cost_type](evaluator, vars)
             vertex.AddCost(binding)

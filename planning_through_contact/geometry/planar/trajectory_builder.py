@@ -29,10 +29,6 @@ class PlanarTrajectory:
     p_c_B: npt.NDArray[np.float64]  # (2, traj_length)
 
     def __post_init__(self) -> None:
-        dets = np.array([np.linalg.det(R) for R in self.R_WB])
-        if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
-            raise ValueError("Rotations do not have determinant 1.")
-
         all_traj_lenths = np.array(
             [traj.shape[1] for traj in (self.p_WB, self.p_c_W, self.f_c_W)]
             + [len(self.R_WB)]
@@ -68,14 +64,17 @@ class PlanarTrajectoryBuilder:
         return cls(path)
 
     def get_trajectory(
-        self, dt: float = 0.01, interpolate: bool = True
+        self,
+        dt: float = 0.01,
+        interpolate: bool = True,
+        check_determinants: bool = True,
     ) -> PlanarTrajectory:
-        if interpolate:
-            # if we interpolate, we need to check determinants before interpolation!
+        if check_determinants:
             dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
             if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
                 raise ValueError("Rotations do not have determinant 1.")
 
+        if interpolate:
             R_WB = sum(
                 [
                     self.interpolate_so2_using_slerp(p.R_WBs, 0, p.time_in_mode, dt)

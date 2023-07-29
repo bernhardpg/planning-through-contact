@@ -58,9 +58,16 @@ class PlanarPushingPlanner:
         slider: RigidBody,
         plan_specs: PlanarPlanSpecs,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
+        avoid_object: bool = False,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
+        self.avoid_object = avoid_object
+
+        if self.avoid_object and plan_specs.num_knot_points_non_collision <= 2:
+            raise ValueError(
+                "It is not possible to avoid object with only 2 knot points."
+            )
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
@@ -114,6 +121,7 @@ class PlanarPushingPlanner:
             self.slider,
             self.plan_specs,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
+            avoid_object=self.avoid_object,
         )
         for idx in (first_contact_mode_idx, second_contact_mode_idx):
             subgraph.connect_with_continuity_constraints(
@@ -149,7 +157,7 @@ class PlanarPushingPlanner:
             kwargs = {"outgoing": False, "incoming": True}
 
         subgraph = NonCollisionSubGraph.create_with_gcs(
-            self.gcs, self.slider, self.plan_specs, name
+            self.gcs, self.slider, self.plan_specs, name, avoid_object=self.avoid_object
         )
 
         for idx, (vertex, mode) in enumerate(
