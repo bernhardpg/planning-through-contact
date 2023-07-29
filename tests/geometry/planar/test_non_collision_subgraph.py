@@ -138,13 +138,25 @@ def test_non_collision_subgraph_initial_and_final(
             "boundary_conds": True,
             "avoid_object": False,
             "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, -0.1, 0),
+        },
+        {
+            "boundary_conds": True,
+            "avoid_object": False,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0.1, 0),
         },
         {
             "boundary_conds": True,
             "avoid_object": True,
             "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, -0.1, 0),
+        },
+        {
+            "boundary_conds": True,
+            "avoid_object": True,
+            "finger_initial": PlanarPose(-0.15, 0, 0),
+            "finger_final": PlanarPose(0.15, 0.1, 0),
         },
     ],
     indirect=["subgraph"],
@@ -179,6 +191,32 @@ def test_non_collision_subgraph_planning(
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
+
+    # Make sure we always take the shortest path
+    vertex_names = [
+        v.name()
+        for v in get_gcs_solution_path(
+            subgraph.gcs, result, subgraph.source.vertex, subgraph.target.vertex
+        )
+    ]
+    should_go_around_above = subgraph.target.mode.finger_final_pose.y >= 0
+    if should_go_around_above:
+        targets = [
+            "source",
+            "Subgraph_TEST_NON_COLL_3",
+            "Subgraph_TEST_NON_COLL_0",
+            "Subgraph_TEST_NON_COLL_1",
+            "target",
+        ]
+    else:
+        targets = [
+            "source",
+            "Subgraph_TEST_NON_COLL_3",
+            "Subgraph_TEST_NON_COLL_2",
+            "Subgraph_TEST_NON_COLL_1",
+            "target",
+        ]
+    assert all([v == t for v, t in zip(vertex_names, targets)])
 
     if subgraph.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
