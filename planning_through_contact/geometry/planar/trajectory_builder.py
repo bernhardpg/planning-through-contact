@@ -71,6 +71,11 @@ class PlanarTrajectoryBuilder:
         self, dt: float = 0.01, interpolate: bool = True
     ) -> PlanarTrajectory:
         if interpolate:
+            # if we interpolate, we need to check determinants before interpolation!
+            dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
+            if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
+                raise ValueError("Rotations do not have determinant 1.")
+
             R_WB = sum(
                 [
                     self.interpolate_so2_using_slerp(p.R_WBs, 0, p.time_in_mode, dt)
