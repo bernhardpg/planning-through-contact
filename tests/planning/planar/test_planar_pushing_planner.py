@@ -1,8 +1,10 @@
 from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import pytest
-from pydrake.solvers import LinearCost
+from _pytest.fixtures import FixtureRequest
+from pydrake.solvers import LinearCost, MathematicalProgramResult
 from pydrake.symbolic import Variables
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -25,44 +27,28 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, rigid_body_box
+from tests.geometry.planar.fixtures import box_geometry, planner, rigid_body_box
+from tests.geometry.planar.tools import (
+    assert_initial_and_final_poses,
+    assert_planning_path_matches_target,
+)
 
 
-@pytest.fixture
-def planar_pushing_planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
-    specs = PlanarPlanSpecs()
-    return PlanarPushingPlanner(rigid_body_box, specs)
-
-
-@pytest.fixture
-def partial_planar_pushing_planner(rigid_body_box: RigidBody) -> PlanarPushingPlanner:
-    """
-    Planar pushing planner that does not consider all the contact locations, in order
-    for tests to be a bit quicker
-    """
-    specs = PlanarPlanSpecs()
-    contact_locations = rigid_body_box.geometry.contact_locations[0:2]
-    return PlanarPushingPlanner(
-        rigid_body_box, specs, contact_locations=contact_locations
-    )
-
-
+@pytest.mark.parametrize("planner", [{"partial": False}], indirect=["planner"])
 def test_planar_pushing_planner_construction(
-    planar_pushing_planner: PlanarPushingPlanner,
+    planner: PlanarPushingPlanner,
 ) -> None:
     # One contact mode per face
-    assert len(planar_pushing_planner.contact_modes) == 4
+    assert len(planner.contact_modes) == 4
 
     # One contact mode per face
-    assert len(planar_pushing_planner.contact_vertices) == 4
+    assert len(planner.contact_vertices) == 4
 
     # One subgraph between each contact mode:
     # 4 choose 2 = 6
-    assert len(planar_pushing_planner.subgraphs) == 6
+    assert len(planner.subgraphs) == 6
 
-    for v, m in zip(
-        planar_pushing_planner.contact_vertices, planar_pushing_planner.contact_modes
-    ):
+    for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
         # angular velocity and linear velocity
@@ -80,39 +66,23 @@ def test_planar_pushing_planner_construction(
         assert isinstance(lin_vel.evaluator(), LinearCost)
         assert isinstance(ang_vel.evaluator(), LinearCost)
 
-    assert planar_pushing_planner.source_subgraph is not None
-    assert planar_pushing_planner.target_subgraph is not None
+    assert planner.source_subgraph is not None
+    assert planner.target_subgraph is not None
 
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(
-            planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-        )
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
+@pytest.mark.parametrize(
+    "planner", [{"partial": False, "initial_conds": True}], indirect=["planner"]
+)
 def test_planar_pushing_planner_set_initial_and_final(
-    planar_pushing_planner: PlanarPushingPlanner,
+    planner: PlanarPushingPlanner,
 ) -> None:
-    finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
-
-    box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-    box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
-
-    planar_pushing_planner.set_initial_poses(
-        finger_initial_pose,
-        box_initial_pose,
-    )
-
-    planar_pushing_planner.set_target_poses(
-        finger_initial_pose,
-        box_target_pose,
-    )
-
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(
-            planar_pushing_planner.gcs, Path("planar_pushing_graph.svg")
-        )
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
     num_vertices_per_subgraph = 4
     num_contact_modes = 4
@@ -122,7 +92,7 @@ def test_planar_pushing_planner_set_initial_and_final(
         + num_vertices_per_subgraph * num_subgraphs
         + 2  # source and target vertices
     )
-    assert len(planar_pushing_planner.gcs.Vertices()) == expected_num_vertices
+    assert len(planner.gcs.Vertices()) == expected_num_vertices
 
     num_edges_per_subgraph = 8
     num_edges_per_contact_mode = 8  # 2 to all three other modes + entry and exit
@@ -131,128 +101,152 @@ def test_planar_pushing_planner_set_initial_and_final(
         + num_edges_per_contact_mode * num_contact_modes
         + 2  # source and target
     )
-    assert len(planar_pushing_planner.gcs.Edges()) == expected_num_edges
+    assert len(planner.gcs.Edges()) == expected_num_edges
 
 
-def test_planar_pushing_planner_without_initial_conds(
-    partial_planar_pushing_planner: PlanarPushingPlanner,
+@pytest.mark.parametrize(
+    "planner, source_idx, target_idx, target_path",
+    [
+        (
+            {"partial": True, "initial_conds": False},
+            0,
+            1,
+            [
+                "FACE_0",
+                "FACE_0_to_FACE_1_NON_COLL_0",
+                "FACE_0_to_FACE_1_NON_COLL_1",
+                "FACE_1",
+            ],
+        )
+    ],
+    indirect=["planner"],
+)
+def test_planner_wo_boundary_conds_with_contact_mode(
+    planner: PlanarPushingPlanner,
+    source_idx: int,
+    target_idx: int,
+    target_path: List[str],
 ) -> None:
-    planner = partial_planar_pushing_planner
     planner.source = VertexModePair(
-        planner.contact_vertices[0],
-        planner.contact_modes[0],
+        planner.contact_vertices[source_idx],
+        planner.contact_modes[source_idx],
     )
     planner.target = VertexModePair(
-        planner.contact_vertices[1],
-        planner.contact_modes[1],
+        planner.contact_vertices[target_idx],
+        planner.contact_modes[target_idx],
     )
 
     result = planner._solve()
     # should find a solution when there are no initial conditions
     assert result.is_success()
 
-    vertex_path = planner.get_vertex_solution_path(result)
-    target_path = [
-        "FACE_0",
-        "FACE_0_to_FACE_1_NON_COLL_0",
-        "FACE_0_to_FACE_1_NON_COLL_1",
-        "FACE_1",
-    ]
-    for v, target in zip(vertex_path, target_path):
-        assert v.name() == target
+    assert_planning_path_matches_target(planner, result, target_path)
 
     DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
-def test_planar_pushing_planner_without_initial_conds_2(
-    partial_planar_pushing_planner: PlanarPushingPlanner,
+@pytest.mark.parametrize(
+    "planner, source_idx, target_idx, target_path",
+    [
+        (
+            {"partial": True, "initial_conds": False},
+            2,
+            3,
+            [
+                "ENTRY_NON_COLL_2",
+                "ENTRY_NON_COLL_1",
+                "FACE_1",
+                "EXIT_NON_COLL_1",
+                "EXIT_NON_COLL_2",
+                "EXIT_NON_COLL_3",
+            ],
+        )
+    ],
+    indirect=["planner"],
+)
+def test_planner_wo_boundary_conds_with_non_collision_mode(
+    planner: PlanarPushingPlanner,
+    source_idx: int,
+    target_idx: int,
+    target_path: List[str],
 ) -> None:
-    planner = partial_planar_pushing_planner
     planner.source = VertexModePair(
-        planner.source_subgraph.non_collision_vertices[2],
-        planner.source_subgraph.non_collision_modes[2],
+        planner.source_subgraph.non_collision_vertices[source_idx],
+        planner.source_subgraph.non_collision_modes[source_idx],
     )
     planner.target = VertexModePair(
-        planner.target_subgraph.non_collision_vertices[3],
-        planner.target_subgraph.non_collision_modes[3],
+        planner.target_subgraph.non_collision_vertices[target_idx],
+        planner.target_subgraph.non_collision_modes[target_idx],
     )
 
     result = planner._solve()
     assert result.is_success()
 
-    vertex_path = planner.get_vertex_solution_path(result)
-    target_path = [
-        "ENTRY_NON_COLL_2",
-        "ENTRY_NON_COLL_1",
-        "FACE_1",
-        "EXIT_NON_COLL_1",
-        "EXIT_NON_COLL_2",
-        "EXIT_NON_COLL_3",
-    ]
-    for v, target in zip(vertex_path, target_path):
-        assert v.name() == target
+    assert_planning_path_matches_target(planner, result, target_path)
 
     DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
 
 
-def test_planar_pushing_planner_make_plan(
-    partial_planar_pushing_planner: PlanarPushingPlanner,
+@pytest.mark.parametrize(
+    "planner, initial_poses, target_path",
+    [
+        (
+            {"partial": True},
+            {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            [
+                "source",
+                "ENTRY_NON_COLL_2",
+                "ENTRY_NON_COLL_1",
+                "FACE_1",
+                "FACE_0_to_FACE_1_NON_COLL_1",
+                "FACE_0_to_FACE_1_NON_COLL_0",
+                "FACE_0",
+                "EXIT_NON_COLL_0",
+                "EXIT_NON_COLL_3",
+                "target",
+            ],
+        )
+    ],
+    indirect=["planner"],
+)
+def test_make_plan(
+    planner: PlanarPushingPlanner,
+    initial_poses: Dict[str, PlanarPose],
+    target_path: List[str],
 ) -> None:
-    planner = partial_planar_pushing_planner
-    finger_initial_pose = PlanarPose(x=0, y=-0.5, theta=0.0)
-    finger_target_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
-
-    box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-    box_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.4)
-
     planner.set_initial_poses(
-        finger_initial_pose,
-        box_initial_pose,
+        initial_poses["finger_initial_pose"],
+        initial_poses["box_initial_pose"],
     )
     planner.set_target_poses(
-        finger_target_pose,
-        box_target_pose,
+        initial_poses["finger_target_pose"],
+        initial_poses["box_target_pose"],
     )
 
     result = planner._solve()
     assert result.is_success()
 
-    vertex_path = planner.get_vertex_solution_path(result)
-    target_path = [
-        "source",
-        "ENTRY_NON_COLL_2",
-        "ENTRY_NON_COLL_3",
-        "ENTRY_NON_COLL_0",
-        "ENTRY_NON_COLL_1",
-        "FACE_1",
-        "FACE_0_to_FACE_1_NON_COLL_1",
-        "FACE_0_to_FACE_1_NON_COLL_0",
-        "FACE_0",
-        "EXIT_NON_COLL_0",
-        "EXIT_NON_COLL_3",
-        "target",
-    ]
-
-    # for v, target in zip(vertex_path, target_path):
-    #     assert v.name() == target
-
-    vertex_names = [v.name() for v in vertex_path]
-    print(vertex_names)
+    assert_planning_path_matches_target(planner, result, target_path)
 
     path = planner._get_gcs_solution_path(result)
     traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=True)
 
-    p_c_W_initial = box_initial_pose.pos() + finger_initial_pose.pos()
-    assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_initial)
-
-    p_c_W_final = box_target_pose.pos() + box_target_pose.two_d_rot_matrix().dot(
-        finger_target_pose.pos()
+    assert_initial_and_final_poses(
+        traj,
+        initial_poses["box_initial_pose"],
+        initial_poses["finger_initial_pose"],
+        initial_poses["box_target_pose"],
+        initial_poses["finger_target_pose"],
     )
-    assert np.allclose(traj.p_c_W[:, -1:], p_c_W_final)
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)

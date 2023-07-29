@@ -294,10 +294,14 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[0], pose.pos()))
 
+        self.slider_initial_pose = pose
+
     def set_slider_final_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[-1] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[-1] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[-1], pose.pos()))
+
+        self.slider_final_pose = pose
 
     def formulate_convex_relaxation(self, make_bounded: bool = False) -> None:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)

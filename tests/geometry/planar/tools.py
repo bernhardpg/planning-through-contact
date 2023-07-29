@@ -1,7 +1,8 @@
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 import numpy as np
 import numpy.typing as npt
+from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -10,6 +11,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.hyperplane import Hyperplane
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import PlanarTrajectory
+from planning_through_contact.planning.planar.planar_pushing_planner import (
+    PlanarPushingPlanner,
+)
 
 
 def _assert_traj_slider_pose(
@@ -81,3 +85,14 @@ def assert_object_is_avoided(
         for p_BF in finger_traj.T[start_idx:end_idx]
     ]
     assert all(outside_faces)
+
+
+def assert_planning_path_matches_target(
+    planner: PlanarPushingPlanner,
+    result: MathematicalProgramResult,
+    target_path: List[str],
+) -> None:
+    vertex_path = planner.get_vertex_solution_path(result)
+    vertex_names = [v.name() for v in vertex_path]
+    for v, target in zip(vertex_names, target_path):
+        assert v == target

@@ -22,6 +22,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_pushing_planner import (
+    PlanarPushingPlanner,
+)
 
 
 @pytest.fixture
@@ -131,3 +134,34 @@ def subgraph(
         subgraph.set_final_poses(finger_final_pose, slider_pose)
 
     return subgraph
+
+
+@pytest.fixture
+def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushingPlanner:
+    specs = PlanarPlanSpecs()
+
+    if request.param["partial"]:
+        contact_locations = rigid_body_box.geometry.contact_locations[0:2]
+    else:
+        contact_locations = rigid_body_box.geometry.contact_locations
+
+    planner = PlanarPushingPlanner(
+        rigid_body_box, specs, contact_locations=contact_locations
+    )
+
+    if request.param.get("initial_conds"):
+        finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
+        box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+        box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
+
+        planner.set_initial_poses(
+            finger_initial_pose,
+            box_initial_pose,
+        )
+
+        planner.set_target_poses(
+            finger_initial_pose,
+            box_target_pose,
+        )
+
+    return planner
