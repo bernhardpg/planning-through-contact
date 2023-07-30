@@ -52,18 +52,22 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
+    cost_param_transition_cost: float = 0.1
+
     def __init__(
         self,
         slider: RigidBody,
         plan_specs: PlanarPlanSpecs,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
         avoid_object: bool = False,
-        allow_teleportation: bool = True,
+        allow_teleportation: bool = False,
+        penalize_mode_transition: bool = False,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
         self.avoid_object = avoid_object
         self.allow_teleportation = allow_teleportation
+        self.penalize_mode_transition = penalize_mode_transition
 
         self.source = None
         self.target = None
@@ -85,9 +89,14 @@ class PlanarPushingPlanner:
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
         self._build_graph()
+
         # costs for non-collisions are added by each of the separate subgraphs
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
+
+        if self.penalize_mode_transition:
+            for v in self.contact_vertices:
+                v.AddCost(self.cost_param_transition_cost)
 
     @property
     def num_contact_modes(self) -> int:

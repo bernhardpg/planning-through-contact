@@ -150,6 +150,9 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
 
     avoid_object = True if request.param.get("avoid_object") else False
     allow_teleportation = True if request.param.get("allow_teleportation") else False
+    penalize_mode_transition = (
+        True if request.param.get("penalize_mode_transition") else False
+    )
 
     planner = PlanarPushingPlanner(
         rigid_body_box,
@@ -157,6 +160,7 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         contact_locations=contact_locations,
         avoid_object=avoid_object,
         allow_teleportation=allow_teleportation,
+        penalize_mode_transition=penalize_mode_transition,
     )
 
     if request.param.get("boundary_conds"):

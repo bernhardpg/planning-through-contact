@@ -263,6 +263,7 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
             {
                 "partial": True,
                 "allow_teleportation": True,
+                "penalize_mode_transition": False,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
@@ -272,19 +273,20 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
             },
             ["source", "FACE_0", "FACE_1", "target"],
         ),
-        # (
-        #     {
-        #         "partial": False,
-        #         "allow_teleportation": True,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-        #         },
-        #     },
-        #     None,
-        # ),
+        (
+            {
+                "partial": False,
+                "allow_teleportation": True,
+                "penalize_mode_transition": True,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=-0.5, y=0.0, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.5, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.1),
+                },
+            },
+            ["source", "FACE_1", "target"],
+        ),
     ],
     indirect=["planner"],
 )
@@ -314,7 +316,7 @@ def test_planner_with_teleportation(
 
     DEBUG = False
     if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
 
 
