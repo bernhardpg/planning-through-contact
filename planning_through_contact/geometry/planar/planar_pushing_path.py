@@ -1,6 +1,7 @@
 from typing import Dict, List
 
 import numpy as np
+import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.solvers import (
@@ -110,7 +111,7 @@ class PlanarPushingPath:
         )
         return mode_vars_stacked[idxs]
 
-    def _construct_nonlinear_program_from_path(self) -> MathematicalProgram:
+    def _construct_nonlinear_program(self) -> MathematicalProgram:
         prog = MathematicalProgram()
 
         for p in self.pairs:
@@ -136,14 +137,30 @@ class PlanarPushingPath:
 
         return prog
 
+    def _get_initial_guess(self) -> npt.NDArray[np.float64]:
+        num_vars_in_modes = [p.mode.prog.num_vars() for p in self.pairs]
+        all_vertex_vars_concatenated = np.concatenate(
+            [
+                pair.vertex.x()[:num_vars]
+                for pair, num_vars in zip(self.pairs, num_vars_in_modes)
+            ]
+        )
+        breakpoint()
+        vertex_var_vals = self.result.GetSolution(all_vertex_vars_concatenated)
+        return vertex_var_vals
+
     def _do_nonlinear_rounding(
         self, measure_time: bool = False
     ) -> MathematicalProgramResult:
-        prog = self._construct_nonlinear_program_from_path()
+        prog = self._construct_nonlinear_program()
 
         import time
 
         start = time.time()
+
+        decision_var_vals = self._get_initial_guess()
+        prog.SetInitialGuess(prog.decision_variables(), decision_var_vals)
+
         result = Solve(prog)
         end = time.time()
 
