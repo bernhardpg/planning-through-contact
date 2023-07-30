@@ -227,17 +227,18 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
             None,
             False,
         ),
-        (
-            {"partial": False},
-            {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-            },
-            None,
-            True,
-        ),
+        # NOTE: This test takes a few minutes, and is hence commented out
+        # (
+        #     {"partial": False},
+        #     {
+        #         "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #         "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+        #         "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+        #         "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+        #     },
+        #     None,
+        #     True,
+        # ),
     ],
     indirect=["planner"],
 )

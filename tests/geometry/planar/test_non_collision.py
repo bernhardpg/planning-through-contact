@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
     NonCollisionVariables,
+    check_finger_pose_in_contact_location,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -16,9 +17,6 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.planning.planar.tools import (
-    check_finger_pose_in_contact_location,
-)
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
