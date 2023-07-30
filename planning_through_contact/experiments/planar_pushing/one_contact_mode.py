@@ -8,6 +8,13 @@ import numpy.typing as npt
 import pydot
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from convex_relaxation.sdp import create_sdp_relaxation, eliminate_equality_constraints
+from geometry.polyhedron import PolyhedronFormulator
+from geometry.two_d.contact.types import ContactLocation
+from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
+from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
+from geometry.two_d.t_pusher import TPusher
+from geometry.utilities import cross_2d
 from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     CommonSolverOption,
@@ -22,14 +29,6 @@ from pydrake.solvers import (
     SolverOptions,
 )
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
-
-from convex_relaxation.sdp import create_sdp_relaxation, eliminate_equality_constraints
-from geometry.polyhedron import PolyhedronFormulator
-from geometry.two_d.contact.types import ContactLocation
-from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
-from geometry.two_d.rigid_body_2d import PolytopeContactLocation, RigidBody2d
-from geometry.two_d.t_pusher import TPusher
-from geometry.utilities import cross_2d
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from visualize.analysis import create_quasistatic_pushing_analysis, plot_cos_sine_trajs
 from visualize.colors import COLORS

@@ -294,12 +294,6 @@ class PlanarPushingPlanner:
         path = self.get_solution_path(result)
         return path.get_vertices()
 
-    def get_vars_on_solution_path(
-        self, result: MathematicalProgramResult
-    ) -> List[AbstractModeVariables]:
-        path = self.get_solution_path(result)
-        return path.get_vars()
-
     def get_solution_path(self, result: MathematicalProgramResult) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
@@ -318,7 +312,7 @@ class PlanarPushingPlanner:
         print_output: bool = False,
         measure_time: bool = False,
         interpolate: bool = True,
-        round_path: bool = False,
+        round_trajectory: bool = False,
     ) -> PlanarPushingTrajectory:
         assert self.source is not None
         assert self.target is not None
@@ -335,21 +329,11 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        if round_path:
-            path = PlanarPushingPath.from_result(
-                self.gcs,
-                result,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-            )
-            path.do_nonlinear_rounding()
-
-        else:
-            vars_on_path = self.get_vars_on_solution_path(result)
-            traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
-                interpolate=interpolate
-            )
+        path = self.get_solution_path(result)
+        vars_on_path = path.get_rounded_vars() if round_trajectory else path.get_vars()
+        traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
+            interpolate=interpolate
+        )
 
         return traj
 
