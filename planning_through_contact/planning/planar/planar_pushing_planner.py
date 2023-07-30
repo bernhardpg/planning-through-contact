@@ -34,6 +34,7 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarPushingPath,
     PlanarTrajectory,
     PlanarTrajectoryBuilder,
 )
@@ -44,45 +45,6 @@ from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
-
-
-class PlanarPushingPath:
-    """
-    Stores a sequence of contact modes of the type AbstractContactMode.
-    """
-
-    def __init__(
-        self, path: List[VertexModePair], result: MathematicalProgramResult
-    ) -> None:
-        self.path = path
-        self.result = result
-
-    @classmethod
-    def from_result(
-        cls,
-        gcs: opt.GraphOfConvexSets,
-        result: MathematicalProgramResult,
-        source_vertex: GcsVertex,
-        target_vertex: GcsVertex,
-        all_pairs: List[VertexModePair],
-        flow_treshold: float = 0.55,
-    ) -> "PlanarPushingPath":
-        vertex_path = get_gcs_solution_path(
-            gcs, result, source_vertex, target_vertex, flow_treshold
-        )
-        pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
-        return cls(pairs_on_path, result)
-
-    def get_vars(self) -> List[AbstractModeVariables]:
-        vars_on_path = [
-            pair.mode.get_variable_solutions_for_vertex(pair.vertex, self.result)
-            for pair in self.path
-        ]
-        return vars_on_path
-
-    def get_path_names(self) -> List[str]:
-        names = [pair.vertex.name() for pair in self.path]
-        return names
 
 
 class PlanarPushingPlanner:
@@ -338,7 +300,6 @@ class PlanarPushingPlanner:
     def get_vertex_solution_path(
         self,
         result: MathematicalProgramResult,
-        flow_treshold: float = 0.55,
     ) -> List[GcsVertex]:
         """
         Returns the vertices on the solution path in the correct order,
@@ -347,41 +308,32 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
-        vertex_path = get_gcs_solution_path(
-            self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
+        path = PlanarPushingPath.from_result(
+            self.gcs,
+            result,
+            self.source.vertex,
+            self.target.vertex,
+            self._get_all_vertex_mode_pairs(),
         )
-        return vertex_path
+        return path.get_vertices()
 
-    def _get_gcs_solution_path(
-        self,
-        result: MathematicalProgramResult,
-        flow_treshold: float = 0.55,
-        print_path: bool = False,
-    ) -> List[FaceContactVariables | NonCollisionVariables]:
+    def get_vars_on_solution_path(
+        self, result: MathematicalProgramResult
+    ) -> List[AbstractModeVariables]:
         assert self.source is not None
         assert self.target is not None
 
-        vertex_path = get_gcs_solution_path(
-            self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
+        path = PlanarPushingPath.from_result(
+            self.gcs,
+            result,
+            self.source.vertex,
+            self.target.vertex,
+            self._get_all_vertex_mode_pairs(),
         )
-        all_pairs = self._get_all_vertex_mode_pairs()
-        pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
-        full_path = [
-            pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
-            for pair in pairs_on_path
-        ]
-
-        if print_path:
-            names = [v.name() for v in vertex_path]
-            print("Vertices on path:")
-            for name in names:
-                print(f" - {name}")
-
-        return full_path
+        return path.get_vars()
 
     def plan_trajectory(
         self,
-        print_path: bool = False,
         print_output: bool = False,
         measure_time: bool = False,
         interpolate: bool = True,
@@ -397,8 +349,10 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        path = self._get_gcs_solution_path(result, print_path=print_path)
-        traj = PlanarTrajectoryBuilder(path).get_trajectory(interpolate=interpolate)
+        vars_on_path = self.get_vars_on_solution_path(result)
+        traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
+            interpolate=interpolate
+        )
 
         return traj
 

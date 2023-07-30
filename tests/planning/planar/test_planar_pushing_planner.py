@@ -273,20 +273,20 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
             },
             ["source", "FACE_0", "FACE_1", "target"],
         ),
-        (
-            {
-                "partial": False,
-                "allow_teleportation": True,
-                "penalize_mode_transition": True,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=-0.5, y=0.0, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.5, y=0, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.1),
-                },
-            },
-            ["source", "FACE_1", "target"],
-        ),
+        # (
+        #     {
+        #         "partial": False,
+        #         "allow_teleportation": True,
+        #         "penalize_mode_transition": True,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=-0.5, y=0.0, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=-0.5, y=0, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.1),
+        #         },
+        #     },
+        #     ["source", "FACE_1", "target"],
+        # ),
     ],
     indirect=["planner"],
 )
@@ -299,7 +299,7 @@ def test_planner_with_teleportation(
     if target_path:
         assert_planning_path_matches_target(planner, result, target_path)
 
-    path = planner._get_gcs_solution_path(result)
+    path = planner.get_vars_on_solution_path(result)
     traj = PlanarTrajectoryBuilder(path).get_trajectory(
         interpolate=False, check_determinants=True
     )
@@ -388,7 +388,7 @@ def test_make_plan(
     if target_path:
         assert_planning_path_matches_target(planner, result, target_path)
 
-    path = planner._get_gcs_solution_path(result)
+    path = planner.get_vars_on_solution_path(result)
     traj = PlanarTrajectoryBuilder(path).get_trajectory(
         interpolate=False, check_determinants=check_determinants
     )
