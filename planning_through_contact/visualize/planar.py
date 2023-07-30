@@ -3,7 +3,9 @@ import numpy as np
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
 )
-from planning_through_contact.geometry.planar.trajectory_builder import PlanarTrajectory
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -14,7 +16,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 
 
 def visualize_planar_pushing_trajectory(
-    traj: PlanarTrajectory, object_geometry: CollisionGeometry
+    traj: PlanarPushingTrajectory, object_geometry: CollisionGeometry
 ) -> None:
     CONTACT_COLOR = COLORS["dodgerblue4"]
     BOX_COLOR = COLORS["aquamarine4"]

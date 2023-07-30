@@ -3,14 +3,9 @@ from typing import List, Optional
 
 import numpy as np
 import pytest
-from _pytest.fixtures import FixtureRequest
-from pydrake.solvers import LinearCost, MathematicalProgramResult
+from pydrake.solvers import LinearCost
 from pydrake.symbolic import Variables
 
-from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    ContactLocation,
-    PolytopeContactLocation,
-)
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -18,8 +13,6 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
@@ -273,6 +266,7 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
             },
             ["source", "FACE_0", "FACE_1", "target"],
         ),
+        # NOTE: This test takes a few minutes, and is hence commented out
         # (
         #     {
         #         "partial": False,

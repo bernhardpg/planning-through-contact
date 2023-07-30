@@ -2,45 +2,31 @@ from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-import numpy as np
-import numpy.typing as npt
 import pydrake.geometry.optimization as opt
-from pydrake.math import eq
-from pydrake.solvers import (
-    Binding,
-    CommonSolverOption,
-    LinearCost,
-    MathematicalProgramResult,
-    SolverOptions,
-)
+from pydrake.solvers import CommonSolverOption, MathematicalProgramResult, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
-from planning_through_contact.geometry.planar.face_contact import (
-    FaceContactMode,
-    FaceContactVariables,
-)
-from planning_through_contact.geometry.planar.non_collision import (
-    NonCollisionMode,
-    NonCollisionVariables,
-)
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
     VertexModePair,
     gcs_add_edge_with_continuity,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.trajectory_builder import (
+from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
-    PlanarTrajectory,
+)
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarPushingTrajectory,
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -337,7 +323,8 @@ class PlanarPushingPlanner:
         print_output: bool = False,
         measure_time: bool = False,
         interpolate: bool = True,
-    ) -> PlanarTrajectory:
+        round_path: bool = False,
+    ) -> PlanarPushingTrajectory:
         import time
 
         start = time.time()
@@ -349,10 +336,14 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        vars_on_path = self.get_vars_on_solution_path(result)
-        traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
-            interpolate=interpolate
-        )
+        if round_path:
+            raise NotImplemented
+
+        else:
+            vars_on_path = self.get_vars_on_solution_path(result)
+            traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
+                interpolate=interpolate
+            )
 
         return traj
 
