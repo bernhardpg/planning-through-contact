@@ -8,6 +8,7 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import Binding, QuadraticCost
 
 from planning_through_contact.geometry.planar.abstract_mode import (
+    AbstractContactMode,
     add_continuity_constraints_btwn_modes,
 )
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -23,7 +24,7 @@ BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 class VertexModePair(NamedTuple):
     vertex: GcsVertex
-    mode: FaceContactMode | NonCollisionMode
+    mode: AbstractContactMode
 
 
 def gcs_add_edge_with_continuity(
