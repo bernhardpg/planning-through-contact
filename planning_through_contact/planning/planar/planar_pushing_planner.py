@@ -29,7 +29,6 @@ from planning_through_contact.geometry.planar.non_collision import (
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
     VertexModePair,
-    gcs_add_edge_with_continuity,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -58,15 +57,20 @@ class PlanarPushingPlanner:
         plan_specs: PlanarPlanSpecs,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
         avoid_object: bool = False,
+        plan_non_collision: bool = True,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
         self.avoid_object = avoid_object
+        self.plan_non_collision = plan_non_collision
 
         if self.avoid_object and plan_specs.num_knot_points_non_collision <= 2:
             raise ValueError(
                 "It is not possible to avoid object with only 2 knot points."
             )
+
+        if self.avoid_object and not self.plan_non_collision:
+            raise ValueError("Cannot avoid object without planning for non collisions")
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
@@ -104,13 +108,20 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        self.subgraphs = [
-            self._build_subgraph_between_contact_modes(mode_i, mode_j)
-            for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
-        ]
+        if self.plan_non_collision:
+            # connect contact modes through NonCollisionSubGraphs
+            self.subgraphs = [
+                self._build_subgraph_between_contact_modes(mode_i, mode_j)
+                for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
+            ]
 
-        self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
-        self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+            self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
+            self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+        else:
+            # directly connect contact modes without continuity constraints
+            for vertex_i, vertex_j in combinations(self.contact_vertices, 2):
+                self.gcs.AddEdge(vertex_i, vertex_j)
+                self.gcs.AddEdge(vertex_j, vertex_i)
 
     def _build_subgraph_between_contact_modes(
         self, first_contact_mode_idx: int, second_contact_mode_idx: int
@@ -137,11 +148,12 @@ class PlanarPushingPlanner:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.contact_vertices, self.contact_modes)
         }
-        for subgraph in self.subgraphs:
-            all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+        if self.plan_non_collision:
+            for subgraph in self.subgraphs:
+                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
-        for subgraph in (self.source_subgraph, self.target_subgraph):
-            all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+            for subgraph in (self.source_subgraph, self.target_subgraph):
+                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
         self.all_pairs = all_pairs
 
@@ -172,16 +184,52 @@ class PlanarPushingPlanner:
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
-        self.source = self.source_subgraph.source
+        if self.plan_non_collision:
+            self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+
+            assert self.source_subgraph.source is not None
+            self.source = self.source_subgraph.source
+        else:
+            self.source = self._add_single_source_or_target(
+                finger_pose, slider_pose, "initial"
+            )
 
     def set_target_poses(
         self,
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
-        self.target_subgraph.set_final_poses(finger_pose, slider_pose)
-        self.target = self.target_subgraph.target
+        if self.plan_non_collision:
+            self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+
+            assert self.target_subgraph.target is not None
+            self.target = self.target_subgraph.target
+        else:
+            self.target = self._add_single_source_or_target(
+                finger_pose, slider_pose, "final"
+            )
+
+    def _add_single_source_or_target(
+        self,
+        finger_pose: PlanarPose,
+        slider_pose: PlanarPose,
+        initial_or_final: Literal["initial", "final"],
+    ) -> VertexModePair:
+        mode = NonCollisionMode.create_source_or_target_mode(
+            self.plan_specs, slider_pose, finger_pose, self.slider, initial_or_final
+        )
+        vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
+
+        # connect source or target to all contact modes
+        if initial_or_final == "initial":
+            # source to contact modes
+            for contact_vertex in self.contact_vertices:
+                self.gcs.AddEdge(vertex, contact_vertex)
+        else:  # contact modes to target
+            for contact_vertex in self.contact_vertices:
+                self.gcs.AddEdge(contact_vertex, vertex)
+
+        return VertexModePair(vertex, mode)
 
     def _solve(
         self, print_output: bool = False, convex_relaxation: bool = True

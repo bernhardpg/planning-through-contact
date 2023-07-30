@@ -153,6 +153,7 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         specs,
         contact_locations=contact_locations,
         avoid_object=request.param.get("avoid_object"),
+        plan_non_collision=request.param.get("plan_non_collision"),
     )
 
     if request.param.get("initial_conds"):
