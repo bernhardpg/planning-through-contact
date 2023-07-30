@@ -148,27 +148,37 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     else:
         specs = PlanarPlanSpecs()
 
+    # default to False
+    avoid_object = True if request.param.get("avoid_object") else False
+
+    # default to True
+    plan_non_collision = (
+        True
+        if (
+            request.param.get("plan_non_collision")
+            or request.param.get("plan_non_collision") is None
+        )
+        else False
+    )
+
     planner = PlanarPushingPlanner(
         rigid_body_box,
         specs,
         contact_locations=contact_locations,
-        avoid_object=request.param.get("avoid_object"),
-        plan_non_collision=request.param.get("plan_non_collision"),
+        avoid_object=avoid_object,
+        plan_non_collision=plan_non_collision,
     )
 
-    if request.param.get("initial_conds"):
-        finger_initial_pose = PlanarPose(x=-0.3, y=0, theta=0.0)
-        box_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-        box_target_pose = PlanarPose(x=0.5, y=0.5, theta=0.0)
+    if request.param.get("boundary_conds"):
+        boundary_conds = request.param.get("boundary_conds")
 
         planner.set_initial_poses(
-            finger_initial_pose,
-            box_initial_pose,
+            boundary_conds["finger_initial_pose"],
+            boundary_conds["box_initial_pose"],
         )
-
         planner.set_target_poses(
-            finger_initial_pose,
-            box_target_pose,
+            boundary_conds["finger_target_pose"],
+            boundary_conds["box_target_pose"],
         )
 
     return planner

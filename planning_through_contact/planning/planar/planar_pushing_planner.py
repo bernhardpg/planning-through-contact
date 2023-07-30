@@ -184,6 +184,9 @@ class PlanarPushingPlanner:
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
+        self.finger_pose_initial = finger_pose
+        self.slider_pose_initial = slider_pose
+
         if self.plan_non_collision:
             self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
 
@@ -199,6 +202,9 @@ class PlanarPushingPlanner:
         finger_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
+        self.finger_pose_target = finger_pose
+        self.slider_pose_target = slider_pose
+
         if self.plan_non_collision:
             self.target_subgraph.set_final_poses(finger_pose, slider_pose)
 

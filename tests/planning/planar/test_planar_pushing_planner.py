@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 import pytest
@@ -35,7 +35,7 @@ from tests.geometry.planar.tools import (
 
 
 @pytest.mark.parametrize("planner", [{"partial": False}], indirect=["planner"])
-def test_planar_pushing_planner_construction(
+def test_planner_construction(
     planner: PlanarPushingPlanner,
 ) -> None:
     # One contact mode per face
@@ -75,9 +75,21 @@ def test_planar_pushing_planner_construction(
 
 
 @pytest.mark.parametrize(
-    "planner", [{"partial": False, "initial_conds": True}], indirect=["planner"]
+    "planner",
+    [
+        {
+            "partial": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+        }
+    ],
+    indirect=["planner"],
 )
-def test_planar_pushing_planner_set_initial_and_final(
+def test_planner_set_initial_and_final(
     planner: PlanarPushingPlanner,
 ) -> None:
     DEBUG = False
@@ -108,7 +120,7 @@ def test_planar_pushing_planner_set_initial_and_final(
     "planner, source_idx, target_idx, target_path",
     [
         (
-            {"partial": True, "initial_conds": False},
+            {"partial": True},
             0,
             1,
             [
@@ -121,12 +133,13 @@ def test_planar_pushing_planner_set_initial_and_final(
     ],
     indirect=["planner"],
 )
-def test_planner_wo_boundary_conds_with_contact_mode(
+def test_planner_without_boundary_conds(
     planner: PlanarPushingPlanner,
     source_idx: int,
     target_idx: int,
     target_path: List[str],
 ) -> None:
+    # face contact as source and target
     planner.source = VertexModePair(
         planner.contact_vertices[source_idx],
         planner.contact_modes[source_idx],
@@ -166,12 +179,13 @@ def test_planner_wo_boundary_conds_with_contact_mode(
     ],
     indirect=["planner"],
 )
-def test_planner_wo_boundary_conds_with_non_collision_mode(
+def test_planner_without_boundary_conds_2(
     planner: PlanarPushingPlanner,
     source_idx: int,
     target_idx: int,
     target_path: List[str],
 ) -> None:
+    # non collision as source and target
     planner.source = VertexModePair(
         planner.source_subgraph.non_collision_vertices[source_idx],
         planner.source_subgraph.non_collision_modes[source_idx],
@@ -192,15 +206,42 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
 
 
 @pytest.mark.parametrize(
-    "planner, boundary_conds, target_path, check_determinants",
+    "planner",
     [
         (
-            {"partial": True},
             {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                "partial": True,
+                "plan_non_collision": False,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                },
+            }
+        )
+    ],
+    indirect=["planner"],
+)
+def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
+    DEBUG = True
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+
+
+@pytest.mark.parametrize(
+    "planner, target_path, check_determinants",
+    [
+        (
+            {
+                "partial": True,
+                "avoid_object": False,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                },
             },
             [
                 "source",
@@ -217,26 +258,18 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
             True,
         ),
         (
-            {"partial": True, "avoid_object": True},
             {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                "partial": True,
+                "avoid_object": True,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                },
             },
             None,
             False,
-        ),
-        (
-            {"partial": True, "plan_non_collision": False},
-            {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-            },
-            None,
-            True,
         ),
         # NOTE: This test takes a few minutes, and is hence commented out
         # (
@@ -255,23 +288,9 @@ def test_planner_wo_boundary_conds_with_non_collision_mode(
 )
 def test_make_plan(
     planner: PlanarPushingPlanner,
-    boundary_conds: Dict[str, PlanarPose],
     target_path: Optional[List[str]],
     check_determinants: bool,
 ) -> None:
-    planner.set_initial_poses(
-        boundary_conds["finger_initial_pose"],
-        boundary_conds["box_initial_pose"],
-    )
-    planner.set_target_poses(
-        boundary_conds["finger_target_pose"],
-        boundary_conds["box_target_pose"],
-    )
-
-    DEBUG = True
-    if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-
     result = planner._solve()
     assert result.is_success()
 
@@ -283,18 +302,18 @@ def test_make_plan(
         interpolate=False, check_determinants=check_determinants
     )
 
-    # assert_initial_and_final_poses(
-    #     traj,
-    #     boundary_conds["box_initial_pose"],
-    #     boundary_conds["finger_initial_pose"],
-    #     boundary_conds["box_target_pose"],
-    #     boundary_conds["finger_target_pose"],
-    # )
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
 
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.0)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
