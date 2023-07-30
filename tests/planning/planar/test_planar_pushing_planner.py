@@ -79,6 +79,7 @@ def test_planner_construction(
     [
         {
             "partial": False,
+            "plan_non_collision": True,
             "boundary_conds": {
                 "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                 "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
@@ -210,7 +211,13 @@ def test_planner_without_boundary_conds_2(
     [
         (
             {
-                "partial": True,
+                "partial": False,
+                "plan_non_collision": False,
+            }
+        ),
+        (
+            {
+                "partial": False,
                 "plan_non_collision": False,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
@@ -219,14 +226,83 @@ def test_planner_without_boundary_conds_2(
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
                 },
             }
-        )
+        ),
     ],
     indirect=["planner"],
 )
-def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
-    DEBUG = True
+def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) -> None:
+    DEBUG = False
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("teleportation_construction.svg"))
+
+    num_contact_modes = 4
+    if planner.source is not None and planner.target is not None:
+        expected_num_vertices = num_contact_modes + 2  # source and target vertices
+    else:
+        expected_num_vertices = num_contact_modes
+
+    assert len(planner.gcs.Vertices()) == expected_num_vertices
+
+    edges_between_contact_modes = 6 * 2  # 4 nCr 2 and bi-directional edges
+
+    if planner.source is not None and planner.target is not None:
+        num_edges_from_target_and_source = num_contact_modes * 2
+        expected_num_edges = (
+            edges_between_contact_modes + num_edges_from_target_and_source
+        )
+    else:
+        expected_num_edges = edges_between_contact_modes
+
+    assert len(planner.gcs.Edges()) == expected_num_edges
+
+
+@pytest.mark.parametrize(
+    "planner, target_path",
+    [
+        (
+            {
+                "partial": True,
+                "plan_non_collision": False,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+                },
+            },
+            ["source", "FACE_0", "FACE_1", "target"],
+        ),
+    ],
+    indirect=["planner"],
+)
+def test_planner_with_teleportation(
+    planner: PlanarPushingPlanner, target_path: List[str]
+) -> None:
+    result = planner._solve(print_output=True)
+    assert result.is_success()
+
+    if target_path:
+        assert_planning_path_matches_target(planner, result, target_path)
+
+    path = planner._get_gcs_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path).get_trajectory(
+        interpolate=False, check_determinants=True
+    )
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(np.abs(traj.p_c_W) <= 1.0)
+
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
 
 
 @pytest.mark.parametrize(

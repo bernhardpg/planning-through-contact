@@ -1,6 +1,6 @@
 from itertools import combinations
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -29,6 +29,7 @@ from planning_through_contact.geometry.planar.non_collision import (
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     NonCollisionSubGraph,
     VertexModePair,
+    gcs_add_edge_with_continuity,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -64,6 +65,9 @@ class PlanarPushingPlanner:
         self.avoid_object = avoid_object
         self.plan_non_collision = plan_non_collision
 
+        self.source = None
+        self.target = None
+
         if self.avoid_object and plan_specs.num_knot_points_non_collision <= 2:
             raise ValueError(
                 "It is not possible to avoid object with only 2 knot points."
@@ -84,8 +88,6 @@ class PlanarPushingPlanner:
         # costs for non-collisions are added by each of the separate subgraphs
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
-
-        self._collect_all_vertex_mode_pairs()
 
     @property
     def num_contact_modes(self) -> int:
@@ -117,11 +119,21 @@ class PlanarPushingPlanner:
 
             self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
             self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
-        else:
-            # directly connect contact modes without continuity constraints
-            for vertex_i, vertex_j in combinations(self.contact_vertices, 2):
-                self.gcs.AddEdge(vertex_i, vertex_j)
-                self.gcs.AddEdge(vertex_j, vertex_i)
+
+        else:  # connect FaceContactModes directly, enforcing only continuity on the slider
+            for i, j in combinations(range(self.num_contact_modes), 2):
+                gcs_add_edge_with_continuity(
+                    self.gcs,
+                    VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
+                    VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
+                    only_continuity_on_slider=True,
+                )
+                gcs_add_edge_with_continuity(
+                    self.gcs,
+                    VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
+                    VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
+                    only_continuity_on_slider=True,
+                )
 
     def _build_subgraph_between_contact_modes(
         self, first_contact_mode_idx: int, second_contact_mode_idx: int
@@ -143,7 +155,7 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def _collect_all_vertex_mode_pairs(self) -> None:
+    def _get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
         all_pairs = {
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.contact_vertices, self.contact_modes)
@@ -154,8 +166,14 @@ class PlanarPushingPlanner:
 
             for subgraph in (self.source_subgraph, self.target_subgraph):
                 all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+        else:
+            assert self.source is not None
+            assert self.target is not None
 
-        self.all_pairs = all_pairs
+            all_pairs[self.source.mode.name] = self.source
+            all_pairs[self.target.mode.name] = self.target
+
+        return all_pairs
 
     def _create_entry_or_exit_subgraph(
         self, entry_or_exit: Literal["entry", "exit"]
@@ -189,8 +207,6 @@ class PlanarPushingPlanner:
 
         if self.plan_non_collision:
             self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
-
-            assert self.source_subgraph.source is not None
             self.source = self.source_subgraph.source
         else:
             self.source = self._add_single_source_or_target(
@@ -207,8 +223,6 @@ class PlanarPushingPlanner:
 
         if self.plan_non_collision:
             self.target_subgraph.set_final_poses(finger_pose, slider_pose)
-
-            assert self.target_subgraph.target is not None
             self.target = self.target_subgraph.target
         else:
             self.target = self._add_single_source_or_target(
@@ -225,17 +239,32 @@ class PlanarPushingPlanner:
             self.plan_specs, slider_pose, finger_pose, self.slider, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
+        pair = VertexModePair(vertex, mode)
 
         # connect source or target to all contact modes
         if initial_or_final == "initial":
             # source to contact modes
-            for contact_vertex in self.contact_vertices:
-                self.gcs.AddEdge(vertex, contact_vertex)
+            for contact_vertex, contact_mode in zip(
+                self.contact_vertices, self.contact_modes
+            ):
+                gcs_add_edge_with_continuity(
+                    self.gcs,
+                    pair,
+                    VertexModePair(contact_vertex, contact_mode),
+                    only_continuity_on_slider=True,
+                )
         else:  # contact modes to target
-            for contact_vertex in self.contact_vertices:
-                self.gcs.AddEdge(contact_vertex, vertex)
+            for contact_vertex, contact_mode in zip(
+                self.contact_vertices, self.contact_modes
+            ):
+                gcs_add_edge_with_continuity(
+                    self.gcs,
+                    VertexModePair(contact_vertex, contact_mode),
+                    pair,
+                    only_continuity_on_slider=True,
+                )
 
-        return VertexModePair(vertex, mode)
+        return pair
 
     def _solve(
         self, print_output: bool = False, convex_relaxation: bool = True
@@ -247,7 +276,7 @@ class PlanarPushingPlanner:
 
         options.convex_relaxation = convex_relaxation
         if options.convex_relaxation is True:
-            options.preprocessing = True  # TODO Do I need to deal with this?
+            options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = 1
 
         assert self.source is not None
@@ -267,6 +296,9 @@ class PlanarPushingPlanner:
         Returns the vertices on the solution path in the correct order,
         given a MathematicalProgramResult.
         """
+        assert self.source is not None
+        assert self.target is not None
+
         vertex_path = get_gcs_solution_path(
             self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
         )
@@ -278,14 +310,14 @@ class PlanarPushingPlanner:
         flow_treshold: float = 0.55,
         print_path: bool = False,
     ) -> List[FaceContactVariables | NonCollisionVariables]:
+        assert self.source is not None
+        assert self.target is not None
+
         vertex_path = get_gcs_solution_path(
             self.gcs, result, self.source.vertex, self.target.vertex, flow_treshold
         )
-        pairs_on_path = [
-            self.all_pairs[v.name()]
-            for v in vertex_path
-            if v.name() not in ["source", "target"]
-        ]
+        all_pairs = self._get_all_vertex_mode_pairs()
+        pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         full_path = [
             pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
             for pair in pairs_on_path

@@ -24,9 +24,10 @@ def add_continuity_constraints_btwn_modes(
     outgoing_mode: "AbstractContactMode",
     incoming_mode: "AbstractContactMode",
     edge: GcsEdge,
+    only_continuity_on_slider: bool = False,
 ):
-    lhs = outgoing_mode.get_continuity_terms(edge, "last")
-    rhs = incoming_mode.get_continuity_terms(edge, "first")
+    lhs = outgoing_mode.get_continuity_terms(edge, "last", only_continuity_on_slider)
+    rhs = incoming_mode.get_continuity_terms(edge, "first", only_continuity_on_slider)
 
     constraint = eq(lhs, rhs)
     for c in constraint:
@@ -61,15 +62,28 @@ class ContinuityVariables:
         else:  # NonCollisionMode: All variables are just sym.Variable
             return self.vector()
 
+    def slider_vector(self) -> NpVariableArray | NpExpressionArray:
+        return np.concatenate(
+            (self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
+        )
+
     def create_expressions_with_vertex_variables(
         self,
         vertex_vars: NpVariableArray,
         mode: "AbstractContactMode",
+        only_continuity_on_slider: bool = True,
     ) -> NpExpressionArray:
-        A, b = sym.DecomposeAffineExpressions(self.vector(), self.get_pure_variables())
-        var_idxs = mode.get_variable_indices_in_gcs_vertex(self.get_pure_variables())
-        rhs = A.dot(vertex_vars[var_idxs]) + b
-        return rhs
+        if only_continuity_on_slider:
+            vars = self.slider_vector()
+            exprs = vars  # for just the slider, all entries are variables
+        else:  # contuity on both objects
+            exprs = self.vector()
+            vars = self.get_pure_variables()
+
+        A, b = sym.DecomposeAffineExpressions(exprs, vars)
+        var_idxs = mode.get_variable_indices_in_gcs_vertex(vars)
+        expr = A.dot(vertex_vars[var_idxs]) + b
+        return expr
 
 
 @dataclass
@@ -183,9 +197,14 @@ class AbstractContactMode(ABC):
         ).item()
 
     def get_continuity_terms(
-        self, edge: GcsEdge, first_or_last: Literal["first", "last"]
+        self,
+        edge: GcsEdge,
+        first_or_last: Literal["first", "last"],
+        only_continuity_on_slider: bool = False,
     ) -> NpExpressionArray | NpVariableArray:
         vars = self.get_continuity_vars(first_or_last)
         edge_vars = edge.xu() if first_or_last == "last" else edge.xv()
-        terms = vars.create_expressions_with_vertex_variables(edge_vars, self)
+        terms = vars.create_expressions_with_vertex_variables(
+            edge_vars, self, only_continuity_on_slider
+        )
         return terms

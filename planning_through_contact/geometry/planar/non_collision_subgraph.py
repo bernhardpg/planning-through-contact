@@ -27,10 +27,15 @@ class VertexModePair(NamedTuple):
 
 
 def gcs_add_edge_with_continuity(
-    gcs: opt.GraphOfConvexSets, outgoing: VertexModePair, incoming: VertexModePair
+    gcs: opt.GraphOfConvexSets,
+    outgoing: VertexModePair,
+    incoming: VertexModePair,
+    only_continuity_on_slider: bool = False,
 ) -> None:
     edge = gcs.AddEdge(outgoing.vertex, incoming.vertex)
-    add_continuity_constraints_btwn_modes(outgoing.mode, incoming.mode, edge)
+    add_continuity_constraints_btwn_modes(
+        outgoing.mode, incoming.mode, edge, only_continuity_on_slider
+    )
 
 
 @dataclass
