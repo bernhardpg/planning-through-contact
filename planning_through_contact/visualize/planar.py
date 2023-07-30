@@ -16,7 +16,9 @@ from planning_through_contact.visualize.visualizer_2d import (
 
 
 def visualize_planar_pushing_trajectory(
-    traj: PlanarPushingTrajectory, object_geometry: CollisionGeometry
+    traj: PlanarPushingTrajectory,
+    object_geometry: CollisionGeometry,
+    visualize_object_vel: bool = False,
 ) -> None:
     CONTACT_COLOR = COLORS["dodgerblue4"]
     BOX_COLOR = COLORS["aquamarine4"]
@@ -41,12 +43,21 @@ def visualize_planar_pushing_trajectory(
 
     contact_point_viz = VisualizationPoint2d(traj.p_c_W.T, FINGER_COLOR)
     contact_force_viz = VisualizationForce2d(traj.p_c_W.T, CONTACT_COLOR, traj.f_c_W.T)
+    contact_forces_viz = [contact_force_viz]
+
+    if visualize_object_vel:
+        # TODO(bernhardpg): functionality that is useful for debugging
+        v_WB = (traj.p_WB[:, 1:] - traj.p_WB[:, :-1]) / 0.1
+        object_vel_viz = VisualizationForce2d(traj.p_WB.T, CONTACT_COLOR, v_WB.T)
+        contact_forces_viz.append(
+            object_vel_viz
+        )  # visualize vel as a force (with an arrow)
 
     viz = Visualizer2d()
     FRAMES_PER_SEC = 1 / traj.dt
     viz.visualize(
         [contact_point_viz],
-        [contact_force_viz],
+        contact_forces_viz,
         [box_viz],
         FRAMES_PER_SEC,
         target_viz,

@@ -81,6 +81,6 @@ def test_path_rounding(planner: PlanarPushingPlanner) -> None:
     vars_on_path = path.get_rounded_vars()
     traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(interpolate=False)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)

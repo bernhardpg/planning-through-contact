@@ -164,6 +164,12 @@ class AbstractContactMode(ABC):
         pass
 
     @abstractmethod
+    def get_variable_solutions(
+        self, result: MathematicalProgramResult
+    ) -> AbstractModeVariables:
+        pass
+
+    @abstractmethod
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         pass
 

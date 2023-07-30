@@ -72,8 +72,7 @@ class PlanarPushingPath:
     ) -> List[AbstractModeVariables]:
         rounded_result = self._do_nonlinear_rounding(measure_time)
         vars_on_path = [
-            pair.mode.get_variable_solutions_for_vertex(pair.vertex, rounded_result)
-            for pair in self.pairs
+            pair.mode.get_variable_solutions(rounded_result) for pair in self.pairs
         ]
         return vars_on_path
 

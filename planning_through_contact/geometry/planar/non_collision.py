@@ -325,6 +325,28 @@ class NonCollisionMode(AbstractContactMode):
             sin_th,
         )
 
+    def get_variable_solutions(
+        self, result: MathematicalProgramResult
+    ) -> NonCollisionVariables:
+        # TODO: This can probably be cleaned up somehow
+        p_BF_xs = result.GetSolution(self.variables.p_BF_xs)
+        p_BF_ys = result.GetSolution(self.variables.p_BF_ys)
+        p_WB_x = result.GetSolution(self.variables.p_WB_x)  # type: ignore
+        p_WB_y = result.GetSolution(self.variables.p_WB_y)  # type: ignore
+        cos_th = result.GetSolution(self.variables.cos_th)  # type: ignore
+        sin_th = result.GetSolution(self.variables.sin_th)  # type: ignore
+        return NonCollisionVariables(
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
+            p_BF_xs,
+            p_BF_ys,
+            p_WB_x,
+            p_WB_y,
+            cos_th,
+            sin_th,
+        )
+
     def get_convex_set(self, make_bounded: bool = True) -> opt.Spectrahedron:
         # Create a temp program without a quadratic cost that we can use to create a polyhedron
         temp_prog = MathematicalProgram()

@@ -363,6 +363,35 @@ class FaceContactMode(AbstractContactMode):
             self.variables.tangent_vec,
         )
 
+    def get_variable_solutions(
+        self, result: MathematicalProgramResult
+    ) -> FaceContactVariables:
+        # TODO: This can probably be cleaned up somehow
+        lams = result.GetSolution(self.variables.lams)
+        normal_forces = result.GetSolution(self.variables.normal_forces)
+        friction_forces = result.GetSolution(self.variables.friction_forces)
+        cos_ths = result.GetSolution(self.variables.cos_ths)  # type: ignore
+        sin_ths = result.GetSolution(self.variables.sin_ths)  # type: ignore
+        p_WB_xs = result.GetSolution(self.variables.p_WB_xs)  # type: ignore
+        p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
+
+        return FaceContactVariables(
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
+            lams,
+            normal_forces,
+            friction_forces,
+            cos_ths,
+            sin_ths,
+            p_WB_xs,
+            p_WB_ys,
+            self.variables.pv1,
+            self.variables.pv2,
+            self.variables.normal_vec,
+            self.variables.tangent_vec,
+        )
+
     def get_continuity_vars(
         self, first_or_last: Literal["first", "last"]
     ) -> ContinuityVariables:

@@ -293,8 +293,8 @@ def test_planner_with_teleportation(
     if target_path:
         assert_planning_path_matches_target(planner, result, target_path)
 
-    path = planner.get_vars_on_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path).get_trajectory(
+    path = planner.get_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
         interpolate=False, check_determinants=True
     )
     assert_initial_and_final_poses(
@@ -382,8 +382,8 @@ def test_make_plan(
     if target_path:
         assert_planning_path_matches_target(planner, result, target_path)
 
-    path = planner.get_vars_on_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path).get_trajectory(
+    path = planner.get_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
         interpolate=False, check_determinants=check_determinants
     )
 
