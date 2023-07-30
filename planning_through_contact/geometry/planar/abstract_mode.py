@@ -7,7 +7,7 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgramResult
+from pydrake.solvers import MathematicalProgram, MathematicalProgramResult
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     PolytopeContactLocation,
@@ -145,6 +145,7 @@ class AbstractContactMode(ABC):
     time_in_mode: float
     contact_location: PolytopeContactLocation
     object: RigidBody
+    prog: MathematicalProgram
 
     @abstractmethod
     def get_convex_set(self, make_bounded: bool) -> opt.ConvexSet:

@@ -193,6 +193,7 @@ class FaceContactMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
     ) -> "FaceContactMode":
+        prog = MathematicalProgram()
         name = str(contact_location)
         return cls(
             name,
@@ -200,10 +201,10 @@ class FaceContactMode(AbstractContactMode):
             specs.time_in_contact,
             contact_location,
             object,
+            prog,
         )
 
     def __post_init__(self) -> None:
-        self.prog = MathematicalProgram()
         self.relaxed_prog = None
         self.variables = FaceContactVariables.from_prog(
             self.prog,

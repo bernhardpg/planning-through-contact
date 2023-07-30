@@ -291,21 +291,16 @@ class PlanarPushingPlanner:
         Returns the vertices on the solution path in the correct order,
         given a MathematicalProgramResult.
         """
-        assert self.source is not None
-        assert self.target is not None
-
-        path = PlanarPushingPath.from_result(
-            self.gcs,
-            result,
-            self.source.vertex,
-            self.target.vertex,
-            self._get_all_vertex_mode_pairs(),
-        )
+        path = self.get_solution_path(result)
         return path.get_vertices()
 
     def get_vars_on_solution_path(
         self, result: MathematicalProgramResult
     ) -> List[AbstractModeVariables]:
+        path = self.get_solution_path(result)
+        return path.get_vars()
+
+    def get_solution_path(self, result: MathematicalProgramResult) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
 
@@ -316,7 +311,7 @@ class PlanarPushingPlanner:
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
         )
-        return path.get_vars()
+        return path
 
     def plan_trajectory(
         self,
@@ -325,19 +320,30 @@ class PlanarPushingPlanner:
         interpolate: bool = True,
         round_path: bool = False,
     ) -> PlanarPushingTrajectory:
+        assert self.source is not None
+        assert self.target is not None
+
         import time
 
         start = time.time()
         result = self._solve(print_output)
-        assert result.is_success()
         end = time.time()
+
+        assert result.is_success()
 
         if measure_time:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
         if round_path:
-            raise NotImplemented
+            path = PlanarPushingPath.from_result(
+                self.gcs,
+                result,
+                self.source.vertex,
+                self.target.vertex,
+                self._get_all_vertex_mode_pairs(),
+            )
+            path.do_nonlinear_rounding()
 
         else:
             vars_on_path = self.get_vars_on_solution_path(result)

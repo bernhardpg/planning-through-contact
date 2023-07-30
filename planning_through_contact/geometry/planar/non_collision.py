@@ -191,12 +191,15 @@ class NonCollisionMode(AbstractContactMode):
 
         num_knot_points = 1 if one_knot_point else specs.num_knot_points_non_collision
 
+        prog = MathematicalProgram()
+
         return cls(
             name,
             num_knot_points,
             specs.time_non_collision,
             contact_location,
             slider,
+            prog,
             avoid_object,
         )
 
@@ -233,7 +236,6 @@ class NonCollisionMode(AbstractContactMode):
         self.planes = self.object.geometry.get_planes_for_collision_free_region(
             self.contact_location
         )
-        self.prog = MathematicalProgram()
         self.variables = NonCollisionVariables.from_prog(
             self.prog, self.num_knot_points, self.time_in_mode
         )

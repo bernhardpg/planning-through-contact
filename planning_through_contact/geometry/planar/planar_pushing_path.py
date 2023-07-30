@@ -1,7 +1,7 @@
 from typing import Dict, List
 
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import MathematicalProgramResult
+from pydrake.solvers import MathematicalProgram, MathematicalProgramResult
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
@@ -19,9 +19,9 @@ class PlanarPushingPath:
     """
 
     def __init__(
-        self, path: List[VertexModePair], result: MathematicalProgramResult
+        self, pairs_on_path: List[VertexModePair], result: MathematicalProgramResult
     ) -> None:
-        self.path = path
+        self.pairs = pairs_on_path
         self.result = result
 
     @classmethod
@@ -43,13 +43,22 @@ class PlanarPushingPath:
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [
             pair.mode.get_variable_solutions_for_vertex(pair.vertex, self.result)
-            for pair in self.path
+            for pair in self.pairs
         ]
         return vars_on_path
 
     def get_path_names(self) -> List[str]:
-        names = [pair.vertex.name() for pair in self.path]
+        names = [pair.vertex.name() for pair in self.pairs]
         return names
 
     def get_vertices(self) -> List[GcsVertex]:
-        return [p.vertex for p in self.path]
+        return [p.vertex for p in self.pairs]
+
+    def do_nonlinear_rounding(self) -> None:
+        prog = MathematicalProgram()
+
+        for p in self.pairs:
+            mode_prog = p.mode.prog
+
+            vars = mode_prog.decision_variables()
+            breakpoint()
