@@ -147,22 +147,9 @@ class NonCollisionSubGraph:
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> None:
-        loc = find_first_matching_location(pusher_pose, slider_pose, self.body)
-        mode_name = "source" if initial_or_final == "initial" else "target"
-        mode = NonCollisionMode.create_from_plan_spec(
-            loc,
-            self.plan_specs,
-            self.body,
-            mode_name,
-            one_knot_point=True,
+        mode = NonCollisionMode.create_source_or_target_mode(
+            self.plan_specs, slider_pose, pusher_pose, self.body, initial_or_final
         )
-        mode.set_slider_pose(slider_pose)
-
-        if initial_or_final == "initial":
-            mode.set_finger_initial_pose(pusher_pose)
-        else:  # final
-            mode.set_finger_final_pose(pusher_pose)
-
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
 
         pair = VertexModePair(vertex, mode)
@@ -170,7 +157,9 @@ class NonCollisionSubGraph:
             kwargs = {"outgoing": False, "incoming": True}
         else:
             kwargs = {"outgoing": True, "incoming": False}
-        self.connect_with_continuity_constraints(loc.idx, pair, **kwargs)
+        self.connect_with_continuity_constraints(
+            mode.contact_location.idx, pair, **kwargs
+        )
 
         if initial_or_final == "initial":
             self.source = pair

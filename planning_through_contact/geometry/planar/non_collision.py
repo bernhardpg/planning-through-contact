@@ -29,6 +29,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.tools import find_first_matching_location
 from planning_through_contact.tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -164,6 +165,33 @@ class NonCollisionMode(AbstractContactMode):
             slider,
             avoid_object,
         )
+
+    @classmethod
+    def create_source_or_target_mode(
+        cls,
+        plan_specs: PlanarPlanSpecs,
+        slider_pose: PlanarPose,
+        pusher_pose: PlanarPose,
+        body: RigidBody,
+        initial_or_final: Literal["initial", "final"],
+    ) -> "NonCollisionMode":
+        loc = find_first_matching_location(pusher_pose, slider_pose, body)
+        mode_name = "source" if initial_or_final == "initial" else "target"
+        mode = cls.create_from_plan_spec(
+            loc,
+            plan_specs,
+            body,
+            mode_name,
+            one_knot_point=True,
+        )
+        mode.set_slider_pose(slider_pose)
+
+        if initial_or_final == "initial":
+            mode.set_finger_initial_pose(pusher_pose)
+        else:  # final
+            mode.set_finger_final_pose(pusher_pose)
+
+        return mode
 
     def __post_init__(self) -> None:
         self.dt = self.time_in_mode / self.num_knot_points
