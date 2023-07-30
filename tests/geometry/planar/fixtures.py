@@ -148,25 +148,15 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     else:
         specs = PlanarPlanSpecs()
 
-    # default to False
     avoid_object = True if request.param.get("avoid_object") else False
-
-    # default to True
-    plan_non_collision = (
-        True
-        if (
-            request.param.get("plan_non_collision")
-            or request.param.get("plan_non_collision") is None
-        )
-        else False
-    )
+    allow_teleportation = True if request.param.get("allow_teleportation") else False
 
     planner = PlanarPushingPlanner(
         rigid_body_box,
         specs,
         contact_locations=contact_locations,
         avoid_object=avoid_object,
-        plan_non_collision=plan_non_collision,
+        allow_teleportation=allow_teleportation,
     )
 
     if request.param.get("boundary_conds"):

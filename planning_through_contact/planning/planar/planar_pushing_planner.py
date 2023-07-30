@@ -58,12 +58,12 @@ class PlanarPushingPlanner:
         plan_specs: PlanarPlanSpecs,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
         avoid_object: bool = False,
-        plan_non_collision: bool = True,
+        allow_teleportation: bool = True,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
         self.avoid_object = avoid_object
-        self.plan_non_collision = plan_non_collision
+        self.allow_teleportation = allow_teleportation
 
         self.source = None
         self.target = None
@@ -73,8 +73,8 @@ class PlanarPushingPlanner:
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if self.avoid_object and not self.plan_non_collision:
-            raise ValueError("Cannot avoid object without planning for non collisions")
+        if self.avoid_object and self.allow_teleportation:
+            raise ValueError("Cannot avoid object while allowing teleportation")
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
@@ -110,17 +110,7 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        if self.plan_non_collision:
-            # connect contact modes through NonCollisionSubGraphs
-            self.subgraphs = [
-                self._build_subgraph_between_contact_modes(mode_i, mode_j)
-                for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
-            ]
-
-            self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
-            self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
-
-        else:  # connect FaceContactModes directly, enforcing only continuity on the slider
+        if self.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
                 gcs_add_edge_with_continuity(
                     self.gcs,
@@ -134,6 +124,15 @@ class PlanarPushingPlanner:
                     VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
                     only_continuity_on_slider=True,
                 )
+        else:
+            # connect contact modes through NonCollisionSubGraphs
+            self.subgraphs = [
+                self._build_subgraph_between_contact_modes(mode_i, mode_j)
+                for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
+            ]
+
+            self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
+            self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
 
     def _build_subgraph_between_contact_modes(
         self, first_contact_mode_idx: int, second_contact_mode_idx: int
@@ -160,18 +159,18 @@ class PlanarPushingPlanner:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.contact_vertices, self.contact_modes)
         }
-        if self.plan_non_collision:
-            for subgraph in self.subgraphs:
-                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
-
-            for subgraph in (self.source_subgraph, self.target_subgraph):
-                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
-        else:
+        if self.allow_teleportation:
             assert self.source is not None
             assert self.target is not None
 
             all_pairs[self.source.mode.name] = self.source
             all_pairs[self.target.mode.name] = self.target
+        else:
+            for subgraph in self.subgraphs:
+                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+
+            for subgraph in (self.source_subgraph, self.target_subgraph):
+                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
         return all_pairs
 
@@ -205,13 +204,13 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
-        if self.plan_non_collision:
-            self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
-            self.source = self.source_subgraph.source
-        else:
+        if self.allow_teleportation:
             self.source = self._add_single_source_or_target(
                 finger_pose, slider_pose, "initial"
             )
+        else:
+            self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+            self.source = self.source_subgraph.source
 
     def set_target_poses(
         self,
@@ -221,13 +220,13 @@ class PlanarPushingPlanner:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
 
-        if self.plan_non_collision:
-            self.target_subgraph.set_final_poses(finger_pose, slider_pose)
-            self.target = self.target_subgraph.target
-        else:
+        if self.allow_teleportation:
             self.target = self._add_single_source_or_target(
                 finger_pose, slider_pose, "final"
             )
+        else:
+            self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+            self.target = self.target_subgraph.target
 
     def _add_single_source_or_target(
         self,

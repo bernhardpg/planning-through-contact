@@ -79,7 +79,7 @@ def test_planner_construction(
     [
         {
             "partial": False,
-            "plan_non_collision": True,
+            "allow_teleportation": False,
             "boundary_conds": {
                 "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                 "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
@@ -212,13 +212,13 @@ def test_planner_without_boundary_conds_2(
         (
             {
                 "partial": False,
-                "plan_non_collision": False,
+                "allow_teleportation": True,
             }
         ),
         (
             {
                 "partial": False,
-                "plan_non_collision": False,
+                "allow_teleportation": True,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
@@ -262,7 +262,7 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
         (
             {
                 "partial": True,
-                "plan_non_collision": False,
+                "allow_teleportation": True,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
@@ -272,13 +272,26 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
             },
             ["source", "FACE_0", "FACE_1", "target"],
         ),
+        # (
+        #     {
+        #         "partial": False,
+        #         "allow_teleportation": True,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+        #         },
+        #     },
+        #     None,
+        # ),
     ],
     indirect=["planner"],
 )
 def test_planner_with_teleportation(
     planner: PlanarPushingPlanner, target_path: List[str]
 ) -> None:
-    result = planner._solve(print_output=True)
+    result = planner._solve(print_output=False)
     assert result.is_success()
 
     if target_path:
