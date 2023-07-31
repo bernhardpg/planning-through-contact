@@ -174,7 +174,7 @@ class NonCollisionMode(AbstractContactMode):
     avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
     cost_param_avoidance_lin: float = 0.1
     cost_param_avoidance_quad_dist: float = 0.2
-    cost_param_avoidance_quad_weight: float = 0.1
+    cost_param_avoidance_quad_weight: float = 0.4
     cost_param_eucl: float = 1.0
 
     @classmethod

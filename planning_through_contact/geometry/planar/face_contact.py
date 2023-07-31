@@ -213,6 +213,9 @@ class FaceContactMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
         )
+        # TODO(bernhardpg): Should we use this?
+        self.enforce_equal_forces = True
+
         self._define_constraints()
         self._define_costs()
 
@@ -237,8 +240,7 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
-        # TODO(bernhardpg): Should we use this?
-        if True:
+        if self.enforce_equal_forces:
             # Enforces forces are constant
             for c_n_curr, c_n_next in zip(
                 self.variables.normal_forces[:-1], self.variables.normal_forces[1:]

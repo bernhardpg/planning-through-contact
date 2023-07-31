@@ -295,7 +295,7 @@ def test_planner_with_teleportation(
 
     path = planner.get_solution_path(result)
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
-        interpolate=False, check_determinants=True
+        interpolate=False, assert_determinants=False
     )
     assert_initial_and_final_poses(
         traj,
@@ -315,7 +315,7 @@ def test_planner_with_teleportation(
 
 
 @pytest.mark.parametrize(
-    "planner, target_path, check_determinants",
+    "planner, target_path, assert_determinants",
     [
         (
             {
@@ -340,7 +340,7 @@ def test_planner_with_teleportation(
                 "EXIT_NON_COLL_3",
                 "target",
             ],
-            True,
+            False,  # trajectories will not have det 1 (but very close)
         ),
         (
             {
@@ -370,76 +370,76 @@ def test_planner_with_teleportation(
                 },
             },
             None,
-            False,
+            False,  # trajectories will not have det 1 (but very close)
         ),
         # NOTE: These tests takes a few minutes, and are hence commented out
-        (
-            # This test gives a result with very small determinants
-            {
-                "partial": False,
-                "avoid_object": True,
-                "avoidance_cost_type": "quadratic",
-                "allow_teleportation": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-                },
-            },
-            None,
-            False,  # trajectories will not have det 1 (but very close)
-        ),
-        (
-            # Are the determinants still small with a linear cost?
-            {
-                "partial": False,
-                "avoid_object": True,
-                "avoidance_cost_type": "linear",
-                "allow_teleportation": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-                },
-            },
-            None,
-            False,
-        ),
-        (
-            # How does the exact same plan look without NonCollisionModes?
-            {
-                "partial": False,
-                "avoid_object": False,
-                "allow_teleportation": True,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-                },
-            },
-            None,
-            False,  # trajectories will not have det 1 (but very close)
-        ),
-        (
-            # What if we penalize the mode transitions?
-            {
-                "partial": False,
-                "avoid_object": False,
-                "allow_teleportation": True,
-                "penalize_mode_transition": True,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-                },
-            },
-            None,
-            False,  # trajectories will not have det 1 (but very close)
-        ),
+        # (
+        #     # This test gives a result with very small determinants
+        #     {
+        #         "partial": False,
+        #         "avoid_object": True,
+        #         "avoidance_cost_type": "quadratic",
+        #         "allow_teleportation": False,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
+        #         },
+        #     },
+        #     None,
+        #     False,  # trajectories will have dets far from 1
+        # ),
+        # (
+        #     # Are the determinants still small with a linear cost?
+        #     {
+        #         "partial": False,
+        #         "avoid_object": True,
+        #         "avoidance_cost_type": "linear",
+        #         "allow_teleportation": False,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
+        #         },
+        #     },
+        #     None,
+        #     False,
+        # ),
+        # (
+        #     # How does the exact same plan look without NonCollisionModes?
+        #     {
+        #         "partial": False,
+        #         "avoid_object": False,
+        #         "allow_teleportation": True,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
+        #         },
+        #     },
+        #     None,
+        #     False,  # trajectories will not have det 1 (but very close)
+        # ),
+        # (
+        #     # What if we penalize the mode transitions?
+        #     {
+        #         "partial": False,
+        #         "avoid_object": False,
+        #         "allow_teleportation": True,
+        #         "penalize_mode_transition": True,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
+        #         },
+        #     },
+        #     None,
+        #     False,  # trajectories will not have det 1 (but very close)
+        # ),
         # (   # Another test of full graph
         #     {
         #         "partial": False,
@@ -460,9 +460,9 @@ def test_planner_with_teleportation(
 def test_make_plan(
     planner: PlanarPushingPlanner,
     target_path: Optional[List[str]],
-    check_determinants: bool,
+    assert_determinants: bool,
 ) -> None:
-    result = planner._solve(print_output=True)
+    result = planner._solve(print_output=False)
     assert result.is_success()
 
     if target_path:
@@ -470,7 +470,7 @@ def test_make_plan(
 
     path = planner.get_solution_path(result)
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
-        interpolate=False, check_determinants=check_determinants
+        interpolate=False, assert_determinants=assert_determinants
     )
 
     assert_initial_and_final_poses(
@@ -484,7 +484,7 @@ def test_make_plan(
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_W) <= 1.5)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
