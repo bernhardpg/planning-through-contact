@@ -237,6 +237,18 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
+        # TODO(bernhardpg): Should we use this?
+        if True:
+            # Enforces forces are constant
+            for c_n_curr, c_n_next in zip(
+                self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_n_curr == c_n_next)
+            for c_f_curr, c_f_next in zip(
+                self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_f_curr == c_f_next)
+
         # Quasi-static dynamics
         use_midpoint = True
         for k in range(self.num_knot_points - 1):
