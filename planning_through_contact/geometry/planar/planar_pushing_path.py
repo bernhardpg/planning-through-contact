@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -6,11 +6,15 @@ import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.solvers import (
     Binding,
+    CommonSolverOption,
     Constraint,
+    IpoptSolver,
     LinearConstraint,
     MathematicalProgram,
     MathematicalProgramResult,
+    SnoptSolver,
     Solve,
+    SolverOptions,
 )
 
 from planning_through_contact.geometry.planar.abstract_mode import (
@@ -161,7 +165,10 @@ class PlanarPushingPath:
         return vertex_var_vals
 
     def _do_nonlinear_rounding(
-        self, measure_time: bool = False
+        self,
+        measure_time: bool = False,
+        solver: Literal["snopt", "ipopt"] = "ipopt",
+        print_output: bool = False,
     ) -> MathematicalProgramResult:
         prog = self._construct_nonlinear_program()
 
@@ -169,10 +176,23 @@ class PlanarPushingPath:
 
         start = time.time()
 
-        decision_var_vals = self._get_initial_guess()
-        prog.SetInitialGuess(prog.decision_variables(), decision_var_vals)
+        initial_guess = self._get_initial_guess()
 
-        result = Solve(prog)
+        solver_options = SolverOptions()
+
+        if print_output:
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+        if solver == "ipopt":
+            solver_options.SetOption(IpoptSolver.id(), "tol", 1e-6)
+        else:
+            raise NotImplementedError("Snopt not yet supported (not tested)")
+            solver_options.SetOption(SnoptSolver.id(), "tol", 1e-6)
+            snopt = SnoptSolver()
+            result = snopt.Solve(prog, solver_options)
+
+        result = Solve(prog, initial_guess, solver_options=solver_options)
+
         end = time.time()
 
         if measure_time:
