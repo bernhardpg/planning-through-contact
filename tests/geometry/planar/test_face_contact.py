@@ -96,7 +96,8 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     # for each finite difference knot point:
     # v_c_B == 0
-    num_lin_eq = num_knot_points - 1
+    # f_c_B_next == f_c_B_curr
+    num_lin_eq = (num_knot_points - 1) * 3
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:

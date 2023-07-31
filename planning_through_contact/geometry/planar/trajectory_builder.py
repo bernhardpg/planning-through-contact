@@ -7,20 +7,21 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
-from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
+from planning_through_contact.geometry.planar.planar_pushing_path import (
+    PlanarPushingPath,
+)
 from planning_through_contact.geometry.utilities import from_so2_to_so3
-from planning_through_contact.tools.gcs_tools import get_gcs_solution_path
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 @dataclass
-class PlanarTrajectory:
+class PlanarPushingTrajectory:
     dt: float
     R_WB: List[npt.NDArray[np.float64]]  # [(2,2) x traj_length]
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
@@ -43,7 +44,7 @@ class PlanarTrajectory:
 
 
 class PlanarTrajectoryBuilder:
-    def __init__(self, path: List[FaceContactVariables | NonCollisionVariables]):
+    def __init__(self, path: List[AbstractModeVariables]):
         self.path = path
 
     @classmethod
@@ -55,24 +56,24 @@ class PlanarTrajectoryBuilder:
         target_vertex: GcsVertex,
         pairs: Dict[str, VertexModePair],
     ):
-        vertex_path = get_gcs_solution_path(gcs, result, source_vertex, target_vertex)
-        pairs_on_path = [pairs[v.name()] for v in vertex_path]
-        path = [
-            pair.mode.get_variable_solutions_for_vertex(pair.vertex, result)
-            for pair in pairs_on_path
-        ]
-        return cls(path)
+        path = PlanarPushingPath.from_result(
+            gcs, result, source_vertex, target_vertex, pairs
+        )
+        return cls(path.get_vars())
 
     def get_trajectory(
         self,
         dt: float = 0.01,
         interpolate: bool = True,
-        check_determinants: bool = True,
-    ) -> PlanarTrajectory:
-        if check_determinants:
-            dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
-            if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-02)):
-                raise ValueError("Rotations do not have determinant 1.")
+        assert_determinants: bool = False,
+    ) -> PlanarPushingTrajectory:
+        dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
+        if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-04)):
+            if assert_determinants:
+                raise ValueError(f"Rotations do not have determinant 1: \n{dets}")
+            else:
+                print("Rotations do not have determinant 1:")
+                print(dets)
 
         if interpolate:
             R_WB = sum(
@@ -116,7 +117,7 @@ class PlanarTrajectoryBuilder:
             # Fixed dt when replaying knot points
             dt = 0.8
 
-        return PlanarTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
+        return PlanarPushingTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
 
     def _get_traj_by_interpolation(
         self,

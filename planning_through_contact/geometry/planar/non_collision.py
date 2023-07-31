@@ -9,7 +9,6 @@ from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
-    Cost,
     LinearConstraint,
     LinearCost,
     MathematicalProgram,
@@ -33,6 +32,42 @@ from planning_through_contact.tools.types import NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
+
+
+def check_finger_pose_in_contact_location(
+    finger_pose: PlanarPose,
+    loc: PolytopeContactLocation,
+    body: RigidBody,
+    body_pose: PlanarPose,
+) -> bool:
+    specs = PlanarPlanSpecs()
+    mode = NonCollisionMode.create_from_plan_spec(loc, specs, body, one_knot_point=True)
+
+    mode.set_finger_initial_pose(finger_pose)
+    mode.set_slider_pose(body_pose)
+
+    result = Solve(mode.prog)
+    return result.is_success()
+
+
+def find_first_matching_location(
+    finger_pose: PlanarPose,
+    slider_pose: PlanarPose,
+    slider: RigidBody,
+) -> PolytopeContactLocation:
+    # we always add all non-collision modes, even when we don't add all contact modes
+    # (think of maneuvering around the object etc)
+    locations = slider.geometry.contact_locations
+    matching_locs = [
+        loc
+        for loc in locations
+        if check_finger_pose_in_contact_location(finger_pose, loc, slider, slider_pose)
+    ]
+    if len(matching_locs) == 0:
+        raise ValueError(
+            "No valid configurations found for specified initial or target poses"
+        )
+    return matching_locs[0]
 
 
 @dataclass
@@ -139,6 +174,7 @@ class NonCollisionMode(AbstractContactMode):
     avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
     cost_param_avoidance_lin: float = 0.1
     cost_param_avoidance_quad_dist: float = 0.2
+    cost_param_avoidance_quad_weight: float = 0.4
     cost_param_eucl: float = 1.0
 
     @classmethod
@@ -150,11 +186,14 @@ class NonCollisionMode(AbstractContactMode):
         name: Optional[str] = None,
         one_knot_point: bool = False,
         avoid_object: bool = False,
+        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
 
         num_knot_points = 1 if one_knot_point else specs.num_knot_points_non_collision
+
+        prog = MathematicalProgram()
 
         return cls(
             name,
@@ -162,8 +201,37 @@ class NonCollisionMode(AbstractContactMode):
             specs.time_non_collision,
             contact_location,
             slider,
+            prog,
             avoid_object,
+            avoidance_cost_type,
         )
+
+    @classmethod
+    def create_source_or_target_mode(
+        cls,
+        plan_specs: PlanarPlanSpecs,
+        slider_pose: PlanarPose,
+        pusher_pose: PlanarPose,
+        body: RigidBody,
+        initial_or_final: Literal["initial", "final"],
+    ) -> "NonCollisionMode":
+        loc = find_first_matching_location(pusher_pose, slider_pose, body)
+        mode_name = "source" if initial_or_final == "initial" else "target"
+        mode = cls.create_from_plan_spec(
+            loc,
+            plan_specs,
+            body,
+            mode_name,
+            one_knot_point=True,
+        )
+        mode.set_slider_pose(slider_pose)
+
+        if initial_or_final == "initial":
+            mode.set_finger_initial_pose(pusher_pose)
+        else:  # final
+            mode.set_finger_final_pose(pusher_pose)
+
+        return mode
 
     def __post_init__(self) -> None:
         self.dt = self.time_in_mode / self.num_knot_points
@@ -171,7 +239,6 @@ class NonCollisionMode(AbstractContactMode):
         self.planes = self.object.geometry.get_planes_for_collision_free_region(
             self.contact_location
         )
-        self.prog = MathematicalProgram()
         self.variables = NonCollisionVariables.from_prog(
             self.prog, self.num_knot_points, self.time_in_mode
         )
@@ -212,7 +279,9 @@ class NonCollisionMode(AbstractContactMode):
                 )  # maximize distances
             else:  # quadratic
                 squared_dists = [
-                    (d - self.cost_param_avoidance_quad_dist) ** 2 for d in dists
+                    self.cost_param_avoidance_quad_weight
+                    * (d - self.cost_param_avoidance_quad_dist) ** 2
+                    for d in dists
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
@@ -249,6 +318,28 @@ class NonCollisionMode(AbstractContactMode):
         p_WB_y = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
         cos_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.cos_th, result)  # type: ignore
         sin_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.sin_th, result)  # type: ignore
+        return NonCollisionVariables(
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
+            p_BF_xs,
+            p_BF_ys,
+            p_WB_x,
+            p_WB_y,
+            cos_th,
+            sin_th,
+        )
+
+    def get_variable_solutions(
+        self, result: MathematicalProgramResult
+    ) -> NonCollisionVariables:
+        # TODO: This can probably be cleaned up somehow
+        p_BF_xs = result.GetSolution(self.variables.p_BF_xs)
+        p_BF_ys = result.GetSolution(self.variables.p_BF_ys)
+        p_WB_x = result.GetSolution(self.variables.p_WB_x)  # type: ignore
+        p_WB_y = result.GetSolution(self.variables.p_WB_y)  # type: ignore
+        cos_th = result.GetSolution(self.variables.cos_th)  # type: ignore
+        sin_th = result.GetSolution(self.variables.sin_th)  # type: ignore
         return NonCollisionVariables(
             self.variables.num_knot_points,
             self.variables.time_in_mode,

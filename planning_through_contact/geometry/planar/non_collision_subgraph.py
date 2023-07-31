@@ -8,6 +8,7 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import Binding, QuadraticCost
 
 from planning_through_contact.geometry.planar.abstract_mode import (
+    AbstractContactMode,
     add_continuity_constraints_btwn_modes,
 )
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -15,7 +16,6 @@ from planning_through_contact.geometry.planar.non_collision import NonCollisionM
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.planning.planar.tools import find_first_matching_location
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -24,14 +24,19 @@ BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 class VertexModePair(NamedTuple):
     vertex: GcsVertex
-    mode: FaceContactMode | NonCollisionMode
+    mode: AbstractContactMode
 
 
 def gcs_add_edge_with_continuity(
-    gcs: opt.GraphOfConvexSets, outgoing: VertexModePair, incoming: VertexModePair
+    gcs: opt.GraphOfConvexSets,
+    outgoing: VertexModePair,
+    incoming: VertexModePair,
+    only_continuity_on_slider: bool = False,
 ) -> None:
     edge = gcs.AddEdge(outgoing.vertex, incoming.vertex)
-    add_continuity_constraints_btwn_modes(outgoing.mode, incoming.mode, edge)
+    add_continuity_constraints_btwn_modes(
+        outgoing.mode, incoming.mode, edge, only_continuity_on_slider
+    )
 
 
 @dataclass
@@ -54,6 +59,7 @@ class NonCollisionSubGraph:
         plan_specs: PlanarPlanSpecs,
         subgraph_name: str,
         avoid_object: bool = False,
+        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
     ) -> "NonCollisionSubGraph":
         """
         Constructs a subgraph of non-collision modes. An edge is added to
@@ -66,7 +72,11 @@ class NonCollisionSubGraph:
 
         non_collision_modes = [
             NonCollisionMode.create_from_plan_spec(
-                loc, plan_specs, body, avoid_object=avoid_object
+                loc,
+                plan_specs,
+                body,
+                avoid_object=avoid_object,
+                avoidance_cost_type=avoidance_cost_type,
             )
             for loc in body.geometry.contact_locations
         ]
@@ -147,22 +157,9 @@ class NonCollisionSubGraph:
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> None:
-        loc = find_first_matching_location(pusher_pose, slider_pose, self.body)
-        mode_name = "source" if initial_or_final == "initial" else "target"
-        mode = NonCollisionMode.create_from_plan_spec(
-            loc,
-            self.plan_specs,
-            self.body,
-            mode_name,
-            one_knot_point=True,
+        mode = NonCollisionMode.create_source_or_target_mode(
+            self.plan_specs, slider_pose, pusher_pose, self.body, initial_or_final
         )
-        mode.set_slider_pose(slider_pose)
-
-        if initial_or_final == "initial":
-            mode.set_finger_initial_pose(pusher_pose)
-        else:  # final
-            mode.set_finger_final_pose(pusher_pose)
-
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
 
         pair = VertexModePair(vertex, mode)
@@ -170,7 +167,9 @@ class NonCollisionSubGraph:
             kwargs = {"outgoing": False, "incoming": True}
         else:
             kwargs = {"outgoing": True, "incoming": False}
-        self.connect_with_continuity_constraints(loc.idx, pair, **kwargs)
+        self.connect_with_continuity_constraints(
+            mode.contact_location.idx, pair, **kwargs
+        )
 
         if initial_or_final == "initial":
             self.source = pair

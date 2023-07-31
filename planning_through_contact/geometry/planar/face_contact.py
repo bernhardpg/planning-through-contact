@@ -193,6 +193,7 @@ class FaceContactMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
     ) -> "FaceContactMode":
+        prog = MathematicalProgram()
         name = str(contact_location)
         return cls(
             name,
@@ -200,10 +201,10 @@ class FaceContactMode(AbstractContactMode):
             specs.time_in_contact,
             contact_location,
             object,
+            prog,
         )
 
     def __post_init__(self) -> None:
-        self.prog = MathematicalProgram()
         self.relaxed_prog = None
         self.variables = FaceContactVariables.from_prog(
             self.prog,
@@ -212,6 +213,9 @@ class FaceContactMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
         )
+        # TODO(bernhardpg): Should we use this?
+        self.enforce_equal_forces = True
+
         self._define_constraints()
         self._define_costs()
 
@@ -235,6 +239,17 @@ class FaceContactMode(AbstractContactMode):
         ):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+
+        if self.enforce_equal_forces:
+            # Enforces forces are constant
+            for c_n_curr, c_n_next in zip(
+                self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_n_curr == c_n_next)
+            for c_f_curr, c_f_next in zip(
+                self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_f_curr == c_f_next)
 
         # Quasi-static dynamics
         use_midpoint = True
@@ -344,6 +359,35 @@ class FaceContactMode(AbstractContactMode):
         sin_ths = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.sin_ths, result)  # type: ignore
         p_WB_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_xs, result)  # type: ignore
         p_WB_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_ys, result)  # type: ignore
+
+        return FaceContactVariables(
+            self.variables.num_knot_points,
+            self.variables.time_in_mode,
+            self.variables.dt,
+            lams,
+            normal_forces,
+            friction_forces,
+            cos_ths,
+            sin_ths,
+            p_WB_xs,
+            p_WB_ys,
+            self.variables.pv1,
+            self.variables.pv2,
+            self.variables.normal_vec,
+            self.variables.tangent_vec,
+        )
+
+    def get_variable_solutions(
+        self, result: MathematicalProgramResult
+    ) -> FaceContactVariables:
+        # TODO: This can probably be cleaned up somehow
+        lams = result.GetSolution(self.variables.lams)
+        normal_forces = result.GetSolution(self.variables.normal_forces)
+        friction_forces = result.GetSolution(self.variables.friction_forces)
+        cos_ths = result.GetSolution(self.variables.cos_ths)  # type: ignore
+        sin_ths = result.GetSolution(self.variables.sin_ths)  # type: ignore
+        p_WB_xs = result.GetSolution(self.variables.p_WB_xs)  # type: ignore
+        p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
 
         return FaceContactVariables(
             self.variables.num_knot_points,
