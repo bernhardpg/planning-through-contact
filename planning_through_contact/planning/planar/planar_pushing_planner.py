@@ -50,12 +50,14 @@ class PlanarPushingPlanner:
         avoid_object: bool = False,
         allow_teleportation: bool = False,
         penalize_mode_transition: bool = False,
+        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
     ):
         self.slider = slider
         self.plan_specs = plan_specs
         self.avoid_object = avoid_object
         self.allow_teleportation = allow_teleportation
         self.penalize_mode_transition = penalize_mode_transition
+        self.object_avoidance_cost = avoidance_cost_type
 
         self.source = None
         self.target = None

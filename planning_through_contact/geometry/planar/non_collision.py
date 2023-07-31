@@ -174,7 +174,7 @@ class NonCollisionMode(AbstractContactMode):
     avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
     cost_param_avoidance_lin: float = 0.1
     cost_param_avoidance_quad_dist: float = 0.2
-    cost_param_avoidance_quad_weight: float = 0.5
+    cost_param_avoidance_quad_weight: float = 0.1
     cost_param_eucl: float = 1.0
 
     @classmethod
@@ -186,6 +186,7 @@ class NonCollisionMode(AbstractContactMode):
         name: Optional[str] = None,
         one_knot_point: bool = False,
         avoid_object: bool = False,
+        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -202,6 +203,7 @@ class NonCollisionMode(AbstractContactMode):
             slider,
             prog,
             avoid_object,
+            avoidance_cost_type,
         )
 
     @classmethod

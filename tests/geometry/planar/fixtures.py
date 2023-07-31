@@ -153,6 +153,7 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     penalize_mode_transition = (
         True if request.param.get("penalize_mode_transition") else False
     )
+    avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
 
     planner = PlanarPushingPlanner(
         rigid_body_box,
@@ -161,6 +162,7 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         avoid_object=avoid_object,
         allow_teleportation=allow_teleportation,
         penalize_mode_transition=penalize_mode_transition,
+        avoidance_cost_type=avoidance_cost_type,
     )
 
     if request.param.get("boundary_conds"):
