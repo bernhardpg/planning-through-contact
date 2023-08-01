@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydot
+from pydrake.math import RollPitchYaw
 from pydrake.systems.all import ConstantVectorSource
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import (
@@ -19,6 +20,7 @@ from pydrake.systems.primitives import (
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
+    PolytopeContactLocation,
 )
 
 
@@ -32,46 +34,89 @@ class SliderPusherSystem(LeafSystem):
     in 2018 IEEE International Conference on Robotics and
     Automation (ICRA), May 2018, pp. 247–253.
     doi: 10.1109/ICRA.2018.8461175.
+
+    state: x = [x, y, theta, lam]
+    input: u = [c_n, c_f, lam_dot]
+
+    lam is the relative position on the contact face, measured from 0 to 1.
     """
 
     def __init__(
         self,
         slider_geometry: CollisionGeometry,
-        num_contact_points: int = 1,
+        contact_location: PolytopeContactLocation,
     ) -> None:
         LeafSystem.__init__(self)
 
         self.slider_geometry = slider_geometry
+        self.pv1, self.pv2 = slider_geometry.get_proximate_vertices_from_location(
+            contact_location
+        )
+        (
+            self.normal_vec,
+            self.tangent_vec,
+        ) = slider_geometry.get_norm_and_tang_vecs_from_location(contact_location)
 
-        if not num_contact_points == 1:
-            raise NotImplementedError("Currently only one contact point is supported")
-
+        NUM_CONTACT_POINTS = 1
         NUM_SLIDER_STATES = 3  # x, y, theta
         state_index = self.DeclareContinuousState(
-            NUM_SLIDER_STATES + num_contact_points
-        )  # x, y, theta, phi
-        self.y = self.DeclareStateOutputPort("y", state_index)  # y = x
+            NUM_SLIDER_STATES + NUM_CONTACT_POINTS
+        )  # x, y, theta, lam
+        self.output = self.DeclareStateOutputPort("y", state_index)  # y = x
 
-        NUM_INPUTS = 3  # f_n, f_t, phi_dot
-        self.u = self.DeclareVectorInputPort("u", NUM_INPUTS)
+        NUM_INPUTS = 3  # f_n, f_t, lam_dot
+        self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-        self.A = np.diag([0.1, 0.1, 0.1])  # TODO: change
+        self.A = np.diag([0.1, 0.1, 0.01])  # TODO: change
+
+    def _get_p_c_B(self, lam: float) -> npt.NDArray[np.float64]:
+        return lam * self.pv1 + (1 - lam) * self.pv2
+
+    def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
+        p_c_B = self._get_p_c_B(lam).flatten()
+        J_c = np.array([[1.0, 0.0, -p_c_B[1]], [0.0, 1.0, p_c_B[0]]])  # type: ignore
+        return J_c
+
+    def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
+        return self.normal_vec * c_n + self.tangent_vec * c_f
 
     def _get_wrench(
-        self, x: npt.NDArray[np.float64], u: npt.NDArray
+        self, lam: float, c_n: float, c_f: float
     ) -> npt.NDArray[np.float64]:
-        c_n, c_f, _ = u
-        phi = x[3]  # need phi to determine which face we are on
-        breakpoint()
+        f_c_B = self._get_contact_force(c_n, c_f)
+        J_c = self._get_contact_jacobian(lam)
+        w = J_c.T.dot(f_c_B)
+        return w
 
     def _get_twist(
-        self, x: npt.NDArray[np.float64], u: npt.NDArray
+        self,
+        lam: float,
+        c_n: float,
+        c_f: float,
     ) -> npt.NDArray[np.float64]:
-        w = self._get_wrench(x, u)
+        w = self._get_wrench(lam, c_n, c_f)
         return self.A.dot(w)
+
+    def _get_R(self, theta: float) -> npt.NDArray[np.float64]:
+        R = RollPitchYaw(0, 0, theta).ToRotationMatrix().matrix()
+        return R
+
+    def _calc_dynamics(
+        self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        _, _, theta, lam = x
+        c_n, c_f, lam_dot = u
+
+        R = self._get_R(theta)
+        t = self._get_twist(lam, c_n, c_f)
+
+        x_dot = np.vstack((R.dot(t), [lam_dot]))
+        return x_dot
 
     def DoCalcTimeDerivatives(
         self, context: Context, derivatives: ContinuousState
     ) -> None:
-        x = context.get_continuous_state_vector().value()
-        derivatives.get_mutable_vector().set_value(x)
+        x = context.get_continuous_state_vector().value()  # type: ignore
+        u = self.input.Eval(context)
+        x_dot = self._calc_dynamics(x, u)
+        derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
