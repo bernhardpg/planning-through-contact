@@ -3,7 +3,8 @@ import numpy as np
 import numpy.typing as npt
 import pydot
 import pytest
-from pydrake.systems.all import ConstantVectorSource
+from pydrake.autodiffutils import AutoDiffXd
+from pydrake.systems.all import ConstantVectorSource, Linearize
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import (
     Context,
@@ -18,7 +19,10 @@ from pydrake.systems.primitives import (
     VectorLogSink,
 )
 
-from planning_through_contact.dynamics.slider_pusher_system import SliderPusherSystem
+from planning_through_contact.dynamics.slider_pusher_system import (
+    SliderPusherSystem,
+    SliderPusherSystem_,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -188,3 +192,15 @@ def test_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
     plt.xlabel("t")
     plt.ylabel("y(t)")
     plt.show()
+
+
+def test_linearize_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
+    system = slider_pusher_system
+
+    context = system.CreateDefaultContext()
+    context.SetContinuousState([0, 0, 0, 0])
+    system.get_input_port(0).FixValue(context, [0, 0, 0])
+    lin_system = Linearize(system, context)
+
+    assert lin_system.A().shape == (4, 4)
+    assert lin_system.B().shape == (4, 3)
