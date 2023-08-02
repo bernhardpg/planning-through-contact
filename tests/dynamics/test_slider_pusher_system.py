@@ -38,14 +38,14 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
 
 
 @pytest.fixture
-def slider_pusher_system(rigid_body_box: RigidBody) -> SliderPusherSystem:
+def slider_pusher_system(rigid_body_box: RigidBody) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
         rigid_body_box.geometry, PolytopeContactLocation(ContactLocation.FACE, 1)
     )
     return slider_pusher
 
 
-def test_get_jacobian(slider_pusher_system: SliderPusherSystem) -> None:
+def test_get_jacobian(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
     lam = 0.0
     J_c = slider_pusher_system._get_contact_jacobian(lam)
     J_c_target = np.array([[1.0, 0.0, 0.15], [0.0, 1.0, 0.15]])
@@ -62,7 +62,7 @@ def test_get_jacobian(slider_pusher_system: SliderPusherSystem) -> None:
     assert np.allclose(J_c, J_c_target)
 
 
-def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:
+def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
     c_n = 0.0
     c_f = 0.0
     lam = 0.0
@@ -105,7 +105,7 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:
     assert w[2] >= 0
 
 
-def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:
+def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
     check_parallel = lambda u, v: np.isclose(
         u.T.dot(v) / (np.linalg.norm(u) * np.linalg.norm(v)), 1
     )
@@ -118,7 +118,7 @@ def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:
     assert t.shape == (3, 1)
 
 
-def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:
+def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
     x = np.array([0, 0, 0.5, 0])
     u = np.array([0, 0, 0])
     x_dot = slider_pusher_system._calc_dynamics(x, u)
@@ -149,7 +149,8 @@ def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:
     indirect=["slider_pusher_system"],
 )
 def test_slider_pusher(
-    slider_pusher_system: SliderPusherSystem, input: npt.NDArray[np.float64]
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+    input: npt.NDArray[np.float64],
 ) -> None:
     slider_pusher = slider_pusher_system
 
@@ -200,7 +201,8 @@ def test_slider_pusher(
     indirect=["slider_pusher_system"],
 )
 def test_slider_pusher_visualization(
-    slider_pusher_system: SliderPusherSystem, input: npt.NDArray[np.float64]
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+    input: npt.NDArray[np.float64],
 ) -> None:
     slider_pusher = slider_pusher_system
 
@@ -255,7 +257,9 @@ def test_slider_pusher_visualization(
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
 
 
-def test_linearize_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
+def test_linearize_slider_pusher(
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+) -> None:
     system = slider_pusher_system
 
     context = system.CreateDefaultContext()
