@@ -1,31 +1,22 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydot
 import pytest
-from pydrake.autodiffutils import AutoDiffXd
+from pydrake.geometry import SceneGraph
 from pydrake.systems.all import ConstantVectorSource, Linearize
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import (
-    Context,
-    ContinuousState,
-    ContinuousState_,
-    DiagramBuilder,
-    LeafSystem,
+from pydrake.systems.framework import DiagramBuilder
+from pydrake.systems.planar_scenegraph_visualizer import (
+    ConnectPlanarSceneGraphVisualizer,
 )
-from pydrake.systems.primitives import (
-    ConstantVectorSource_,
-    LogVectorOutput,
-    VectorLogSink,
-)
+from pydrake.systems.primitives import VectorLogSink
 
 from planning_through_contact.dynamics.slider_pusher_system import (
+    SliderPusherGeometry,
     SliderPusherSystem,
-    SliderPusherSystem_,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
@@ -150,23 +141,35 @@ def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:
     assert x_dot[3] == 1
 
 
-def test_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
+@pytest.mark.parametrize(
+    "slider_pusher_system, input",
+    [({}, np.array([0, 0, 0]))],
+    indirect=["slider_pusher_system"],
+)
+def test_slider_pusher(
+    slider_pusher_system: SliderPusherSystem, input: npt.NDArray[np.float64]
+) -> None:
     slider_pusher = slider_pusher_system
 
     builder = DiagramBuilder()
     builder.AddNamedSystem("slider_pusher", slider_pusher)
 
     # input
-    constant_input = ConstantVectorSource(
-        np.full(slider_pusher.get_input_port().size(), 1),
-    )
+    constant_input = ConstantVectorSource(np.array([0, 0, 0]))
     builder.AddNamedSystem("input", constant_input)
     builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
 
+    scene_graph = builder.AddSystem(SceneGraph())
+    source_id = scene_graph.RegisterSource()
+
     # logger
-    logger = VectorLogSink(slider_pusher.num_continuous_states())
-    builder.AddNamedSystem("logger", logger)
-    builder.Connect(slider_pusher.get_output_port(), logger.get_input_port())
+    state_logger = VectorLogSink(slider_pusher.num_continuous_states())
+    builder.AddNamedSystem("state_logger", state_logger)
+    builder.Connect(slider_pusher.get_output_port(), state_logger.get_input_port())
+
+    input_logger = VectorLogSink(slider_pusher.input.size())
+    builder.AddNamedSystem("input_logger", input_logger)
+    builder.Connect(constant_input.get_output_port(), input_logger.get_input_port())
 
     diagram = builder.Build()
     diagram.set_name("diagram")
@@ -174,9 +177,8 @@ def test_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
     pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
 
     context = diagram.CreateDefaultContext()
-    system_context = slider_pusher.GetMyContextFromRoot(context)
 
-    x_initial = np.array([0, 0, 0, 0])
+    x_initial = np.array([0, 0, 0, 0.5])
     context.SetContinuousState(x_initial)
 
     # Create the simulator, and simulate for 10 seconds.
@@ -184,14 +186,70 @@ def test_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:
     simulator = Simulator(diagram, context)
     simulator.AdvanceTo(SIMULATION_END)
 
-    log = logger.FindLog(context)
+    state_log = state_logger.FindLog(context)
+    input_log = input_logger.FindLog(context)
 
-    # Plot the results
-    plt.figure()
-    plt.plot(log.sample_times(), log.data().transpose())
-    plt.xlabel("t")
-    plt.ylabel("y(t)")
-    plt.show()
+    log = SliderPusherLog.from_logs(state_log, input_log)
+    # TODO
+
+
+@pytest.mark.parametrize(
+    "slider_pusher_system, input",
+    [({}, np.array([0, 0, 0]))],
+    indirect=["slider_pusher_system"],
+)
+def test_slider_pusher_visualization(
+    slider_pusher_system: SliderPusherSystem, input: npt.NDArray[np.float64]
+) -> None:
+    slider_pusher = slider_pusher_system
+
+    builder = DiagramBuilder()
+    builder.AddNamedSystem("slider_pusher", slider_pusher)
+
+    # Register geometry with SceneGraph
+    scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
+    slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
+        builder,
+        slider_pusher.get_output_port(),
+        slider_pusher.slider_geometry,
+        scene_graph,
+    )
+
+    # input
+    constant_input = ConstantVectorSource(np.array([0, 0, 0]))
+    builder.AddNamedSystem("input", constant_input)
+    builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
+
+    # Connect planar visualizer
+    T_VW = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+    visualizer = ConnectPlanarSceneGraphVisualizer(
+        builder, scene_graph, T_VW=T_VW, xlim=[-1.2, 1.2], ylim=[-1.2, 1.2], show=True
+    )
+
+    diagram = builder.Build()
+    diagram.set_name("diagram")
+
+    context = diagram.CreateDefaultContext()
+    x_initial = np.array([0, 0, 0, 0.5])
+    context.SetContinuousState(x_initial)
+
+    visualizer.start_recording()
+
+    # Create the simulator, and simulate for 10 seconds.
+    SIMULATION_END = 10
+    simulator = Simulator(diagram, context)
+    simulator.Initialize()
+    # simulator.set_target_realtime_rate(1.0)
+    simulator.AdvanceTo(SIMULATION_END)
+
+    visualizer.stop_recording()
+    ani = visualizer.get_recording_as_animation()
+    # Playback the recording and save the output.
+    ani.save("test.mp4", fps=30)
+
+    DEBUG = True
+    if DEBUG:
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
 
 
 def test_linearize_slider_pusher(slider_pusher_system: SliderPusherSystem) -> None:

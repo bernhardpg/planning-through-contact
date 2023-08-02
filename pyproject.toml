@@ -22,6 +22,8 @@ pydot = "^1.4.2"
 tk = "^0.1.0"
 drake = "^1.13"
 pytest = "^7.4.0"
+ffmpeg = "^1.4"
+ffmpeg-python = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 

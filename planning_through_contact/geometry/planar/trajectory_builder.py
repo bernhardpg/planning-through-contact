@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
+from pydrake.systems.primitives import VectorLog
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
@@ -41,6 +42,17 @@ class PlanarPushingTrajectory:
     @property
     def N(self) -> int:
         return self.p_WB.shape[1]
+
+    @classmethod
+    def from_log(cls, log: VectorLog) -> "PlanarPushingTrajectory":
+        EXPECTED_NUM_STATES = 4:
+        if not log.get_input_size == EXPECTED_NUM_STATES:
+            raise ValueError("Log size must match expected state: [x, y, theta, lam]^T")
+
+        p_c_W = log.data()[0:2,:]
+        thetas = log.data()[3,:]
+        R_WB = [np.array([[np.cos(th), -np.sin(th)],[np.cos(th), np.sin(th)]]) for th in thetas]
+        breakpoint()
 
 
 class PlanarTrajectoryBuilder:
