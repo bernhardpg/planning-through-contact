@@ -120,10 +120,16 @@ def SliderPusherSystem_(T):
             self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]
         ) -> npt.NDArray[np.float64]:
             theta = x[2]
-            lam = x[3]
+            # we can not move outside of the contact face
+            lam = np.clip(x[3], 0.0, 1.0)
             c_n = u[0]
             c_f = u[1]
+
             lam_dot = u[2]
+            if lam == 1.0:  # lam_dot must be nonpositive
+                lam_dot = np.clip(lam_dot, None, 0.0)
+            elif lam == 0.0:  # lam_dot must be nonnegative
+                lam_dot = np.clip(lam_dot, 0.0, None)
 
             R = self._get_R(theta)
             t = self._get_twist(lam, c_n, c_f)
