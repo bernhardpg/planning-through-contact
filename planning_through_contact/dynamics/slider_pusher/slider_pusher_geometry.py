@@ -59,7 +59,9 @@ class SliderPusherGeometry(LeafSystem):
         )
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
-            self.source_id, GeometryFrame("pusher")
+            source_id=self.source_id,
+            parent_id=self.slider_frame_id,
+            frame=GeometryFrame("pusher"),
         )
         self.pusher_geometry_id = scene_graph.RegisterGeometry(
             self.source_id,

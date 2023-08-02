@@ -144,13 +144,19 @@ def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:  # typ
 
 
 @pytest.mark.parametrize(
-    "slider_pusher_system, input",
-    [({}, np.array([0, 0, 0]))],
+    "slider_pusher_system, state, input",
+    [
+        ({}, np.array([0, 0, 0, 0.9]), np.array([1.0, 0, 0])),
+        ({}, np.array([0, 0, 0, 0.5]), np.array([0, 0, 0.1])),
+    ],
     indirect=["slider_pusher_system"],
+    ids=["rotate", "move_finger"],
 )
-def test_slider_pusher(
+def test_slider_pusher_simulation(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
+    state: npt.NDArray[np.float64],
     input: npt.NDArray[np.float64],
+    request: pytest.FixtureRequest,
 ) -> None:
     slider_pusher = slider_pusher_system
 
@@ -172,6 +178,12 @@ def test_slider_pusher(
     builder.AddNamedSystem("input", constant_input)
     builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
 
+    # state logger
+    logger = builder.AddNamedSystem(
+        "logger", VectorLogSink(slider_pusher.num_continuous_states())
+    )
+    builder.Connect(slider_pusher.get_output_port(), logger.get_input_port())
+
     # Connect planar visualizer
     DEBUG = False
     if DEBUG:
@@ -192,28 +204,41 @@ def test_slider_pusher(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    x_initial = np.array([0, 0, 0, 0.5])
+    x_initial = state
     context.SetContinuousState(x_initial)
 
     if DEBUG:
         visualizer.start_recording()  # type: ignore
 
     # Create the simulator, and simulate for 10 seconds.
-    SIMULATION_END = 10
+    SIMULATION_END = 7
     simulator = Simulator(diagram, context)
     simulator.Initialize()
     # simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
+    log = logger.FindLog(context).data()
+    if request.node.callspec.id == "rotate":  # type: ignore
+        xs = log[0, :]
+        thetas = log[2, :]
+
+        x_diffs = xs[1:] - xs[:-1]
+        assert np.all(x_diffs <= 0)  # we should only move in negative x-direction
+        theta_diffs = thetas[1:] - thetas[:-1]
+
+        assert np.all(theta_diffs >= 0)  # we should rotate in positive direction
+    elif request.node.callspec.id == "move_finger":  # type: ignore
+        lams = log[3, :]
+        lam_diffs = lams[1:] - lams[:-1]
+        assert np.all(lam_diffs >= 0)  # finger should move upwards
+
     if DEBUG:
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+
         visualizer.stop_recording()  # type: ignore
         ani = visualizer.get_recording_as_animation()  # type: ignore
         # Playback the recording and save the output.
         ani.save("test.mp4", fps=30)
-
-    DEBUG = True
-    if DEBUG:
-        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
 
 
 def test_linearize_slider_pusher(

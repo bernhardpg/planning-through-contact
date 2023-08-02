@@ -57,7 +57,7 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            self.A = np.diag([0.1, 0.1, 0.01])  # TODO: change
+            self.A = np.diag([0.1, 0.1, 1.5])  # TODO: change
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
