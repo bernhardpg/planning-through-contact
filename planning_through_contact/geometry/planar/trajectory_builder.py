@@ -45,13 +45,16 @@ class PlanarPushingTrajectory:
 
     @classmethod
     def from_log(cls, log: VectorLog) -> "PlanarPushingTrajectory":
-        EXPECTED_NUM_STATES = 4:
+        EXPECTED_NUM_STATES = 4
         if not log.get_input_size == EXPECTED_NUM_STATES:
             raise ValueError("Log size must match expected state: [x, y, theta, lam]^T")
 
-        p_c_W = log.data()[0:2,:]
-        thetas = log.data()[3,:]
-        R_WB = [np.array([[np.cos(th), -np.sin(th)],[np.cos(th), np.sin(th)]]) for th in thetas]
+        p_c_W = log.data()[0:2, :]
+        thetas = log.data()[3, :]
+        R_WB = [
+            np.array([[np.cos(th), -np.sin(th)], [np.cos(th), np.sin(th)]])
+            for th in thetas
+        ]
         breakpoint()
 
 

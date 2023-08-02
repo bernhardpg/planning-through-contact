@@ -157,58 +157,6 @@ def test_slider_pusher(
     builder = DiagramBuilder()
     builder.AddNamedSystem("slider_pusher", slider_pusher)
 
-    # input
-    constant_input = ConstantVectorSource(np.array([0, 0, 0]))
-    builder.AddNamedSystem("input", constant_input)
-    builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
-
-    scene_graph = builder.AddSystem(SceneGraph())
-    source_id = scene_graph.RegisterSource()
-
-    # logger
-    state_logger = VectorLogSink(slider_pusher.num_continuous_states())
-    builder.AddNamedSystem("state_logger", state_logger)
-    builder.Connect(slider_pusher.get_output_port(), state_logger.get_input_port())
-
-    input_logger = VectorLogSink(slider_pusher.input.size())
-    builder.AddNamedSystem("input_logger", input_logger)
-    builder.Connect(constant_input.get_output_port(), input_logger.get_input_port())
-
-    diagram = builder.Build()
-    diagram.set_name("diagram")
-
-    pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
-
-    context = diagram.CreateDefaultContext()
-
-    x_initial = np.array([0, 0, 0, 0.5])
-    context.SetContinuousState(x_initial)
-
-    # Create the simulator, and simulate for 10 seconds.
-    SIMULATION_END = 10
-    simulator = Simulator(diagram, context)
-    simulator.AdvanceTo(SIMULATION_END)
-
-    state_log = state_logger.FindLog(context)
-    input_log = input_logger.FindLog(context)
-
-    # TODO
-
-
-@pytest.mark.parametrize(
-    "slider_pusher_system, input",
-    [({}, np.array([0, 0, 0]))],
-    indirect=["slider_pusher_system"],
-)
-def test_slider_pusher_visualization(
-    slider_pusher_system: SliderPusherSystem,  # type: ignore
-    input: npt.NDArray[np.float64],
-) -> None:
-    slider_pusher = slider_pusher_system
-
-    builder = DiagramBuilder()
-    builder.AddNamedSystem("slider_pusher", slider_pusher)
-
     # Register geometry with SceneGraph
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
@@ -220,16 +168,25 @@ def test_slider_pusher_visualization(
     )
 
     # input
-    constant_input = ConstantVectorSource(np.array([0, 0, 0.1]))
+    constant_input = ConstantVectorSource(input)
     builder.AddNamedSystem("input", constant_input)
     builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
 
     # Connect planar visualizer
-    T_VW = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
-    LIM = 0.8
-    visualizer = ConnectPlanarSceneGraphVisualizer(
-        builder, scene_graph, T_VW=T_VW, xlim=[-LIM, LIM], ylim=[-LIM, LIM], show=True
-    )
+    DEBUG = False
+    if DEBUG:
+        T_VW = np.array(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+        )
+        LIM = 0.8
+        visualizer = ConnectPlanarSceneGraphVisualizer(
+            builder,
+            scene_graph,
+            T_VW=T_VW,
+            xlim=[-LIM, LIM],
+            ylim=[-LIM, LIM],
+            show=True,
+        )
 
     diagram = builder.Build()
     diagram.set_name("diagram")
@@ -238,7 +195,8 @@ def test_slider_pusher_visualization(
     x_initial = np.array([0, 0, 0, 0.5])
     context.SetContinuousState(x_initial)
 
-    visualizer.start_recording()
+    if DEBUG:
+        visualizer.start_recording()  # type: ignore
 
     # Create the simulator, and simulate for 10 seconds.
     SIMULATION_END = 10
@@ -247,10 +205,11 @@ def test_slider_pusher_visualization(
     # simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
-    visualizer.stop_recording()
-    ani = visualizer.get_recording_as_animation()
-    # Playback the recording and save the output.
-    ani.save("test.mp4", fps=30)
+    if DEBUG:
+        visualizer.stop_recording()  # type: ignore
+        ani = visualizer.get_recording_as_animation()  # type: ignore
+        # Playback the recording and save the output.
+        ani.save("test.mp4", fps=30)
 
     DEBUG = True
     if DEBUG:
