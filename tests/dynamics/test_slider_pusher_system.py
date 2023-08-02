@@ -11,8 +11,10 @@ from pydrake.systems.planar_scenegraph_visualizer import (
 )
 from pydrake.systems.primitives import VectorLogSink
 
-from planning_through_contact.dynamics.slider_pusher_system import (
+from planning_through_contact.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
+)
+from planning_through_contact.dynamics.slider_pusher.slider_pusher_system import (
     SliderPusherSystem,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -189,7 +191,6 @@ def test_slider_pusher(
     state_log = state_logger.FindLog(context)
     input_log = input_logger.FindLog(context)
 
-    log = SliderPusherLog.from_logs(state_log, input_log)
     # TODO
 
 
