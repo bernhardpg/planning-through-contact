@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
+from pydrake.systems.primitives import VectorLog
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables

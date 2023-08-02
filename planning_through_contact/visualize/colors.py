@@ -5,6 +5,9 @@
 
 from collections import OrderedDict, namedtuple
 
+import numpy as np
+import numpy.typing as npt
+
 Color = namedtuple("RGB", "red, green, blue")
 COLORS = {}  # dict of colors
 
@@ -13,6 +16,10 @@ class RGB(Color):
     def hex_format(self):
         """Returns color in hex format"""
         return "#{:02X}{:02X}{:02X}".format(self.red, self.green, self.blue)
+
+    def diffuse(self, alpha: float = 1.0) -> npt.NDArray[np.float64]:
+        rgb_normalized = np.array([self.red, self.green, self.blue]) / 256
+        return np.concatenate((rgb_normalized, [alpha]))
 
 
 # Color Contants
