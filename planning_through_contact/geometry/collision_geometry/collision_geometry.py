@@ -94,3 +94,9 @@ class CollisionGeometry(ABC):
         self, location: PolytopeContactLocation
     ) -> List[Hyperplane]:
         pass
+
+    @abstractmethod
+    def get_p_c_B_from_lam(
+        self, lam: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        pass

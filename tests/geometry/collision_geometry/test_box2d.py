@@ -4,6 +4,7 @@ import pytest
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
+    PolytopeContactLocation,
 )
 from planning_through_contact.geometry.hyperplane import Hyperplane
 
@@ -72,6 +73,15 @@ def test_tangent_vecs(box_geometry: Box2d) -> None:
     tangent_vecs = box_geometry.tangent_vecs
     for n, t in zip(tangent_vecs, targets):
         assert np.allclose(n, t)
+
+
+def test_get_p_c_B(box_geometry: Box2d) -> None:
+    loc = PolytopeContactLocation(ContactLocation.FACE, idx=0)
+    lam = 0.5
+    p_c_B = box_geometry.get_p_c_B_from_lam(lam, loc)
+    assert p_c_B.shape == (2, 1)
+    assert p_c_B[0, 0] == 0
+    assert p_c_B[1, 0] == box_geometry.height / 2
 
 
 # TODO: Complete test coverage

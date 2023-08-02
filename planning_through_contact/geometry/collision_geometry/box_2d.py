@@ -359,3 +359,10 @@ class Box2d(CollisionGeometry):
             raise ValueError(f"Can not get collision free region for {location}")
 
         return planes
+
+    def get_p_c_B_from_lam(
+        self, lam: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        assert loc.pos == ContactLocation.FACE
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+        return lam * pv1 + (1 - lam) * pv2

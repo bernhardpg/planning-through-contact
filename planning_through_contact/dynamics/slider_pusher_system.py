@@ -82,7 +82,7 @@ def SliderPusherSystem_(T):
             )
 
         def _get_p_c_B(self, lam: float) -> npt.NDArray[np.float64]:
-            return lam * self.pv1 + (1 - lam) * self.pv2
+            return self.slider_geometry.get_p_c_B_from_lam(lam, self.contact_location)
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
             p_c_B = self._get_p_c_B(lam).flatten()
