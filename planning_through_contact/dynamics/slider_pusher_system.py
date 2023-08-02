@@ -8,6 +8,7 @@ from pydrake.geometry import (
     GeometryInstance,
     MakePhongIllustrationProperties,
     SceneGraph,
+    Sphere,
 )
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix, cos, sin
 from pydrake.systems.framework import (
@@ -146,9 +147,15 @@ SliderPusherSystem = SliderPusherSystem_[None]  # type: ignore
 
 class SliderPusherGeometry(LeafSystem):
     def __init__(
-        self, slider_geometry: CollisionGeometry, scene_graph: SceneGraph
+        self,
+        slider_geometry: CollisionGeometry,
+        contact_location: PolytopeContactLocation,
+        scene_graph: SceneGraph,
     ) -> None:
         super().__init__()
+
+        self.slider_geometry = slider_geometry
+        self.contact_location = contact_location
 
         NUM_CONTACT_POINTS = 1
         NUM_SLIDER_STATES = 3  # x, y, theta
@@ -164,7 +171,7 @@ class SliderPusherGeometry(LeafSystem):
         self.slider_frame_id = scene_graph.RegisterFrame(
             self.source_id, GeometryFrame("slider")
         )
-        self.geometry_id = scene_graph.RegisterGeometry(
+        self.slider_geometry_id = scene_graph.RegisterGeometry(
             self.source_id,
             self.slider_frame_id,
             GeometryInstance(RigidTransform.Identity(), Box(0.3, 0.3, 0.3), "slider"),
@@ -172,8 +179,23 @@ class SliderPusherGeometry(LeafSystem):
         BOX_COLOR = COLORS["aquamarine4"]
         scene_graph.AssignRole(
             self.source_id,
-            self.geometry_id,
+            self.slider_geometry_id,
             MakePhongIllustrationProperties(BOX_COLOR.diffuse()),
+        )
+
+        self.pusher_frame_id = scene_graph.RegisterFrame(
+            self.source_id, GeometryFrame("pusher")
+        )
+        self.pusher_geometry_id = scene_graph.RegisterGeometry(
+            self.source_id,
+            self.pusher_frame_id,
+            GeometryInstance(RigidTransform.Identity(), Sphere(0.01), "pusher"),
+        )
+        FINGER_COLOR = COLORS["firebrick3"]
+        scene_graph.AssignRole(
+            self.source_id,
+            self.pusher_geometry_id,
+            MakePhongIllustrationProperties(FINGER_COLOR.diffuse()),
         )
 
     @classmethod
@@ -182,10 +204,12 @@ class SliderPusherGeometry(LeafSystem):
         builder: DiagramBuilder,
         slider_pusher_output_port: OutputPort,
         slider_geometry: CollisionGeometry,
+        contact_location: PolytopeContactLocation,
         scene_graph: SceneGraph,
     ) -> "SliderPusherGeometry":
         slider_pusher_geometry = builder.AddNamedSystem(
-            "slider_pusher_geometry", cls(slider_geometry, scene_graph)
+            "slider_pusher_geometry",
+            cls(slider_geometry, contact_location, scene_graph),
         )
         builder.Connect(
             slider_pusher_output_port, slider_pusher_geometry.get_input_port()
@@ -202,9 +226,14 @@ class SliderPusherGeometry(LeafSystem):
         p_x = state[0]
         p_y = state[1]
         theta = state[2]
-        lam = [3]
-
         pose = RigidTransform(
             RollPitchYaw(np.array([0.0, 0.0, theta])), np.array([p_x, p_y, 0.0])  # type: ignore
         )
         output.get_mutable_value().set_value(id=self.slider_frame_id, value=pose)  # type: ignore
+
+        lam = state[3]
+        p_c_B = self.slider_geometry.get_p_c_B_from_lam(lam, self.contact_location)
+        pose = RigidTransform(
+            RotationMatrix.Identity(), np.concatenate((p_c_B.flatten(), [0]))  # type: ignore
+        )
+        output.get_mutable_value().set_value(id=self.pusher_frame_id, value=pose)  # type: ignore

@@ -212,18 +212,20 @@ def test_slider_pusher_visualization(
         builder,
         slider_pusher.get_output_port(),
         slider_pusher.slider_geometry,
+        slider_pusher.contact_location,
         scene_graph,
     )
 
     # input
-    constant_input = ConstantVectorSource(np.array([0, 0, 0]))
+    constant_input = ConstantVectorSource(np.array([0, 0, 0.1]))
     builder.AddNamedSystem("input", constant_input)
     builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
 
     # Connect planar visualizer
     T_VW = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+    LIM = 0.8
     visualizer = ConnectPlanarSceneGraphVisualizer(
-        builder, scene_graph, T_VW=T_VW, xlim=[-1.2, 1.2], ylim=[-1.2, 1.2], show=True
+        builder, scene_graph, T_VW=T_VW, xlim=[-LIM, LIM], ylim=[-LIM, LIM], show=True
     )
 
     diagram = builder.Build()
