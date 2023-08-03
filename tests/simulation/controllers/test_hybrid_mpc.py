@@ -51,7 +51,7 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:  #
     assert sum(linear_system.B().flatten() != 0) == 4
 
 
-def test_hybrid_mpc(
+def test_hybrid_mpc_control(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[AbstractModeVariables],
     hybrid_mpc: HybridModelPredictiveControl,
