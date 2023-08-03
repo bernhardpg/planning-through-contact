@@ -8,6 +8,7 @@ from pydrake.geometry import SceneGraph
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
+from pydrake.systems.primitives import ConstantVectorSource
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -69,7 +70,7 @@ def one_contact_mode_vars(
     return [vars]
 
 
-def test_feeder_state(
+def test_feeder_get_state(
     one_contact_mode_vars: List[AbstractModeVariables],
 ) -> None:
     feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars)
@@ -125,6 +126,87 @@ def test_feeder_state_feedforward_visualization(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
+
+    if DEBUG:
+        visualizer.start_recording()  # type: ignore
+
+    SIMULATION_END = face_contact_mode.time_in_mode
+    simulator = Simulator(diagram, context)
+    simulator.Initialize()
+    simulator.AdvanceTo(SIMULATION_END)
+
+    # TODO(bernhardpg): Add some actual tests here?
+
+    if DEBUG:
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+
+        visualizer.stop_recording()  # type: ignore
+        ani = visualizer.get_recording_as_animation()  # type: ignore
+        # Playback the recording and save the output.
+        ani.save("test.mp4", fps=30)
+
+
+def test_visualize_both_desired_and_actual_traj(
+    face_contact_mode: FaceContactMode,
+    one_contact_mode_vars: List[AbstractModeVariables],
+) -> None:
+    slider_geometry = face_contact_mode.object.geometry
+    contact_location = face_contact_mode.contact_location
+
+    builder = DiagramBuilder()
+
+    feeder = builder.AddNamedSystem(
+        "feedforward", SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+    )
+    scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
+    slider_pusher = builder.AddNamedSystem(
+        "slider_pusher", SliderPusherSystem(slider_geometry, contact_location)
+    )
+
+    # only feedforward a constant force on the block
+    constant_input = builder.AddNamedSystem(
+        "input", ConstantVectorSource(np.array([1.0, 0, 0]))
+    )
+    builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
+
+    slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
+        builder,
+        slider_pusher.get_output_port(),
+        slider_geometry,
+        contact_location,
+        scene_graph,
+    )
+    slider_pusher_desired_geometry = SliderPusherGeometry.add_to_builder(
+        builder,
+        feeder.GetOutputPort("state"),
+        slider_geometry,
+        contact_location,
+        scene_graph,
+        "desired_slider_pusher_geometry",
+        alpha=0.1,
+    )
+
+    # Connect planar visualizer
+    DEBUG = False
+    if DEBUG:
+        T_VW = np.array(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+        )
+        LIM = 0.8
+        visualizer = ConnectPlanarSceneGraphVisualizer(
+            builder,
+            scene_graph,
+            T_VW=T_VW,
+            xlim=[-LIM, LIM],
+            ylim=[-LIM, LIM],
+            show=False,
+        )
+
+    diagram = builder.Build()
+    diagram.set_name("diagram")
+
+    context = diagram.CreateDefaultContext()
+    context.SetContinuousState(np.array([0, 0, 0, 0.5]))
 
     if DEBUG:
         visualizer.start_recording()  # type: ignore
