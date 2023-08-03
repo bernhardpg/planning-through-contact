@@ -2,7 +2,7 @@ from typing import Dict, List
 
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
-from pydrake.systems.framework import LeafSystem
+from pydrake.systems.framework import BasicVector, Context, LeafSystem
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
@@ -21,12 +21,17 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         super().__init__()
 
         NUM_STATE_VARS = 4
-        self.DeclareVectorOutputPort("state", NUM_STATE_VARS)
+        self.DeclareVectorOutputPort("state", NUM_STATE_VARS, self.CalcStateOutput)
 
         NUM_INPUT_VARS = 3
-        self.DeclareVectorOutputPort("input", NUM_INPUT_VARS)
+        self.DeclareVectorOutputPort("input", NUM_INPUT_VARS, self.CalcInputOutput)
 
+    def CalcStateOutput(self, context: Context, output: BasicVector):
+        output.SetFromVector([0, 0, 0, 0])
+
+    def CalcInputOutput(self, context: Context, output: BasicVector):
         breakpoint()
+        output.SetFromVector([0, 0, 0, 0])
 
     @classmethod
     def from_result(

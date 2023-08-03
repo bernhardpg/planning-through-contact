@@ -84,7 +84,9 @@ def non_collision_mode(rigid_body_box: RigidBody) -> NonCollisionMode:
 
 
 @pytest.fixture
-def face_contact_mode(rigid_body_box: RigidBody) -> FaceContactMode:
+def face_contact_mode(
+    rigid_body_box: RigidBody,
+) -> FaceContactMode:
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
     specs = PlanarPlanSpecs()
     mode = FaceContactMode.create_from_plan_spec(
