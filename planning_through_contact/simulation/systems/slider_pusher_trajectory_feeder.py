@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
-from pydrake.systems.framework import BasicVector, Context, LeafSystem
+from pydrake.systems.framework import BasicVector, Context, LeafSystem, OutputPort
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
@@ -105,7 +105,7 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         self.DeclareVectorOutputPort("state", NUM_STATE_VARS, self.CalcStateOutput)
 
         NUM_INPUT_VARS = 3
-        self.DeclareVectorOutputPort("input", NUM_INPUT_VARS, self.CalcInputOutput)
+        self.DeclareVectorOutputPort("control", NUM_INPUT_VARS, self.CalcControlOutput)
 
         time_in_modes = [knot_points.time_in_mode for knot_points in path]
         temp = np.concatenate(([0], np.cumsum(time_in_modes)))
@@ -129,10 +129,17 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         state = traj.eval_state(t)
         return state
 
+    def get_state_feedforward_port(self) -> OutputPort:
+        return self.GetOutputPort("state")
+
+    def get_control_feedforward_port(self) -> OutputPort:
+        return self.GetOutputPort("control")
+
     def CalcStateOutput(self, context: Context, output: BasicVector):
         output.SetFromVector(self.get_state(context.get_time()))
 
-    def CalcInputOutput(self, context: Context, output: BasicVector):
+    def CalcControlOutput(self, context: Context, output: BasicVector):
+        # TODO(bernhardpg):
         breakpoint()
         output.SetFromVector([0, 0, 0, 0])
 
