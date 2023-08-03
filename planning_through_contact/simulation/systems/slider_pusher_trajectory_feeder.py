@@ -171,10 +171,12 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         return self.GetOutputPort("control")
 
     def CalcStateOutput(self, context: Context, output: BasicVector):
-        output.SetFromVector(self.get_state(context.get_time()))
+        state = self.get_state(context.get_time())
+        output.SetFromVector(state)
 
     def CalcControlOutput(self, context: Context, output: BasicVector):
-        output.SetFromVector(self.get_control(context.get_time()))
+        control = self.get_control(context.get_time())
+        output.SetFromVector(control)
 
     @classmethod
     def from_result(

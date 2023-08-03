@@ -106,6 +106,8 @@ def test_hybrid_mpc(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
+    x_initial = feeder.get_state(0)
+    context.SetContinuousState(x_initial)
 
     if DEBUG:
         visualizer.start_recording()  # type: ignore

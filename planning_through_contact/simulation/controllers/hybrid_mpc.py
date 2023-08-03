@@ -42,7 +42,9 @@ class HybridModelPredictiveControl(LeafSystem):
         return Linearize(self.model, self.model_context)
 
     def CalcControl(self, context: Context, output: BasicVector):
-        output.SetFromVector(np.array([0, 0, 0]))
+        desired_input = self.desired_input_port.Eval(context)
+        desired_state = self.desired_state_port.Eval(context)
+        output.SetFromVector(desired_input)  # type: ignore
 
     def get_control_port(self) -> OutputPort:
         return self.control_port
