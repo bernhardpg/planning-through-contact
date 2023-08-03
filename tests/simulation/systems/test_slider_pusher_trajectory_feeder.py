@@ -1,6 +1,7 @@
 from typing import List
 
 import numpy as np
+import pydot
 import pytest
 from pydrake.all import ConnectPlanarSceneGraphVisualizer
 from pydrake.geometry import SceneGraph
@@ -19,6 +20,9 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
     assemble_progs_from_contact_modes,
 )
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    PlanarTrajectoryBuilder,
+)
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
@@ -28,6 +32,9 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 )
 from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder import (
     SliderPusherTrajectoryFeeder,
+)
+from planning_through_contact.visualize.planar import (
+    visualize_planar_pushing_trajectory,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -62,7 +69,22 @@ def one_contact_mode_vars(
     return [vars]
 
 
-def test_feeder(
+def test_feeder_state(
+    one_contact_mode_vars: List[AbstractModeVariables],
+) -> None:
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+
+    target = np.array([0.0, 0.0, 0.0, 0.65777792])
+    assert np.allclose(feeder.get_state(0), target)
+
+    target = np.array([0.15, -0.02698766, 0.4, 0.65777792])
+    assert np.allclose(feeder.get_state(1), target)
+
+    target = np.array([3.00000000e-01, 1.83975037e-18, 8.00000000e-01, 6.57777918e-01])
+    assert np.allclose(feeder.get_state(2), target)
+
+
+def test_feeder_state_feedforward_visualization(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[AbstractModeVariables],
 ) -> None:
@@ -84,7 +106,7 @@ def test_feeder(
     )
 
     # Connect planar visualizer
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -96,7 +118,7 @@ def test_feeder(
             T_VW=T_VW,
             xlim=[-LIM, LIM],
             ylim=[-LIM, LIM],
-            show=True,
+            show=False,
         )
 
     diagram = builder.Build()
@@ -107,10 +129,9 @@ def test_feeder(
     if DEBUG:
         visualizer.start_recording()  # type: ignore
 
-    SIMULATION_END = 7
+    SIMULATION_END = face_contact_mode.time_in_mode
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:
@@ -120,12 +141,3 @@ def test_feeder(
         ani = visualizer.get_recording_as_animation()  # type: ignore
         # Playback the recording and save the output.
         ani.save("test.mp4", fps=30)
-
-    breakpoint()
-
-    # slider_pusher = builder.AddNamedSystem(
-    #     "slider_pusher",
-    #     SliderPusherSystem(
-    #         face_contact_mode.object.geometry, face_contact_mode.contact_location
-    #     ),
-    # )

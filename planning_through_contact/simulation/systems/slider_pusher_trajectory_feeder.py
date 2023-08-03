@@ -1,8 +1,12 @@
+from dataclasses import dataclass
 from typing import Dict, List
 
+import numpy as np
+import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.framework import BasicVector, Context, LeafSystem
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
@@ -11,9 +15,86 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
+from planning_through_contact.geometry.utilities import from_so2_to_so3
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
+
+
+class So2TrajSegment:
+    def __init__(
+        self,
+        # NOTE: we don't really need the entire matrix for this,
+        # but keep it around until we want to extend to SO(3)
+        Rs: List[npt.NDArray],
+        start_time: float,
+        end_time: float,
+    ) -> None:
+        self.Rs = Rs
+        self.start_time = start_time
+        self.end_time = end_time
+
+        Rs_in_SO3 = [from_so2_to_so3(R) for R in Rs]
+        knot_point_times = np.linspace(start_time, end_time, len(Rs))
+        self.traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
+
+    def eval(self, t: float) -> float:
+        R = self.traj.orientation(t).rotation()
+        return np.arccos(R[0, 0])
+
+
+class LinTrajSegment:
+    def __init__(
+        self,
+        knot_points: npt.NDArray[np.float64],  # (NUM_SAMPLES, )
+        start_time: float,
+        end_time: float,
+    ) -> None:
+        self.knot_points = knot_points
+        self.start_time = start_time
+        self.end_time = end_time
+
+        knot_point_times = np.linspace(start_time, end_time, len(knot_points))
+
+        self.traj = PiecewisePolynomial.FirstOrderHold(
+            knot_point_times,
+            knot_points.reshape(
+                (1, -1)
+            ),  # FirstOrderHold expects values to be two-dimensional
+        )
+
+    def eval(self, t: float) -> None:  # TODO
+        return self.traj.value(t).item()
+
+
+@dataclass
+class SliderPusherTrajSegment:
+    start_time: float
+    end_time: float
+    p_WB_x: LinTrajSegment
+    p_WB_y: LinTrajSegment
+    theta: So2TrajSegment
+    lam: LinTrajSegment
+
+    @classmethod
+    def from_knot_points(
+        cls, knot_points: AbstractModeVariables, start_time: float, end_time: float
+    ) -> "SliderPusherTrajSegment":
+        p_WB_x = LinTrajSegment(knot_points.p_WB_xs, start_time, end_time)  # type: ignore
+        p_WB_y = LinTrajSegment(knot_points.p_WB_ys, start_time, end_time)  # type: ignore
+        lam = LinTrajSegment(knot_points.lams, start_time, end_time)  # type: ignore
+        theta = So2TrajSegment(knot_points.R_WBs, start_time, end_time)  # type: ignore
+        return cls(start_time, end_time, p_WB_x, p_WB_y, theta, lam)
+
+    def eval_state(self, t: float) -> npt.NDArray[np.float64]:
+        return np.array(
+            [
+                self.p_WB_x.eval(t),
+                self.p_WB_y.eval(t),
+                self.theta.eval(t),
+                self.lam.eval(t),
+            ]
+        )
 
 
 class SliderPusherTrajectoryFeeder(LeafSystem):
@@ -26,8 +107,30 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         NUM_INPUT_VARS = 3
         self.DeclareVectorOutputPort("input", NUM_INPUT_VARS, self.CalcInputOutput)
 
+        time_in_modes = [knot_points.time_in_mode for knot_points in path]
+        temp = np.concatenate(([0], np.cumsum(time_in_modes)))
+        self.start_times = temp[:-1]
+        self.end_times = temp[1:]
+        self.traj_segments = [
+            SliderPusherTrajSegment.from_knot_points(p, start, end)
+            for p, start, end in zip(path, self.start_times, self.end_times)
+        ]
+
+    def _get_traj_segment_for_time(self, t: float) -> SliderPusherTrajSegment:
+        idx_of_curr_segment = np.where(t <= self.end_times)[0][0]
+        return self.traj_segments[idx_of_curr_segment]
+
+    def get_state(self, t: float) -> npt.NDArray[np.float64]:
+        if t > self.end_times[-1]:
+            raise RuntimeError(
+                f"Cannot get value for time {t}, last end_time is {self.end_times[-1]}"
+            )
+        traj = self._get_traj_segment_for_time(t)
+        state = traj.eval_state(t)
+        return state
+
     def CalcStateOutput(self, context: Context, output: BasicVector):
-        output.SetFromVector([0, 0, 0, 0])
+        output.SetFromVector(self.get_state(context.get_time()))
 
     def CalcInputOutput(self, context: Context, output: BasicVector):
         breakpoint()
