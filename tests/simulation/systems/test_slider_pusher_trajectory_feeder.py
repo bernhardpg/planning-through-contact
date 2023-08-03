@@ -100,7 +100,7 @@ def test_feeder_state_feedforward_visualization(
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
         builder,
-        feeder.GetOutputPort("state"),
+        feeder.get_state_feedforward_port(),
         slider_geometry,
         contact_location,
         scene_graph,
