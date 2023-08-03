@@ -62,8 +62,10 @@ def test_hybrid_mpc(
     builder = DiagramBuilder()
 
     builder.AddNamedSystem("mpc", hybrid_mpc)
+
     feeder = builder.AddNamedSystem(
-        "feedforward", SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+        "feedforward",
+        SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.cfg),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
@@ -105,10 +107,11 @@ def test_hybrid_mpc(
     builder.Connect(slider_pusher.get_output_port(), hybrid_mpc.get_state_port())
     builder.Connect(hybrid_mpc.get_control_port(), slider_pusher.get_input_port())
     builder.Connect(
-        feeder.get_state_feedforward_port(), hybrid_mpc.get_desired_state_port()
+        feeder.get_state_traj_feedforward_port(), hybrid_mpc.get_desired_state_port()
     )
     builder.Connect(
-        feeder.get_control_feedforward_port(), hybrid_mpc.get_desired_input_port()
+        feeder.get_control_traj_feedforward_port(),
+        hybrid_mpc.get_desired_control_port(),
     )
 
     diagram = builder.Build()
