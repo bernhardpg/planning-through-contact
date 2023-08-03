@@ -77,6 +77,15 @@ def test_hybrid_mpc(
         slider_pusher.contact_location,
         scene_graph,
     )
+    slider_pusher_desired_geometry = SliderPusherGeometry.add_to_builder(
+        builder,
+        feeder.get_state_feedforward_port(),
+        slider_geometry,
+        contact_location,
+        scene_graph,
+        "desired_slider_pusher_geometry",
+        alpha=0.1,
+    )
 
     DEBUG = True
     if DEBUG:
