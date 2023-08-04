@@ -167,18 +167,18 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
 
     def get_state(self, t: float) -> npt.NDArray[np.float64]:
         if t > self.end_times[-1]:
-            raise RuntimeError(
-                f"Cannot get value for time {t}, last end_time is {self.end_times[-1]}"
-            )
+            t = self.end_times[
+                -1
+            ]  # repeat last element when we want trajectory after end time
         traj = self._get_traj_segment_for_time(t)
         state = traj.eval_state(t)
         return state
 
     def get_control(self, t: float) -> npt.NDArray[np.float64]:
         if t > self.end_times[-1]:
-            raise RuntimeError(
-                f"Cannot get value for time {t}, last end_time is {self.end_times[-1]}"
-            )
+            t = self.end_times[
+                -1
+            ]  # repeat last element when we want trajectory after end time
         traj = self._get_traj_segment_for_time(t)
         control = traj.eval_control(t)
         return control

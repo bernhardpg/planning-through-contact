@@ -3,6 +3,7 @@ from typing import List
 
 import numpy as np
 import numpy.typing as npt
+import pydrake.symbolic as sym
 from pydrake.common.value import Value
 from pydrake.math import eq
 from pydrake.planning import MultipleShooting
@@ -36,6 +37,7 @@ class HybridModelPredictiveControl(LeafSystem):
         super().__init__()
 
         self.model = model
+        self.model_context = self.model.CreateDefaultContext()
         self.cfg = config
 
         self.num_states = model.num_continuous_states()
@@ -57,12 +59,42 @@ class HybridModelPredictiveControl(LeafSystem):
         )
 
     def _get_linear_system(
-        self, state: npt.NDArray[np.float64], input: npt.NDArray[np.float64]
+        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
     ) -> AffineSystem:
-        model_context = self.model.CreateDefaultContext()
-        model_context.SetContinuousState(state)
-        self.model.get_input_port().FixValue(model_context, input)
-        return FirstOrderTaylorApproximation(self.model, model_context)
+        # TODO(bernhardpg): This causes a segfault. Look into this
+        # self.model_context.SetContinuousState(state)
+        # self.model.get_input_port().FixValue(self.model_context, input)
+        # lin_sys = FirstOrderTaylorApproximation(self.model, self.model_context)
+        sym_model = self.model.ToSymbolic()
+        x = sym.Variable("x")
+        y = sym.Variable("y")
+        theta = sym.Variable("theta")
+        lam = sym.Variable("lam")
+        state_sym = np.array([x, y, theta, lam])
+
+        c_n = sym.Variable("c_n")
+        c_f = sym.Variable("c_f")
+        lam_dot = sym.Variable("lam_dot")
+        control_sym = np.array([c_n, c_f, lam_dot])
+
+        x_dot = sym_model._calc_dynamics(state_sym, control_sym)
+        A_sym = sym.Jacobian(x_dot, state_sym)
+        B_sym = sym.Jacobian(x_dot, control_sym)
+
+        env = {
+            x: state[0],
+            y: state[1],
+            theta: state[2],
+            lam: state[3],
+            c_n: control[0],
+            c_f: control[1],
+            lam_dot: control[2],
+        }
+        A = sym.Evaluate(A_sym, env)
+        B = sym.Evaluate(B_sym, env)
+        f = np.array([0, 0, 0, 0])  # TODO
+
+        return AffineSystem(A, B, f)
 
     def _setup_QP(
         self,
@@ -116,7 +148,7 @@ class HybridModelPredictiveControl(LeafSystem):
         result = Solve(self.prog)
         assert result.is_success()
 
-        u_next = result.GetSolution(self.u[:, 0])
+        u_next = desired_control_traj[0] + result.GetSolution(self.u[:, 0])  # type: ignore
 
         output.SetFromVector(u_next)  # type: ignore
 
