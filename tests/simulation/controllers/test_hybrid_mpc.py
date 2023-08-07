@@ -9,6 +9,7 @@ from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.planar_scenegraph_visualizer import (
     ConnectPlanarSceneGraphVisualizer,
 )
+from pydrake.systems.primitives import VectorLogSink
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -24,6 +25,7 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder import (
     SliderPusherTrajectoryFeeder,
 )
+from planning_through_contact.visualize.analysis import plot_planar_pushing_trajectory
 from tests.geometry.planar.fixtures import face_contact_mode
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
@@ -71,6 +73,17 @@ def test_hybrid_mpc_control(
     slider_pusher = builder.AddNamedSystem(
         "slider_pusher", SliderPusherSystem(slider_geometry, contact_location)
     )
+
+    # state logger
+    logger = builder.AddNamedSystem(
+        "logger", VectorLogSink(slider_pusher.num_continuous_states())
+    )
+    builder.Connect(slider_pusher.get_output_port(), logger.get_input_port())
+
+    traj_logger = builder.AddNamedSystem(
+        "traj_logger", VectorLogSink(slider_pusher.num_continuous_states())
+    )
+    builder.Connect(feeder.get_state_feedforward_port(), traj_logger.get_input_port())
 
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
         builder,
@@ -137,3 +150,8 @@ def test_hybrid_mpc_control(
         ani = visualizer.get_recording_as_animation()  # type: ignore
         # Playback the recording and save the output.
         ani.save("test.mp4", fps=30)
+
+        state_log = logger.FindLog(context)
+        desired_state_log = traj_logger.FindLog(context)
+
+        plot_planar_pushing_trajectory(state_log, desired_state_log)

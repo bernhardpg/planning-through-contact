@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -6,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
+from pydrake.systems.primitives import VectorLog
 
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
@@ -23,6 +25,68 @@ def save_gcs_graph_diagram(
 
     data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
     data.write_svg(str(filepath))
+
+
+@dataclass
+class PlanarPushingLog:
+    t: npt.NDArray[np.float64]
+    x: npt.NDArray[np.float64]
+    y: npt.NDArray[np.float64]
+    theta: npt.NDArray[np.float64]
+    lam: npt.NDArray[np.float64]
+
+    @classmethod
+    def from_np(
+        cls, times: npt.NDArray[np.float64], np_array: npt.NDArray[np.float64]
+    ) -> "PlanarPushingLog":
+        x = np_array[0, :]
+        y = np_array[1, :]
+        theta = np_array[2, :]
+        lam = np_array[3, :]
+        return cls(times, x, y, theta, lam)
+
+    @classmethod
+    def from_log(cls, log: VectorLog) -> "PlanarPushingLog":
+        t = log.sample_times()
+        np_array = log.data()
+        return cls.from_np(t, np_array)
+
+
+def plot_planar_pushing_trajectory(
+    log: VectorLog,
+    log_desired: VectorLog,
+) -> None:
+    state = PlanarPushingLog.from_log(log)
+    desired = PlanarPushingLog.from_log(log_desired)
+
+    # Create subplots
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
+
+    # Plot lines on each subplot
+    axes[0].plot(state.t, state.x, label="Actual")
+    axes[0].plot(state.t, desired.x, linestyle="--", label="Desired")
+    axes[0].set_title("x")
+    axes[0].legend()
+
+    axes[1].plot(state.t, state.y, label="Actual")
+    axes[1].plot(state.t, desired.y, linestyle="--", label="Desired")
+    axes[1].set_title("y")
+    axes[1].legend()
+
+    axes[2].plot(state.t, state.theta, label="Actual")
+    axes[2].plot(state.t, desired.theta, linestyle="--", label="Desired")
+    axes[2].set_title("theta")
+    axes[2].legend()
+
+    axes[3].plot(state.t, state.lam, label="Actual")
+    axes[3].plot(state.t, desired.lam, linestyle="--", label="Desired")
+    axes[3].set_title("lam")
+    axes[3].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+
+    plt.savefig("planar_pushing_plots.pdf")
 
 
 PLOT_WIDTH_INCH = 7

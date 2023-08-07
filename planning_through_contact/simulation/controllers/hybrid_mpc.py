@@ -65,6 +65,7 @@ class HybridModelPredictiveControl(LeafSystem):
         # self.model_context.SetContinuousState(state)
         # self.model.get_input_port().FixValue(self.model_context, input)
         # lin_sys = FirstOrderTaylorApproximation(self.model, self.model_context)
+
         sym_model = self.model.ToSymbolic()
         x = sym.Variable("x")
         y = sym.Variable("y")
