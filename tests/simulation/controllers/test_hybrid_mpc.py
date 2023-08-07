@@ -75,15 +75,28 @@ def test_hybrid_mpc_control(
     )
 
     # state logger
-    logger = builder.AddNamedSystem(
-        "logger", VectorLogSink(slider_pusher.num_continuous_states())
+    state_logger = builder.AddNamedSystem(
+        "state_logger", VectorLogSink(slider_pusher.num_continuous_states())
     )
-    builder.Connect(slider_pusher.get_output_port(), logger.get_input_port())
+    builder.Connect(slider_pusher.get_output_port(), state_logger.get_input_port())
+    state_desired_logger = builder.AddNamedSystem(
+        "state_desired_logger", VectorLogSink(slider_pusher.num_continuous_states())
+    )
+    builder.Connect(
+        feeder.get_state_feedforward_port(), state_desired_logger.get_input_port()
+    )
 
-    traj_logger = builder.AddNamedSystem(
-        "traj_logger", VectorLogSink(slider_pusher.num_continuous_states())
+    # control logger
+    control_logger = builder.AddNamedSystem(
+        "control_logger", VectorLogSink(slider_pusher.get_input_port().size())
     )
-    builder.Connect(feeder.get_state_feedforward_port(), traj_logger.get_input_port())
+    builder.Connect(hybrid_mpc.get_control_port(), control_logger.get_input_port())
+    control_desired_logger = builder.AddNamedSystem(
+        "control_desired_logger", VectorLogSink(slider_pusher.get_input_port().size())
+    )
+    builder.Connect(
+        feeder.get_control_feedforward_port(), control_desired_logger.get_input_port()
+    )
 
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
         builder,
@@ -151,7 +164,11 @@ def test_hybrid_mpc_control(
         # Playback the recording and save the output.
         ani.save("test.mp4", fps=30)
 
-        state_log = logger.FindLog(context)
-        desired_state_log = traj_logger.FindLog(context)
+        state_log = state_logger.FindLog(context)
+        desired_state_log = state_desired_logger.FindLog(context)
+        control_log = control_logger.FindLog(context)
+        desired_control_log = control_desired_logger.FindLog(context)
 
-        plot_planar_pushing_trajectory(state_log, desired_state_log)
+        plot_planar_pushing_trajectory(
+            state_log, desired_state_log, control_log, desired_control_log
+        )

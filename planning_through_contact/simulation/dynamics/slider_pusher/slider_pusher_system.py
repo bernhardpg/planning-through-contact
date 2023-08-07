@@ -98,12 +98,12 @@ def SliderPusherSystem_(T):
             )
             return R
 
-        def _calc_dynamics(
+        def calc_dynamics(
             self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]
         ) -> npt.NDArray[np.float64]:
             theta = x[2]
-            # we can not move outside of the contact face
             lam = x[3]
+
             c_n = u[0]
             c_f = u[1]
 
@@ -120,7 +120,7 @@ def SliderPusherSystem_(T):
         ) -> None:
             x = context.get_continuous_state_vector()
             u = self.input.Eval(context)
-            x_dot = self._calc_dynamics(x, u)  # type: ignore
+            x_dot = self.calc_dynamics(x, u)  # type: ignore
             derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
 
     return Impl

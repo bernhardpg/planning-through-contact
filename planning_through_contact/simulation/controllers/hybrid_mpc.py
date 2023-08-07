@@ -66,6 +66,7 @@ class HybridModelPredictiveControl(LeafSystem):
         # self.model.get_input_port().FixValue(self.model_context, input)
         # lin_sys = FirstOrderTaylorApproximation(self.model, self.model_context)
 
+        # TODO(bernhardpg): Replace all of the following once symbolic computation works
         sym_model = self.model.ToSymbolic()
         x = sym.Variable("x")
         y = sym.Variable("y")
@@ -78,7 +79,7 @@ class HybridModelPredictiveControl(LeafSystem):
         lam_dot = sym.Variable("lam_dot")
         control_sym = np.array([c_n, c_f, lam_dot])
 
-        x_dot = sym_model._calc_dynamics(state_sym, control_sym)
+        x_dot = sym_model.calc_dynamics(state_sym, control_sym)
         A_sym = sym.Jacobian(x_dot, state_sym)
         B_sym = sym.Jacobian(x_dot, control_sym)
 
@@ -93,7 +94,9 @@ class HybridModelPredictiveControl(LeafSystem):
         }
         A = sym.Evaluate(A_sym, env)
         B = sym.Evaluate(B_sym, env)
-        f = np.array([0, 0, 0, 0])  # TODO
+
+        x_dot_desired = self.model.calc_dynamics(state, control).flatten()  # type: ignore
+        f = x_dot_desired - A.dot(state) - B.dot(control)
 
         return AffineSystem(A, B, f)
 
