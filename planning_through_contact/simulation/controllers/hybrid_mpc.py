@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -22,6 +22,8 @@ from pydrake.systems.primitives import (
     Linearize,
     LinearSystem,
 )
+
+from planning_through_contact.tools.types import NpVariableArray
 
 
 @dataclass
@@ -105,18 +107,20 @@ class HybridModelPredictiveControl(LeafSystem):
         current_state: npt.NDArray[np.float64],
         desired_state: List[npt.NDArray[np.float64]],
         desired_control: List[npt.NDArray[np.float64]],
-    ) -> None:
+    ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
         N = self.cfg.horizon
-        Q = np.eye(self.num_states)
+        Q = np.eye(self.num_states) * 10
         Q_N = np.eye(self.num_states)
         R = np.eye(self.num_inputs)
 
         prog = MathematicalProgram()
-        x = prog.NewContinuousVariables(self.num_states, N, "x")
-        u = prog.NewContinuousVariables(self.num_inputs, N - 1, "u")
+        error_state = prog.NewContinuousVariables(self.num_states, N, "error_state")
+        # u = prog.NewContinuousVariables(self.num_inputs, N - 1, "u")
+        error_control = prog.NewContinuousVariables(self.num_inputs, N, "error_control")
 
         # Initial value constraint
-        prog.AddLinearConstraint(eq(x[:, 0], current_state))
+        curr_error_state = current_state - desired_state[0]
+        prog.AddLinearConstraint(eq(error_state[:, 0], curr_error_state))
 
         # Dynamic constraints
         lin_systems = [
@@ -127,21 +131,26 @@ class HybridModelPredictiveControl(LeafSystem):
         ]  # only need N-1 linear systems
         As = [sys.A() for sys in lin_systems]
         Bs = [sys.B() for sys in lin_systems]
-        f0s = [sys.f0() for sys in lin_systems]
-        for i, (A, B, f0) in enumerate(zip(As, Bs, f0s)):
-            x_dot = A.dot(x[:, i]) + B.dot(u[:, i]) + f0
-            forward_euler = x[:, i] + self.cfg.step_size * x_dot
-            prog.AddLinearConstraint(eq(x[:, i + 1], forward_euler))
+        for i, (A, B) in enumerate(zip(As, Bs)):
+            error_state_dot = A.dot(error_state[:, i]) + B.dot(error_control[:, i])
+            forward_euler = error_state[:, i] + self.cfg.step_size * error_state_dot
+            prog.AddLinearConstraint(eq(error_state[:, i + 1], forward_euler))
 
         # Cost
-        terminal_cost = x[:, -1].T.dot(Q_N).dot(x[:, -1])
-        state_running_cost = sum([x[:, i].T.dot(Q).dot(x[:, i]) for i in range(N - 1)])
-        input_running_cost = sum([u[:, i].T.dot(R).dot(u[:, i]) for i in range(N - 1)])
+        terminal_cost = error_state[:, -1].T.dot(Q_N).dot(error_state[:, -1])
+        state_running_cost = sum(
+            [error_state[:, i].T.dot(Q).dot(error_state[:, i]) for i in range(N)]
+        )
+        input_running_cost = sum(
+            [error_control[:, i].T.dot(R).dot(error_control[:, i]) for i in range(N)]
+        )
         prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
-        self.prog = prog
-        self.x = x
-        self.u = u
+        # error_state = state - desired_state
+        state = error_state + np.vstack(desired_state).T
+        control = error_control + np.vstack(desired_control).T
+
+        return prog, state, control  # type: ignore
 
     def CalcControl(self, context: Context, output: BasicVector):
         state = self.state_port.Eval(context)
@@ -152,9 +161,11 @@ class HybridModelPredictiveControl(LeafSystem):
         result = Solve(self.prog)
         assert result.is_success()
 
-        u_next = desired_control_traj[0] + result.GetSolution(self.u[:, 0])  # type: ignore
+        u_bar_next = result.GetSolution(self.u[:, 0])
+        u_next = desired_control_traj[0] + u_bar_next  # type: ignore
 
         output.SetFromVector(u_next)  # type: ignore
+        # output.SetFromVector(result.GetSolution(self.u[:, 0]))  # type: ignore
 
     def get_control_port(self) -> OutputPort:
         return self.control_port

@@ -2,8 +2,10 @@ from typing import List
 
 import numpy as np
 import pydot
+import pydrake.symbolic as sym
 import pytest
 from pydrake.geometry import SceneGraph
+from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.planar_scenegraph_visualizer import (
@@ -15,6 +17,7 @@ from planning_through_contact.geometry.planar.abstract_mode import AbstractModeV
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
     HybridModelPredictiveControl,
+    HybridMpcConfig,
 )
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
@@ -25,7 +28,11 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder import (
     SliderPusherTrajectoryFeeder,
 )
-from planning_through_contact.visualize.analysis import plot_planar_pushing_trajectory
+from planning_through_contact.visualize.analysis import (
+    PlanarPushingLog,
+    plot_planar_pushing_logs,
+    plot_planar_pushing_trajectory,
+)
 from tests.geometry.planar.fixtures import face_contact_mode
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
@@ -41,16 +48,55 @@ from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
 def hybrid_mpc(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
 ) -> HybridModelPredictiveControl:
-    mpc = HybridModelPredictiveControl(slider_pusher_system)
+    config = HybridMpcConfig()
+    mpc = HybridModelPredictiveControl(slider_pusher_system, config)
     return mpc
 
 
-def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:  # type: ignore
+def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
     linear_system = hybrid_mpc._get_linear_system(
         np.array([0, 0, 0, 0.5]), np.array([1.0, 0, 0])
     )
     assert np.allclose(linear_system.A(), np.zeros((4, 4)))
     assert sum(linear_system.B().flatten() != 0) == 4
+
+
+def test_get_control_no_movement(
+    one_contact_mode_vars: List[AbstractModeVariables],
+    hybrid_mpc: HybridModelPredictiveControl,
+) -> None:
+    N = hybrid_mpc.cfg.horizon
+    current_state = np.array([0, 0, 0, 0.5])
+    desired_state = [current_state] * N
+    desired_control = [np.zeros((3,))] * N
+    prog, x, u = hybrid_mpc._setup_QP(current_state, desired_state, desired_control)
+
+    dt = hybrid_mpc.cfg.step_size
+    times = np.arange(0, dt * N, dt)
+
+    result = Solve(prog)
+    assert result.is_success()
+
+    # must evaluate to get rid of expression type
+    state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
+    control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
+
+    actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
+    desired = PlanarPushingLog.from_np(
+        times, np.vstack(desired_state).T, np.vstack(desired_control).T
+    )
+
+    # No deviation should happen
+    for state, state_desired in zip(state_sol.T, desired_state):
+        assert np.allclose(state, state_desired)
+
+    # No control should be applied
+    for control, control_desired in zip(control_sol.T, desired_control):
+        assert np.allclose(control, control_desired)
+
+    DEBUG = True
+    if DEBUG:
+        plot_planar_pushing_trajectory(actual, desired)
 
 
 def test_hybrid_mpc_control(
@@ -169,6 +215,6 @@ def test_hybrid_mpc_control(
         control_log = control_logger.FindLog(context)
         desired_control_log = control_desired_logger.FindLog(context)
 
-        plot_planar_pushing_trajectory(
+        plot_planar_pushing_logs(
             state_log, desired_state_log, control_log, desired_control_log
         )

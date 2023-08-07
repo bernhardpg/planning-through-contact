@@ -67,7 +67,7 @@ class PlanarPushingLog:
         return cls.from_np(t, state_np_array, control_np_array)
 
 
-def plot_planar_pushing_trajectory(
+def plot_planar_pushing_logs(
     state_log: VectorLog,
     state_log_desired: VectorLog,
     control_log: VectorLog,
@@ -76,6 +76,12 @@ def plot_planar_pushing_trajectory(
     actual = PlanarPushingLog.from_log(state_log, control_log)
     desired = PlanarPushingLog.from_log(state_log_desired, control_log_desired)
 
+    plot_planar_pushing_trajectory(actual, desired)
+
+
+def plot_planar_pushing_trajectory(
+    actual: PlanarPushingLog, desired: PlanarPushingLog
+) -> None:
     # State plot
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
 
