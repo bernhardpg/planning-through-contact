@@ -151,7 +151,7 @@ def test_get_control_with_plan(
         plot_planar_pushing_trajectory(actual, desired)
 
 
-def test_hybrid_mpc_control(
+def test_hybrid_mpc_controller(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[AbstractModeVariables],
     hybrid_mpc: HybridModelPredictiveControl,

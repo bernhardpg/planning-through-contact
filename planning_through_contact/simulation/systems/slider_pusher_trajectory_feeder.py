@@ -204,7 +204,10 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
     ) -> List[npt.NDArray[np.float64]]:
         ts = np.arange(
             curr_t, curr_t + self.cfg.step_size * self.cfg.horizon, self.cfg.step_size
-        )
+        )[: self.cfg.horizon]
+
+        assert len(ts) == self.cfg.horizon
+
         traj = [func(t) for t in ts]
         return traj
 

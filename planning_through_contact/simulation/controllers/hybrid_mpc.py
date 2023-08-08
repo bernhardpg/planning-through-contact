@@ -131,12 +131,29 @@ class HybridModelPredictiveControl(LeafSystem):
             forward_euler = error_state[:, i] + self.cfg.step_size * error_state_dot
             prog.AddLinearConstraint(eq(error_state[:, i + 1], forward_euler))
 
+        # error_state = state - desired_state
+        state = error_state + np.vstack(desired_state).T
+        control = error_control + np.vstack(desired_control).T
+        for u_i in control.T:
+            c_n = u_i[0]
+            c_f = u_i[1]
+            lam_dot = u_i[2]
+            FRICTION_COEFF = 0.5
+            prog.AddLinearConstraint(c_n >= 0)
+            prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
+            prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+
+        for x in state.T:
+            lam = x[3]
+            prog.AddLinearConstraint(lam >= 0)
+            prog.AddLinearConstraint(lam <= 1)
+
         # Cost
         Q = np.diag([10, 10, 10, 0.01])
         R = np.eye(self.num_inputs) * 0.01
         # Use the infinite horizon ricatti solution as the terminal cost
-        # Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
-        Q_N = Q
+        Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
+        # Q_N = Q
 
         terminal_cost = error_state[:, -1].T.dot(Q_N).dot(error_state[:, -1])
         state_running_cost = sum(
@@ -147,26 +164,21 @@ class HybridModelPredictiveControl(LeafSystem):
         )
         prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
-        # error_state = state - desired_state
-        state = error_state + np.vstack(desired_state).T
-        control = error_control + np.vstack(desired_control).T
-
         return prog, state, control  # type: ignore
 
     def CalcControl(self, context: Context, output: BasicVector):
         state = self.state_port.Eval(context)
         desired_state_traj = self.desired_state_port.Eval(context)
         desired_control_traj = self.desired_control_port.Eval(context)
-        self._setup_QP(state, desired_state_traj, desired_control_traj)  # type: ignore
+        prog, state, control = self._setup_QP(state, desired_state_traj, desired_control_traj)  # type: ignore
 
-        result = Solve(self.prog)
+        result = Solve(prog)
         assert result.is_success()
 
-        u_bar_next = result.GetSolution(self.u[:, 0])
-        u_next = desired_control_traj[0] + u_bar_next  # type: ignore
+        control_sol = sym.Evaluate(result.GetSolution(control))
+        control_next = control_sol[:, 0]
 
-        output.SetFromVector(u_next)  # type: ignore
-        # output.SetFromVector(result.GetSolution(self.u[:, 0]))  # type: ignore
+        output.SetFromVector(control_next)  # type: ignore
 
     def get_control_port(self) -> OutputPort:
         return self.control_port
