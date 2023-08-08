@@ -62,7 +62,6 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
 
 
 def test_get_control_no_movement(
-    one_contact_mode_vars: List[AbstractModeVariables],
     hybrid_mpc: HybridModelPredictiveControl,
 ) -> None:
     N = hybrid_mpc.cfg.horizon
@@ -94,7 +93,60 @@ def test_get_control_no_movement(
     for control, control_desired in zip(control_sol.T, desired_control):
         assert np.allclose(control, control_desired)
 
-    DEBUG = True
+    DEBUG = False
+    if DEBUG:
+        plot_planar_pushing_trajectory(actual, desired)
+
+
+def test_get_control_with_plan(
+    one_contact_mode_vars: List[AbstractModeVariables],
+    hybrid_mpc: HybridModelPredictiveControl,
+) -> None:
+    """
+    The plan should follow the desired trajectory exactly.
+    """
+
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.cfg)
+    context = feeder.CreateDefaultContext()
+
+    desired_state = feeder.get_state_traj_feedforward_port().Eval(context)
+    desired_control = feeder.get_control_traj_feedforward_port().Eval(context)
+    initial_state = feeder.get_state(0) + np.array([0.005, -0.005, 0.02, 0])
+
+    prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state, desired_control)  # type: ignore
+
+    result = Solve(prog)
+    assert result.is_success()
+
+    # must evaluate to get rid of expression type
+    state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
+    control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
+
+    N = hybrid_mpc.cfg.horizon
+    dt = hybrid_mpc.cfg.step_size
+    times = np.arange(0, dt * N, dt)
+
+    actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
+    desired = PlanarPushingLog.from_np(
+        times, np.vstack(desired_state).T, np.vstack(desired_control).T  # type: ignore
+    )
+
+    # No deviation should happen
+    state_treshold = 0.1
+    for state, state_desired in zip(state_sol.T, desired_state):  # type: ignore
+        assert np.all(
+            np.abs(state - state_desired) <= np.full(state.shape, state_treshold)
+        )
+
+    # No control should be applied
+    control_treshold = 0.4
+    for control, control_desired in zip(control_sol.T, desired_control):  # type: ignore
+        assert np.all(
+            np.abs(control - control_desired)
+            <= np.full(control.shape, control_treshold)
+        )
+
+    DEBUG = False
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
 

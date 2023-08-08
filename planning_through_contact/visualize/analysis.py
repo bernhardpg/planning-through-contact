@@ -85,25 +85,34 @@ def plot_planar_pushing_trajectory(
     # State plot
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
 
+    pos = np.vstack((actual.x, actual.y))
+    max_pos_change = np.ptp(np.linalg.norm(pos, axis=0))
+
     axes[0].plot(actual.t, actual.x, label="Actual")
     axes[0].plot(actual.t, desired.x, linestyle="--", label="Desired")
     axes[0].set_title("x")
     axes[0].legend()
+    axes[0].set_ylim(-max_pos_change, max_pos_change)
 
     axes[1].plot(actual.t, actual.y, label="Actual")
     axes[1].plot(actual.t, desired.y, linestyle="--", label="Desired")
     axes[1].set_title("y")
     axes[1].legend()
+    axes[1].set_ylim(-max_pos_change, max_pos_change)
+
+    th_change = np.ptp(actual.theta)
 
     axes[2].plot(actual.t, actual.theta, label="Actual")
     axes[2].plot(actual.t, desired.theta, linestyle="--", label="Desired")
     axes[2].set_title("theta")
     axes[2].legend()
+    axes[2].set_ylim(-th_change, th_change)
 
     axes[3].plot(actual.t, actual.lam, label="Actual")
     axes[3].plot(actual.t, desired.lam, linestyle="--", label="Desired")
     axes[3].set_title("lam")
     axes[3].legend()
+    axes[3].set_ylim(0, 1)
 
     plt.tight_layout()
     plt.savefig("planar_pushing_states.pdf")

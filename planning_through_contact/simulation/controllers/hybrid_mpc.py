@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.common.value import Value
-from pydrake.math import eq
+from pydrake.math import ContinuousAlgebraicRiccatiEquation, eq
 from pydrake.planning import MultipleShooting
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.systems.framework import (
@@ -109,13 +109,8 @@ class HybridModelPredictiveControl(LeafSystem):
         desired_control: List[npt.NDArray[np.float64]],
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
         N = self.cfg.horizon
-        Q = np.eye(self.num_states) * 10
-        Q_N = np.eye(self.num_states)
-        R = np.eye(self.num_inputs)
-
         prog = MathematicalProgram()
         error_state = prog.NewContinuousVariables(self.num_states, N, "error_state")
-        # u = prog.NewContinuousVariables(self.num_inputs, N - 1, "u")
         error_control = prog.NewContinuousVariables(self.num_inputs, N, "error_control")
 
         # Initial value constraint
@@ -137,6 +132,12 @@ class HybridModelPredictiveControl(LeafSystem):
             prog.AddLinearConstraint(eq(error_state[:, i + 1], forward_euler))
 
         # Cost
+        Q = np.diag([10, 10, 10, 0.01])
+        R = np.eye(self.num_inputs) * 0.01
+        # Use the infinite horizon ricatti solution as the terminal cost
+        # Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
+        Q_N = Q
+
         terminal_cost = error_state[:, -1].T.dot(Q_N).dot(error_state[:, -1])
         state_running_cost = sum(
             [error_state[:, i].T.dot(Q).dot(error_state[:, i]) for i in range(N)]
