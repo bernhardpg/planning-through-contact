@@ -233,6 +233,15 @@ class FaceContactMode(AbstractContactMode):
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
             self.prog.AddConstraint(c**2 + s**2 == 1)
 
+        # Redundant angular velocity constraint
+        for c, s, c_dot, s_dot in zip(
+            self.variables.cos_ths,
+            self.variables.sin_ths,
+            self.variables.cos_th_dots,
+            self.variables.sin_th_dots,
+        ):
+            self.prog.AddConstraint(c_dot * c + s_dot * s == 0)
+
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
             self.prog.AddLinearConstraint(c_n >= 0)
