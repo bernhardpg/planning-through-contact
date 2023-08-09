@@ -2,7 +2,12 @@ import numpy as np
 import pydot
 import pytest
 from pydrake.all import ConnectPlanarSceneGraphVisualizer, PlanarSceneGraphVisualizer
-from pydrake.geometry import SceneGraph
+from pydrake.geometry import (
+    DrakeVisualizer,
+    MeshcatVisualizer,
+    SceneGraph,
+    StartMeshcat,
+)
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Diagram, DiagramBuilder
 from pydrake.systems.primitives import ConstantVectorSource
@@ -40,7 +45,7 @@ def connect_planar_visualizer(
     return visualizer
 
 
-def test_visualize() -> None:
+def test_visualize_2d() -> None:
     # 1. Define T-pusher as a collision geometry (should just be two rectangles)
     # 2. Add geometry to the scene graph
     # 3. Connect the trajectory feeder to the geometry system
@@ -67,6 +72,51 @@ def test_visualize() -> None:
     # Connect planar visualizer
     if DEBUG:
         connect_planar_visualizer(builder, scene_graph)
+
+    diagram = builder.Build()
+    diagram.set_name("diagram")
+
+    # Create the simulator, and simulate for 10 seconds.
+    SIMULATION_END = 7
+    context = diagram.CreateDefaultContext()
+    simulator = Simulator(diagram, context)
+    simulator.Initialize()
+    # simulator.set_target_realtime_rate(1.0)
+    simulator.AdvanceTo(SIMULATION_END)
+
+    if DEBUG:
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+
+
+def test_visualize_3d() -> None:
+    # 1. Define T-pusher as a collision geometry (should just be two rectangles)
+    # 2. Add geometry to the scene graph
+    # 3. Connect the trajectory feeder to the geometry system
+
+    DEBUG = True
+    slider = TPusher2d()
+
+    builder = DiagramBuilder()
+
+    state = builder.AddNamedSystem(
+        "state", ConstantVectorSource(np.array([0, 0, 0, 0]))
+    )
+
+    # Register geometry with SceneGraph
+    scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
+    slider_pusher_geometry = GeneralSliderPusherGeometry.add_to_builder(
+        builder,
+        state.get_output_port(),
+        slider,
+        slider.contact_locations[0],
+        scene_graph,
+    )
+
+    # Connect planar visualizer
+    if DEBUG:
+        meshcat = StartMeshcat()
+        meshcat.Delete()  # remove everything from visualizer
+        visualizer = MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
     diagram = builder.Build()
     diagram.set_name("diagram")
