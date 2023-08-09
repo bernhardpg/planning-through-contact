@@ -20,7 +20,12 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, planner, rigid_body_box
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    planner,
+    planner_with_t_pusher,
+    rigid_body_box,
+)
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
     assert_planning_path_matches_target,
@@ -487,4 +492,52 @@ def test_make_plan(
     DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
+
+
+@pytest.mark.parametrize(
+    "planner_with_t_pusher",
+    [
+        {
+            "partial": True,
+            "avoid_object": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+        }
+    ],
+    indirect=["planner_with_t_pusher"],
+)
+def test_make_plan_t_pusher(
+    planner_with_t_pusher: PlanarPushingPlanner,
+) -> None:
+    DEBUG = True
+
+    planner = planner_with_t_pusher
+
+    print_output = True if DEBUG else False
+    result = planner._solve(print_output=print_output)
+    assert result.is_success()
+
+    path = planner.get_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
+        interpolate=False,
+    )
+
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(np.abs(traj.p_c_W) <= 1.5)
+
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph_t_pusher.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)

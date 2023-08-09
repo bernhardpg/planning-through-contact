@@ -1,8 +1,14 @@
 import numpy as np
+import pytest
 from pydrake.solvers import Solve
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -11,6 +17,8 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
@@ -194,6 +202,51 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
+
+
+@pytest.mark.parametrize(
+    "face_contact_mode", [{"face_idx": 1}], indirect=["face_contact_mode"]
+)
+def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.8)
+    face_contact_mode.set_slider_initial_pose(initial_pose)
+    face_contact_mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.formulate_convex_relaxation()
+    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    assert not result.is_success()  # this should fail
+
+
+def test_planning_for_t_pusher() -> None:
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, 5)
+    specs = PlanarPlanSpecs()
+
+    mass = 0.3
+    t_pusher = RigidBody("t_pusher", TPusher2d(), mass)
+
+    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, t_pusher)
+
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.8)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    result = Solve(mode.relaxed_prog)  # type: ignore
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
+
+    DEBUG = True
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
