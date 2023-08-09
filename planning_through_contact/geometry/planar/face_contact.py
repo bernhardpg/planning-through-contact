@@ -215,6 +215,7 @@ class FaceContactMode(AbstractContactMode):
         )
         # TODO(bernhardpg): Should we use this?
         self.enforce_equal_forces = True
+        self.redundant_angular_velocity_constraints = False
 
         self._define_constraints()
         self._define_costs()
@@ -226,25 +227,27 @@ class FaceContactMode(AbstractContactMode):
         TABLE_SIZE = 1.0
 
         for lam in self.variables.lams:
-            self.prog.AddLinearConstraint(lam >= 0)
-            self.prog.AddLinearConstraint(lam <= 1)
+            self.prog.AddBoundingBoxConstraint(0, 1, lam)
 
         # SO(2) constraints
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
             self.prog.AddConstraint(c**2 + s**2 == 1)
 
-        # Redundant angular velocity constraint
-        for c, s, c_dot, s_dot in zip(
-            self.variables.cos_ths,
-            self.variables.sin_ths,
-            self.variables.cos_th_dots,
-            self.variables.sin_th_dots,
-        ):
-            self.prog.AddConstraint(c_dot * c + s_dot * s == 0)
+        # Redundant angular velocity constraint, implied by [\omega]^x = \dot{R} R^\intercal
+        # TODO(bernhardpg): For some reason, these are not tight!
+        if self.redundant_angular_velocity_constraints:
+            for c, s, c_dot, s_dot in zip(
+                self.variables.cos_ths,
+                self.variables.sin_ths,
+                self.variables.cos_th_dots,
+                self.variables.sin_th_dots,
+            ):
+                constraint = c_dot * c + s_dot * s == 0
+                self.prog.AddConstraint(constraint)
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddLinearConstraint(c_n >= 0)
+            self.prog.AddBoundingBoxConstraint(0, MAX_FORCE, c_n)
 
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
@@ -256,7 +259,6 @@ class FaceContactMode(AbstractContactMode):
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
         ):
-            self.prog.AddLinearConstraint(c_n <= MAX_FORCE)
             self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
 
         # Bounds on positions
