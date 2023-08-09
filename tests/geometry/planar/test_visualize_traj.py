@@ -46,11 +46,7 @@ def connect_planar_visualizer(
 
 
 def test_visualize_2d() -> None:
-    # 1. Define T-pusher as a collision geometry (should just be two rectangles)
-    # 2. Add geometry to the scene graph
-    # 3. Connect the trajectory feeder to the geometry system
-
-    DEBUG = True
+    DEBUG = False
     slider = TPusher2d()
 
     builder = DiagramBuilder()
@@ -89,11 +85,7 @@ def test_visualize_2d() -> None:
 
 
 def test_visualize_3d() -> None:
-    # 1. Define T-pusher as a collision geometry (should just be two rectangles)
-    # 2. Add geometry to the scene graph
-    # 3. Connect the trajectory feeder to the geometry system
-
-    DEBUG = True
+    DEBUG = False
     slider = TPusher2d()
 
     builder = DiagramBuilder()
@@ -114,7 +106,7 @@ def test_visualize_3d() -> None:
 
     # Connect planar visualizer
     if DEBUG:
-        meshcat = StartMeshcat()
+        meshcat = StartMeshcat()  # type: ignore
         meshcat.Delete()  # remove everything from visualizer
         visualizer = MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
@@ -131,5 +123,3 @@ def test_visualize_3d() -> None:
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
-
-    breakpoint()
