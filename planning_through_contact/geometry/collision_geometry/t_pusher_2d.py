@@ -216,18 +216,20 @@ class TPusher2d(CollisionGeometry):
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
         return lam * pv1 + (1 - lam) * pv2
 
-    def get_as_boxes(self) -> Tuple[List[Box2d], List[RigidTransform]]:
+    def get_as_boxes(
+        self, z_value: float = 0.0
+    ) -> Tuple[List[Box2d], List[RigidTransform]]:
         # NOTE(bernhardpg): Hardcoded for this specific geometry
         # BOX_1 is the vertical box
         BOX_1_WIDTH = 2
         BOX_1_HEIGHT = 4
         box_1 = Box2d(BOX_1_WIDTH * self.scale, BOX_1_HEIGHT * self.scale)
-        transform_1 = RigidTransform(RotationMatrix.Identity(), np.array([0, -1, 0]) * self.scale)  # type: ignore
+        transform_1 = RigidTransform(RotationMatrix.Identity(), np.array([0, -1, z_value / self.scale]) * self.scale)  # type: ignore
 
         # BOX_2 is the horisontal box
         BOX_2_WIDTH = 6
         BOX_2_HEIGHT = 2
         box_2 = Box2d(BOX_2_WIDTH * self.scale, BOX_2_HEIGHT * self.scale)
-        transform_2 = RigidTransform(RotationMatrix.Identity(), np.array([0, 2, 0]) * self.scale)  # type: ignore
+        transform_2 = RigidTransform(RotationMatrix.Identity(), np.array([0, 2, z_value / self.scale]) * self.scale)  # type: ignore
 
         return [box_1, box_2], [transform_1, transform_2]
