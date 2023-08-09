@@ -41,6 +41,12 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
 
 
 @pytest.fixture
+def t_pusher() -> RigidBody:
+    mass = 0.3
+    return RigidBody("box", TPusher2d(), mass)
+
+
+@pytest.fixture
 def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
     prog = MathematicalProgram()
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
@@ -86,14 +92,20 @@ def non_collision_mode(rigid_body_box: RigidBody) -> NonCollisionMode:
 
 @pytest.fixture
 def face_contact_mode(
-    rigid_body_box: RigidBody, request: FixtureRequest
+    rigid_body_box: RigidBody, t_pusher: RigidBody, request: FixtureRequest
 ) -> FaceContactMode:
+    rigid_body = rigid_body_box
+
+    if not hasattr(request, "param"):
+        request.param = {}  # Make the fixture work without params
+
+    if request.param.get("body") == "t_pusher":
+        rigid_body = t_pusher
     face_idx = request.param.get("face_idx", 3)
+
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     specs = PlanarPlanSpecs()
-    mode = FaceContactMode.create_from_plan_spec(
-        contact_location, specs, rigid_body_box
-    )
+    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, rigid_body)
     return mode
 
 
