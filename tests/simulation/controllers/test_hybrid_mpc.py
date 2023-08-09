@@ -6,12 +6,13 @@ import pydrake.symbolic as sym
 import pytest
 from pydrake.geometry import SceneGraph
 from pydrake.solvers import Solve
+from pydrake.systems.all import ZeroOrderHold
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.planar_scenegraph_visualizer import (
     ConnectPlanarSceneGraphVisualizer,
 )
-from pydrake.systems.primitives import VectorLogSink
+from pydrake.systems.primitives import VectorLogSink, ZeroOrderHold_
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -229,7 +230,11 @@ def test_hybrid_mpc_controller(
         )
 
     builder.Connect(slider_pusher.get_output_port(), hybrid_mpc.get_state_port())
-    builder.Connect(hybrid_mpc.get_control_port(), slider_pusher.get_input_port())
+    zero_order_hold = builder.AddNamedSystem(
+        "zero_order_hold", ZeroOrderHold(hybrid_mpc.cfg.step_size, 3)
+    )
+    builder.Connect(hybrid_mpc.get_control_port(), zero_order_hold.get_input_port())
+    builder.Connect(zero_order_hold.get_output_port(), slider_pusher.get_input_port())
     builder.Connect(
         feeder.get_state_traj_feedforward_port(), hybrid_mpc.get_desired_state_port()
     )

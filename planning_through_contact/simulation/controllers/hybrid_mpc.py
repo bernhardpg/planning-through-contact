@@ -149,8 +149,8 @@ class HybridModelPredictiveControl(LeafSystem):
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([10, 10, 10, 0.01])
-        R = np.eye(self.num_inputs) * 0.01
+        Q = np.diag([10, 10, 10, 1])
+        R = np.eye(self.num_inputs) * 0.5
         # Use the infinite horizon ricatti solution as the terminal cost
         Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
         # Q_N = Q
