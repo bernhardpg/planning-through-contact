@@ -19,6 +19,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 )
 from planning_through_contact.visualize.colors import COLORS
 
+# TODO(bernhardpg): This class should be unified with GeneralSliderPusherGeometry
+# The only difference is that this class expects the state to be [x, y, th, lam],
+# but this should just be converted by a conversion system in the diagram
+
 
 class SliderPusherGeometry(LeafSystem):
     def __init__(

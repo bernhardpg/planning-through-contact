@@ -4,24 +4,23 @@ from typing import List, Tuple
 import numpy as np
 import numpy.typing as npt
 from pydrake.geometry import Shape as DrakeShape
+from pydrake.math import RigidTransform, RotationMatrix
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
+    ContactLocation,
+    PolytopeContactLocation,
 )
 from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
 )
-from planning_through_contact.geometry.two_d.contact.types import ContactLocation
-from planning_through_contact.geometry.two_d.rigid_body_2d import (
-    PolytopeContactLocation,
-    RigidBody2d,
-)
 from planning_through_contact.geometry.utilities import normalize_vec
 
 
 @dataclass
-class TPusher(CollisionGeometry):
+class TPusher2d(CollisionGeometry):
     scale: float = 0.05
 
     @classmethod
@@ -216,3 +215,19 @@ class TPusher(CollisionGeometry):
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
         return lam * pv1 + (1 - lam) * pv2
+
+    def get_as_boxes(self) -> Tuple[List[Box2d], List[RigidTransform]]:
+        # NOTE(bernhardpg): Hardcoded for this specific geometry
+        # BOX_1 is the vertical box
+        BOX_1_WIDTH = 2
+        BOX_1_HEIGHT = 4
+        box_1 = Box2d(BOX_1_WIDTH * self.scale, BOX_1_HEIGHT * self.scale)
+        transform_1 = RigidTransform(RotationMatrix.Identity(), np.array([0, -1, 0]) * self.scale)  # type: ignore
+
+        # BOX_2 is the horisontal box
+        BOX_2_WIDTH = 6
+        BOX_2_HEIGHT = 2
+        box_2 = Box2d(BOX_2_WIDTH * self.scale, BOX_2_HEIGHT * self.scale)
+        transform_2 = RigidTransform(RotationMatrix.Identity(), np.array([0, 2, 0]) * self.scale)  # type: ignore
+
+        return [box_1, box_2], [transform_1, transform_2]
