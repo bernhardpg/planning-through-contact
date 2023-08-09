@@ -675,7 +675,6 @@ class GraphChain:
             for chain in self.non_collision_chains
         ]
         mode = self.non_collision_modes[0][0]
-        breakpoint()
 
     def create_edges(
         self,
@@ -1020,7 +1019,6 @@ def plan_planar_pushing():
     )
 
     traj_length = len(R_traj)
-    breakpoint()
 
     compute_violation = False
     if compute_violation:
