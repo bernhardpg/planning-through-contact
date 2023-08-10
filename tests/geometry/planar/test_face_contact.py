@@ -201,7 +201,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
@@ -210,7 +210,12 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
 
 @pytest.mark.parametrize(
-    "face_contact_mode", [{"face_idx": 1}], indirect=["face_contact_mode"]
+    "face_contact_mode",
+    [
+        ({"face_idx": 1}),  # not infeasible, although it seems it should be?
+        ({"face_idx": 0}),
+    ],
+    indirect=["face_contact_mode"],
 )
 def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
@@ -222,37 +227,44 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert not result.is_success()  # should fail when the relaxation is tight!
 
+    DEBUG = False
+    if DEBUG:
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
 
-# TODO(bernhardpg): This test should fail when the relaxation is tight. Make sure to come back to this!
 
-# @pytest.mark.parametrize(
-#     "face_contact_mode",
-#     [{"face_idx": 3, "body": "t_pusher"}],
-#     indirect=["face_contact_mode"],
-# )
-# def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) -> None:
-#     mode = face_contact_mode
-#     initial_pose = PlanarPose(0, 0, 0)
-#     final_pose = PlanarPose(0.3, 0, 0.3)
-#     mode.set_slider_initial_pose(initial_pose)
-#     mode.set_slider_final_pose(final_pose)
-#
-#     mode.formulate_convex_relaxation()
-#     result = Solve(mode.relaxed_prog)  # type: ignore
-#     # assert not result.is_success()  # should fail when the relaxation is tight!
-#
-#     assert result.is_success()  # should fail when the relaxation is tight!
-#
-#     vars = face_contact_mode.variables.eval_result(result)
-#     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-#     breakpoint()
-#
-#     DEBUG = True
-#     if DEBUG:
-#         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
-#         # (num_knot_points, 2): first col cosines, second col sines
-#         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
-#         plot_cos_sine_trajs(rs)
+@pytest.mark.parametrize(
+    "face_contact_mode",
+    [
+        # ({"face_idx": 3, "body": "t_pusher"}), # not infeasible, although it seems it should be?
+        ({"face_idx": 4, "body": "t_pusher"}),
+        ({"face_idx": 6, "body": "t_pusher"}),
+    ],
+    indirect=["face_contact_mode"],
+)
+def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) -> None:
+    mode = face_contact_mode
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.3)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    result = Solve(mode.relaxed_prog)  # type: ignore
+    assert not result.is_success()  # should fail when the relaxation is tight!
+
+    DEBUG = False
+    if DEBUG:
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
 
 
 @pytest.mark.parametrize(
