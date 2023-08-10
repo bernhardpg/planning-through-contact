@@ -111,10 +111,11 @@ class AbstractModeVariables(ABC):
     def v_WBs(self):
         pass
 
-    @property
-    @abstractmethod
-    def omega_WBs(self):
-        pass
+    # TODO(bernhardpg): Remove
+    # @property
+    # @abstractmethod
+    # def omega_WBs(self):
+    #     pass
 
     @property
     @abstractmethod

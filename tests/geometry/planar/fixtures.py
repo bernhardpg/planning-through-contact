@@ -202,7 +202,7 @@ def planner_with_t_pusher(request: FixtureRequest) -> PlanarPushingPlanner:
     t_pusher = RigidBody("t_pusher", TPusher2d(), mass)
 
     if request.param.get("partial"):
-        contact_locations = t_pusher.geometry.contact_locations[3:5]
+        contact_locations = t_pusher.geometry.contact_locations[0:2]
     else:
         contact_locations = t_pusher.geometry.contact_locations
 

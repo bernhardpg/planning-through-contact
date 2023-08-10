@@ -366,3 +366,6 @@ class Box2d(CollisionGeometry):
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
         return lam * pv1 + (1 - lam) * pv2
+
+    def get_max_contact_arm(self, _: PolytopeContactLocation) -> float:
+        return np.linalg.norm(self._v1)  # type: ignore

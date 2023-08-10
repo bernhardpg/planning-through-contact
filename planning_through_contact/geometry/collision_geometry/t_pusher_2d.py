@@ -71,6 +71,7 @@ class TPusher2d(CollisionGeometry):
                 "Can only find faces for collisionfree regions for faces."
             )
         else:
+            # TODO(bernhardpg): These can be improved by tessolating the space better
             face_idx = location.idx
             if face_idx == 0:
                 return [self.faces[0], self.faces[1]]  # normals pointing outwards
@@ -89,7 +90,7 @@ class TPusher2d(CollisionGeometry):
             elif face_idx == 7:
                 return [self.faces[7]]
             else:
-                raise NotImplementedError("Currently only face 0 is supported")
+                raise NotImplementedError()
 
     # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
@@ -233,3 +234,30 @@ class TPusher2d(CollisionGeometry):
         transform_2 = RigidTransform(RotationMatrix.Identity(), np.array([0, 2, z_value / self.scale]) * self.scale)  # type: ignore
 
         return [box_1, box_2], [transform_1, transform_2]
+
+    def get_max_contact_arm(self, location: PolytopeContactLocation) -> float:
+        if not location.pos == ContactLocation.FACE:
+            raise NotImplementedError(
+                "Can only find faces for collisionfree regions for faces."
+            )
+        else:
+            # TODO(bernhardpg): These can be improved by tessolating the space better
+            face_idx = location.idx
+            if face_idx == 0:
+                return np.linalg.norm(self.vertices[0])  # type: ignore
+            elif face_idx == 1:
+                return np.linalg.norm(self.vertices[2])  # type: ignore
+            elif face_idx == 2:
+                return np.linalg.norm(self.vertices[3])  # type: ignore
+            elif face_idx == 3:
+                return np.linalg.norm(self.vertices[3])  # type: ignore
+            elif face_idx == 4:
+                return np.linalg.norm(self.vertices[4])  # type: ignore
+            elif face_idx == 5:
+                return np.linalg.norm(self.vertices[5])  # type: ignore
+            elif face_idx == 6:
+                return np.linalg.norm(self.vertices[7])  # type: ignore
+            elif face_idx == 7:
+                return np.linalg.norm(self.vertices[7])  # type: ignore
+            else:
+                raise NotImplementedError()

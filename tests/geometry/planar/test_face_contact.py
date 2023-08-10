@@ -201,7 +201,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
@@ -223,12 +223,12 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     assert not result.is_success()  # should fail when the relaxation is tight!
 
 
-# TODO(bernhardpg): This test should fail when the relaxation is tight. Make sure to come back to this!
-
-
 @pytest.mark.parametrize(
     "face_contact_mode",
-    [{"face_idx": 6, "body": "t_pusher"}],
+    [
+        ({"face_idx": 3, "body": "t_pusher"}),
+        ({"face_idx": 6, "body": "t_pusher"}),
+    ],
     indirect=["face_contact_mode"],
 )
 def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) -> None:
@@ -240,16 +240,12 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
 
     mode.formulate_convex_relaxation()
     result = Solve(mode.relaxed_prog)  # type: ignore
-    # assert not result.is_success()  # should fail when the relaxation is tight!
+    assert not result.is_success()  # should fail when the relaxation is tight!
 
-    assert result.is_success()  # should fail when the relaxation is tight!
-
-    vars = face_contact_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-    breakpoint()
-
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
@@ -261,7 +257,7 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     [{"face_idx": 0, "body": "t_pusher"}],
     indirect=["face_contact_mode"],
 )
-def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
+def test_planning_for_t_pusher_feasible(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     initial_pose = PlanarPose(0, 0, 0)
     final_pose = PlanarPose(0.3, 0.1, 0.1)
@@ -270,7 +266,7 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
 
     mode.formulate_convex_relaxation()
     result = Solve(mode.relaxed_prog)  # type: ignore
-    assert result.is_success()  # should fail when the relaxation is tight!
+    assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)

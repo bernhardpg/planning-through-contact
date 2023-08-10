@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import Callable, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -42,6 +42,7 @@ class FaceContactVariables(AbstractModeVariables):
     sin_ths: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     p_WB_xs: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     p_WB_ys: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    omega_WBs: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
 
     pv1: npt.NDArray[np.float64]
     pv2: npt.NDArray[np.float64]
@@ -79,6 +80,9 @@ class FaceContactVariables(AbstractModeVariables):
         p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
         p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
 
+        # Angular velocity
+        omega_WBs = prog.NewContinuousVariables(num_knot_points - 1, "omega_WB")
+
         dt = time_in_mode / num_knot_points
 
         return FaceContactVariables(
@@ -92,6 +96,7 @@ class FaceContactVariables(AbstractModeVariables):
             sin_ths,
             p_WB_xs,
             p_WB_ys,
+            omega_WBs,
             pv1,
             pv2,
             normal_vec,
@@ -110,6 +115,7 @@ class FaceContactVariables(AbstractModeVariables):
             result.GetSolution(self.sin_ths),
             result.GetSolution(self.p_WB_xs),
             result.GetSolution(self.p_WB_ys),
+            result.GetSolution(self.omega_WBs),
             self.pv1,
             self.pv2,
             self.normal_vec,
@@ -159,15 +165,23 @@ class FaceContactVariables(AbstractModeVariables):
             self.p_c_Bs, self.dt
         )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
 
+    # TODO(bernhardpg): Remove this
+    # @property
+    # def omega_WBs(self):
+    #     R_WB_dots = [
+    #         np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
+    #         for cos_dot, sin_dot in zip(self.cos_th_dots, self.sin_th_dots)
+    #     ]
+    #     # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
+    #     oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
+    #     return oms
+
     @property
-    def omega_WBs(self):
-        R_WB_dots = [
+    def R_WB_dots(self):
+        return [
             np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
             for cos_dot, sin_dot in zip(self.cos_th_dots, self.sin_th_dots)
         ]
-        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
-        oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
-        return oms
 
     @property
     def p_c_Ws(self):
@@ -214,8 +228,7 @@ class FaceContactMode(AbstractContactMode):
             self.time_in_mode,
         )
         # TODO(bernhardpg): Should we use this?
-        self.enforce_equal_forces = True
-        self.redundant_angular_velocity_constraints = False
+        self.enforce_equal_forces = False
 
         self._define_constraints()
         self._define_costs()
@@ -223,7 +236,8 @@ class FaceContactMode(AbstractContactMode):
     def _define_constraints(self) -> None:
         # TODO: take this from drake simulation
         FRICTION_COEFF = 0.5
-        MAX_FORCE = FRICTION_COEFF * self.object.mass * 9.81
+        G = 9.81
+        force_max = FRICTION_COEFF * self.object.mass * G
         TABLE_SIZE = 1.0
 
         for lam in self.variables.lams:
@@ -233,21 +247,21 @@ class FaceContactMode(AbstractContactMode):
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
             self.prog.AddConstraint(c**2 + s**2 == 1)
 
-        # Redundant angular velocity constraint, implied by [\omega]^x = \dot{R} R^\intercal
-        # TODO(bernhardpg): For some reason, these are not tight!
-        if self.redundant_angular_velocity_constraints:
-            for c, s, c_dot, s_dot in zip(
-                self.variables.cos_ths,
-                self.variables.sin_ths,
-                self.variables.cos_th_dots,
-                self.variables.sin_th_dots,
-            ):
-                constraint = c_dot * c + s_dot * s == 0
-                self.prog.AddConstraint(constraint)
-
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddBoundingBoxConstraint(0, MAX_FORCE, c_n)
+            self.prog.AddBoundingBoxConstraint(0, force_max, c_n)
+
+        # TODO(bernhardpg): Compute f_max and tau_max correctly
+        # torque_max = force_max * self.object.geometry.get_max_contact_arm(
+        #     self.contact_location
+        # )
+        torque_max = force_max * 0.6 * 0.2
+        # Friction cone constraints
+        # for omega_WB in self.variables.omega_WBs:
+        # self.prog.AddBoundingBoxConstraint(
+        #     -1 / torque_max, 1 / torque_max, omega_WB
+        # )
+        # self.prog.AddBoundingBoxConstraint(-0.3, 0.3, omega_WB)
 
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
@@ -259,7 +273,7 @@ class FaceContactMode(AbstractContactMode):
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
         ):
-            self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
+            self.prog.AddBoundingBoxConstraint(-force_max, force_max, c_f)
 
         # Bounds on positions
         for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
@@ -299,11 +313,77 @@ class FaceContactMode(AbstractContactMode):
                 R_WB = self.variables.R_WBs[k]
 
             x_dot, dyn = self.quasi_static_dynamics(
-                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
+                v_WB,
+                omega_WB,
+                f_c_B,
+                p_c_B,
+                R_WB,
+                force_max,
+                torque_max,
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
                 self.prog.AddConstraint(row)
+
+        # # Angular velocity constraints
+        # to_skew_symmetric: Callable[
+        #     [float], npt.NDArray[np.float64]
+        # ] = lambda omega: np.array([[0.0, -omega], [omega, 0.0]])
+        # for omega_WB, R_WB, R_WB_dot in zip(
+        #     self.variables.omega_WBs, self.variables.R_WBs, self.variables.R_WB_dots
+        # ):
+        #     rhs = R_WB_dot.dot(R_WB.T)
+        #     lhs = to_skew_symmetric(omega_WB)
+        #
+        #     constraint = eq(lhs, rhs)
+        #     c = constraint[1, 0]
+        #     self.prog.AddConstraint(c)
+        #     # c = constraint[0, 0]
+        #     # self.prog.AddConstraint(c)
+        #     # TODO(bernhardpg): Why does constraint[0,0] make the relaxation infeasible?
+        #     # This should be a valid constraint
+        #
+        #     rhs = R_WB_dot
+        #     lhs = to_skew_symmetric(omega_WB).dot(R_WB)
+        #
+        #     constraint = eq(lhs, rhs)
+        #     c = constraint[1, 0]
+        #     self.prog.AddConstraint(c)
+        #     # c = constraint[0, 0]
+        #     # self.prog.AddConstraint(c)
+        #     # TODO(bernhardpg): Why does constraint[0,0] make the relaxation infeasible?
+        #     # This should be a valid constraint
+
+        # Angular velocity constraints
+        to_skew_symmetric: Callable[
+            [float], npt.NDArray[np.float64]
+        ] = lambda omega: np.array([[0.0, -omega], [omega, 0.0]])
+
+        for k in range(self.num_knot_points - 1):
+            R_WB_dot = self.variables.R_WB_dots[k]
+            omega_WB = self.variables.omega_WBs[k]
+
+            # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
+            if use_midpoint:
+                R_WB = self._get_midpoint(self.variables.R_WBs, k)
+            else:
+                R_WB = self.variables.R_WBs[k]
+
+            rhs = R_WB_dot.dot(R_WB.T)
+            lhs = to_skew_symmetric(omega_WB)
+            constraint = eq(lhs, rhs)
+            c = constraint[1, 0]
+            self.prog.AddConstraint(c)
+            c = constraint[0, 0]
+            self.prog.AddConstraint(c)
+
+            rhs = R_WB_dot
+            lhs = to_skew_symmetric(omega_WB).dot(R_WB)
+            constraint = eq(lhs, rhs)
+            c = constraint[1, 0]
+            self.prog.AddConstraint(c)
+            c = constraint[0, 0]
+            self.prog.AddConstraint(c)
 
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_c_Bs:
@@ -325,6 +405,8 @@ class FaceContactMode(AbstractContactMode):
         )
         self.prog.AddQuadraticCost(self.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
+        self.prog.AddQuadraticCost(np.sum(self.variables.omega_WBs))  # type: ignore
+
     def set_finger_pos(self, lam: float) -> None:
         """
         Set finger position along the contact face.
@@ -342,6 +424,7 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[0], pose.pos()))
+        breakpoint()
 
         self.slider_initial_pose = pose
 
@@ -383,6 +466,8 @@ class FaceContactMode(AbstractContactMode):
         p_WB_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_xs, result)  # type: ignore
         p_WB_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_ys, result)  # type: ignore
 
+        omega_WBs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.omega_WBs, result)  # type: ignore
+
         return FaceContactVariables(
             self.variables.num_knot_points,
             self.variables.time_in_mode,
@@ -394,6 +479,7 @@ class FaceContactMode(AbstractContactMode):
             sin_ths,
             p_WB_xs,
             p_WB_ys,
+            omega_WBs,
             self.variables.pv1,
             self.variables.pv2,
             self.variables.normal_vec,
@@ -411,6 +497,7 @@ class FaceContactMode(AbstractContactMode):
         sin_ths = result.GetSolution(self.variables.sin_ths)  # type: ignore
         p_WB_xs = result.GetSolution(self.variables.p_WB_xs)  # type: ignore
         p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
+        omega_WBs = result.GetSolution(self.variables.omega_WBs)  # type: ignore
 
         return FaceContactVariables(
             self.variables.num_knot_points,
@@ -423,6 +510,7 @@ class FaceContactMode(AbstractContactMode):
             sin_ths,
             p_WB_xs,
             p_WB_ys,
+            omega_WBs,
             self.variables.pv1,
             self.variables.pv2,
             self.variables.normal_vec,
@@ -480,17 +568,11 @@ class FaceContactMode(AbstractContactMode):
         f_c_B,
         p_c_B,
         R_WB,
-        FRICTION_COEFF,
-        OBJECT_MASS,
+        f_max: float,
+        tau_max: float,
         use_redundant_constraints: bool = True,
     ):
-        G = 9.81
-        # TODO(bernhardpg): Compute f_max and tau_max correctly
-        f_max = FRICTION_COEFF * G * OBJECT_MASS
-        tau_max = f_max * 0.2
-
         A = np.diag(
-            # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
             [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
         )  # Ellipsoidal Limit surface approximation
 

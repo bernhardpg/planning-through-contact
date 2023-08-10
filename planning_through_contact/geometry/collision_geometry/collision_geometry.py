@@ -100,3 +100,7 @@ class CollisionGeometry(ABC):
         self, lam: float, loc: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
         pass
+
+    @abstractmethod
+    def get_max_contact_arm(self, loc: PolytopeContactLocation) -> float:
+        pass
