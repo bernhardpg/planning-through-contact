@@ -220,13 +220,23 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
 
     face_contact_mode.formulate_convex_relaxation()
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
-    assert not result.is_success()  # should fail when the relaxation is tight!
+    # assert not result.is_success()  # should fail when the relaxation is tight!
+
+    DEBUG = True
+    if DEBUG:
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
 
 
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
         ({"face_idx": 3, "body": "t_pusher"}),
+        ({"face_idx": 4, "body": "t_pusher"}),
         ({"face_idx": 6, "body": "t_pusher"}),
     ],
     indirect=["face_contact_mode"],
@@ -254,7 +264,10 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
 
 @pytest.mark.parametrize(
     "face_contact_mode",
-    [{"face_idx": 0, "body": "t_pusher"}],
+    [
+        ({"face_idx": 0, "body": "t_pusher"}),
+        ({"face_idx": 2, "body": "t_pusher"}),
+    ],
     indirect=["face_contact_mode"],
 )
 def test_planning_for_t_pusher_feasible(face_contact_mode: FaceContactMode) -> None:

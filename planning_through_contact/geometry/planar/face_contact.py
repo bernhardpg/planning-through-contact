@@ -252,16 +252,13 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddBoundingBoxConstraint(0, force_max, c_n)
 
         # TODO(bernhardpg): Compute f_max and tau_max correctly
-        # torque_max = force_max * self.object.geometry.get_max_contact_arm(
-        #     self.contact_location
-        # )
-        torque_max = force_max * 0.6 * 0.2
-        # Friction cone constraints
-        # for omega_WB in self.variables.omega_WBs:
-        # self.prog.AddBoundingBoxConstraint(
-        #     -1 / torque_max, 1 / torque_max, omega_WB
-        # )
-        # self.prog.AddBoundingBoxConstraint(-0.3, 0.3, omega_WB)
+        torque_max = force_max * self.object.geometry.get_max_contact_arm(
+            self.contact_location
+        )
+        for omega_WB in self.variables.omega_WBs:
+            self.prog.AddBoundingBoxConstraint(
+                -1 / torque_max, 1 / torque_max, omega_WB
+            )
 
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
@@ -324,35 +321,6 @@ class FaceContactMode(AbstractContactMode):
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
                 self.prog.AddConstraint(row)
-
-        # # Angular velocity constraints
-        # to_skew_symmetric: Callable[
-        #     [float], npt.NDArray[np.float64]
-        # ] = lambda omega: np.array([[0.0, -omega], [omega, 0.0]])
-        # for omega_WB, R_WB, R_WB_dot in zip(
-        #     self.variables.omega_WBs, self.variables.R_WBs, self.variables.R_WB_dots
-        # ):
-        #     rhs = R_WB_dot.dot(R_WB.T)
-        #     lhs = to_skew_symmetric(omega_WB)
-        #
-        #     constraint = eq(lhs, rhs)
-        #     c = constraint[1, 0]
-        #     self.prog.AddConstraint(c)
-        #     # c = constraint[0, 0]
-        #     # self.prog.AddConstraint(c)
-        #     # TODO(bernhardpg): Why does constraint[0,0] make the relaxation infeasible?
-        #     # This should be a valid constraint
-        #
-        #     rhs = R_WB_dot
-        #     lhs = to_skew_symmetric(omega_WB).dot(R_WB)
-        #
-        #     constraint = eq(lhs, rhs)
-        #     c = constraint[1, 0]
-        #     self.prog.AddConstraint(c)
-        #     # c = constraint[0, 0]
-        #     # self.prog.AddConstraint(c)
-        #     # TODO(bernhardpg): Why does constraint[0,0] make the relaxation infeasible?
-        #     # This should be a valid constraint
 
         # Angular velocity constraints
         to_skew_symmetric: Callable[
@@ -424,7 +392,6 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
         self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[0], pose.pos()))
-        breakpoint()
 
         self.slider_initial_pose = pose
 
