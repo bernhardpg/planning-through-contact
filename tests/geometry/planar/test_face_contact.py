@@ -215,8 +215,8 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        # ({"face_idx": 1}),  # not infeasible, although it seems it should be?
-        ({"face_idx": 0}),
+        ({"face_idx": 1}),
+        # ({"face_idx": 0}),  # not infeasible, although it seems it should be?
     ],
     indirect=["face_contact_mode"],
 )
@@ -301,8 +301,9 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     "face_contact_mode",
     [
         ({"face_idx": 3}),
-        # ({"face_idx": 1}),  # not infeasible, although it seems it should be?
-        # ({"face_idx": 0}),
+        (
+            {"face_idx": 0}
+        ),  # not infeasible, although it should be (relaxation is loose)
     ],
     indirect=["face_contact_mode"],
 )
@@ -314,13 +315,13 @@ def test_problem_reduction(face_contact_mode: FaceContactMode) -> None:
 
     x = face_contact_mode.formulate_reduced_convex_relaxation()
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    assert result.is_success()
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         vars = face_contact_mode.variables.eval_from_reduced_result(
             face_contact_mode.prog, result, x
         )
-        breakpoint()
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines

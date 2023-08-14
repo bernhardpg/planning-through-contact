@@ -4,6 +4,7 @@ from typing import List, Literal, Tuple
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
+import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
@@ -119,9 +120,14 @@ class FaceContactVariables(AbstractModeVariables):
             self.tangent_vec,
         )
 
-    def eval_from_vals(
-        self, prog: MathematicalProgram, vals: npt.NDArray[np.float64]
+    def eval_from_reduced_result(
+        self,
+        prog: MathematicalProgram,
+        result: MathematicalProgramResult,
+        reduced_vars: NpExpressionArray,
     ) -> "FaceContactVariables":
+        # must evaluate to get rid of expressions
+        vals = sym.Evaluate(result.GetSolution(reduced_vars))  # type: ignore
         temp = lambda vars: vals[prog.FindDecisionVariableIndices(vars)].flatten()
 
         return FaceContactVariables(
@@ -240,7 +246,6 @@ class FaceContactMode(AbstractContactMode):
         )
         # TODO(bernhardpg): Should we use this?
         self.enforce_equal_forces = True
-        self.redundant_angular_velocity_constraints = False
 
         self._define_constraints()
         self._define_costs()
@@ -257,18 +262,6 @@ class FaceContactMode(AbstractContactMode):
         # SO(2) constraints
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
             self.prog.AddConstraint(c**2 + s**2 == 1)
-
-        # Redundant angular velocity constraint, implied by [\omega]^x = \dot{R} R^\intercal
-        # TODO(bernhardpg): For some reason, these are not tight!
-        if self.redundant_angular_velocity_constraints:
-            for c, s, c_dot, s_dot in zip(
-                self.variables.cos_ths,
-                self.variables.sin_ths,
-                self.variables.cos_th_dots,
-                self.variables.sin_th_dots,
-            ):
-                constraint = c_dot * c + s_dot * s == 0
-                self.prog.AddConstraint(constraint)
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
