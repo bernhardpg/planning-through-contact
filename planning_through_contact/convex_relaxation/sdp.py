@@ -305,7 +305,7 @@ def eliminate_equality_constraints(
     )
     if has_linear_ineq_constraints:
         B, d = _linear_bindings_to_affine_terms(
-            prog.linear_constraints(), bounding_box_eqs, decision_vars
+            prog.linear_constraints(), bounding_box_ineqs, decision_vars
         )  # B x >= d becomes B F z >= d - B x_hat
         new_prog.AddLinearConstraint(
             B.dot(F), d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars

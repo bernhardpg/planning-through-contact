@@ -301,6 +301,32 @@ def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
     assert np.allclose(x_val_true, x, atol=1e-5)
 
 
+def test_eq_elimination_bbox() -> None:
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(1, "x")[0]
+    y = prog.NewContinuousVariables(1, "y")[0]
+
+    prog.AddQuadraticConstraint(x**2 + y**2 - 1, 0, 0)
+    prog.AddLinearConstraint(x == y)
+    prog.AddQuadraticCost(
+        x * y + x + y
+    )  # add a cost with a linear term to make the relaxation tight
+
+    prog.AddBoundingBoxConstraint(-10, 10, x)
+    prog.AddBoundingBoxConstraint(-9, np.inf, y)
+
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+
+    assert (
+        len(smaller_prog.linear_constraints()) == 1
+    )  # only one big Bz >= d constraint
+
+    constraint = smaller_prog.linear_constraints()[0].evaluator()
+
+    expected_num_constraints = 2 + 1  # two bounding box constraints, one is two-sided
+    assert constraint.num_constraints() == expected_num_constraints
+
+
 if __name__ == "__main__":
     # test_so_2_relaxation_multiple_points(so_2_prog_multiple_points())
     test_eq_elimination(so_2_prog_multiple_points())
