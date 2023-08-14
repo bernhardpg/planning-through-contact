@@ -5,7 +5,7 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 import pytest
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import MakeSemidefiniteRelaxation, MathematicalProgram, Solve
 
 from planning_through_contact.convex_relaxation.sdp import (
     _collect_bounding_box_constraints,
@@ -15,6 +15,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     find_solution,
     get_nullspace_matrix,
 )
+from planning_through_contact.tools.types import NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 
@@ -130,6 +131,9 @@ def test_linear_bindings_to_affine_terms(so_2_prog: MathematicalProgram) -> None
     assert np.allclose(A, np.array([[-1, 1]]))
     assert np.allclose(b, np.array([[0]]))
     assert len(b.shape) == 2
+
+
+###### DEPRECATED, we now use Drake's builtin MakeSemidefiniteRelaxation
 
 
 def test_sdp_relaxation(so_2_prog: MathematicalProgram) -> None:
@@ -259,7 +263,121 @@ def test_so_2_relaxation_multiple_points(
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
 
 
-def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
+###### DEPRECATED
+
+
+def test_eq_elimination_formulation() -> None:
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(1, "x")[0]
+    y = prog.NewContinuousVariables(1, "y")[0]
+    z = prog.NewContinuousVariables(1, "z")[0]
+
+    prog.AddLinearConstraint(y == z)
+
+    prog.AddBoundingBoxConstraint(-10, 10, x)
+    prog.AddBoundingBoxConstraint(-5, np.inf, y)
+    prog.AddBoundingBoxConstraint(-5, np.inf, z)
+
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+
+    assert (
+        len(smaller_prog.linear_constraints()) == 1
+    )  # only one big Bz >= d constraint
+
+    constraint = smaller_prog.linear_constraints()[0].evaluator()
+
+    expected_num_constraints = (
+        2 + 1 + 1
+    )  # three bounding box constraints, two are two-sided
+    assert constraint.num_constraints() == expected_num_constraints
+
+    # Recreate F and x_hat
+    bounding_box_eqs, _ = _collect_bounding_box_constraints(
+        prog.bounding_box_constraints()
+    )
+    A_eq, b_eq = _linear_bindings_to_affine_terms(
+        prog.linear_equality_constraints(), bounding_box_eqs, prog.decision_variables()
+    )
+    F = get_nullspace_matrix(A_eq)
+    x_hat = find_solution(A_eq, -b_eq)
+
+    B = np.array([[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    d = np.array([10, 10, 5, 5])
+
+    A_target = B.dot(F)
+    b_target = -d - B.dot(x_hat).flatten()
+
+    # Az >= b
+    A = constraint.GetDenseA()
+    b = constraint.lower_bound()
+
+    assert np.allclose(A, A_target)
+    assert np.allclose(b, b_target)
+
+
+def test_eq_elimination_qp_solution() -> None:
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(1, "x")[0]
+    y = prog.NewContinuousVariables(1, "y")[0]
+    z = prog.NewContinuousVariables(1, "z")[0]
+
+    prog.AddLinearConstraint(y == z)
+
+    prog.AddBoundingBoxConstraint(-10, 10, x)
+    prog.AddBoundingBoxConstraint(-5, np.inf, y)
+    prog.AddBoundingBoxConstraint(-5, np.inf, z)
+
+    prog.AddCost(x**2 + y + z)
+
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+
+    prog.SetInitialGuess(prog.decision_variables(), np.array([0.1, -3, -3]))
+    result = Solve(prog)
+
+    sol = result.GetSolution(prog.decision_variables())
+    # solution is [0, -5, -5]
+
+    smaller_initial_guess = np.array([-5, -5])
+    # make sure we provide the right initial guess
+    assert np.allclose(sol, get_x(smaller_initial_guess))
+
+    smaller_prog.SetInitialGuess(
+        smaller_prog.decision_variables(), smaller_initial_guess
+    )
+    smaller_result = Solve(smaller_prog)
+    assert smaller_result.is_success()  # this should not fail
+    smaller_sol = get_x(smaller_result.GetSolution(smaller_prog.decision_variables()))
+
+    assert np.allclose(sol, smaller_sol)
+
+
+def test_so2_equality_elimination_with_initial_guess(
+    so_2_prog: MathematicalProgram, so_2_true_sol: npt.NDArray[np.float64]
+) -> None:
+    prog = so_2_prog
+    true_sol = so_2_true_sol
+
+    prog.SetInitialGuess(prog.decision_variables(), np.array([0.7, 0.7]))
+
+    result = Solve(prog)
+    assert result.is_success()
+
+    sol = result.GetSolution(prog.decision_variables())
+
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+    z = smaller_prog.decision_variables()
+    smaller_prog.SetInitialGuess(z, np.array([-0.7]))
+    smaller_result = Solve(smaller_prog)
+    assert smaller_result.is_success()
+
+    sol = get_x(smaller_result.GetSolution(z))
+    # There are only two feasible points
+    assert np.allclose(np.abs(sol), np.abs(true_sol))
+
+
+def test_eq_elimination_with_relaxation(
+    so_2_prog_multiple_points: ProgSo2WithDetails,
+) -> None:
     (
         prog,
         th_initial,
@@ -270,25 +388,37 @@ def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
 
     # Find solution by eliminating equalities first
     smaller_prog, get_x = eliminate_equality_constraints(prog)
-    relaxed_prog, Z, _ = create_sdp_relaxation(smaller_prog)
+    relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
     result = Solve(relaxed_prog)
     assert result.is_success()
 
+    N = prog.num_vars()
+
+    def get_X(original_prog, relaxed_prog) -> NpVariableArray:
+        N = original_prog.num_vars()
+        X = (
+            relaxed_prog.positive_semidefinite_constraints()[0]
+            .variables()
+            .reshape((N + 1, N + 1))
+        )
+        return X
+
+    Z = get_X(smaller_prog, relaxed_prog)
     Z_val = result.GetSolution(Z)
 
+    # Solution should be tight with this cost
     tol = 1e-6
     num_nonzero_eigvals = len(
         [val for val in np.linalg.eigvals(Z_val) if np.abs(val) >= tol]
     )
     assert num_nonzero_eigvals == 1
-    z = Z_val[1:, 0]
+    z = result.GetSolution(smaller_prog.decision_variables())
     x = get_x(z)
 
     # Find solution from relaxing the program directly
-    relaxed_prog, X, _ = create_sdp_relaxation(prog)
+    relaxed_prog = MakeSemidefiniteRelaxation(prog)
     result = Solve(relaxed_prog)
-    X_val = result.GetSolution(X)
-    x_val_true = X_val[1:, 0]
+    x_val_true = result.GetSolution(prog.decision_variables())
 
     rs = get_r_from_x(x)
 
@@ -296,75 +426,7 @@ def test_eq_elimination(so_2_prog_multiple_points: ProgSo2WithDetails) -> None:
     if DEBUG:
         plot_cos_sine_trajs(rs.T)
 
+    # Make sure the solutions are the same
     assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
     assert np.allclose(x_val_true, x, atol=1e-5)
-
-
-if __name__ == "__main__":
-    # test_so_2_relaxation_multiple_points(so_2_prog_multiple_points())
-    test_eq_elimination(so_2_prog_multiple_points())
-# test_equality_elimination_with_initial_guess(so_2_prog(), so_2_true_sol())
-# test_equality_elimination_with_sdp_relaxation()
-
-
-# TODO: Finish writing these unit tests
-
-
-# def test_equality_elimination_with_initial_guess(
-#     so_2_prog: MathematicalProgram, so_2_true_sol: npt.NDArray[np.float64]
-# ) -> None:
-#     prog = so_2_prog
-#     true_sol = so_2_true_sol
-#
-#     prog.SetInitialGuess(prog.decision_variables(), np.array([0.7, 0.7]))
-#
-#     result = Solve(prog)
-#     assert result.is_success()
-#
-#     sol = result.GetSolution(prog.decision_variables())
-#
-#     smaller_prog, retrieve_x, F, x_hat = eliminate_equality_constraints(prog)
-#     z = smaller_prog.decision_variables()[0]
-#     smaller_prog.SetInitialGuess(z, 0.7)
-#     smaller_result = Solve(smaller_prog)
-#     assert smaller_result.is_success()
-#
-#     sol = retrieve_x(smaller_result.GetSolution(z))
-#     breakpoint()
-#     assert np.all(sol == true_sol)
-#
-
-# def test_equality_elimination_with_sdp_relaxation(
-#     so_2_test_data: Tuple[MathematicalProgram, npt.NDArray[np.float64]]
-# ):
-#     prog, true_sol = so_2_test_data
-#
-#     # TODO: Fix problem where sdp relaxation doesn't pick up quadratic constraints
-#     prog = MathematicalProgram()
-#     x = prog.NewContinuousVariables(1, "x")[0]
-#     y = prog.NewContinuousVariables(1, "y")[0]
-#
-#     prog.AddQuadraticConstraint(x**2 + y**2 - 1, 0, 0)
-#     prog.AddLinearConstraint(x == y)
-#
-#     # Solve with SDP relaxation
-#     relaxed_prog, X, _ = create_sdp_relaxation(prog)
-#     x = X[1:, 0]
-#
-#     result = Solve(relaxed_prog)
-#     assert result.is_success()
-#
-#     sol_relaxation = result.GetSolution(x)
-#
-#     # Eliminate linear equality constraints, then solve relaxation
-#     smaller_prog, retrieve_x = eliminate_equality_constraints(prog)
-#     relaxed_prog, Z, _ = create_sdp_relaxation(smaller_prog)
-#     relaxed_result = Solve(relaxed_prog)
-#     assert relaxed_result.is_success()
-#
-#     z_sol = relaxed_result.GetSolution(Z[1:, 0])
-#     eliminated_sol = retrieve_x(z_sol)
-#     assert np.allclose(sol_relaxation, eliminated_sol, atol=1e-3)
-#
-#     assert np.allclose(eliminated_sol, TRUE_SOL, atol=1e-3)

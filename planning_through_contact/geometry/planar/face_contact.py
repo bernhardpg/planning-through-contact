@@ -4,6 +4,7 @@ from typing import List, Literal, Tuple
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
+import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
@@ -13,6 +14,9 @@ from pydrake.solvers import (
     MathematicalProgramResult,
 )
 
+from planning_through_contact.convex_relaxation.sdp import (
+    eliminate_equality_constraints,
+)
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
@@ -26,7 +30,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import forward_differences
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -110,6 +114,33 @@ class FaceContactVariables(AbstractModeVariables):
             result.GetSolution(self.sin_ths),
             result.GetSolution(self.p_WB_xs),
             result.GetSolution(self.p_WB_ys),
+            self.pv1,
+            self.pv2,
+            self.normal_vec,
+            self.tangent_vec,
+        )
+
+    def eval_from_reduced_result(
+        self,
+        prog: MathematicalProgram,
+        result: MathematicalProgramResult,
+        reduced_vars: NpExpressionArray,
+    ) -> "FaceContactVariables":
+        # must evaluate to get rid of expressions
+        vals = sym.Evaluate(result.GetSolution(reduced_vars))  # type: ignore
+        temp = lambda vars: vals[prog.FindDecisionVariableIndices(vars)].flatten()
+
+        return FaceContactVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            temp(self.lams),
+            temp(self.normal_forces),
+            temp(self.friction_forces),
+            temp(self.cos_ths),
+            temp(self.sin_ths),
+            temp(self.p_WB_xs),
+            temp(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
@@ -222,10 +253,11 @@ class FaceContactMode(AbstractContactMode):
     def _define_constraints(self) -> None:
         # TODO: take this from drake simulation
         FRICTION_COEFF = 0.5
+        MAX_FORCE = FRICTION_COEFF * self.object.mass * 9.81
+        TABLE_SIZE = 1.0
 
         for lam in self.variables.lams:
-            self.prog.AddLinearConstraint(lam >= 0)
-            self.prog.AddLinearConstraint(lam <= 1)
+            self.prog.AddBoundingBoxConstraint(0, 1, lam)
 
         # SO(2) constraints
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
@@ -233,12 +265,29 @@ class FaceContactMode(AbstractContactMode):
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddLinearConstraint(c_n >= 0)
+            self.prog.AddBoundingBoxConstraint(0, MAX_FORCE, c_n)
+
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
         ):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+
+        # Bounds on forces
+        for c_n, c_f in zip(
+            self.variables.normal_forces, self.variables.friction_forces
+        ):
+            self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
+
+        # Bounds on positions
+        for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
+            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x)
+            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y)
+
+        # Bounds on cosines and sines
+        for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
+            self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
+            self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
         if self.enforce_equal_forces:
             # Enforces forces are constant
@@ -321,20 +370,21 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_final_pose = pose
 
-    def formulate_convex_relaxation(self, make_bounded: bool = False) -> None:
+    def formulate_reduced_convex_relaxation(
+        self,
+    ) -> NpExpressionArray:
+        smaller_prog, get_x_from_z = eliminate_equality_constraints(self.prog)
+        self.relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
+
+        x = get_x_from_z(smaller_prog.decision_variables())
+        return x  # type: ignore
+
+    def formulate_convex_relaxation(self) -> None:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
-        # GCS requires the sets to be bounded
-        if make_bounded:
-            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
-            ub = np.full((self.relaxed_prog.num_vars(),), BOUND)
-            self.relaxed_prog.AddBoundingBoxConstraint(
-                -ub, ub, self.relaxed_prog.decision_variables()
-            )
-
-    def get_convex_set(self, make_bounded: bool = True) -> opt.Spectrahedron:
+    def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
-            self.formulate_convex_relaxation(make_bounded)
+            self.formulate_convex_relaxation()
 
         return opt.Spectrahedron(self.relaxed_prog)
 
@@ -452,7 +502,14 @@ class FaceContactMode(AbstractContactMode):
 
     @staticmethod
     def quasi_static_dynamics(
-        v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, OBJECT_MASS
+        v_WB,
+        omega_WB,
+        f_c_B,
+        p_c_B,
+        R_WB,
+        FRICTION_COEFF,
+        OBJECT_MASS,
+        use_redundant_constraints: bool = True,
     ):
         G = 9.81
         # TODO(bernhardpg): Compute f_max and tau_max correctly
@@ -473,12 +530,22 @@ class FaceContactMode(AbstractContactMode):
         # Contact torques
         tau_c_B = cross_2d(p_c_B, f_c_B)
 
-        x_dot = np.concatenate((v_WB, [[omega_WB]]))
+        x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
         wrench_W = R.dot(wrench_B)
-        dynamics = A.dot(
+        dynamics_in_W = A.dot(
             wrench_W
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
+        if use_redundant_constraints:
+            # NOTE(bernhardpg): Add constraints both ways
+            x_dot_in_B = R.T.dot(x_dot_in_W)
+            dynamics_in_B = A.dot(
+                wrench_B
+            )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
-        # x_dot, f(x,u)
-        return x_dot, dynamics  # (3,1), (3,1)
+            # x_dot, f(x,u)
+            return np.vstack((x_dot_in_W, x_dot_in_B)), np.vstack(
+                (dynamics_in_W, dynamics_in_B)
+            )  # (6,1), (6,1)
+        else:
+            return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)

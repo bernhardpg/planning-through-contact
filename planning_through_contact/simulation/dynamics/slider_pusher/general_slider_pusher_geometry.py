@@ -3,6 +3,7 @@ import numpy.typing as npt
 from pydrake.common.value import Value
 from pydrake.geometry import (
     Box,
+    Cylinder,
     FramePoseVector,
     GeometryFrame,
     GeometryInstance,
@@ -13,18 +14,16 @@ from pydrake.geometry import (
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, OutputPort
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.visualize.colors import COLORS
 
-# TODO(bernhardpg): This class should be unified with GeneralSliderPusherGeometry
-# The only difference is that this class expects the state to be [x, y, th, lam],
-# but this should just be converted by a conversion system in the diagram
 
-
-class SliderPusherGeometry(LeafSystem):
+class GeneralSliderPusherGeometry(LeafSystem):
     def __init__(
         self,
         slider_geometry: CollisionGeometry,
@@ -51,33 +50,85 @@ class SliderPusherGeometry(LeafSystem):
         self.slider_frame_id = scene_graph.RegisterFrame(
             self.source_id, GeometryFrame("slider")
         )
-        self.slider_geometry_id = scene_graph.RegisterGeometry(
-            self.source_id,
-            self.slider_frame_id,
-            GeometryInstance(RigidTransform.Identity(), Box(0.3, 0.3, 0.3), "slider"),
-        )
         BOX_COLOR = COLORS["aquamarine4"]
-        scene_graph.AssignRole(
-            self.source_id,
-            self.slider_geometry_id,
-            MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
-        )
+        if isinstance(slider_geometry, Box2d):
+            DEFAULT_HEIGHT = 0.3
+            box_geometry_id = scene_graph.RegisterGeometry(
+                self.source_id,
+                self.slider_frame_id,
+                GeometryInstance(
+                    RigidTransform.Identity(),
+                    Box(slider_geometry.width, slider_geometry.height, DEFAULT_HEIGHT),
+                    "slider",
+                ),
+            )
+            scene_graph.AssignRole(
+                self.source_id,
+                box_geometry_id,
+                MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+            )
+        elif isinstance(slider_geometry, TPusher2d):
+            DEFAULT_HEIGHT = 0.1
+            boxes, transforms = slider_geometry.get_as_boxes(DEFAULT_HEIGHT / 2)
+            box_geometry_ids = [
+                scene_graph.RegisterGeometry(
+                    self.source_id,
+                    self.slider_frame_id,
+                    GeometryInstance(
+                        transform,
+                        Box(box.width, box.height, DEFAULT_HEIGHT),
+                        f"box_{idx}",
+                    ),
+                )
+                for idx, (box, transform) in enumerate(zip(boxes, transforms))
+            ]
+            for box_geometry_id in box_geometry_ids:
+                scene_graph.AssignRole(
+                    self.source_id,
+                    box_geometry_id,
+                    MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+                )
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
             source_id=self.source_id,
             parent_id=self.slider_frame_id,
             frame=GeometryFrame("pusher"),
         )
+        CYLINDER_HEIGHT = 0.3
         self.pusher_geometry_id = scene_graph.RegisterGeometry(
             self.source_id,
             self.pusher_frame_id,
-            GeometryInstance(RigidTransform.Identity(), Sphere(0.01), "pusher"),
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, 0, CYLINDER_HEIGHT / 2])  # type: ignore
+                ),
+                Cylinder(0.01, CYLINDER_HEIGHT),
+                "pusher",
+            ),
         )
         FINGER_COLOR = COLORS["firebrick3"]
         scene_graph.AssignRole(
             self.source_id,
             self.pusher_geometry_id,
             MakePhongIllustrationProperties(FINGER_COLOR.diffuse(alpha)),
+        )
+
+        TABLE_COLOR = COLORS["bisque3"]
+        TABLE_HEIGHT = 0.1
+        table_geometry_id = scene_graph.RegisterAnchoredGeometry(
+            self.source_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, 0, -TABLE_HEIGHT / 2])  # type: ignore
+                ),
+                Box(1.0, 1.0, TABLE_HEIGHT),
+                "table",
+            ),
+        )
+        scene_graph.AssignRole(
+            self.source_id,
+            table_geometry_id,
+            MakePhongIllustrationProperties(TABLE_COLOR.diffuse(alpha)),
         )
 
     @classmethod
