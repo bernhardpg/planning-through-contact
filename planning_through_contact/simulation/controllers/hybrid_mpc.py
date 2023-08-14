@@ -151,9 +151,11 @@ class HybridModelPredictiveControl(LeafSystem):
         # Cost
         Q = np.diag([10, 10, 10, 1])
         R = np.eye(self.num_inputs) * 0.5
+        # NOTE: For some reason, the system is not stabilizable
+        # TODO(bernhardpg): Get back to this
         # Use the infinite horizon ricatti solution as the terminal cost
-        Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
-        # Q_N = Q
+        # Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
+        Q_N = Q
 
         terminal_cost = error_state[:, -1].T.dot(Q_N).dot(error_state[:, -1])
         state_running_cost = sum(

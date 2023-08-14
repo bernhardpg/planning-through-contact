@@ -58,8 +58,25 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
     linear_system = hybrid_mpc._get_linear_system(
         np.array([0, 0, 0, 0.5]), np.array([1.0, 0, 0])
     )
-    assert np.allclose(linear_system.A(), np.zeros((4, 4)))
-    assert sum(linear_system.B().flatten() != 0) == 4
+    A_target = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, -0.46, 0.0],
+            [0.0, 0.0, 0.0, 3.45],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    assert np.allclose(linear_system.A(), A_target)
+
+    # Linearized around th = 0 and with only a normal force,
+    # theta should only impact y_dot
+    assert np.all(linear_system.A()[0, :] == 0)
+    assert linear_system.A()[1, 2] != 0
+
+    B_target = np.array(
+        [[-0.46, 0.0, 0.0], [-0.0, -0.46, 0.0], [0.0, -1.725, 0.0], [0.0, 0.0, 1.0]]
+    )
+    assert np.allclose(linear_system.B(), B_target)
 
 
 def test_get_control_no_movement(
