@@ -317,8 +317,8 @@ def test_problem_reduction(face_contact_mode: FaceContactMode) -> None:
 
     DEBUG = True
     if DEBUG:
-        vars = face_contact_mode.variables.eval_from_vals(
-            face_contact_mode.prog, result.GetSolution(x)
+        vars = face_contact_mode.variables.eval_from_reduced_result(
+            face_contact_mode.prog, result, x
         )
         breakpoint()
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
