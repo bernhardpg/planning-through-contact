@@ -13,6 +13,9 @@ from pydrake.solvers import (
     MathematicalProgramResult,
 )
 
+from planning_through_contact.convex_relaxation.sdp import (
+    eliminate_equality_constraints,
+)
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
@@ -26,7 +29,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
-from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import forward_differences
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -110,6 +113,28 @@ class FaceContactVariables(AbstractModeVariables):
             result.GetSolution(self.sin_ths),
             result.GetSolution(self.p_WB_xs),
             result.GetSolution(self.p_WB_ys),
+            self.pv1,
+            self.pv2,
+            self.normal_vec,
+            self.tangent_vec,
+        )
+
+    def eval_from_vals(
+        self, prog: MathematicalProgram, vals: npt.NDArray[np.float64]
+    ) -> "FaceContactVariables":
+        temp = lambda vars: vals[prog.FindDecisionVariableIndices(vars)].flatten()
+
+        return FaceContactVariables(
+            self.num_knot_points,
+            self.time_in_mode,
+            self.dt,
+            temp(self.lams),
+            temp(self.normal_forces),
+            temp(self.friction_forces),
+            temp(self.cos_ths),
+            temp(self.sin_ths),
+            temp(self.p_WB_xs),
+            temp(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
@@ -351,6 +376,15 @@ class FaceContactMode(AbstractContactMode):
         self.prog.AddLinearConstraint(eq(self.variables.p_WBs[-1], pose.pos()))
 
         self.slider_final_pose = pose
+
+    def formulate_reduced_convex_relaxation(
+        self,
+    ) -> NpExpressionArray:
+        smaller_prog, get_x_from_z = eliminate_equality_constraints(self.prog)
+        self.relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
+
+        x = get_x_from_z(smaller_prog.decision_variables())
+        return x  # type: ignore
 
     def formulate_convex_relaxation(self) -> None:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)

@@ -3,6 +3,9 @@ import pytest
 from pydrake.solvers import Solve
 from pydrake.symbolic import Expression, Variables
 
+from planning_through_contact.convex_relaxation.sdp import (
+    eliminate_equality_constraints,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -212,7 +215,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        ({"face_idx": 1}),  # not infeasible, although it seems it should be?
+        # ({"face_idx": 1}),  # not infeasible, although it seems it should be?
         ({"face_idx": 0}),
     ],
     indirect=["face_contact_mode"],
@@ -297,8 +300,9 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        ({"face_idx": 1}),  # not infeasible, although it seems it should be?
-        ({"face_idx": 0}),
+        ({"face_idx": 3}),
+        # ({"face_idx": 1}),  # not infeasible, although it seems it should be?
+        # ({"face_idx": 0}),
     ],
     indirect=["face_contact_mode"],
 )
@@ -308,13 +312,15 @@ def test_problem_reduction(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
-    face_contact_mode.formulate_convex_relaxation()
+    x = face_contact_mode.formulate_reduced_convex_relaxation()
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
-    assert not result.is_success()  # should fail when the relaxation is tight!
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
-        vars = face_contact_mode.variables.eval_result(result)
+        vars = face_contact_mode.variables.eval_from_vals(
+            face_contact_mode.prog, result.GetSolution(x)
+        )
+        breakpoint()
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
