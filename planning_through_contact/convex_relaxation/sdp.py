@@ -304,11 +304,12 @@ def eliminate_equality_constraints(
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
     )
     if has_linear_ineq_constraints:
+        # Notice sign change on d
         B, d = _linear_bindings_to_affine_terms(
             prog.linear_constraints(), bounding_box_ineqs, decision_vars
-        )  # B x >= d becomes B F z >= d - B x_hat
+        )  # B x >= -d becomes B F z >= -d - B x_hat
         new_prog.AddLinearConstraint(
-            B.dot(F), d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
+            B.dot(F), -d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
         )
 
     has_generic_constaints = len(prog.generic_constraints()) > 0

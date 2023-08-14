@@ -266,15 +266,17 @@ def test_so_2_relaxation_multiple_points(
 ###### DEPRECATED
 
 
-def test_eq_elimination_bbox() -> None:
+def test_eq_elimination_formulation() -> None:
     prog = MathematicalProgram()
     x = prog.NewContinuousVariables(1, "x")[0]
     y = prog.NewContinuousVariables(1, "y")[0]
+    z = prog.NewContinuousVariables(1, "z")[0]
 
-    prog.AddLinearConstraint(x == y)
+    prog.AddLinearConstraint(y == z)
 
     prog.AddBoundingBoxConstraint(-10, 10, x)
-    prog.AddBoundingBoxConstraint(-9, np.inf, y)
+    prog.AddBoundingBoxConstraint(-5, np.inf, y)
+    prog.AddBoundingBoxConstraint(-5, np.inf, z)
 
     smaller_prog, get_x = eliminate_equality_constraints(prog)
 
@@ -284,21 +286,72 @@ def test_eq_elimination_bbox() -> None:
 
     constraint = smaller_prog.linear_constraints()[0].evaluator()
 
-    expected_num_constraints = 2 + 1  # two bounding box constraints, one is two-sided
+    expected_num_constraints = (
+        2 + 1 + 1
+    )  # three bounding box constraints, two are two-sided
     assert constraint.num_constraints() == expected_num_constraints
 
-    x = get_x(smaller_prog.decision_variables())
+    # Recreate F and x_hat
+    bounding_box_eqs, _ = _collect_bounding_box_constraints(
+        prog.bounding_box_constraints()
+    )
+    A_eq, b_eq = _linear_bindings_to_affine_terms(
+        prog.linear_equality_constraints(), bounding_box_eqs, prog.decision_variables()
+    )
+    F = get_nullspace_matrix(A_eq)
+    x_hat = find_solution(A_eq, -b_eq)
 
-    z_test = np.array([1])
-    smaller_prog.SetInitialGuess(smaller_prog.decision_variables(), z_test)
+    B = np.array([[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    d = np.array([10, 10, 5, 5])
 
-    x_test = get_x(z_test)
-    prog.SetInitialGuess(prog.decision_variables(), x_test)
+    A_target = B.dot(F)
+    b_target = -d - B.dot(x_hat).flatten()
 
-    breakpoint()
+    # Az >= b
+    A = constraint.GetDenseA()
+    b = constraint.lower_bound()
+
+    assert np.allclose(A, A_target)
+    assert np.allclose(b, b_target)
 
 
-def test_equality_elimination_with_initial_guess(
+def test_eq_elimination_qp_solution() -> None:
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(1, "x")[0]
+    y = prog.NewContinuousVariables(1, "y")[0]
+    z = prog.NewContinuousVariables(1, "z")[0]
+
+    prog.AddLinearConstraint(y == z)
+
+    prog.AddBoundingBoxConstraint(-10, 10, x)
+    prog.AddBoundingBoxConstraint(-5, np.inf, y)
+    prog.AddBoundingBoxConstraint(-5, np.inf, z)
+
+    prog.AddCost(x**2 + y + z)
+
+    smaller_prog, get_x = eliminate_equality_constraints(prog)
+
+    prog.SetInitialGuess(prog.decision_variables(), np.array([0.1, -3, -3]))
+    result = Solve(prog)
+
+    sol = result.GetSolution(prog.decision_variables())
+    # solution is [0, -5, -5]
+
+    smaller_initial_guess = np.array([-5, -5])
+    # make sure we provide the right initial guess
+    assert np.allclose(sol, get_x(smaller_initial_guess))
+
+    smaller_prog.SetInitialGuess(
+        smaller_prog.decision_variables(), smaller_initial_guess
+    )
+    smaller_result = Solve(smaller_prog)
+    assert smaller_result.is_success()  # this should not fail
+    smaller_sol = get_x(smaller_result.GetSolution(smaller_prog.decision_variables()))
+
+    assert np.allclose(sol, smaller_sol)
+
+
+def test_so2_equality_elimination_with_initial_guess(
     so_2_prog: MathematicalProgram, so_2_true_sol: npt.NDArray[np.float64]
 ) -> None:
     prog = so_2_prog
