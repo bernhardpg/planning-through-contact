@@ -189,6 +189,15 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "face_contact_mode",
+    [
+        ({"face_idx": 3}),
+        ({"face_idx": 0}),
+    ],
+    indirect=["face_contact_mode"],
+    ids=["right", "loose"],
+)
 def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
     final_pose = PlanarPose(0.3, 0, 0.8)
@@ -243,11 +252,11 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        # ({"face_idx": 3, "body": "t_pusher"}), # not infeasible, although it seems it should be?
         ({"face_idx": 4, "body": "t_pusher"}),
         ({"face_idx": 6, "body": "t_pusher"}),
     ],
     indirect=["face_contact_mode"],
+    ids=[4, 6],
 )
 def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
@@ -272,13 +281,17 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
 
 @pytest.mark.parametrize(
     "face_contact_mode",
-    [{"face_idx": 0, "body": "t_pusher"}],
+    [
+        ({"face_idx": 0, "body": "t_pusher"}),
+        ({"face_idx": 3, "body": "t_pusher"}),
+    ],
     indirect=["face_contact_mode"],
+    ids=["tight", "loose"],
 )
 def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.1, 0.1)
+    final_pose = PlanarPose(0.3, 0, 0.1)
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
 
@@ -304,12 +317,15 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
         (
             {"face_idx": 0}
         ),  # not infeasible, although it should be (relaxation is loose)
+        ({"face_idx": 0, "body": "t_pusher"}),
+        ({"face_idx": 3, "body": "t_pusher"}),
     ],
     indirect=["face_contact_mode"],
+    ids=["box", "box_loose", "t_pusher", "t_pusher_loose"],
 )
 def test_problem_reduction(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0, 0.8)
+    final_pose = PlanarPose(0.3, 0, 0.1)
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
