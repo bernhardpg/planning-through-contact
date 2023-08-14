@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -6,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
+from pydrake.systems.primitives import VectorLog
 
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
@@ -23,6 +25,120 @@ def save_gcs_graph_diagram(
 
     data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
     data.write_svg(str(filepath))
+
+
+@dataclass
+class PlanarPushingLog:
+    t: npt.NDArray[np.float64]
+    x: npt.NDArray[np.float64]
+    y: npt.NDArray[np.float64]
+    theta: npt.NDArray[np.float64]
+    lam: npt.NDArray[np.float64]
+    c_n: npt.NDArray[np.float64]
+    c_f: npt.NDArray[np.float64]
+    lam_dot: npt.NDArray[np.float64]
+
+    @classmethod
+    def from_np(
+        cls,
+        t: npt.NDArray[np.float64],
+        state_np_array: npt.NDArray[np.float64],
+        control_np_array: npt.NDArray[np.float64],
+    ) -> "PlanarPushingLog":
+        x = state_np_array[0, :]
+        y = state_np_array[1, :]
+        theta = state_np_array[2, :]
+        lam = state_np_array[3, :]
+
+        c_n = control_np_array[0, :]
+        c_f = control_np_array[1, :]
+        lam_dot = control_np_array[2, :]
+        return cls(t, x, y, theta, lam, c_n, c_f, lam_dot)
+
+    @classmethod
+    def from_log(
+        cls,
+        state_log: VectorLog,
+        control_log: VectorLog,
+    ) -> "PlanarPushingLog":
+        t = state_log.sample_times()
+        state_np_array = state_log.data()
+        control_np_array = control_log.data()
+        return cls.from_np(t, state_np_array, control_np_array)
+
+
+def plot_planar_pushing_logs(
+    state_log: VectorLog,
+    state_log_desired: VectorLog,
+    control_log: VectorLog,
+    control_log_desired: VectorLog,
+) -> None:
+    actual = PlanarPushingLog.from_log(state_log, control_log)
+    desired = PlanarPushingLog.from_log(state_log_desired, control_log_desired)
+
+    plot_planar_pushing_trajectory(actual, desired)
+
+
+def plot_planar_pushing_trajectory(
+    actual: PlanarPushingLog, desired: PlanarPushingLog
+) -> None:
+    # State plot
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
+
+    pos = np.vstack((actual.x, actual.y))
+    max_pos_change = np.ptp(np.linalg.norm(pos, axis=0))
+
+    axes[0].plot(actual.t, actual.x, label="Actual")
+    axes[0].plot(actual.t, desired.x, linestyle="--", label="Desired")
+    axes[0].set_title("x")
+    axes[0].legend()
+    axes[0].set_ylim(-max_pos_change, max_pos_change)
+
+    axes[1].plot(actual.t, actual.y, label="Actual")
+    axes[1].plot(actual.t, desired.y, linestyle="--", label="Desired")
+    axes[1].set_title("y")
+    axes[1].legend()
+    axes[1].set_ylim(-max_pos_change, max_pos_change)
+
+    th_change = np.ptp(actual.theta)
+
+    axes[2].plot(actual.t, actual.theta, label="Actual")
+    axes[2].plot(actual.t, desired.theta, linestyle="--", label="Desired")
+    axes[2].set_title("theta")
+    axes[2].legend()
+    axes[2].set_ylim(-th_change, th_change)
+
+    axes[3].plot(actual.t, actual.lam, label="Actual")
+    axes[3].plot(actual.t, desired.lam, linestyle="--", label="Desired")
+    axes[3].set_title("lam")
+    axes[3].legend()
+    axes[3].set_ylim(0, 1)
+
+    plt.tight_layout()
+    plt.savefig("planar_pushing_states.pdf")
+
+    # Control input
+    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 8))
+
+    # Plot lines on each subplot
+    axes[0].plot(actual.t, actual.c_n, label="Actual")
+    axes[0].plot(actual.t, desired.c_n, linestyle="--", label="Desired")
+    axes[0].set_title("c_n")
+    axes[0].legend()
+
+    axes[1].plot(actual.t, actual.c_f, label="Actual")
+    axes[1].plot(actual.t, desired.c_f, linestyle="--", label="Desired")
+    axes[1].set_title("c_f")
+    axes[1].legend()
+
+    axes[2].plot(actual.t, actual.lam_dot, label="Actual")
+    axes[2].plot(actual.t, desired.lam_dot, linestyle="--", label="Desired")
+    axes[2].set_title("lam_dot")
+    axes[2].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.savefig("planar_pushing_control.pdf")
 
 
 PLOT_WIDTH_INCH = 7

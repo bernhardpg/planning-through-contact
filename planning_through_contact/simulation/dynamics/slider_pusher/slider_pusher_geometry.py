@@ -26,6 +26,7 @@ class SliderPusherGeometry(LeafSystem):
         slider_geometry: CollisionGeometry,
         contact_location: PolytopeContactLocation,
         scene_graph: SceneGraph,
+        alpha: float = 1.0,
     ) -> None:
         super().__init__()
 
@@ -55,7 +56,7 @@ class SliderPusherGeometry(LeafSystem):
         scene_graph.AssignRole(
             self.source_id,
             self.slider_geometry_id,
-            MakePhongIllustrationProperties(BOX_COLOR.diffuse()),
+            MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
         )
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
@@ -72,7 +73,7 @@ class SliderPusherGeometry(LeafSystem):
         scene_graph.AssignRole(
             self.source_id,
             self.pusher_geometry_id,
-            MakePhongIllustrationProperties(FINGER_COLOR.diffuse()),
+            MakePhongIllustrationProperties(FINGER_COLOR.diffuse(alpha)),
         )
 
     @classmethod
@@ -83,10 +84,12 @@ class SliderPusherGeometry(LeafSystem):
         slider_geometry: CollisionGeometry,
         contact_location: PolytopeContactLocation,
         scene_graph: SceneGraph,
+        name: str = "slider_pusher_geometry",
+        alpha: float = 1.0,
     ) -> "SliderPusherGeometry":
         slider_pusher_geometry = builder.AddNamedSystem(
-            "slider_pusher_geometry",
-            cls(slider_geometry, contact_location, scene_graph),
+            name,
+            cls(slider_geometry, contact_location, scene_graph, alpha=alpha),
         )
         builder.Connect(
             slider_pusher_output_port, slider_pusher_geometry.get_input_port()

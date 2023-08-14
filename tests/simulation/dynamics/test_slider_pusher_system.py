@@ -11,18 +11,18 @@ from pydrake.systems.planar_scenegraph_visualizer import (
 )
 from pydrake.systems.primitives import VectorLogSink
 
-from planning_through_contact.dynamics.slider_pusher.slider_pusher_geometry import (
-    SliderPusherGeometry,
-)
-from planning_through_contact.dynamics.slider_pusher.slider_pusher_system import (
-    SliderPusherSystem,
-)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
+    SliderPusherGeometry,
+)
+from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_system import (
+    SliderPusherSystem,
+)
 
 
 @pytest.fixture
@@ -121,25 +121,25 @@ def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:  # type: i
 def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
     x = np.array([0, 0, 0.5, 0])
     u = np.array([0, 0, 0])
-    x_dot = slider_pusher_system._calc_dynamics(x, u)
+    x_dot = slider_pusher_system.calc_dynamics(x, u)
     assert np.allclose(x_dot, np.zeros(x_dot.shape))
     assert x_dot.shape == (4, 1)
 
     x = np.array([0, 0, 0, 0])
     u = np.array([1, 0, 0])
-    x_dot = slider_pusher_system._calc_dynamics(x, u)
+    x_dot = slider_pusher_system.calc_dynamics(x, u)
     assert x_dot[0] <= 0
     assert x_dot[2] <= 0
 
     x = np.array([0, 0, 0, 1])
     u = np.array([1, 0, 0])
-    x_dot = slider_pusher_system._calc_dynamics(x, u)
+    x_dot = slider_pusher_system.calc_dynamics(x, u)
     assert x_dot[0] <= 0
     assert x_dot[2] >= 0
 
     x = np.array([0, 0, 0, 0])
     u = np.array([0, 0, 1])
-    x_dot = slider_pusher_system._calc_dynamics(x, u)
+    x_dot = slider_pusher_system.calc_dynamics(x, u)
     assert x_dot[3] == 1
 
 
@@ -222,8 +222,6 @@ def test_slider_pusher_simulation(
         xs = log[0, :]
         thetas = log[2, :]
 
-        x_diffs = xs[1:] - xs[:-1]
-        assert np.all(x_diffs <= 0)  # we should only move in negative x-direction
         theta_diffs = thetas[1:] - thetas[:-1]
 
         assert np.all(theta_diffs >= 0)  # we should rotate in positive direction

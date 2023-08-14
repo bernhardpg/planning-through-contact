@@ -57,7 +57,8 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            self.A = np.diag([0.1, 0.1, 1.5])  # TODO: change
+            self.A = np.diag([0.46, 0.46, 11.5])  # TODO: change
+            # self.A = np.diag([0.1, 0.1, 1.5])  # TODO: change
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
@@ -98,20 +99,16 @@ def SliderPusherSystem_(T):
             )
             return R
 
-        def _calc_dynamics(
+        def calc_dynamics(
             self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]
         ) -> npt.NDArray[np.float64]:
             theta = x[2]
-            # we can not move outside of the contact face
-            lam = np.clip(x[3], 0.0, 1.0)
+            lam = x[3]
+
             c_n = u[0]
             c_f = u[1]
 
             lam_dot = u[2]
-            if lam == 1.0:  # lam_dot must be nonpositive
-                lam_dot = np.clip(lam_dot, None, 0.0)
-            elif lam == 0.0:  # lam_dot must be nonnegative
-                lam_dot = np.clip(lam_dot, 0.0, None)
 
             R = self._get_R(theta)
             t = self._get_twist(lam, c_n, c_f)
@@ -124,7 +121,7 @@ def SliderPusherSystem_(T):
         ) -> None:
             x = context.get_continuous_state_vector()
             u = self.input.Eval(context)
-            x_dot = self._calc_dynamics(x, u)  # type: ignore
+            x_dot = self.calc_dynamics(x, u)  # type: ignore
             derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
 
     return Impl
