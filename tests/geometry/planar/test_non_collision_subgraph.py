@@ -242,32 +242,51 @@ def test_subgraph_planning(
 
 
 @pytest.mark.parametrize(
-    "subgraph",
+    "subgraph, use_eq_elimination",
     [
-        {
-            "boundary_conds": False,
-            "avoid_object": False,
-        },
-        {
-            "boundary_conds": False,
-            "avoid_object": True,
-        },
+        (
+            {
+                "boundary_conds": False,
+                "avoid_object": False,
+            },
+            False,
+        ),
+        (
+            {
+                "boundary_conds": False,
+                "avoid_object": True,
+            },
+            False,
+        ),
+        (
+            {
+                "boundary_conds": False,
+                "avoid_object": False,
+            },
+            True,
+        ),
     ],
     indirect=["subgraph"],
+    ids=["simple", "avoid_object", "eq_elimination"],
 )
 def test_subgraph_with_contact_modes(
     subgraph: NonCollisionSubGraph,
     gcs_options: opt.GraphOfConvexSetsOptions,
+    use_eq_elimination: bool,
 ):
+    """
+    This unit test tests much of the code that is implemented in the PlanarPushingPlanner.
+    """
+
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     source_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_start, subgraph.plan_specs, subgraph.body
+        contact_location_start, subgraph.plan_specs, subgraph.body, use_eq_elimination
     )
     source_mode.set_finger_pos(0.5)
 
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 2)
     target_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_end, subgraph.plan_specs, subgraph.body
+        contact_location_end, subgraph.plan_specs, subgraph.body, use_eq_elimination
     )
     target_mode.set_finger_pos(0.5)
 

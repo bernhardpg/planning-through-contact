@@ -346,7 +346,16 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
     face_contact_mode.set_slider_final_pose(final_pose)
 
     face_contact_mode.formulate_convex_relaxation()
+    import time
+
+    now = time.time()
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    solve_time = time.time() - now
+
+    SOLVE_TIME_TRESHOLD = 0.07
+    assert solve_time <= SOLVE_TIME_TRESHOLD
+    # Empirically all of these should solve within the treshold
+
     assert result.is_success()
 
     DEBUG = False

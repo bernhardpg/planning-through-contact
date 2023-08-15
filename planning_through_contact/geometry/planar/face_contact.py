@@ -288,21 +288,27 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
-        # Bounds on forces
-        for c_n, c_f in zip(
-            self.variables.normal_forces, self.variables.friction_forces
-        ):
-            self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
+        self.bound_variables = False
+        if self.bound_variables:
+            # Bounds on forces
+            for c_n, c_f in zip(
+                self.variables.normal_forces, self.variables.friction_forces
+            ):
+                self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
 
-        # Bounds on positions
-        for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
-            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x)
-            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y)
+            # Bounds on positions
+            for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
+                self.prog.AddBoundingBoxConstraint(
+                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x
+                )
+                self.prog.AddBoundingBoxConstraint(
+                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y
+                )
 
-        # Bounds on cosines and sines
-        for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
-            self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
-            self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
+            # Bounds on cosines and sines
+            for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
+                self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
+                self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
         if self.enforce_equal_forces:
             # Enforces forces are constant
