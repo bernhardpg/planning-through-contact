@@ -393,12 +393,19 @@ class FaceContactMode(AbstractContactMode):
 
     def formulate_convex_relaxation(self) -> None:
         if self.use_eq_elimination:
+            self.original_prog = self.prog
             (
                 self.reduced_prog,
                 self.get_original_vars_from_reduced,
             ) = eliminate_equality_constraints(self.prog)
-            self.reduced_variables = self.variables.from_reduced_prog(
-                self.prog, self.reduced_prog, self.get_original_vars_from_reduced
+            self.prog = self.reduced_prog
+
+            # TODO(bernhardpg): Clean up this
+            self.original_variables = self.variables
+            self.variables = self.variables.from_reduced_prog(
+                self.original_prog,
+                self.reduced_prog,
+                self.get_original_vars_from_reduced,
             )
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
