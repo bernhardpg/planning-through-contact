@@ -293,13 +293,13 @@ def test_subgraph_with_contact_modes(
     slider_initial_pose = PlanarPose(0.3, 0, 0)
     source_mode.set_slider_initial_pose(slider_initial_pose)
     source_vertex = subgraph.gcs.AddVertex(source_mode.get_convex_set(), "source")
-    # source_mode.add_cost_to_vertex(source_vertex)
+    source_mode.add_cost_to_vertex(source_vertex)
     source = VertexModePair(source_vertex, source_mode)
 
     slider_final_pose = PlanarPose(0.5, 0.3, 0.4)
     target_mode.set_slider_final_pose(slider_final_pose)
     target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "target")
-    # target_mode.add_cost_to_vertex(target_vertex)
+    target_mode.add_cost_to_vertex(target_vertex)
     target = VertexModePair(target_vertex, target_mode)
 
     subgraph.connect_with_continuity_constraints(
@@ -355,7 +355,7 @@ def test_subgraph_with_contact_modes(
             end_idx=-2,
         )
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)

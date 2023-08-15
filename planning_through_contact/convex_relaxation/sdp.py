@@ -393,7 +393,13 @@ def eliminate_equality_constraints(
     def get_x_from_z(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         z = z.reshape((-1, 1))  # make sure z is (N, 1)
         x = F.dot(z) + x_hat
-        return x.flatten()  # (n_vars, )
+
+        remove_small_coeffs = lambda expr: (
+            sym.Polynomial(expr).RemoveTermsWithSmallCoefficients(1e-5).ToExpression()
+        )
+
+        x = np.array([remove_small_coeffs(e) for e in x.flatten()])
+        return x  # (n_vars, )
 
     return new_prog, get_x_from_z
 

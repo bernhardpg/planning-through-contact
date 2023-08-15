@@ -118,6 +118,7 @@ def test_add_continuity_between_non_coll_and_face_contact(
         loc, plan_specs, rigid_body_box, use_eq_elimination
     )
     source_mode.set_slider_initial_pose(slider_initial_pose)
+    source_mode.set_finger_pos(0.5)
 
     target_mode = NonCollisionMode.create_from_plan_spec(
         loc, plan_specs, rigid_body_box
@@ -151,8 +152,9 @@ def test_add_continuity_between_non_coll_and_face_contact(
         slider_final_pose,
         finger_final_pose,
     )
+    breakpoint()
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)

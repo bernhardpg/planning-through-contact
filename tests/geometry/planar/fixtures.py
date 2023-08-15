@@ -123,7 +123,7 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
     options.preprocessing = True
     options.max_rounded_paths = 1
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 

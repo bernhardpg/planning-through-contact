@@ -310,16 +310,16 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
                 self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
-        if self.enforce_equal_forces:
-            # Enforces forces are constant
-            for c_n_curr, c_n_next in zip(
-                self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
-            ):
-                self.prog.AddLinearConstraint(c_n_curr == c_n_next)
-            for c_f_curr, c_f_next in zip(
-                self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
-            ):
-                self.prog.AddLinearConstraint(c_f_curr == c_f_next)
+        # if self.enforce_equal_forces:
+        #     # Enforces forces are constant
+        #     for c_n_curr, c_n_next in zip(
+        #         self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
+        #     ):
+        #         self.prog.AddLinearConstraint(c_n_curr == c_n_next)
+        #     for c_f_curr, c_f_next in zip(
+        #         self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
+        #     ):
+        #         self.prog.AddLinearConstraint(c_f_curr == c_f_next)
 
         # Quasi-static dynamics
         use_midpoint = True
@@ -364,18 +364,24 @@ class FaceContactMode(AbstractContactMode):
         )
         self.prog.AddQuadraticCost(self.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
-    def set_finger_pos(self, lam: float) -> None:
+    def set_finger_pos(self, lam_target: float) -> None:
         """
         Set finger position along the contact face.
         As the finger position is constant, there is no difference between
         initial and target value.
 
-        @param lam: Position along face, value 0 to 1.
+        @param lam_target: Position along face, value 0 to 1.
         """
-        if lam >= 1 or lam <= 0:
+        if lam_target >= 1 or lam_target <= 0:
             raise ValueError("The finger position should be set between 0 and 1")
 
-        self.prog.AddLinearConstraint(self.variables.lams[0] == lam)
+        # for lam in self.variables.lams:
+        #     self.prog.AddLinearConstraint(lam >= lam_target)
+        #     self.prog.AddLinearConstraint(lam <= lam_target)
+
+        self.prog.AddLinearConstraint(
+            eq(self.variables.lams, np.full(self.variables.lams.shape, lam_target))
+        )
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
@@ -407,6 +413,8 @@ class FaceContactMode(AbstractContactMode):
                 self.reduced_prog,
                 self.get_original_vars_from_reduced,
             )
+            c = self.reduced_prog.linear_constraints()[0]
+
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
