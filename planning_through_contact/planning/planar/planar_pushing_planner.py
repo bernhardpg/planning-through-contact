@@ -51,6 +51,7 @@ class PlanarPushingPlanner:
         allow_teleportation: bool = False,
         penalize_mode_transition: bool = False,
         avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
+        use_eq_elimination: bool = True,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
@@ -58,6 +59,7 @@ class PlanarPushingPlanner:
         self.allow_teleportation = allow_teleportation
         self.penalize_mode_transition = penalize_mode_transition
         self.object_avoidance_cost = avoidance_cost_type
+        self.use_eq_elimination = use_eq_elimination
 
         self.source = None
         self.target = None
@@ -99,7 +101,9 @@ class PlanarPushingPlanner:
             raise RuntimeError("Only face contacts are supported for planar pushing.")
 
         self.contact_modes = [
-            FaceContactMode.create_from_plan_spec(loc, self.plan_specs, self.slider)
+            FaceContactMode.create_from_plan_spec(
+                loc, self.plan_specs, self.slider, self.use_eq_elimination
+            )
             for loc in self.contact_locations
         ]
 

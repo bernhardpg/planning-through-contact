@@ -165,73 +165,35 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     else:
         contact_locations = rigid_body_box.geometry.contact_locations
 
-    if request.param.get("avoid_object"):
-        specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
+    body_to_use = request.param.get("body", "rigid_body_box")
+    if body_to_use == "rigid_body_box":
+        body = rigid_body_box
+    elif body_to_use == "t_pusher":
+        mass = 0.3
+        body = RigidBody("t_pusher", TPusher2d(), mass)
     else:
-        specs = PlanarPlanSpecs()
-
-    avoid_object = True if request.param.get("avoid_object") else False
-    allow_teleportation = True if request.param.get("allow_teleportation") else False
-    penalize_mode_transition = (
-        True if request.param.get("penalize_mode_transition") else False
-    )
-    avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
-
-    planner = PlanarPushingPlanner(
-        rigid_body_box,
-        specs,
-        contact_locations=contact_locations,
-        avoid_object=avoid_object,
-        allow_teleportation=allow_teleportation,
-        penalize_mode_transition=penalize_mode_transition,
-        avoidance_cost_type=avoidance_cost_type,
-    )
-
-    if request.param.get("boundary_conds"):
-        boundary_conds = request.param.get("boundary_conds")
-
-        planner.set_initial_poses(
-            boundary_conds["finger_initial_pose"],
-            boundary_conds["box_initial_pose"],
-        )
-        planner.set_target_poses(
-            boundary_conds["finger_target_pose"],
-            boundary_conds["box_target_pose"],
-        )
-
-    return planner
-
-
-@pytest.fixture
-def planner_with_t_pusher(request: FixtureRequest) -> PlanarPushingPlanner:
-    mass = 0.3
-    t_pusher = RigidBody("t_pusher", TPusher2d(), mass)
-
-    if request.param.get("partial"):
-        contact_locations = t_pusher.geometry.contact_locations[3:5]
-    else:
-        contact_locations = t_pusher.geometry.contact_locations
+        body = rigid_body_box
 
     if request.param.get("avoid_object"):
         specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
     else:
         specs = PlanarPlanSpecs()
 
-    avoid_object = True if request.param.get("avoid_object") else False
-    allow_teleportation = True if request.param.get("allow_teleportation") else False
-    penalize_mode_transition = (
-        True if request.param.get("penalize_mode_transition") else False
-    )
+    avoid_object = request.param.get("avoid_object", False)
+    allow_teleportation = request.param.get("allow_teleportation", False)
+    penalize_mode_transition = request.param.get("penalize_mode_transition", False)
     avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
+    use_eq_elimination = request.param.get("use_eq_elimination", False)
 
     planner = PlanarPushingPlanner(
-        t_pusher,
+        body,
         specs,
         contact_locations=contact_locations,
         avoid_object=avoid_object,
         allow_teleportation=allow_teleportation,
         penalize_mode_transition=penalize_mode_transition,
         avoidance_cost_type=avoidance_cost_type,
+        use_eq_elimination=use_eq_elimination,
     )
 
     if request.param.get("boundary_conds"):
