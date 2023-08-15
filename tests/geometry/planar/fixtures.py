@@ -101,11 +101,17 @@ def face_contact_mode(
 
     if request.param.get("body") == "t_pusher":
         rigid_body = t_pusher
+
     face_idx = request.param.get("face_idx", 3)
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     specs = PlanarPlanSpecs()
-    mode = FaceContactMode.create_from_plan_spec(contact_location, specs, rigid_body)
+    mode = FaceContactMode.create_from_plan_spec(
+        contact_location,
+        specs,
+        rigid_body,
+        request.param.get("use_eq_elimination", False),
+    )
     return mode
 
 

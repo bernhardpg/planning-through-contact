@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import Callable, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -103,44 +103,56 @@ class FaceContactVariables(AbstractModeVariables):
         )
 
     def eval_result(self, result: MathematicalProgramResult) -> "FaceContactVariables":
+        def get_float_from_result(
+            vec: npt.NDArray[np.float64] | NpExpressionArray,
+        ) -> npt.NDArray[np.float64]:
+            if vec.dtype == np.float64:
+                return result.GetSolution(vec)
+            elif vec.dtype == np.object_:
+                return sym.Evaluate(result.GetSolution(vec)).flatten()  # type: ignore
+            else:
+                raise NotImplementedError(f"dtype {vec.dtype} not supported")
+
         return FaceContactVariables(
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
-            result.GetSolution(self.lams),
-            result.GetSolution(self.normal_forces),
-            result.GetSolution(self.friction_forces),
-            result.GetSolution(self.cos_ths),
-            result.GetSolution(self.sin_ths),
-            result.GetSolution(self.p_WB_xs),
-            result.GetSolution(self.p_WB_ys),
+            get_float_from_result(self.lams),
+            get_float_from_result(self.normal_forces),
+            get_float_from_result(self.friction_forces),
+            get_float_from_result(self.cos_ths),
+            get_float_from_result(self.sin_ths),
+            get_float_from_result(self.p_WB_xs),
+            get_float_from_result(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
         )
 
-    def eval_from_reduced_result(
+    def from_reduced_prog(
         self,
-        prog: MathematicalProgram,
-        result: MathematicalProgramResult,
-        reduced_vars: NpExpressionArray,
+        original_prog: MathematicalProgram,
+        reduced_prog: MathematicalProgram,
+        get_original_exprs: Callable,
     ) -> "FaceContactVariables":
-        # must evaluate to get rid of expressions
-        vals = sym.Evaluate(result.GetSolution(reduced_vars))  # type: ignore
-        temp = lambda vars: vals[prog.FindDecisionVariableIndices(vars)].flatten()
+        original_as_expressions = get_original_exprs(reduced_prog.decision_variables())
+
+        get_original_vars_from_reduced = lambda original_vars: original_as_expressions[
+            original_prog.FindDecisionVariableIndices(original_vars)
+        ].flatten()
 
         return FaceContactVariables(
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
-            temp(self.lams),
-            temp(self.normal_forces),
-            temp(self.friction_forces),
-            temp(self.cos_ths),
-            temp(self.sin_ths),
-            temp(self.p_WB_xs),
-            temp(self.p_WB_ys),
+            get_original_vars_from_reduced(self.lams),
+            get_original_vars_from_reduced(self.normal_forces),
+            get_original_vars_from_reduced(self.friction_forces),
+            get_original_vars_from_reduced(self.cos_ths),
+            get_original_vars_from_reduced(self.sin_ths),
+            get_original_vars_from_reduced(self.p_WB_xs),
+            get_original_vars_from_reduced(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
@@ -214,6 +226,7 @@ class FaceContactVariables(AbstractModeVariables):
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
+    use_eq_elimination: bool = False
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
 
@@ -223,6 +236,7 @@ class FaceContactMode(AbstractContactMode):
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
         object: RigidBody,
+        use_eq_elimination: bool = False,
     ) -> "FaceContactMode":
         prog = MathematicalProgram()
         name = str(contact_location)
@@ -233,6 +247,7 @@ class FaceContactMode(AbstractContactMode):
             contact_location,
             object,
             prog,
+            use_eq_elimination=use_eq_elimination,
         )
 
     def __post_init__(self) -> None:
@@ -370,17 +385,18 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_final_pose = pose
 
-    def formulate_reduced_convex_relaxation(
-        self,
-    ) -> NpExpressionArray:
-        smaller_prog, get_x_from_z = eliminate_equality_constraints(self.prog)
-        self.relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
-
-        x = get_x_from_z(smaller_prog.decision_variables())
-        return x  # type: ignore
-
     def formulate_convex_relaxation(self) -> None:
-        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        if self.use_eq_elimination:
+            (
+                self.reduced_prog,
+                self.get_original_vars_from_reduced,
+            ) = eliminate_equality_constraints(self.prog)
+            self.reduced_variables = self.variables.from_reduced_prog(
+                self.prog, self.reduced_prog, self.get_original_vars_from_reduced
+            )
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
+        else:
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
