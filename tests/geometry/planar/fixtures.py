@@ -160,11 +160,6 @@ def subgraph(
 
 @pytest.fixture
 def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushingPlanner:
-    if request.param.get("partial"):
-        contact_locations = rigid_body_box.geometry.contact_locations[0:2]
-    else:
-        contact_locations = rigid_body_box.geometry.contact_locations
-
     body_to_use = request.param.get("body", "rigid_body_box")
     if body_to_use == "rigid_body_box":
         body = rigid_body_box
@@ -173,6 +168,11 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         body = RigidBody("t_pusher", TPusher2d(), mass)
     else:
         body = rigid_body_box
+
+    if request.param.get("partial"):
+        contact_locations = body.geometry.contact_locations[0:2]
+    else:
+        contact_locations = body.geometry.contact_locations
 
     if request.param.get("avoid_object"):
         specs = PlanarPlanSpecs(num_knot_points_non_collision=4)

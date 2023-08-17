@@ -345,11 +345,19 @@ class PlanarPushingContactMode:
             tau_c_B = cross_2d(p_c_B, f_c_B)
 
             x_dot = np.concatenate([v_WB, [omega_WB]])
-            wrench = np.concatenate(
+            wrench_B = np.concatenate(
                 [f_c_B.flatten(), [tau_c_B]]
             )  # NOTE: Should fix not nice vector dimensions
 
-            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench))
+            wrench_W = R.dot(wrench_B)
+
+            # quasi-static dynamics in world frame
+            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench_W))
+            for row in quasi_static_dynamic_constraint:
+                prog.AddConstraint(row)
+
+            # quasi-static dynamics in body frame
+            quasi_static_dynamic_constraint = eq(R.T.dot(x_dot), A.dot(wrench_B))
             for row in quasi_static_dynamic_constraint:
                 prog.AddConstraint(row)
 
@@ -381,9 +389,9 @@ class PlanarPushingContactMode:
             R_WB_T = create_R(th_target)
             prog.AddLinearConstraint(eq(R_WBs[-1], R_WB_T))
         if pos_initial is not None:
-            prog.AddLinearConstraint(eq(p_WBs[0], pos_initial))
+            prog.AddLinearConstraint(eq(p_WBs[0], pos_initial.flatten()))
         if pos_target is not None:
-            prog.AddLinearConstraint(eq(p_WBs[-1], pos_target))
+            prog.AddLinearConstraint(eq(p_WBs[-1], pos_target.flatten()))
 
         start = time.time()
         print("Starting to create SDP relaxation...")
@@ -437,6 +445,40 @@ class PlanarPushingContactMode:
             self.time_in_mode,
         )
 
+    def eval_result(self, result):
+        lam_vals = result.GetSolution(self.lams)
+        normal_forces_vals = result.GetSolution(self.normal_forces)
+        friction_forces_vals = result.GetSolution(self.friction_forces)
+        cos_th_vals = result.GetSolution(self.cos_ths)
+        sin_th_vals = result.GetSolution(self.sin_ths)
+        p_WB_xs_vals = result.GetSolution(self.p_WB_xs)
+        p_WB_ys_vals = result.GetSolution(self.p_WB_ys)
+
+        p_WB_vals = np.hstack(
+            [
+                np.expand_dims(np.array([x, y]), 1)
+                for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)
+            ]
+        )
+
+        f_c_B_vals = np.hstack(
+            [
+                c_n * self.normal_vec + c_f * self.tangent_vec
+                for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
+            ]
+        )
+
+        p_c_B_vals = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lam_vals])
+
+        return ModeVarsResult(
+            cos_th_vals,
+            sin_th_vals,
+            p_WB_vals,
+            p_c_B_vals,
+            f_c_B_vals,
+            self.time_in_mode,
+        )
+
     def solve(self):
         print("Solving...")
         start = time.time()
@@ -454,14 +496,29 @@ class PlanarPushingContactMode:
         p_WB_xs_vals = result.GetSolution(self.p_WB_xs)
         p_WB_ys_vals = result.GetSolution(self.p_WB_ys)
 
-        return (
-            lam_vals,
-            normal_forces_vals,
-            friction_forces_vals,
+        p_WB_vals = np.hstack(
+            [
+                np.expand_dims(np.array([x, y]), 1)
+                for x, y in zip(p_WB_xs_vals, p_WB_ys_vals)
+            ]
+        )
+
+        f_c_B_vals = np.hstack(
+            [
+                c_n * self.normal_vec + c_f * self.tangent_vec
+                for c_n, c_f in zip(normal_forces_vals, friction_forces_vals)
+            ]
+        )
+
+        p_c_B_vals = np.hstack([l * self.pv1 + (1 - l) * self.pv2 for l in lam_vals])
+
+        return ModeVarsResult(
             cos_th_vals,
             sin_th_vals,
-            p_WB_xs_vals,
-            p_WB_ys_vals,
+            p_WB_vals,
+            p_c_B_vals,
+            f_c_B_vals,
+            self.time_in_mode,
         )
 
 
@@ -498,6 +555,7 @@ class NonCollisionMode:
                 # TODO: There is a sign error somewhere! b has the wrong sign
                 dist_to_face = face.a.T.dot(p_BF) - face.b
                 self.constraints.append(ge(dist_to_face, 0))
+                prog.AddLinearConstraint(ge(dist_to_face, 0))
 
         p_WB_x = prog.NewContinuousVariables(1, "p_WB_x").item()
         p_WB_y = prog.NewContinuousVariables(1, "p_WB_y").item()
@@ -808,7 +866,7 @@ def plan_planar_pushing():
         (5, 2): [[5, 4, 3, 2], [0]],
     }
 
-    experiment_number = 0
+    experiment_number = 1
     if experiment_number == 0:
         th_initial = 0
         th_target = 0.5
@@ -817,9 +875,9 @@ def plan_planar_pushing():
 
     elif experiment_number == 1:
         th_initial = 0
-        th_target = 0.3
-        pos_initial = np.array([[-0.2, 0.1]])
-        pos_target = np.array([[0.2, 0.2]])
+        th_target = 0.5
+        pos_initial = np.array([[0.2, 0.1]])
+        pos_target = np.array([[-0.2, 0.2]])
 
     elif experiment_number == 2:
         th_initial = 0.0
@@ -977,7 +1035,13 @@ def plan_planar_pushing():
     if options.convex_relaxation is True:
         options.preprocessing = True  # TODO Do I need to deal with this?
         options.max_rounded_paths = 1
+    import time
+
+    start = time.time()
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
+    elapsed_time = time.time() - start
+
+    breakpoint()
 
     assert result.is_success()
     print("Success!")
@@ -1002,8 +1066,8 @@ def plan_planar_pushing():
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
-    DT = 0.01
-    interpolate = True
+    DT = 0.5
+    interpolate = False
     R_traj = sum(
         [val.get_R_traj(DT, interpolate=interpolate) for val in vals],
         [],
@@ -1017,6 +1081,8 @@ def plan_planar_pushing():
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
+
+    breakpoint()
 
     traj_length = len(R_traj)
 
@@ -1085,7 +1151,7 @@ def plan_planar_pushing():
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
-    FRAMES_PER_SEC = len(R_traj) / DT
+    FRAMES_PER_SEC = 1 / DT
     viz.visualize(
         [contact_point_viz],
         [contact_force_viz],

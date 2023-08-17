@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from pydrake.solvers import Solve
+from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.convex_relaxation.sdp import (

@@ -371,7 +371,21 @@ def test_planner_with_teleportation(
         ),
         (
             {
-                "partial": True,
+                "partial": False,
+                "avoid_object": False,
+                "boundary_conds": {
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "box_initial_pose": PlanarPose(x=0.2, y=0.1, theta=0.0),
+                    "box_target_pose": PlanarPose(x=-0.2, y=0.2, theta=0.5),
+                },
+                "body": "t_pusher",
+            },
+            None,
+        ),
+        (
+            {
+                "partial": False,
                 "avoid_object": False,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
@@ -380,94 +394,19 @@ def test_planner_with_teleportation(
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
                 },
                 "body": "t_pusher",
+                "use_eq_elimination": True,
             },
             None,
-        )
-        # NOTE: These tests take a few minutes, and are hence commented out
-        # (
-        #     # This test gives a result with very small determinants
-        #     {
-        #         "partial": False,
-        #         "avoid_object": True,
-        #         "avoidance_cost_type": "quadratic",
-        #         "allow_teleportation": False,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-        #         },
-        #     },
-        #     None,
-        #     False,  # trajectories will have dets far from 1
-        # ),
-        # (
-        #     # Are the determinants still small with a linear cost?
-        #     {
-        #         "partial": False,
-        #         "avoid_object": True,
-        #         "avoidance_cost_type": "linear",
-        #         "allow_teleportation": False,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-        #         },
-        #     },
-        #     None,
-        #     False,
-        # ),
-        # (
-        #     # How does the exact same plan look without NonCollisionModes?
-        #     {
-        #         "partial": False,
-        #         "avoid_object": False,
-        #         "allow_teleportation": True,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-        #         },
-        #     },
-        #     None,
-        #     False,  # trajectories will not have det 1 (but very close)
-        # ),
-        # (
-        #     # What if we penalize the mode transitions?
-        #     {
-        #         "partial": False,
-        #         "avoid_object": False,
-        #         "allow_teleportation": True,
-        #         "penalize_mode_transition": True,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.6, theta=0.3),
-        #         },
-        #     },
-        #     None,
-        #     False,  # trajectories will not have det 1 (but very close)
-        # ),
-        # (   # Another test of full graph
-        #     {
-        #         "partial": False,
-        #         "avoid_object": True,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.3),
-        #             "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=1.3),
-        #         },
-        #     },
-        #     None,
-        #     False,
-        # ),
+        ),
     ],
     indirect=["planner"],
-    ids=["box_collision", "box_non_collision_1", "box_non_collision_2", "t_pusher"],
+    ids=[
+        "box_collision",
+        "box_non_collision_1",
+        "box_non_collision_2",
+        "t_pusher",
+        "box_eq_elimination",
+    ],
 )
 def test_make_plan(
     planner: PlanarPushingPlanner,
@@ -475,6 +414,7 @@ def test_make_plan(
 ) -> None:
     DEBUG = True
 
+    save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
     result = planner._solve(print_output=True if DEBUG else False)
     assert result.is_success()
 
