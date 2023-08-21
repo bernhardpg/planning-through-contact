@@ -399,6 +399,13 @@ class PlanarPushingContactMode:
         start = time.time()
         print("Starting to create SDP relaxation...")
         self.relaxed_prog = MakeSemidefiniteRelaxation(prog)
+
+        bound = 10
+        x = self.relaxed_prog.decision_variables()
+        self.relaxed_prog.AddBoundingBoxConstraint(
+            -np.full(x.shape, bound), np.full(x.shape, bound), x
+        )
+
         end = time.time()
         print(
             f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
@@ -828,14 +835,14 @@ class GraphChain:
 
 def plan_planar_pushing():
     faces_to_consider = [0, 1, 2, 3]
-    # faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
     source_connections = faces_to_consider
     target_connections = faces_to_consider
 
     face_connections = list(combinations(faces_to_consider, 2))
 
+    LENGTH = 3
+
     def generate_sequence(i, j):
-        LENGTH = 7
         # 3 to 7: 3,4,5,6,7
         if i < j:
             seq = [k for k in range(i, j + 1)]
@@ -847,17 +854,8 @@ def plan_planar_pushing():
     def get_shortest_sequence(seq1, seq2):
         return seq1 if len(seq1) <= len(seq2) else seq2
 
-    # paths = {
-    #     (i, j): [generate_sequence(i, j), list(reversed(generate_sequence(j, i)))]
-    #     for i, j in face_connections
-    # }
-
     paths = {
-        (i, j): [
-            get_shortest_sequence(
-                generate_sequence(i, j), list(reversed(generate_sequence(j, i)))
-            )
-        ]
+        (i, j): [generate_sequence(i, j), list(reversed(generate_sequence(j, i)))]
         for i, j in face_connections
     }
 
@@ -1043,8 +1041,6 @@ def plan_planar_pushing():
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     elapsed_time = time.time() - start
 
-    breakpoint()
-
     assert result.is_success()
     print("Success!")
 
@@ -1055,6 +1051,15 @@ def plan_planar_pushing():
     ]
 
     full_path = _find_path_to_target(active_edges, target_vertex, source_vertex)
+
+    results = [vertex.GetSolution(result) for vertex in full_path]
+
+    def any_is_nan(results):
+        return [any(np.isnan(r)) for r in results]
+
+    if any(any_is_nan(results)):
+        breakpoint()
+
     vertex_names_on_path = [
         v.name() for v in full_path if v.name() not in ["source", "target"]
     ]
@@ -1062,12 +1067,17 @@ def plan_planar_pushing():
     vertices_on_path = [all_vertices[name] for name in vertex_names_on_path]
     modes_on_path = [all_modes[name] for name in vertex_names_on_path]
 
+    ress = [v.GetSolution(result) for v in vertices_on_path]
+
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
+    # TODO(bernhardpg): There is a bug here, where the wrong vertices are extracted
+    # in the end, causing NaN-values in the solution. But this is not worth fixing, as
+    # this code will be deprecated.
     DT = 0.5
     interpolate = False
     R_traj = sum(
@@ -1084,7 +1094,7 @@ def plan_planar_pushing():
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
 
-    breakpoint()
+    dets = [np.linalg.det(R) for R in R_traj]
 
     traj_length = len(R_traj)
 
