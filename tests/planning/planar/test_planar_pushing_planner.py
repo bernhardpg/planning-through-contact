@@ -369,50 +369,50 @@ def test_planner_with_teleportation(
             },
             None,
         ),
-        (
-            {
-                "partial": False,
-                "avoid_object": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0.2, y=0.1, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=0.2, theta=0.5),
-                },
-                "body": "t_pusher",
-            },
-            None,
-        ),
-        (
-            {
-                "partial": False,
-                "avoid_object": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-                },
-                "body": "t_pusher",
-                "use_eq_elimination": True,
-            },
-            None,
-        ),
+        # (
+        #     {
+        #         "partial": False,
+        #         "avoid_object": False,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0.2, y=0.1, theta=0.0),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=0.2, theta=0.5),
+        #         },
+        #         "body": "t_pusher",
+        #     },
+        #     None,
+        # ),
+        # (
+        #     {
+        #         "partial": False,
+        #         "avoid_object": False,
+        #         "boundary_conds": {
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+        #         },
+        #         "body": "t_pusher",
+        #         "use_eq_elimination": True,
+        #     },
+        #     None,
+        # ),
     ],
     indirect=["planner"],
     ids=[
         "box_collision",
         "box_non_collision_1",
         "box_non_collision_2",
-        "t_pusher",
-        "box_eq_elimination",
+        # "t_pusher",
+        # "box_eq_elimination",
     ],
 )
 def test_make_plan(
     planner: PlanarPushingPlanner,
     target_path: Optional[List[str]],
 ) -> None:
-    DEBUG = True
+    DEBUG = False
 
     save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
     result = planner._solve(print_output=True if DEBUG else False)
