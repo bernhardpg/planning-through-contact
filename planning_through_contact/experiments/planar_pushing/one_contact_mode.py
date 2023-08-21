@@ -601,7 +601,7 @@ def plan_planar_pushing(
 
     if eliminate_equalities:
         z_sols = relaxed_result.GetSolution(smaller_prog.decision_variables())  # type: ignore
-        decision_var_vals = retrieve_x(z_sols)  # type: ignore
+        decision_var_vals = sym.Evaluate(retrieve_x(z_sols)).flatten()  # type: ignore
         relaxed_sols = contact_mode.vars.eval_from_vec(decision_var_vals, contact_mode.prog)  # type: ignore
 
     else:
