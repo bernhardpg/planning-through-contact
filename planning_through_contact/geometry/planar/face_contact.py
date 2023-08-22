@@ -227,6 +227,8 @@ class FaceContactVariables(AbstractModeVariables):
 @dataclass
 class FaceContactMode(AbstractContactMode):
     use_eq_elimination: bool = False
+    # NOTE(bernhardpg): Currently rounding doesn't seem to work with these redundant constraints
+    use_redundant_dynamic_constraints: bool = True
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
 
@@ -237,6 +239,7 @@ class FaceContactMode(AbstractContactMode):
         specs: PlanarPlanSpecs,
         object: RigidBody,
         use_eq_elimination: bool = False,
+        use_redundant_dynamic_constraints: bool = True,
     ) -> "FaceContactMode":
         prog = MathematicalProgram()
         name = str(contact_location)
@@ -248,6 +251,7 @@ class FaceContactMode(AbstractContactMode):
             object,
             prog,
             use_eq_elimination=use_eq_elimination,
+            use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
         )
 
     def __post_init__(self) -> None:
@@ -288,6 +292,7 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
+        # TODO(bernhardpg): Experimental research feature, remove this
         self.bound_variables = False
         if self.bound_variables:
             # Bounds on forces
@@ -310,16 +315,18 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
                 self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
-        # if self.enforce_equal_forces:
-        #     # Enforces forces are constant
-        #     for c_n_curr, c_n_next in zip(
-        #         self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
-        #     ):
-        #         self.prog.AddLinearConstraint(c_n_curr == c_n_next)
-        #     for c_f_curr, c_f_next in zip(
-        #         self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
-        #     ):
-        #         self.prog.AddLinearConstraint(c_f_curr == c_f_next)
+        # TODO(bernhardpg): Experimental research feature, remove this
+        self.enforce_equal_forces = False
+        if self.enforce_equal_forces:
+            # Enforces forces are constant
+            for c_n_curr, c_n_next in zip(
+                self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_n_curr == c_n_next)
+            for c_f_curr, c_f_next in zip(
+                self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
+            ):
+                self.prog.AddLinearConstraint(c_f_curr == c_f_next)
 
         # Quasi-static dynamics
         use_midpoint = True
@@ -337,12 +344,24 @@ class FaceContactMode(AbstractContactMode):
                 p_c_B = self.variables.p_c_Bs[k]
                 R_WB = self.variables.R_WBs[k]
 
-            x_dot, dyn = self.quasi_static_dynamics(
+            # quasi-static dynamics in W
+            x_dot, dyn = self.quasi_static_dynamics_in_W(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
                 self.prog.AddConstraint(row)
+
+            # quasi-static dynamics in B
+            if self.use_redundant_dynamic_constraints:
+                x_dot, dyn = self.quasi_static_dynamics_in_B(
+                    v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
+                )
+                quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
+                self.quasi_static_dynamics_constraints_in_B = []
+                for row in quasi_static_dynamic_constraint:
+                    c = self.prog.AddConstraint(row)
+                    self.quasi_static_dynamics_constraints_in_B.append(c)
 
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_c_Bs:
@@ -538,7 +557,7 @@ class FaceContactMode(AbstractContactMode):
         return (vals[k] + vals[k + 1]) / 2
 
     @staticmethod
-    def quasi_static_dynamics(
+    def quasi_static_dynamics_in_W(
         v_WB,
         omega_WB,
         f_c_B,
@@ -546,7 +565,6 @@ class FaceContactMode(AbstractContactMode):
         R_WB,
         FRICTION_COEFF,
         OBJECT_MASS,
-        use_redundant_constraints: bool = True,
     ):
         G = 9.81
         # TODO(bernhardpg): Compute f_max and tau_max correctly
@@ -573,16 +591,45 @@ class FaceContactMode(AbstractContactMode):
         dynamics_in_W = A.dot(
             wrench_W
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
-        if use_redundant_constraints:
-            # NOTE(bernhardpg): Add constraints both ways
-            x_dot_in_B = R.T.dot(x_dot_in_W)
-            dynamics_in_B = A.dot(
-                wrench_B
-            )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
-            # x_dot, f(x,u)
-            return np.vstack((x_dot_in_W, x_dot_in_B)), np.vstack(
-                (dynamics_in_W, dynamics_in_B)
-            )  # (6,1), (6,1)
-        else:
-            return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)
+        return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)
+
+    @staticmethod
+    def quasi_static_dynamics_in_B(
+        v_WB,
+        omega_WB,
+        f_c_B,
+        p_c_B,
+        R_WB,
+        FRICTION_COEFF,
+        OBJECT_MASS,
+    ):
+        G = 9.81
+        # TODO(bernhardpg): Compute f_max and tau_max correctly
+        f_max = FRICTION_COEFF * G * OBJECT_MASS
+        tau_max = f_max * 0.2
+
+        A = np.diag(
+            # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+        )  # Ellipsoidal Limit surface approximation
+
+        # We need to add an entry for multiplication with the wrench,
+        # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
+        R = np.zeros((3, 3), dtype="O")
+        R[2, 2] = 1
+        R[0:2, 0:2] = R_WB
+
+        # Contact torques
+        tau_c_B = cross_2d(p_c_B, f_c_B)
+
+        x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
+        wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
+
+        x_dot_in_B = R.T.dot(x_dot_in_W)
+        dynamics_in_B = A.dot(
+            wrench_B
+        )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
+
+        # x_dot, f(x,u)
+        return x_dot_in_B, dynamics_in_B

@@ -231,7 +231,7 @@ def test_hybrid_mpc_controller(
         alpha=0.1,
     )
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -274,7 +274,7 @@ def test_hybrid_mpc_controller(
     simulator.Initialize()
     simulator.AdvanceTo(face_contact_mode.time_in_mode)
 
-    DEBUG = True
+    DEBUG = False
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore

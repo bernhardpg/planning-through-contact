@@ -15,7 +15,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     find_solution,
     get_nullspace_matrix,
 )
-from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 
@@ -278,7 +278,7 @@ def test_eq_elimination_formulation() -> None:
     prog.AddBoundingBoxConstraint(-5, np.inf, y)
     prog.AddBoundingBoxConstraint(-5, np.inf, z)
 
-    smaller_prog, get_x = eliminate_equality_constraints(prog)
+    smaller_prog, _ = eliminate_equality_constraints(prog)
 
     assert (
         len(smaller_prog.linear_constraints()) == 1
@@ -315,6 +315,10 @@ def test_eq_elimination_formulation() -> None:
     assert np.allclose(b, b_target)
 
 
+def get_x_as_float(get_x: Callable) -> Callable:
+    return lambda x: sym.Evaluate(get_x(x)).flatten()
+
+
 def test_eq_elimination_qp_solution() -> None:
     prog = MathematicalProgram()
     x = prog.NewContinuousVariables(1, "x")[0]
@@ -330,6 +334,7 @@ def test_eq_elimination_qp_solution() -> None:
     prog.AddCost(x**2 + y + z)
 
     smaller_prog, get_x = eliminate_equality_constraints(prog)
+    get_x = get_x_as_float(get_x)
 
     prog.SetInitialGuess(prog.decision_variables(), np.array([0.1, -3, -3]))
     result = Solve(prog)
@@ -365,6 +370,8 @@ def test_so2_equality_elimination_with_initial_guess(
     sol = result.GetSolution(prog.decision_variables())
 
     smaller_prog, get_x = eliminate_equality_constraints(prog)
+    get_x = get_x_as_float(get_x)
+
     z = smaller_prog.decision_variables()
     smaller_prog.SetInitialGuess(z, np.array([-0.7]))
     smaller_result = Solve(smaller_prog)
@@ -388,6 +395,8 @@ def test_eq_elimination_with_relaxation(
 
     # Find solution by eliminating equalities first
     smaller_prog, get_x = eliminate_equality_constraints(prog)
+    get_x = get_x_as_float(get_x)
+
     relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
     result = Solve(relaxed_prog)
     assert result.is_success()

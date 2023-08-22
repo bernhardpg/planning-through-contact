@@ -51,7 +51,8 @@ class PlanarPushingPlanner:
         allow_teleportation: bool = False,
         penalize_mode_transition: bool = False,
         avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
-        use_eq_elimination: bool = True,
+        use_eq_elimination: bool = False,
+        use_redundant_dynamic_constraints: bool = True,
     ):
         self.slider = slider
         self.plan_specs = plan_specs
@@ -60,6 +61,7 @@ class PlanarPushingPlanner:
         self.penalize_mode_transition = penalize_mode_transition
         self.object_avoidance_cost = avoidance_cost_type
         self.use_eq_elimination = use_eq_elimination
+        self.use_redundant_dynamic_constraints = use_redundant_dynamic_constraints
 
         self.source = None
         self.target = None
@@ -102,7 +104,11 @@ class PlanarPushingPlanner:
 
         self.contact_modes = [
             FaceContactMode.create_from_plan_spec(
-                loc, self.plan_specs, self.slider, self.use_eq_elimination
+                loc,
+                self.plan_specs,
+                self.slider,
+                self.use_eq_elimination,
+                self.use_redundant_dynamic_constraints,
             )
             for loc in self.contact_locations
         ]
@@ -279,7 +285,7 @@ class PlanarPushingPlanner:
         options.convex_relaxation = convex_relaxation
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
-            options.max_rounded_paths = 1
+            options.max_rounded_paths = 10
 
         assert self.source is not None
         assert self.target is not None

@@ -123,7 +123,7 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
     options.preprocessing = True
     options.max_rounded_paths = 1
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
@@ -184,6 +184,9 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     penalize_mode_transition = request.param.get("penalize_mode_transition", False)
     avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
     use_eq_elimination = request.param.get("use_eq_elimination", False)
+    use_redundant_dynamic_constraints = request.param.get(
+        "use_redundant_dynamic_constraints", True
+    )
 
     planner = PlanarPushingPlanner(
         body,
@@ -194,6 +197,7 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         penalize_mode_transition=penalize_mode_transition,
         avoidance_cost_type=avoidance_cost_type,
         use_eq_elimination=use_eq_elimination,
+        use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
     )
 
     if request.param.get("boundary_conds"):

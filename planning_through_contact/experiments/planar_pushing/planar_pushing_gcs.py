@@ -394,12 +394,12 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(eq(p_WBs[-1], pos_target.flatten()))
 
         start = time.time()
-        print("Starting to create SDP relaxation...")
+        # print("Starting to create SDP relaxation...")
         self.relaxed_prog = MakeSemidefiniteRelaxation(prog)
         end = time.time()
-        print(
-            f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
-        )
+        # print(
+        #     f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
+        # )
 
         self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
 

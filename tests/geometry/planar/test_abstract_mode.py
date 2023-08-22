@@ -152,9 +152,8 @@ def test_add_continuity_between_non_coll_and_face_contact(
         slider_final_pose,
         finger_final_pose,
     )
-    breakpoint()
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)

@@ -67,12 +67,13 @@ class PlanarTrajectoryBuilder:
         dt: float = 0.01,
         interpolate: bool = True,
         assert_determinants: bool = False,
+        print_determinants: bool = False,
     ) -> PlanarPushingTrajectory:
         dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
         if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-04)):
             if assert_determinants:
                 raise ValueError(f"Rotations do not have determinant 1: \n{dets}")
-            else:
+            if print_determinants:
                 print("Rotations do not have determinant 1:")
                 print(dets)
 

@@ -355,7 +355,7 @@ def test_subgraph_with_contact_modes(
             end_idx=-2,
         )
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)
