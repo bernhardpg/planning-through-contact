@@ -34,7 +34,7 @@ from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import face_contact_mode
+from tests.geometry.planar.fixtures import face_contact_mode, t_pusher
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
     rigid_body_box,
