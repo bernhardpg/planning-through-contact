@@ -22,6 +22,8 @@ from planning_through_contact.geometry.utilities import from_so2_to_so3
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
+# TODO(bernhardpg): We want to deprecate this in favor of SliderPusherTrajectory
+
 
 @dataclass
 class PlanarPushingTrajectory:

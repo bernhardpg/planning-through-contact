@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
@@ -20,109 +19,14 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    SliderPusherTrajSegment,
+)
 from planning_through_contact.geometry.utilities import from_so2_to_so3
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
-
-
-class So2TrajSegment:
-    def __init__(
-        self,
-        # NOTE: we don't really need the entire matrix for this,
-        # but keep it around until we want to extend to SO(3)
-        Rs: List[npt.NDArray],
-        start_time: float,
-        end_time: float,
-    ) -> None:
-        self.Rs = Rs
-        self.start_time = start_time
-        self.end_time = end_time
-
-        Rs_in_SO3 = [from_so2_to_so3(R) for R in Rs]
-        knot_point_times = np.linspace(start_time, end_time, len(Rs))
-        self.traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
-
-    def eval(self, t: float) -> float:
-        R = self.traj.orientation(t).rotation()
-        return np.arccos(R[0, 0])
-
-
-@dataclass
-class LinTrajSegment:
-    knot_points: npt.NDArray[np.float64]
-    start_time: float
-    end_time: float
-    traj: Trajectory
-
-    @classmethod
-    def from_knot_points(
-        cls,
-        knot_points: npt.NDArray[np.float64],  # (NUM_SAMPLES, )
-        start_time: float,
-        end_time: float,
-    ) -> "LinTrajSegment":
-        knot_point_times = np.linspace(start_time, end_time, len(knot_points))
-        traj = PiecewisePolynomial.FirstOrderHold(
-            knot_point_times,
-            knot_points.reshape(
-                (1, -1)
-            ),  # FirstOrderHold expects values to be two-dimensional
-        )
-        return cls(knot_points, start_time, end_time, traj)
-
-    def eval(self, t: float) -> None:  # TODO
-        return self.traj.value(t).item()
-
-    def make_derivative(self, derivative_order: int = 1) -> "LinTrajSegment":
-        return LinTrajSegment(
-            self.knot_points,
-            self.start_time,
-            self.end_time,
-            self.traj.MakeDerivative(derivative_order),
-        )
-
-
-@dataclass
-class SliderPusherTrajSegment:
-    start_time: float
-    end_time: float
-    p_WB_x: LinTrajSegment
-    p_WB_y: LinTrajSegment
-    theta: So2TrajSegment
-    lam: LinTrajSegment
-    c_n: LinTrajSegment
-    c_f: LinTrajSegment
-    lam_dot: LinTrajSegment
-
-    @classmethod
-    def from_knot_points(
-        cls, knot_points: AbstractModeVariables, start_time: float, end_time: float
-    ) -> "SliderPusherTrajSegment":
-        p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time)  # type: ignore
-        p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time)  # type: ignore
-        lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time)  # type: ignore
-        theta = So2TrajSegment(knot_points.R_WBs, start_time, end_time)  # type: ignore
-
-        c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time)  # type: ignore
-        c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time)  # type: ignore
-        lam_dot = lam.make_derivative()
-
-        return cls(start_time, end_time, p_WB_x, p_WB_y, theta, lam, c_n, c_f, lam_dot)
-
-    def eval_state(self, t: float) -> npt.NDArray[np.float64]:
-        return np.array(
-            [
-                self.p_WB_x.eval(t),
-                self.p_WB_y.eval(t),
-                self.theta.eval(t),
-                self.lam.eval(t),
-            ]
-        )
-
-    def eval_control(self, t: float) -> npt.NDArray[np.float64]:
-        return np.array([self.c_n.eval(t), self.c_f.eval(t), self.lam_dot.eval(t)])
 
 
 class SliderPusherTrajectoryFeeder(LeafSystem):
