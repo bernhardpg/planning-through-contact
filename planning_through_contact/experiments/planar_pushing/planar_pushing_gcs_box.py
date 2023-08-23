@@ -1,6 +1,7 @@
 import argparse
 import time
 from dataclasses import dataclass
+from itertools import combinations, permutations
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
@@ -23,15 +24,17 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
-from planning_through_contact.geometry.two_d.contact.types import ContactLocation
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
     EquilateralPolytope2d,
 )
-from planning_through_contact.geometry.two_d.rigid_body_2d import (
-    PolytopeContactLocation,
-    RigidBody2d,
-)
+from planning_through_contact.geometry.two_d.rigid_body_2d import RigidBody2d
 from planning_through_contact.geometry.two_d.t_pusher import TPusher
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import (
@@ -274,7 +277,7 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        self.pv1, self.pv2 = self.object.get_proximate_vertices_from_location(
+        self.pv1, self.pv2 = self.object.geometry.get_proximate_vertices_from_location(
             contact_face
         )
         p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
@@ -285,7 +288,7 @@ class PlanarPushingContactMode:
         (
             self.normal_vec,
             self.tangent_vec,
-        ) = self.object.get_norm_and_tang_vecs_from_location(contact_face)
+        ) = self.object.geometry.get_norm_and_tang_vecs_from_location(contact_face)
         f_c_Bs = [
             c_n * self.normal_vec + c_f * self.tangent_vec
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
@@ -394,12 +397,19 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(eq(p_WBs[-1], pos_target.flatten()))
 
         start = time.time()
-        # print("Starting to create SDP relaxation...")
+        print("Starting to create SDP relaxation...")
         self.relaxed_prog = MakeSemidefiniteRelaxation(prog)
+
+        bound = 10
+        x = self.relaxed_prog.decision_variables()
+        self.relaxed_prog.AddBoundingBoxConstraint(
+            -np.full(x.shape, bound), np.full(x.shape, bound), x
+        )
+
         end = time.time()
-        # print(
-        #     f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
-        # )
+        print(
+            f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
+        )
 
         self.num_variables = 7 * num_knot_points + 1  # TODO: 7 is hardcoded, fix this
 
@@ -535,7 +545,7 @@ class NonCollisionMode:
         self.name = name
         self.time_in_mode = end_time
 
-        faces = object.get_faces_for_collision_free_set(
+        faces = object.geometry.get_planes_for_collision_free_region(
             PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
         )
 
@@ -732,7 +742,6 @@ class GraphChain:
             ]
             for chain in self.non_collision_chains
         ]
-        mode = self.non_collision_modes[0][0]
 
     def create_edges(
         self,
@@ -763,6 +772,13 @@ class GraphChain:
                 modes[0],
                 gcs,
             )
+            add_edge_with_continuity_constraint(
+                vertices[0],
+                start_contact_vertex,
+                modes[0],
+                start_contact_mode,
+                gcs,
+            )
 
             # Connect last position mode to last contact mode
             add_edge_with_continuity_constraint(
@@ -770,6 +786,13 @@ class GraphChain:
                 end_contact_vertex,
                 modes[-1],
                 end_contact_mode,
+                gcs,
+            )
+            add_edge_with_continuity_constraint(
+                end_contact_vertex,
+                vertices[-1],
+                end_contact_mode,
+                modes[-1],
                 gcs,
             )
 
@@ -780,6 +803,9 @@ class GraphChain:
                 next_mode = modes[i + 1]
                 add_edge_with_continuity_constraint(
                     curr_vertex, next_vertex, curr_mode, next_mode, gcs
+                )
+                add_edge_with_continuity_constraint(
+                    next_vertex, curr_vertex, next_mode, curr_mode, gcs
                 )
 
     def add_costs(self) -> None:
@@ -808,62 +834,29 @@ class GraphChain:
 
 
 def plan_planar_pushing():
-    # Build the graph
-    # NOTE: Somewhat ad-hoc, as we are missing the code to deal with cycles currently
-    faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
+    faces_to_consider = [0, 1, 2, 3]
     source_connections = faces_to_consider
     target_connections = faces_to_consider
 
-    face_connections = [
-        (i, j) for i in faces_to_consider for j in faces_to_consider[:-4] if i < j
-    ]
-    face_connections.extend(
-        [
-            (0, 7),
-            (0, 6),
-            (3, 6),
-            (3, 7),
-            (7, 6),
-            (7, 5),
-            (7, 4),
-            (6, 5),
-            (6, 4),
-            (5, 4),
-            (5, 3),
-            (5, 2),
-        ]
-    )
+    face_connections = list(combinations(faces_to_consider, 2))
 
-    # TODO: For some reason, this causes a very strange bug!
-    # def generate_sequence(i, j):
-    #     seq = [k for k in range(i, j + 1)]  # 0 and 1 have the same set
-    #     replace_ones = [0 if k == 1 else k for k in seq]
-    #     no_repeats = [replace_ones[0]]
-    #     for i in range(1, len(replace_ones)):
-    #         if replace_ones[i] != replace_ones[i - 1]:
-    #             no_repeats.append(replace_ones[i])
-    #
-    #     return no_repeats
-    # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
+    LENGTH = 3
+
+    def generate_sequence(i, j):
+        # 3 to 7: 3,4,5,6,7
+        if i < j:
+            seq = [k for k in range(i, j + 1)]
+        # 7 to 3: 7, 0, 1, 2, 3
+        else:
+            seq = [k % (LENGTH + 1) for k in range(i, j + 1 + (LENGTH + 1))]
+        return seq
+
+    def get_shortest_sequence(seq1, seq2):
+        return seq1 if len(seq1) <= len(seq2) else seq2
+
     paths = {
-        (0, 1): [[0], [0, 7, 5, 4, 3, 2, 0]],
-        (0, 2): [[0, 2], [0, 7, 5, 4, 3, 2]],
-        (0, 3): [[0, 2, 3], [0, 7, 5, 4, 3]],
-        (1, 2): [[2], [0]],
-        (1, 3): [[0, 2, 3], [0]],
-        (2, 3): [[2, 3], [0]],
-        (0, 7): [[0, 7], [0]],
-        (0, 6): [[0, 7, 5], [0]],
-        (3, 6): [[3, 4, 5], [0]],
-        (3, 7): [[3, 4, 5, 7], [0]],
-        (7, 6): [[7, 6], [0]],
-        (7, 5): [[7, 6], [0]],
-        (7, 4): [[7, 6, 4], [0]],
-        (6, 5): [[5], [0]],
-        (6, 4): [[5, 4], [0]],
-        (5, 4): [[5, 4], [0]],
-        (5, 3): [[5, 4, 3], [0]],
-        (5, 2): [[5, 4, 3, 2], [0]],
+        (i, j): [generate_sequence(i, j), list(reversed(generate_sequence(j, i)))]
+        for i, j in face_connections
     }
 
     experiment_number = 1
@@ -905,8 +898,8 @@ def plan_planar_pushing():
     DIST_TO_CORNERS = 0.2
     num_vertices = 6
 
-    use_polytope = False
-    if use_polytope:
+    slider = "box"
+    if slider == "polytope":
         object = EquilateralPolytope2d(
             actuated=False,
             name="Slider",
@@ -915,12 +908,19 @@ def plan_planar_pushing():
             num_vertices=num_vertices,
         )
         raise NotImplementedError("Polytope missing support for collision free sets")
-    else:
+    elif slider == "t_pusher":
         object = TPusher(
             actuated=False,
             name="Slider",
             mass=MASS,
         )
+    elif slider == "box":
+        mass = 0.3
+        box_geometry = Box2d(width=0.3, height=0.3)
+        box = RigidBody("box", box_geometry, mass)
+        object = box
+    else:
+        raise NotImplementedError()
 
     initial_config = _create_obj_config(pos_initial, th_initial)
     target_config = _create_obj_config(pos_target, th_target)
@@ -1041,8 +1041,6 @@ def plan_planar_pushing():
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     elapsed_time = time.time() - start
 
-    breakpoint()
-
     assert result.is_success()
     print("Success!")
 
@@ -1053,6 +1051,15 @@ def plan_planar_pushing():
     ]
 
     full_path = _find_path_to_target(active_edges, target_vertex, source_vertex)
+
+    results = [vertex.GetSolution(result) for vertex in full_path]
+
+    def any_is_nan(results):
+        return [any(np.isnan(r)) for r in results]
+
+    if any(any_is_nan(results)):
+        breakpoint()
+
     vertex_names_on_path = [
         v.name() for v in full_path if v.name() not in ["source", "target"]
     ]
@@ -1060,12 +1067,17 @@ def plan_planar_pushing():
     vertices_on_path = [all_vertices[name] for name in vertex_names_on_path]
     modes_on_path = [all_modes[name] for name in vertex_names_on_path]
 
+    ress = [v.GetSolution(result) for v in vertices_on_path]
+
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
+    # TODO(bernhardpg): There is a bug here, where the wrong vertices are extracted
+    # in the end, causing NaN-values in the solution. But this is not worth fixing, as
+    # this code will be deprecated.
     DT = 0.5
     interpolate = False
     R_traj = sum(
@@ -1082,7 +1094,7 @@ def plan_planar_pushing():
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
 
-    breakpoint()
+    dets = [np.linalg.det(R) for R in R_traj]
 
     traj_length = len(R_traj)
 
@@ -1134,7 +1146,7 @@ def plan_planar_pushing():
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        object,
+        object.geometry,
         BOX_COLOR,
     )
 
@@ -1142,7 +1154,7 @@ def plan_planar_pushing():
     target_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        object,
+        object.geometry,
         TARGET_COLOR,
     )
 

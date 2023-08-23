@@ -570,7 +570,7 @@ def plan_planar_pushing(
     # Solve the problem by using elimination of equality constraints
     eliminate_equalities = True
 
-    NUM_TRIALS = 1
+    NUM_TRIALS = 5
     DEBUG = False
 
     solver_options = SolverOptions()
@@ -583,7 +583,9 @@ def plan_planar_pushing(
             smaller_prog, retrieve_x = eliminate_equality_constraints(
                 contact_mode.prog, print_num_vars_eliminated=True
             )
+            # TODO(bernhardpg): This is consistently slower to solve than my implementation
             relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
+            # relaxed_prog, _, _ = create_sdp_relaxation(smaller_prog)
         else:
             relaxed_prog = contact_mode.relaxed_prog
 
@@ -599,7 +601,7 @@ def plan_planar_pushing(
 
     if eliminate_equalities:
         z_sols = relaxed_result.GetSolution(smaller_prog.decision_variables())  # type: ignore
-        decision_var_vals = retrieve_x(z_sols)  # type: ignore
+        decision_var_vals = sym.Evaluate(retrieve_x(z_sols)).flatten()  # type: ignore
         relaxed_sols = contact_mode.vars.eval_from_vec(decision_var_vals, contact_mode.prog)  # type: ignore
 
     else:

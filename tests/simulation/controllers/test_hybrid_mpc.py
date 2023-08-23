@@ -34,7 +34,7 @@ from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import face_contact_mode
+from tests.geometry.planar.fixtures import face_contact_mode, t_pusher
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
     rigid_body_box,
@@ -231,7 +231,7 @@ def test_hybrid_mpc_controller(
         alpha=0.1,
     )
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -274,7 +274,7 @@ def test_hybrid_mpc_controller(
     simulator.Initialize()
     simulator.AdvanceTo(face_contact_mode.time_in_mode)
 
-    DEBUG = True
+    DEBUG = False
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore

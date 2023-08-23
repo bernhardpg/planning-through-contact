@@ -21,6 +21,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     AbstractModeVariables,
 )
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -41,6 +42,12 @@ def assemble_progs_from_contact_modes(
 
     for mode in modes:
         mode_prog = mode.prog
+
+        # TODO(bernhardpg): Look at this into more detail
+        # For some reason, we need to remove the redundant dynamic constraints when rounding
+        if isinstance(mode, FaceContactMode) and mode.use_redundant_dynamic_constraints:
+            for c in mode.quasi_static_dynamics_constraints_in_B:
+                mode_prog.RemoveConstraint(c)
 
         vars = mode_prog.decision_variables()
         prog.AddDecisionVariables(vars)
@@ -167,7 +174,7 @@ class PlanarPushingPath:
     def _do_nonlinear_rounding(
         self,
         measure_time: bool = False,
-        solver: Literal["snopt", "ipopt"] = "ipopt",
+        solver: Literal["snopt", "ipopt"] = "snopt",
         print_output: bool = False,
     ) -> MathematicalProgramResult:
         prog = self._construct_nonlinear_program()
@@ -181,17 +188,19 @@ class PlanarPushingPath:
         solver_options = SolverOptions()
 
         if print_output:
+            # NOTE(bernhardpg): I don't think either SNOPT nor IPOPT supports this setting
             solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
         if solver == "ipopt":
-            solver_options.SetOption(IpoptSolver.id(), "tol", 1e-6)
-        else:
-            raise NotImplementedError("Snopt not yet supported (not tested)")
-            solver_options.SetOption(SnoptSolver.id(), "tol", 1e-6)
+            ipopt = IpoptSolver()
+            solver_options.SetOption(ipopt.solver_id(), "tol", 1e-6)
+            result = ipopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
+        elif solver == "snopt":
             snopt = SnoptSolver()
-            result = snopt.Solve(prog, solver_options)
-
-        result = Solve(prog, initial_guess, solver_options=solver_options)
+            solver_options.SetOption(snopt.solver_id(), "Print file", "my_output.txt")
+            result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
+        else:
+            raise NotImplementedError()
 
         end = time.time()
 

@@ -296,6 +296,7 @@ class Box2d(CollisionGeometry):
                     f"Location {location.pos}: {location.idx} not implemented"
                 )
         else:
+            breakpoint()
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
             )

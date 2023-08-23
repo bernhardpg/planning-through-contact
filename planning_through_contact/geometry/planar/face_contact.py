@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import Callable, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -103,44 +103,56 @@ class FaceContactVariables(AbstractModeVariables):
         )
 
     def eval_result(self, result: MathematicalProgramResult) -> "FaceContactVariables":
+        def get_float_from_result(
+            vec: npt.NDArray[np.float64] | NpExpressionArray,
+        ) -> npt.NDArray[np.float64]:
+            if vec.dtype == np.float64:
+                return result.GetSolution(vec)
+            elif vec.dtype == np.object_:
+                return sym.Evaluate(result.GetSolution(vec)).flatten()  # type: ignore
+            else:
+                raise NotImplementedError(f"dtype {vec.dtype} not supported")
+
         return FaceContactVariables(
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
-            result.GetSolution(self.lams),
-            result.GetSolution(self.normal_forces),
-            result.GetSolution(self.friction_forces),
-            result.GetSolution(self.cos_ths),
-            result.GetSolution(self.sin_ths),
-            result.GetSolution(self.p_WB_xs),
-            result.GetSolution(self.p_WB_ys),
+            get_float_from_result(self.lams),
+            get_float_from_result(self.normal_forces),
+            get_float_from_result(self.friction_forces),
+            get_float_from_result(self.cos_ths),
+            get_float_from_result(self.sin_ths),
+            get_float_from_result(self.p_WB_xs),
+            get_float_from_result(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
         )
 
-    def eval_from_reduced_result(
+    def from_reduced_prog(
         self,
-        prog: MathematicalProgram,
-        result: MathematicalProgramResult,
-        reduced_vars: NpExpressionArray,
+        original_prog: MathematicalProgram,
+        reduced_prog: MathematicalProgram,
+        get_original_exprs: Callable,
     ) -> "FaceContactVariables":
-        # must evaluate to get rid of expressions
-        vals = sym.Evaluate(result.GetSolution(reduced_vars))  # type: ignore
-        temp = lambda vars: vals[prog.FindDecisionVariableIndices(vars)].flatten()
+        original_as_expressions = get_original_exprs(reduced_prog.decision_variables())
+
+        get_original_vars_from_reduced = lambda original_vars: original_as_expressions[
+            original_prog.FindDecisionVariableIndices(original_vars)
+        ].flatten()
 
         return FaceContactVariables(
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
-            temp(self.lams),
-            temp(self.normal_forces),
-            temp(self.friction_forces),
-            temp(self.cos_ths),
-            temp(self.sin_ths),
-            temp(self.p_WB_xs),
-            temp(self.p_WB_ys),
+            get_original_vars_from_reduced(self.lams),
+            get_original_vars_from_reduced(self.normal_forces),
+            get_original_vars_from_reduced(self.friction_forces),
+            get_original_vars_from_reduced(self.cos_ths),
+            get_original_vars_from_reduced(self.sin_ths),
+            get_original_vars_from_reduced(self.p_WB_xs),
+            get_original_vars_from_reduced(self.p_WB_ys),
             self.pv1,
             self.pv2,
             self.normal_vec,
@@ -214,6 +226,9 @@ class FaceContactVariables(AbstractModeVariables):
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
+    use_eq_elimination: bool = False
+    # NOTE(bernhardpg): Currently rounding doesn't seem to work with these redundant constraints
+    use_redundant_dynamic_constraints: bool = True
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
 
@@ -223,6 +238,8 @@ class FaceContactMode(AbstractContactMode):
         contact_location: PolytopeContactLocation,
         specs: PlanarPlanSpecs,
         object: RigidBody,
+        use_eq_elimination: bool = False,
+        use_redundant_dynamic_constraints: bool = True,
     ) -> "FaceContactMode":
         prog = MathematicalProgram()
         name = str(contact_location)
@@ -233,6 +250,8 @@ class FaceContactMode(AbstractContactMode):
             contact_location,
             object,
             prog,
+            use_eq_elimination=use_eq_elimination,
+            use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
         )
 
     def __post_init__(self) -> None:
@@ -273,22 +292,31 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
-        # Bounds on forces
-        for c_n, c_f in zip(
-            self.variables.normal_forces, self.variables.friction_forces
-        ):
-            self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
+        # TODO(bernhardpg): Experimental research feature, remove this
+        self.bound_variables = False
+        if self.bound_variables:
+            # Bounds on forces
+            for c_n, c_f in zip(
+                self.variables.normal_forces, self.variables.friction_forces
+            ):
+                self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
 
-        # Bounds on positions
-        for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
-            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x)
-            self.prog.AddBoundingBoxConstraint(-TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y)
+            # Bounds on positions
+            for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
+                self.prog.AddBoundingBoxConstraint(
+                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x
+                )
+                self.prog.AddBoundingBoxConstraint(
+                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y
+                )
 
-        # Bounds on cosines and sines
-        for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
-            self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
-            self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
+            # Bounds on cosines and sines
+            for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
+                self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
+                self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
+        # TODO(bernhardpg): Experimental research feature, remove this
+        self.enforce_equal_forces = False
         if self.enforce_equal_forces:
             # Enforces forces are constant
             for c_n_curr, c_n_next in zip(
@@ -316,12 +344,24 @@ class FaceContactMode(AbstractContactMode):
                 p_c_B = self.variables.p_c_Bs[k]
                 R_WB = self.variables.R_WBs[k]
 
-            x_dot, dyn = self.quasi_static_dynamics(
+            # quasi-static dynamics in W
+            x_dot, dyn = self.quasi_static_dynamics_in_W(
                 v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
                 self.prog.AddConstraint(row)
+
+            # quasi-static dynamics in B
+            if self.use_redundant_dynamic_constraints:
+                x_dot, dyn = self.quasi_static_dynamics_in_B(
+                    v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
+                )
+                quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
+                self.quasi_static_dynamics_constraints_in_B = []
+                for row in quasi_static_dynamic_constraint:
+                    c = self.prog.AddConstraint(row)
+                    self.quasi_static_dynamics_constraints_in_B.append(c)
 
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_c_Bs:
@@ -343,18 +383,24 @@ class FaceContactMode(AbstractContactMode):
         )
         self.prog.AddQuadraticCost(self.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
-    def set_finger_pos(self, lam: float) -> None:
+    def set_finger_pos(self, lam_target: float) -> None:
         """
         Set finger position along the contact face.
         As the finger position is constant, there is no difference between
         initial and target value.
 
-        @param lam: Position along face, value 0 to 1.
+        @param lam_target: Position along face, value 0 to 1.
         """
-        if lam >= 1 or lam <= 0:
+        if lam_target >= 1 or lam_target <= 0:
             raise ValueError("The finger position should be set between 0 and 1")
 
-        self.prog.AddLinearConstraint(self.variables.lams[0] == lam)
+        # for lam in self.variables.lams:
+        #     self.prog.AddLinearConstraint(lam >= lam_target)
+        #     self.prog.AddLinearConstraint(lam <= lam_target)
+
+        self.prog.AddLinearConstraint(
+            eq(self.variables.lams, np.full(self.variables.lams.shape, lam_target))
+        )
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
@@ -370,17 +416,27 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_final_pose = pose
 
-    def formulate_reduced_convex_relaxation(
-        self,
-    ) -> NpExpressionArray:
-        smaller_prog, get_x_from_z = eliminate_equality_constraints(self.prog)
-        self.relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
-
-        x = get_x_from_z(smaller_prog.decision_variables())
-        return x  # type: ignore
-
     def formulate_convex_relaxation(self) -> None:
-        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        if self.use_eq_elimination:
+            self.original_prog = self.prog
+            (
+                self.reduced_prog,
+                self.get_original_vars_from_reduced,
+            ) = eliminate_equality_constraints(self.prog)
+            self.prog = self.reduced_prog
+
+            # TODO(bernhardpg): Clean up this
+            self.original_variables = self.variables
+            self.variables = self.variables.from_reduced_prog(
+                self.original_prog,
+                self.reduced_prog,
+                self.get_original_vars_from_reduced,
+            )
+            c = self.reduced_prog.linear_constraints()[0]
+
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
+        else:
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
@@ -501,7 +557,7 @@ class FaceContactMode(AbstractContactMode):
         return (vals[k] + vals[k + 1]) / 2
 
     @staticmethod
-    def quasi_static_dynamics(
+    def quasi_static_dynamics_in_W(
         v_WB,
         omega_WB,
         f_c_B,
@@ -509,7 +565,6 @@ class FaceContactMode(AbstractContactMode):
         R_WB,
         FRICTION_COEFF,
         OBJECT_MASS,
-        use_redundant_constraints: bool = True,
     ):
         G = 9.81
         # TODO(bernhardpg): Compute f_max and tau_max correctly
@@ -536,16 +591,45 @@ class FaceContactMode(AbstractContactMode):
         dynamics_in_W = A.dot(
             wrench_W
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
-        if use_redundant_constraints:
-            # NOTE(bernhardpg): Add constraints both ways
-            x_dot_in_B = R.T.dot(x_dot_in_W)
-            dynamics_in_B = A.dot(
-                wrench_B
-            )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
-            # x_dot, f(x,u)
-            return np.vstack((x_dot_in_W, x_dot_in_B)), np.vstack(
-                (dynamics_in_W, dynamics_in_B)
-            )  # (6,1), (6,1)
-        else:
-            return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)
+        return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)
+
+    @staticmethod
+    def quasi_static_dynamics_in_B(
+        v_WB,
+        omega_WB,
+        f_c_B,
+        p_c_B,
+        R_WB,
+        FRICTION_COEFF,
+        OBJECT_MASS,
+    ):
+        G = 9.81
+        # TODO(bernhardpg): Compute f_max and tau_max correctly
+        f_max = FRICTION_COEFF * G * OBJECT_MASS
+        tau_max = f_max * 0.2
+
+        A = np.diag(
+            # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+        )  # Ellipsoidal Limit surface approximation
+
+        # We need to add an entry for multiplication with the wrench,
+        # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
+        R = np.zeros((3, 3), dtype="O")
+        R[2, 2] = 1
+        R[0:2, 0:2] = R_WB
+
+        # Contact torques
+        tau_c_B = cross_2d(p_c_B, f_c_B)
+
+        x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
+        wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
+
+        x_dot_in_B = R.T.dot(x_dot_in_W)
+        dynamics_in_B = A.dot(
+            wrench_B
+        )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
+
+        # x_dot, f(x,u)
+        return x_dot_in_B, dynamics_in_B

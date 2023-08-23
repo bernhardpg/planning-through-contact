@@ -22,6 +22,7 @@ from tests.geometry.planar.fixtures import (
     face_contact_mode,
     planner,
     rigid_body_box,
+    t_pusher,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 
@@ -99,100 +100,78 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
 
 @pytest.mark.parametrize(
-    "planner, should_succeed",
+    "planner",
     [
-        (
-            {
-                "partial": True,
-                "allow_teleportation": True,
-                "penalize_mode_transition": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-                },
+        {
+            "partial": True,
+            "allow_teleportation": True,
+            "use_redundant_dynamic_constraints": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
-            True,
-        ),
-        (
-            {
-                "partial": True,
-                "allow_teleportation": True,
-                "penalize_mode_transition": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
-                },
+        },
+        {
+            "partial": True,
+            "allow_teleportation": True,
+            "use_redundant_dynamic_constraints": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
             },
-            True,
-        ),
-        (
-            {
-                "partial": True,
-                "avoid_object": True,
-                "allow_teleportation": False,
-                "penalize_mode_transition": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
-                },
+        },
+        {
+            "partial": True,
+            "avoid_object": True,
+            "allow_teleportation": False,
+            "use_redundant_dynamic_constraints": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
             },
-            True,
-        ),
-        (  # Fails
-            {
-                "partial": True,
-                "avoid_object": True,
-                "allow_teleportation": False,
-                "penalize_mode_transition": False,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0.2, y=0, theta=1.2),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=2.1),
-                },
-            },
-            False,
-        ),
-        # NOTE: Commented out because it is very slow
-        # (
-        #     {
-        #         "partial": False,
-        #         "avoid_object": True,
-        #         "allow_teleportation": False,
-        #         "penalize_mode_transition": False,
-        #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0.4, y=-0.4, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=0.4, y=0.4, theta=0.0),
-        #             "box_initial_pose": PlanarPose(x=0, y=0, theta=1.2),
-        #             "box_target_pose": PlanarPose(x=-0.4, y=-0.2, theta=2.3),
-        #         },
-        #     }
-        # ),
+        },
+        # Very slow, so commented out. Should pass!
+        # {
+        #     "partial": False,
+        #     "avoid_object": True,
+        #     "allow_teleportation": False,
+        #     "use_redundant_dynamic_constraints": False,
+        #     "boundary_conds": {
+        #         "finger_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
+        #         "finger_target_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
+        #         "box_initial_pose": PlanarPose(x=0.2, y=0, theta=1.2),
+        #         "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=2.1),
+        #     },
+        # },
     ],
     indirect=["planner"],
+    ids=[
+        "teleport1",
+        "teleport2",
+        "normal1",
+        # "normal2",
+    ],
 )
-def test_path_rounding(planner: PlanarPushingPlanner, should_succeed: bool) -> None:
-    result = planner._solve(print_output=False)
+def test_path_rounding(planner: PlanarPushingPlanner) -> None:
+    DEBUG = False
+    result = planner._solve(print_output=DEBUG)
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    rounded_result = path._do_nonlinear_rounding(print_output=False, measure_time=True)
-    if should_succeed:
-        assert rounded_result.is_success()
-    else:
-        assert not rounded_result.is_success()
+    rounded_result = path._do_nonlinear_rounding(print_output=DEBUG, measure_time=DEBUG)
+    assert rounded_result.is_success()
 
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
     traj_rounded = PlanarTrajectoryBuilder(path.get_rounded_vars()).get_trajectory(
         interpolate=False
     )
 
-    DEBUG = False
     if DEBUG:
+        # visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
         visualize_planar_pushing_trajectory(traj_rounded, planner.slider.geometry)

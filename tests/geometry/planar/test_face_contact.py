@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from pydrake.solvers import Solve
+from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.convex_relaxation.sdp import (
@@ -97,20 +97,44 @@ def test_face_contact_variables(
         assert f.shape == (2, 1)
 
 
+def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> None:
+    original_prog = face_contact_mode.prog
+    reduced_prog, get_x = eliminate_equality_constraints(original_prog)
+    vars = face_contact_mode.variables
+
+    reduced_vars = vars.from_reduced_prog(original_prog, reduced_prog, get_x)
+
+    assert vars.lams.shape == reduced_vars.lams.shape
+    assert vars.cos_ths.shape == reduced_vars.cos_ths.shape
+    assert vars.sin_ths.shape == reduced_vars.sin_ths.shape
+    assert vars.normal_forces.shape == reduced_vars.normal_forces.shape
+    assert vars.friction_forces.shape == reduced_vars.friction_forces.shape
+    assert vars.p_WB_xs.shape == reduced_vars.p_WB_xs.shape
+    assert vars.p_WB_ys.shape == reduced_vars.p_WB_ys.shape
+
+
 def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     num_knot_points = mode.num_knot_points
 
+    # NOTE(bernhardpg): These are commented out, as we are currently not using bbox constraints
+    # (they slow down the solution times a lot.
+    # TODO(bernhardpg): This should be properly investigated
+
     # for each knot point:
     # each variable should have a bounding box constraint
     # lam, c_n, c_f, cos_th, sin_th, p_WB_x, p_WB_y
-    num_bbox = num_knot_points * 7
+    # num_bbox = num_knot_points * 7
+    # assert len(mode.prog.bounding_box_constraints()) == num_bbox
+
+    # NOTE(bernhardpg): With the current setup, we will have one bounding box constraint for the
+    # lams and one for the c_ns
+    num_bbox = 2 * num_knot_points
     assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
     # v_c_B == 0
-    # f_c_B_next == f_c_B_curr
-    num_lin_eq = (num_knot_points - 1) * 3
+    num_lin_eq = num_knot_points - 1
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
@@ -156,7 +180,7 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     v_WB = face_contact_vars.v_WBs[k]
     omega_WB = face_contact_vars.omega_WBs[k]
 
-    _, dyn = FaceContactMode.quasi_static_dynamics(
+    _, dyn = FaceContactMode.quasi_static_dynamics_in_W(
         v_WB, omega_WB, f_c_B, p_c_B, R_WB, friction_coeff, mass
     )
 
@@ -189,6 +213,15 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "face_contact_mode",
+    [
+        ({"face_idx": 3}),
+        ({"face_idx": 0}),
+    ],
+    indirect=["face_contact_mode"],
+    ids=["right", "loose"],
+)
 def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
     final_pose = PlanarPose(0.3, 0, 0.8)
@@ -215,7 +248,42 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        ({"face_idx": 1}),
+        ({"face_idx": 0, "body": "t_pusher"}),
+        ({"face_idx": 3, "body": "t_pusher"}),
+    ],
+    indirect=["face_contact_mode"],
+    ids=["tight", "loose"],
+)
+def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
+    mode = face_contact_mode
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.1)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    result = Solve(mode.relaxed_prog)  # type: ignore
+    assert result.is_success()  # should fail when the relaxation is tight!
+
+    vars = face_contact_mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    DEBUG = False
+    if DEBUG:
+        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        plot_cos_sine_trajs(rs)
+
+
+@pytest.mark.parametrize(
+    "face_contact_mode",
+    [
+        # TODO(bernhardpg): Get back to this after figuring out integration scheme
+        # only infeasible with bounds, redundant dynamics constraints, and CONSTANT contact forces
+        # (
+        #     {"face_idx": 1}
+        # ),
         # ({"face_idx": 0}),  # not infeasible, although it seems it should be?
     ],
     indirect=["face_contact_mode"],
@@ -243,9 +311,10 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        # ({"face_idx": 3, "body": "t_pusher"}), # not infeasible, although it seems it should be?
-        ({"face_idx": 4, "body": "t_pusher"}),
-        ({"face_idx": 6, "body": "t_pusher"}),
+        # TODO(bernhardpg): Get back to this after figuring out integration scheme
+        # only infeasible with bounds, redundant dynamics constraints, and CONSTANT contact forces
+        # ({"face_idx": 4, "body": "t_pusher"}),
+        # ({"face_idx": 6, "body": "t_pusher"}),
     ],
     indirect=["face_contact_mode"],
 )
@@ -258,9 +327,9 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
 
     mode.formulate_convex_relaxation()
     result = Solve(mode.relaxed_prog)  # type: ignore
-    assert not result.is_success()  # should fail when the relaxation is tight!
+    # assert not result.is_success()  # should fail when the relaxation is tight!
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
@@ -272,56 +341,39 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
 
 @pytest.mark.parametrize(
     "face_contact_mode",
-    [{"face_idx": 0, "body": "t_pusher"}],
-    indirect=["face_contact_mode"],
-)
-def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
-    mode = face_contact_mode
-    initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.1, 0.1)
-    mode.set_slider_initial_pose(initial_pose)
-    mode.set_slider_final_pose(final_pose)
-
-    mode.formulate_convex_relaxation()
-    result = Solve(mode.relaxed_prog)  # type: ignore
-    assert result.is_success()  # should fail when the relaxation is tight!
-
-    vars = face_contact_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-
-    DEBUG = False
-    if DEBUG:
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
-        # (num_knot_points, 2): first col cosines, second col sines
-        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
-        plot_cos_sine_trajs(rs)
-
-
-@pytest.mark.parametrize(
-    "face_contact_mode",
     [
-        ({"face_idx": 3}),
-        (
-            {"face_idx": 0}
-        ),  # not infeasible, although it should be (relaxation is loose)
+        {"face_idx": 3, "use_eq_elimination": True},
+        # not infeasible, although it should be (relaxation is loose)
+        {"face_idx": 0, "use_eq_elimination": True},
+        {"face_idx": 0, "use_eq_elimination": True, "body": "t_pusher"},
+        # not infeasible, although it should be (relaxation is loose)
+        {"face_idx": 1, "use_eq_elimination": True, "body": "t_pusher"},
     ],
     indirect=["face_contact_mode"],
+    ids=["box", "box_loose", "t_pusher", "t_pusher_loose"],
 )
-def test_problem_reduction(face_contact_mode: FaceContactMode) -> None:
+def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0, 0.8)
+    final_pose = PlanarPose(0.3, 0, 0.1)
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
-    x = face_contact_mode.formulate_reduced_convex_relaxation()
+    face_contact_mode.formulate_convex_relaxation()
+    import time
+
+    now = time.time()
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    solve_time = time.time() - now
+
+    SOLVE_TIME_TRESHOLD = 0.08
+    assert solve_time <= SOLVE_TIME_TRESHOLD
+    # Empirically all of these should solve within the treshold
+
     assert result.is_success()
 
     DEBUG = False
     if DEBUG:
-        vars = face_contact_mode.variables.eval_from_reduced_result(
-            face_contact_mode.prog, result, x
-        )
+        vars = face_contact_mode.reduced_variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines

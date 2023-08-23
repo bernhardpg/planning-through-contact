@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pydrake.geometry.optimization as opt
+import pytest
 from pydrake.solvers import CommonSolverOption, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -95,8 +96,16 @@ def test_add_continuity_constraints_between_non_collision_modes(
         visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
 
 
+@pytest.mark.parametrize(
+    "rigid_body_box, gcs_options, use_eq_elimination",
+    [({}, {}, False), ({}, {}, True)],
+    indirect=["rigid_body_box", "gcs_options"],
+    ids=["normal", "eq_elimination"],
+)
 def test_add_continuity_between_non_coll_and_face_contact(
-    rigid_body_box: RigidBody, gcs_options: opt.GraphOfConvexSetsOptions
+    rigid_body_box: RigidBody,
+    gcs_options: opt.GraphOfConvexSetsOptions,
+    use_eq_elimination: bool,
 ) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
     plan_specs = PlanarPlanSpecs()
@@ -105,8 +114,11 @@ def test_add_continuity_between_non_coll_and_face_contact(
     slider_final_pose = PlanarPose(0.5, 0, 0.4)
     finger_final_pose = PlanarPose(-0.4, 0, 0)
 
-    source_mode = FaceContactMode.create_from_plan_spec(loc, plan_specs, rigid_body_box)
+    source_mode = FaceContactMode.create_from_plan_spec(
+        loc, plan_specs, rigid_body_box, use_eq_elimination
+    )
     source_mode.set_slider_initial_pose(slider_initial_pose)
+    source_mode.set_finger_pos(0.5)
 
     target_mode = NonCollisionMode.create_from_plan_spec(
         loc, plan_specs, rigid_body_box

@@ -54,11 +54,18 @@ class ContinuityVariables:
         """
         Function that returns a vector with only the symbolic variables (as opposed to having some be symbolic Expressions)
         """
-        # FaceContactMode: some variables are sym.Expression
+        # some variables can be sym.Expression
         if isinstance(self.p_BF[0, 0], sym.Expression):
-            lam = list(self.p_BF[0, 0].GetVariables())[0]
-            vars = np.concatenate(([lam], self.vector()[2:]))
-            return vars
+            vars = sym.Variables()
+            for expr_or_var in self.vector():
+                if isinstance(expr_or_var, sym.Expression):
+                    vars.insert(expr_or_var.GetVariables())
+                elif isinstance(expr_or_var, sym.Variable):
+                    vars.insert(expr_or_var)
+                else:
+                    raise RuntimeError("Must be a variable or expression!")
+
+            return np.array(list(vars))
         else:  # NonCollisionMode: All variables are just sym.Variable
             return self.vector()
 
@@ -74,6 +81,7 @@ class ContinuityVariables:
         only_continuity_on_slider: bool = True,
     ) -> NpExpressionArray:
         if only_continuity_on_slider:
+            # TODO(bernhardpg): This needs to be updated if I use equality elimination on NonCollisionModes too
             vars = self.slider_vector()
             exprs = vars  # for just the slider, all entries are variables
         else:  # contuity on both objects
@@ -186,12 +194,25 @@ class AbstractContactMode(ABC):
     def _get_vars_solution_for_vertex_vars(
         self,
         vertex_vars: NpVariableArray,
-        vars: NpVariableArray,
+        vars: NpVariableArray | NpExpressionArray,
         result: MathematicalProgramResult,
     ) -> npt.NDArray[np.float64]:
-        return result.GetSolution(
-            vertex_vars[self.get_variable_indices_in_gcs_vertex(vars)]
-        )
+        # vars can be an expression when we use equality elimination
+        if isinstance(vars[0], sym.Expression):
+            pure_vars = sym.Variables()
+            for expr in vars:
+                pure_vars.insert(expr.GetVariables())
+            pure_vars = np.array(list(pure_vars))
+            relevant_vertex_vars = vertex_vars[
+                self.get_variable_indices_in_gcs_vertex(pure_vars)
+            ]
+            A, b = sym.DecomposeAffineExpressions(vars, pure_vars)
+            vertex_exprs = A.dot(relevant_vertex_vars) + b
+            return sym.Evaluate(result.GetSolution(vertex_exprs)).flatten()
+        else:
+            return result.GetSolution(
+                vertex_vars[self.get_variable_indices_in_gcs_vertex(vars)]
+            )
 
     def _get_var_solution_for_vertex_vars(
         self,
