@@ -264,7 +264,7 @@ class KeyptsLCM(LeafSystem):
         # self.lc.publish("KEYPTS", msg.encode())
 
 
-class PlanarPushingSimulation:
+class PlanarPushingMockSimulation:
     """
     Planar pushing dynamical system, implemented in Drake.
     x: position of box and pusher, [x_box, y_box, theta_box, x_pusher, y_pusher]
