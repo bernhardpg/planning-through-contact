@@ -13,7 +13,6 @@ from pydrake.systems.framework import Diagram, DiagramBuilder
 from pydrake.systems.primitives import ConstantVectorSource
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.collision_geometry.box_group_2d import BoxGroup2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
