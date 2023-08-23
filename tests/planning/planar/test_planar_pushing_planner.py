@@ -397,6 +397,19 @@ def test_planner_with_teleportation(
             },
             None,
         ),
+        (
+            {
+                "partial": False,
+                "avoid_object": True,
+                "boundary_conds": {
+                    "box_initial_pose": PlanarPose(x=0.0, y=0.5, theta=0.0),
+                    "box_target_pose": PlanarPose(x=0.5, y=0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
+                },
+            },
+            None,
+        ),
         # (
         #     {
         #         "partial": False,
@@ -434,6 +447,7 @@ def test_planner_with_teleportation(
         "box_non_collision_2",
         "box_full_1",
         "box_full_2",
+        "box_full_3",
         # "t_pusher",
         # "box_eq_elimination",
     ],
@@ -444,7 +458,6 @@ def test_make_plan(
 ) -> None:
     DEBUG = False
 
-    save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
     result = planner._solve(print_output=DEBUG)
     assert result.is_success()
 
@@ -466,5 +479,44 @@ def test_make_plan(
     assert np.all(np.abs(traj.p_c_W) <= 1.5)
 
     if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "partial": False,
+            "avoid_object": True,
+            "boundary_conds": {
+                "box_initial_pose": PlanarPose(x=0.0, y=0.5, theta=0.0),
+                "box_target_pose": PlanarPose(x=0.5, y=0.7, theta=0.5),
+                "finger_initial_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
+            },
+        },
+    ],
+    indirect=["planner"],
+    ids=["box"],
+)
+def test_make_full_trajectory(planner: PlanarPushingPlanner) -> None:
+    DEBUG = False
+    traj = planner.plan_trajectory(
+        round_trajectory=False, interpolate=True, print_output=DEBUG, measure_time=DEBUG
+    )
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(np.abs(traj.p_c_W) <= 1.5)
+
+    if DEBUG:
+        traj.save("box_pushing_traj.pkl")
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)

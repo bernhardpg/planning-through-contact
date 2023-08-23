@@ -1,7 +1,7 @@
 import numpy as np
 from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 
-from planning_through_contact.experiments.planar_pushing.planar_pushing_gcs import (
+from planning_through_contact.experiments.planar_pushing.old.planar_pushing_gcs import (
     PlanarPushingContactMode,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose

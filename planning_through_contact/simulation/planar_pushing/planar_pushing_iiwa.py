@@ -299,14 +299,16 @@ class PlanarPushingSimulation:
         self._set_joint_positions(self.DEFAULT_JOINT_POSITIONS)
         self.set_box_planar_pose(self.DEFAULT_BOX_POSITION)
 
-    def export_diagram(self, target_folder: str):
+    def export_diagram(self, filename: str):
         import pydot
 
-        filename = target_folder + "/diagram.png"
         pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_png(  # type: ignore
             filename
         )
         print(f"Saved diagram to: {filename}")
+
+    def reset(self) -> None:
+        self.simulator.Initialize()
 
     def run(self, timeout=1e8):
         self.simulator.AdvanceTo(timeout)
@@ -380,7 +382,8 @@ class PlanarPushingSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
-        self.TABLE_BUFFER_DIST = 0.05
+        # self.TABLE_BUFFER_DIST = 0.01
+        self.TABLE_BUFFER_DIST = 0.04
 
     def get_box(self) -> RigidBody:
         return self.station.get_box()

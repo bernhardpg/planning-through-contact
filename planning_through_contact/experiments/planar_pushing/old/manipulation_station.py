@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import numpy as np
-
 from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
