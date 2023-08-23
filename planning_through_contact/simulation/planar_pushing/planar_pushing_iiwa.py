@@ -382,7 +382,7 @@ class PlanarPushingSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
-        self.TABLE_BUFFER_DIST = 0.05
+        self.TABLE_BUFFER_DIST = 0.01
 
     def get_box(self) -> RigidBody:
         return self.station.get_box()
