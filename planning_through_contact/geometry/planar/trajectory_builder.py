@@ -1,4 +1,6 @@
+import pickle
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
@@ -42,6 +44,17 @@ class PlanarPushingTrajectory:
     @property
     def N(self) -> int:
         return self.p_WB.shape[1]
+
+    def save(self, filename: str) -> None:
+        with open(Path(filename), "wb") as file:
+            pickle.dump(self, file)
+
+    @staticmethod
+    def load(filename: str) -> "PlanarPushingTrajectory":
+        with open(Path(filename), "rb") as file:
+            obj = pickle.load(file)
+
+            return obj
 
 
 class PlanarTrajectoryBuilder:
