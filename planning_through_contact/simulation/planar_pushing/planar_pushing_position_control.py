@@ -13,6 +13,9 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
 from pyparsing import Path
 
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.simulation.hardware.hardware_interface import (
     ManipulationHardwareInterface,
 )
@@ -24,7 +27,7 @@ class PlanarPushingPositionControl:
     following a pre-computed trajectory.
     """
 
-    def __init__(self):
+    def __init__(self, traj: PlanarPushingTrajectory):
         builder = DiagramBuilder()
 
         self.station = builder.AddSystem(ManipulationHardwareInterface())
@@ -44,13 +47,13 @@ class PlanarPushingPositionControl:
 
         self.simulator.set_target_realtime_rate(1.0)
 
-        station_context = diagram.GetMutableSubsystemContext(
+        self.station_context = diagram.GetMutableSubsystemContext(
             self.station, self.simulator.get_mutable_context()
         )
 
         # TODO(bernhardpg): Do we want to compute a feedforward torque?
         self.station.GetInputPort("iiwa_feedforward_torque").FixValue(
-            station_context, np.zeros(7)
+            self.station_context, np.zeros(7)
         )
 
         # If the diagram is only the hardware interface, then we must advance it a
@@ -113,7 +116,9 @@ class PlanarPushingPositionControl:
         )
 
     def _initialize_ik(self) -> None:
-        q0 = self.station.GetOutputPort("iiwa_position_measured").Eval(station_context)
+        q0 = self.station.GetOutputPort("iiwa_position_measured").Eval(
+            self.station_context
+        )
         self.differential_ik.get_mutable_parameters().set_nominal_joint_position(q0)
         self.differential_ik.SetPositions(
             self.differential_ik.GetMyMutableContextFromRoot(
