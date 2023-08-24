@@ -8,14 +8,17 @@ from planning_through_contact.planning.planar.planar_plan_specs import PlanarPla
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
+from planning_through_contact.visualize.planar import (
+    visualize_planar_pushing_trajectory,
+)
 
 
-def create_plan(DEBUG: bool = True):
+def create_plan(debug: bool = False):
     specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
 
-    mass = 0.3
+    mass = 0.1
     # TODO(bernhardpg): Make the object geometry an argument
-    box_geometry = Box2d(width=0.3, height=0.3)
+    box_geometry = Box2d(width=0.15, height=0.15)
     body = RigidBody("box", box_geometry, mass)
 
     planner = PlanarPushingPlanner(
