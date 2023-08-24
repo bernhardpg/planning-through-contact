@@ -271,11 +271,12 @@ class PlanarPushingMockSimulation:
     u: delta position command on the pusher.
     """
 
-    def __init__(self):
+    def __init__(self, box_pose: PlanarPose = PlanarPose(x=0.5, y=0.0, theta=0.0)):
+        self.TABLE_BUFFER_DIST = 0.01
+
         self.DEFAULT_JOINT_POSITIONS = np.array(
             [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
         )
-        self.DEFAULT_BOX_POSITION = PlanarPose(x=0.5, y=0.0, theta=0.0)
 
         builder = DiagramBuilder()
         self.station = builder.AddSystem(PlanarPushingDiagram(add_visualizer=True))
@@ -297,7 +298,7 @@ class PlanarPushingMockSimulation:
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
         self._set_joint_positions(self.DEFAULT_JOINT_POSITIONS)
-        self.set_box_planar_pose(self.DEFAULT_BOX_POSITION)
+        self.set_box_planar_pose(box_pose)
 
     def export_diagram(self, filename: str):
         import pydot
@@ -382,9 +383,6 @@ class PlanarPushingMockSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
-        # self.TABLE_BUFFER_DIST = 0.01
-        self.TABLE_BUFFER_DIST = 0.04
-
     def get_box(self) -> RigidBody:
         return self.station.get_box()
 
@@ -393,12 +391,14 @@ class PlanarPushingMockSimulation:
 
     def set_box_planar_pose(self, box_pose: PlanarPose):
         box_height = self.station.get_box_shape().height()
-        q = box_pose.to_generalized_coords(box_height + self.TABLE_BUFFER_DIST)
+        # add a small height to avoid the box penetrating the table
+        q = box_pose.to_generalized_coords(box_height + 1e-2)
         self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
 
     def get_pusher_planar_pose(self):
         return self.station.get_pusher_planar_pose(self.mbp_context)
 
+    # TODO(bernhardpg): This will not work on the real system!
     def set_pusher_planar_pose(
         self, planar_pose: PlanarPose, disregard_angle: bool = True
     ):
