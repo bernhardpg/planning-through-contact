@@ -41,7 +41,7 @@ class PusherPosePublisher(LeafSystem):
         )
 
     def _calc_pose(self, t: float) -> RigidTransform:
-        p_c_W = self.traj.get_value(0, "p_c_W")
+        p_c_W = self.traj.get_value(t - self.delay, "p_c_W")
         assert isinstance(p_c_W, type(np.array([])))
 
         planar_pose = PlanarPose(p_c_W[0].item(), p_c_W[1].item(), theta=0)
@@ -125,7 +125,7 @@ class PlanarPushingPositionControl:
         # True velocity limits for the IIWA14
         # (in rad, rounded down to the first decimal)
         iiwa14_velocity_limits = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 0.1
+        velocity_limit_factor = 1.0
         ik_params.set_joint_velocity_limits(
             (
                 -velocity_limit_factor * iiwa14_velocity_limits,

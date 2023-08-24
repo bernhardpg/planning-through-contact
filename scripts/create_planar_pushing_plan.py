@@ -8,13 +8,16 @@ from planning_through_contact.planning.planar.planar_plan_specs import PlanarPla
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
+from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
 
 
 def create_plan(debug: bool = False):
-    specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
+    specs = PlanarPlanSpecs(
+        time_non_collision=2.0, time_in_contact=2.0, num_knot_points_non_collision=4
+    )
 
     mass = 0.1
     # TODO(bernhardpg): Make the object geometry an argument
@@ -26,8 +29,8 @@ def create_plan(debug: bool = False):
     )
 
     # TODO(bernhardpg): Make the initial and target pose configurable
-    box_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
-    box_target_pose = PlanarPose(x=0.5, y=0.7, theta=0.5)
+    box_initial_pose = PlanarPose(x=0.0, y=0.4, theta=0.0)
+    box_target_pose = PlanarPose(x=0.3, y=0.4, theta=0.5)
     finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
     finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
 
