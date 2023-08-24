@@ -38,7 +38,7 @@ def create_plan(debug: bool = False):
     planner.set_target_poses(finger_target_pose, box_target_pose)
 
     traj = planner.plan_trajectory(
-        round_trajectory=False, print_output=debug, measure_time=debug
+        round_trajectory=True, print_output=debug, measure_time=debug
     )
     traj.save("box_pushing.pkl")
 
