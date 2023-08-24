@@ -26,15 +26,20 @@ class PlanarPose:
         theta = RollPitchYaw(pose.rotation()).vector()[Z_AXIS]
         return cls(x, y, theta)
 
-    def to_pose(self, object_height: float) -> RigidTransform:
+    def to_pose(
+        self, object_height: float, pos_along_z_axis: bool = False
+    ) -> RigidTransform:
         """
-        Creates a RigidTransform from a planar pose, with the x-axis pointing downwards.
+        Creates a RigidTransform from a planar pose, with the z-axis pointing downwards.
 
         @param object_height: Height of the object. This is required to set the z-value of the pose correctly.
+        @param pos_along_z_axis: Set to true to point z-axis upwards
 
         """
+        roll = 0 if pos_along_z_axis else np.pi
+
         pose = RigidTransform(
-            RollPitchYaw(np.array([np.pi, 0.0, self.theta])),  # type: ignore
+            RollPitchYaw(np.array([roll, 0.0, self.theta])),  # type: ignore
             np.array([self.x, self.y, object_height]),
         )
         return pose

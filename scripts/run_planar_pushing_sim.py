@@ -23,10 +23,13 @@ from planning_through_contact.visualize.planar import (
 
 
 def run_sim(debug: bool = False):
-    sim = PlanarPushingMockSimulation()
+    box_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
+    box_target_pose = PlanarPose(x=0.3, y=0.5, theta=0.5)
+    sim = PlanarPushingMockSimulation(
+        visualize_desired=True, desired_box_pose=box_target_pose
+    )
 
     # NOTE: These are currently hardcoded to match the pre-computed plan
-    box_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
     sim.set_box_planar_pose(box_initial_pose)
 
     sim.reset()
