@@ -28,6 +28,8 @@ from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpc
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
+# TODO(bernhardpg): Use the PlanarPushingTrajectory class instead of the duplicated functionality
+
 
 class SliderPusherTrajectoryFeeder(LeafSystem):
     def __init__(

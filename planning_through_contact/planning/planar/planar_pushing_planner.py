@@ -21,9 +21,8 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
-from planning_through_contact.geometry.planar.trajectory_builder import (
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
-    PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
@@ -323,7 +322,6 @@ class PlanarPushingPlanner:
         self,
         print_output: bool = False,
         measure_time: bool = False,
-        interpolate: bool = True,
         round_trajectory: bool = False,
     ) -> PlanarPushingTrajectory:
         assert self.source is not None
@@ -341,10 +339,13 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        path = self.get_solution_path(result)
-        vars_on_path = path.get_rounded_vars() if round_trajectory else path.get_vars()
-        traj = PlanarTrajectoryBuilder(vars_on_path).get_trajectory(
-            interpolate=interpolate
+        traj = PlanarPushingTrajectory.from_result(
+            result,
+            self.gcs,
+            self.source.vertex,
+            self.target.vertex,
+            self._get_all_vertex_mode_pairs(),
+            round_trajectory,
         )
 
         return traj
