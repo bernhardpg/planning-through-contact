@@ -48,7 +48,7 @@
       <collision name="box_collision">
         <geometry>
           <box>
-            <size>0.15 0.15 0.1</size>
+            <size>0.15 0.15 0.05</size>
           </box>
         </geometry>
       </collision>
