@@ -6,6 +6,9 @@ directives:
 - add_weld:
     parent: world
     child: small_table::TableTop
+    X_PC:
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.0, 0.3, 0.0]
 
 - add_model:
     name: box
