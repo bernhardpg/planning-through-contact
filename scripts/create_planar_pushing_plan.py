@@ -32,10 +32,13 @@ def create_plan(DEBUG: bool = True):
     planner.set_target_poses(finger_target_pose, box_target_pose)
 
     traj = planner.plan_trajectory(
-        round_trajectory=False, print_output=DEBUG, measure_time=DEBUG
+        round_trajectory=False, print_output=debug, measure_time=debug
     )
     traj.save("box_pushing.pkl")
 
+    if debug:
+        visualize_planar_pushing_trajectory(traj.to_old_format(), box_geometry)
+
 
 if __name__ == "__main__":
-    create_plan()
+    create_plan(debug=True)

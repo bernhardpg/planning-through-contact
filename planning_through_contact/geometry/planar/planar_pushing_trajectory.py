@@ -20,8 +20,13 @@ from planning_through_contact.geometry.planar.face_contact import FaceContactVar
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
+)
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    OldPlanarPushingTrajectory,
+    PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.utilities import from_so2_to_so3
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
@@ -221,8 +226,10 @@ class PlanarPushingTrajectory:
             return t
 
     def get_value(
-        self, t: float, traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W"]
-    ) -> npt.NDArray[np.float64]:
+        self,
+        t: float,
+        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta"],
+    ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         traj = self._get_traj_segment_for_time(t)
         if traj_to_get == "p_WB":
@@ -233,10 +240,21 @@ class PlanarPushingTrajectory:
             val = traj.p_c_W.eval(t)
         elif traj_to_get == "f_c_W":
             val = traj.f_c_W.eval(t)
+        elif traj_to_get == "theta":
+            val = traj.R_WB.eval_theta(t)
 
-        # avoid typing error, as the trajs can return either float or np.array
-        assert isinstance(val, type(np.array([])))
         return val
+
+    def get_box_planar_pose(self, t) -> PlanarPose:
+        p_WB = self.get_value(t, "p_WB")
+        theta = self.get_value(t, "theta")
+
+        # avoid typing errors
+        assert isinstance(p_WB, type(np.array([])))
+        assert isinstance(theta, float)
+
+        planar_pose = PlanarPose(p_WB[0, 0], p_WB[1, 0], theta)
+        return planar_pose
 
     @classmethod
     def from_result(
@@ -267,3 +285,9 @@ class PlanarPushingTrajectory:
             var_path = pickle.load(file)
 
             return cls(var_path)
+
+    # TODO(bernhardpg): Remove
+    def to_old_format(self) -> OldPlanarPushingTrajectory:
+        return PlanarTrajectoryBuilder(self.path_knot_points).get_trajectory(
+            interpolate=True
+        )

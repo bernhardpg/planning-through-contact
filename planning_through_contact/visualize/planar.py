@@ -4,7 +4,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
 )
 from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarPushingTrajectory,
+    OldPlanarPushingTrajectory,
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
@@ -16,7 +16,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 
 
 def visualize_planar_pushing_trajectory(
-    traj: PlanarPushingTrajectory,
+    traj: OldPlanarPushingTrajectory,
     object_geometry: CollisionGeometry,
     visualize_object_vel: bool = False,
 ) -> None:

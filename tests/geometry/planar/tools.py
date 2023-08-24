@@ -11,7 +11,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 from planning_through_contact.geometry.hyperplane import Hyperplane
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarPushingTrajectory,
+    OldPlanarPushingTrajectory,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
@@ -19,7 +19,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 
 
 def _assert_traj_slider_pose(
-    traj: PlanarPushingTrajectory,
+    traj: OldPlanarPushingTrajectory,
     target_pose: PlanarPose,
     start_or_end: Literal["start", "end"],
     atol: float = 1e-3,
@@ -33,7 +33,7 @@ def _assert_traj_slider_pose(
 
 
 def _assert_traj_finger_pos(
-    traj: PlanarPushingTrajectory,
+    traj: OldPlanarPushingTrajectory,
     target_pose_slider: PlanarPose,
     target_pose_finger: PlanarPose,
     start_or_end: Literal["start", "end"],
@@ -49,7 +49,7 @@ def _assert_traj_finger_pos(
 
 
 def assert_initial_and_final_poses(
-    traj: PlanarPushingTrajectory,
+    traj: OldPlanarPushingTrajectory,
     initial_slider_pose: Optional[PlanarPose],
     initial_finger_pose: Optional[PlanarPose],
     target_slider_pose: Optional[PlanarPose],

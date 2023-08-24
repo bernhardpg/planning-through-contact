@@ -6,7 +6,7 @@ import lcm
 import numpy as np
 
 from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarPushingTrajectory,
+    OldPlanarPushingTrajectory,
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
