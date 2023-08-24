@@ -153,9 +153,10 @@ class PlanarPushingPositionControl:
     ) -> None:
         # TODO(bernhardpg): Should not hardcode this
         PUSHER_HEIGHT = 0.15
+        BUFFER = 0.05
         self.pose_publisher = builder.AddNamedSystem(
             "pusher_pose_publisher",
-            PusherPosePublisher(traj, PUSHER_HEIGHT),
+            PusherPosePublisher(traj, PUSHER_HEIGHT + BUFFER),
         )
         builder.Connect(
             self.pose_publisher.get_output_port(),
