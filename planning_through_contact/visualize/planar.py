@@ -61,4 +61,5 @@ def visualize_planar_pushing_trajectory(
         [box_viz],
         FRAMES_PER_SEC,
         target_viz,
+        draw_origin=True,
     )
