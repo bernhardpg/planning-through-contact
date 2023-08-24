@@ -29,8 +29,8 @@ def create_plan(debug: bool = False):
     )
 
     # TODO(bernhardpg): Make the initial and target pose configurable
-    box_initial_pose = PlanarPose(x=0.0, y=0.4, theta=0.0)
-    box_target_pose = PlanarPose(x=0.3, y=0.4, theta=0.5)
+    box_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
+    box_target_pose = PlanarPose(x=0.3, y=0.5, theta=0.5)
     finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
     finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
 
