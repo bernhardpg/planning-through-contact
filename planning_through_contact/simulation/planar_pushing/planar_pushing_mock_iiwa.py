@@ -1,5 +1,6 @@
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import lcm
 import numpy as np
@@ -22,7 +23,7 @@ from pydrake.geometry import (
     StartMeshcat,
 )
 from pydrake.lcm import DrakeLcm
-from pydrake.manipulation.kuka_iiwa import IiwaCommandReceiver, IiwaStatusSender
+from pydrake.manipulation import IiwaCommandReceiver, IiwaStatusSender
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.multibody.parsing import (
@@ -46,6 +47,22 @@ from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.visualize.colors import COLORS
+
+
+@dataclass
+class PlanarPushingSimConfig:
+    body: Literal["box", "t_pusher"] = "box"
+    contact_model: ContactModel = ContactModel.kHydroelasticWithFallback
+    visualize_desired: bool = False
+    goal_pose: Optional[PlanarPose] = None
+    start_pose: PlanarPose = field(
+        default_factory=lambda: PlanarPose(x=0.0, y=0.5, theta=0.0)
+    )
+    default_joint_positions: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.array(
+            [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
+        )
+    )
 
 
 # TODO: remove
@@ -86,9 +103,7 @@ class PlanarPushingDiagram(Diagram):
     def __init__(
         self,
         add_visualizer: bool = False,
-        visualize_desired: bool = False,
-        desired_box_pose: Optional[PlanarPose] = None,
-        hydroelastic: bool = False,
+        config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
     ):
         Diagram.__init__(self)
 
@@ -106,16 +121,17 @@ class PlanarPushingDiagram(Diagram):
         self.models_folder = Path(__file__).parents[1] / "models"
         self.parser.package_map().PopulateFromFolder(str(self.models_folder))
 
+        use_hydroelastic = config.contact_model == ContactModel.kHydroelastic
         plant_file = (
             "planar_pushing_iiwa_plant_hydroelastic.yaml"
-            if hydroelastic
+            if use_hydroelastic
             else "planar_pushing_iiwa_plant.yaml"
         )
 
         directives = LoadModelDirectives(str(self.models_folder / plant_file))
         ProcessModelDirectives(directives, self.mbp, self.parser)  # type: ignore
 
-        if hydroelastic:
+        if use_hydroelastic:
             self.mbp.set_contact_model(ContactModel.kHydroelastic)
 
         self.mbp.Finalize()
@@ -126,9 +142,9 @@ class PlanarPushingDiagram(Diagram):
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
-        if visualize_desired:
-            assert desired_box_pose is not None
-            self._visualize_desired_slider_pose(desired_box_pose)
+        if config.visualize_desired:
+            assert config.goal_pose is not None
+            self._visualize_desired_slider_pose(config.goal_pose)
 
         if add_visualizer:
             self.meshcat = StartMeshcat()  # type: ignore
@@ -320,27 +336,12 @@ class PlanarPushingMockSimulation:
     u: delta position command on the pusher.
     """
 
-    def __init__(
-        self,
-        box_pose: PlanarPose = PlanarPose(x=0.5, y=0.0, theta=0.0),
-        visualize_desired: bool = False,
-        desired_box_pose: Optional[PlanarPose] = None,
-        hydroelastic: bool = False,
-    ):
+    def __init__(self, config: PlanarPushingSimConfig = PlanarPushingSimConfig()):
         self.TABLE_BUFFER_DIST = 0.01
-
-        self.DEFAULT_JOINT_POSITIONS = np.array(
-            [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
-        )
 
         builder = DiagramBuilder()
         self.station = builder.AddSystem(
-            PlanarPushingDiagram(
-                add_visualizer=True,
-                visualize_desired=visualize_desired,
-                desired_box_pose=desired_box_pose,
-                hydroelastic=hydroelastic,
-            )
+            PlanarPushingDiagram(add_visualizer=True, config=config)
         )
 
         self.connect_lcm(builder, self.station)
@@ -359,8 +360,10 @@ class PlanarPushingMockSimulation:
         self.context = self.simulator.get_mutable_context()
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
-        self._set_joint_positions(self.DEFAULT_JOINT_POSITIONS)
-        self.set_box_planar_pose(box_pose)
+        self._set_joint_positions(config.default_joint_positions)
+        self.set_box_planar_pose(config.start_pose)
+
+        self.config = config
 
     def export_diagram(self, filename: str):
         import pydot
@@ -513,7 +516,7 @@ class PlanarPushingMockSimulation:
         q = ik.q()
 
         box_position = self.station.mbp.GetPositions(self.mbp_context, self.station.box)
-        q0 = np.concatenate([self.DEFAULT_JOINT_POSITIONS, box_position])
+        q0 = np.concatenate([self.config.default_joint_positions, box_position])
         prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
         prog.SetInitialGuess(q, q0)
 

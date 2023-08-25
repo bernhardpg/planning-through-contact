@@ -1,6 +1,8 @@
 # Import local LCM build
 import sys
 
+from pydrake.multibody.plant import ContactModel
+
 sys.path.append("/Users/bernhardpg/software/lcm/build/python")
 import lcm
 import numpy as np
@@ -16,6 +18,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_mock_iiwa import (
     PlanarPose,
     PlanarPushingMockSimulation,
+    PlanarPushingSimConfig,
 )
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
@@ -23,14 +26,14 @@ from planning_through_contact.visualize.planar import (
 
 
 def run_sim(debug: bool = False):
-    box_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
-    box_target_pose = PlanarPose(x=0.3, y=0.5, theta=0.5)
-    sim = PlanarPushingMockSimulation(
-        visualize_desired=True, desired_box_pose=box_target_pose, hydroelastic=True
+    config = PlanarPushingSimConfig(
+        body="box",
+        contact_model=ContactModel.kHydroelastic,
+        start_pose=PlanarPose(x=0.0, y=0.5, theta=0.0),
+        goal_pose=PlanarPose(x=0.3, y=0.5, theta=0.5),
+        visualize_desired=True,
     )
-
-    # NOTE: These are currently hardcoded to match the pre-computed plan
-    sim.set_box_planar_pose(box_initial_pose)
+    sim = PlanarPushingMockSimulation(config)
 
     sim.reset()
     sim.run(1e-6)  # advance the sim to we can see anything
