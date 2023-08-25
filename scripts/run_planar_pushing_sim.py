@@ -4,24 +4,12 @@ import sys
 from pydrake.multibody.plant import ContactModel
 
 sys.path.append("/Users/bernhardpg/software/lcm/build/python")
-import lcm
-import numpy as np
+import lcm  # make sure we can import lcm
 
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    OldPlanarPushingTrajectory,
-    PlanarTrajectoryBuilder,
-)
-from planning_through_contact.planning.planar.planar_pushing_planner import (
-    PlanarPlanSpecs,
-    PlanarPushingPlanner,
-)
 from planning_through_contact.simulation.planar_pushing.planar_pushing_mock_iiwa import (
     PlanarPose,
     PlanarPushingMockSimulation,
     PlanarPushingSimConfig,
-)
-from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
 )
 
 
