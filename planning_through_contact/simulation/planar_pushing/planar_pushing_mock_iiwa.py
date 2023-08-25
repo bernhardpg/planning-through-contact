@@ -118,23 +118,7 @@ class PlanarPushingDiagram(Diagram):
 
         if visualize_desired:
             assert desired_box_pose is not None
-
-            source_id = self.scene_graph.RegisterSource()
-            box_shape = self.get_box_shape()
-            box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
-                source_id,
-                GeometryInstance(
-                    desired_box_pose.to_pose(box_shape.height(), pos_along_z_axis=True),
-                    box_shape,
-                    "box",
-                ),
-            )
-            BOX_COLOR = COLORS["emeraldgreen"]
-            self.scene_graph.AssignRole(
-                source_id,
-                box_desired_geometry_id,
-                MakePhongIllustrationProperties(BOX_COLOR.diffuse(0.4)),
-            )
+            self._visualize_desired_slider_pose(desired_box_pose)
 
         if add_visualizer:
             self.meshcat = StartMeshcat()  # type: ignore
@@ -152,6 +136,24 @@ class PlanarPushingDiagram(Diagram):
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
         builder.BuildInto(self)
+
+    def _visualize_desired_slider_pose(self, desired_box_pose: PlanarPose) -> None:
+        source_id = self.scene_graph.RegisterSource()
+        box_shape = self.get_box_shape()
+        box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
+            source_id,
+            GeometryInstance(
+                desired_box_pose.to_pose(box_shape.height(), pos_along_z_axis=True),
+                box_shape,
+                "box",
+            ),
+        )
+        BOX_COLOR = COLORS["emeraldgreen"]
+        self.scene_graph.AssignRole(
+            source_id,
+            box_desired_geometry_id,
+            MakePhongIllustrationProperties(BOX_COLOR.diffuse(0.4)),
+        )
 
     def add_controller(self, builder):
         self.controller_plant = MultibodyPlant(1e-3)
