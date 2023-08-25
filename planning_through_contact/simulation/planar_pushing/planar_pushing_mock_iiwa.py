@@ -143,7 +143,7 @@ class PlanarPushingDiagram(Diagram):
         box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
             source_id,
             GeometryInstance(
-                desired_box_pose.to_pose(box_shape.height(), pos_along_z_axis=True),
+                desired_box_pose.to_pose(box_shape.height() / 2, pos_along_z_axis=True),
                 box_shape,
                 "box",
             ),
