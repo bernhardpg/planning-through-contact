@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 import lcm
 import numpy as np
@@ -14,8 +14,8 @@ from pydrake.all import (
     Quaternion,
     StateInterpolatorWithDiscreteDerivative,
 )
-from pydrake.geometry import Box
 from pydrake.geometry import Box as DrakeBox
+from pydrake.geometry import Cylinder as DrakeCylinder
 from pydrake.geometry import (
     GeometryInstance,
     MakePhongIllustrationProperties,
@@ -173,25 +173,33 @@ class PlanarPushingDiagram(Diagram):
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
         builder.BuildInto(self)
 
-    def _visualize_desired_slider_pose(self, desired_box_pose: PlanarPose) -> None:
+    def _visualize_desired_slider_pose(self, desired_planar_pose: PlanarPose) -> None:
         source_id = self.scene_graph.RegisterSource()
-        box_shape = self.get_box_shape()
-        box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
-            source_id,
-            GeometryInstance(
-                desired_box_pose.to_pose(
-                    box_shape.height() / 2, z_axis_is_positive=True
-                ),
-                box_shape,
-                "box",
-            ),
+        shapes = self.get_slider_shapes()
+        poses = self.get_slider_shape_poses()
+
+        heights = [shape.height() for shape in shapes]
+        min_height = min(heights)
+        desired_pose = desired_planar_pose.to_pose(
+            min_height / 2, z_axis_is_positive=True
         )
+
         BOX_COLOR = COLORS["emeraldgreen"]
-        self.scene_graph.AssignRole(
-            source_id,
-            box_desired_geometry_id,
-            MakePhongIllustrationProperties(BOX_COLOR.diffuse(0.4)),
-        )
+        DESIRED_POSE_ALPHA = 0.4
+        for idx, (shape, pose) in enumerate(zip(shapes, poses)):
+            curr_shape_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
+                source_id,
+                GeometryInstance(
+                    desired_pose.multiply(pose),
+                    shape,
+                    f"shape_{idx}",
+                ),
+            )
+            self.scene_graph.AssignRole(
+                source_id,
+                curr_shape_geometry_id,
+                MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
+            )
 
     def add_controller(self, builder):
         self.controller_plant = MultibodyPlant(1e-3)
@@ -258,33 +266,37 @@ class PlanarPushingDiagram(Diagram):
             "iiwa_torque_external",
         )
 
-    def get_box_body(self) -> DrakeRigidBody:
-        box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.slider)
-        return box_body
+    def get_slider_body(self) -> DrakeRigidBody:
+        slider_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.slider)
+        return slider_body
 
-    def get_box_shape(self) -> DrakeBox:
-        box_body = self.get_box_body()
-        collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(box_body)
+    def get_slider_shapes(self) -> List[DrakeBox]:
+        slider_body = self.get_slider_body()
+        collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(slider_body)
 
         inspector = self.scene_graph.model_inspector()
         shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
-        box_shape = next(shape for shape in shapes if isinstance(shape, DrakeBox))
 
-        return box_shape
+        # for now we only support Box shapes
+        assert all([isinstance(shape, DrakeBox) for shape in shapes])
 
-    def get_box(self) -> RigidBody:
-        box_body = self.get_box_body()
-        box_shape = self.get_box_shape()
+        return shapes
 
-        box = RigidBody.from_drake(box_shape, box_body, "box")
-        return box
+    def get_slider_shape_poses(self) -> List[DrakeBox]:
+        slider_body = self.get_slider_body()
+        collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(slider_body)
 
-    def get_box_planar_pose(self, context: Context):
-        pose = self.mbp.GetFreeBodyPose(context, self.get_box_body())
+        inspector = self.scene_graph.model_inspector()
+        poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]
+
+        return poses
+
+    def get_slider_planar_pose(self, context: Context):
+        pose = self.mbp.GetFreeBodyPose(context, self.get_slider_body())
         planar_pose = PlanarPose.from_pose(pose)
         return planar_pose
 
-    def get_pusher_shape(self) -> DrakeBox:
+    def get_pusher_shape(self) -> DrakeCylinder:
         pusher_body = self.mbp.GetBodyByName("pusher")
         collision_geometry_id = self.mbp.GetCollisionGeometriesForBody(pusher_body)[0]
 
@@ -356,7 +368,7 @@ class PlanarPushingMockSimulation:
 
         self.connect_lcm(builder, self.station)
         self.keypts_lcm = builder.AddSystem(
-            KeyptsLCM(self.station.get_box_body().index())
+            KeyptsLCM(self.station.get_slider_body().index())
         )
         builder.Connect(
             self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
@@ -371,7 +383,7 @@ class PlanarPushingMockSimulation:
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
         self._set_joint_positions(config.default_joint_positions)
-        self.set_box_planar_pose(config.start_pose)
+        self.set_slider_planar_pose(config.start_pose)
 
         self.config = config
 
@@ -458,17 +470,14 @@ class PlanarPushingMockSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
-    def get_box(self) -> RigidBody:
-        return self.station.get_box()
+    def get_slider_planar_pose(self):
+        return self.station.get_slider_planar_pose(self.mbp_context)
 
-    def get_box_planar_pose(self):
-        return self.station.get_box_planar_pose(self.mbp_context)
+    def set_slider_planar_pose(self, pose: PlanarPose):
+        min_height = min([shape.height() for shape in self.station.get_slider_shapes()])
 
-    def set_box_planar_pose(self, box_pose: PlanarPose):
-        # TODO(bernhardpg): Generalize for T-pusher
-        box_height = self.station.get_box_shape().height()
         # add a small height to avoid the box penetrating the table
-        q = box_pose.to_generalized_coords(box_height + 1e-2)
+        q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self.station.mbp.SetPositions(self.mbp_context, self.station.slider, q)
 
     def get_pusher_planar_pose(self):
