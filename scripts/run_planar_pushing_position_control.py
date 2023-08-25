@@ -7,7 +7,8 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_position_
 
 
 def run_position_control(debug: bool = False):
-    traj = PlanarPushingTrajectory.load("box_pushing.pkl")
+    traj_name = "trajectories/box_pushing_1.pkl"
+    traj = PlanarPushingTrajectory.load(traj_name)
 
     position_control_node = PlanarPushingPositionControl(traj, delay_before_start=3)
     if debug:
