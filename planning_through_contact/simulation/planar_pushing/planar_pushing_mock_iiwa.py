@@ -143,7 +143,9 @@ class PlanarPushingDiagram(Diagram):
         box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
             source_id,
             GeometryInstance(
-                desired_box_pose.to_pose(box_shape.height() / 2, pos_along_z_axis=True),
+                desired_box_pose.to_pose(
+                    box_shape.height() / 2, z_axis_is_positive=True
+                ),
                 box_shape,
                 "box",
             ),
@@ -460,7 +462,7 @@ class PlanarPushingMockSimulation:
         ik = InverseKinematics(self.station.mbp, self.mbp_context)
         pusher_shape = self.station.get_pusher_shape()
         pose = planar_pose.to_pose(
-            object_height=pusher_shape.length() + self.TABLE_BUFFER_DIST
+            z_value=pusher_shape.length() + self.TABLE_BUFFER_DIST
         )
 
         ik.AddPositionConstraint(

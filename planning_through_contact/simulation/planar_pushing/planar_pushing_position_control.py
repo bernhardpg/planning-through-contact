@@ -45,7 +45,7 @@ class PusherPosePublisher(LeafSystem):
         assert isinstance(p_c_W, type(np.array([])))
 
         planar_pose = PlanarPose(p_c_W[0].item(), p_c_W[1].item(), theta=0)
-        return planar_pose.to_pose(object_height=self.z_dist)
+        return planar_pose.to_pose(z_value=self.z_dist)
 
     def DoCalcOutput(self, context: Context, output):
         curr_t = context.get_time()
