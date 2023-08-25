@@ -192,6 +192,7 @@ class Visualizer2d:
         polygons: List[VisualizationPolygon2d],
         frames_per_sec: float = 20.0,
         target: Optional[VisualizationPolygon2d] = None,
+        draw_origin: bool = False,
     ) -> None:
         curve_lengths = np.array(
             [len(p.position_curve) for p in points]
@@ -223,6 +224,10 @@ class Visualizer2d:
         )
         self.canvas.pack()
 
+        if draw_origin:
+            origin = VisualizationPoint2d(np.zeros((1, 2)), COLORS["cornsilk4"])
+            origin.change_radius(4.0)
+
         for frame_idx in range(num_frames):
             self.canvas.delete("all")
 
@@ -234,6 +239,9 @@ class Visualizer2d:
 
             for point in points:
                 self._draw_point(point, frame_idx)
+
+            if draw_origin:
+                self._draw_point(origin, 0)  # type: ignore
 
             for force in forces:
                 self._draw_force(force, frame_idx)

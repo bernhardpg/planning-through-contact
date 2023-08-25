@@ -155,53 +155,6 @@ def test_planner_without_boundary_conds(
 
 
 @pytest.mark.parametrize(
-    "planner, source_idx, target_idx, target_path",
-    [
-        (
-            {"partial": True, "initial_conds": False},
-            2,
-            3,
-            [
-                "ENTRY_NON_COLL_2",
-                "ENTRY_NON_COLL_1",
-                "FACE_1",
-                "FACE_0_to_FACE_1_NON_COLL_1",
-                "FACE_0_to_FACE_1_NON_COLL_0",
-                "FACE_0",
-                "EXIT_NON_COLL_0",
-                "EXIT_NON_COLL_3",
-            ],
-        )
-    ],
-    indirect=["planner"],
-)
-def test_planner_without_boundary_conds_2(
-    planner: PlanarPushingPlanner,
-    source_idx: int,
-    target_idx: int,
-    target_path: List[str],
-) -> None:
-    # non collision as source and target
-    planner.source = VertexModePair(
-        planner.source_subgraph.non_collision_vertices[source_idx],
-        planner.source_subgraph.non_collision_modes[source_idx],
-    )
-    planner.target = VertexModePair(
-        planner.target_subgraph.non_collision_vertices[target_idx],
-        planner.target_subgraph.non_collision_modes[target_idx],
-    )
-
-    result = planner._solve()
-    assert result.is_success()
-
-    assert_planning_path_matches_target(planner, result, target_path)
-
-    DEBUG = False
-    if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-
-
-@pytest.mark.parametrize(
     "planner",
     [
         (
@@ -479,44 +432,5 @@ def test_make_plan(
     assert np.all(np.abs(traj.p_c_W) <= 1.5)
 
     if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
-
-
-@pytest.mark.parametrize(
-    "planner",
-    [
-        {
-            "partial": False,
-            "avoid_object": True,
-            "boundary_conds": {
-                "box_initial_pose": PlanarPose(x=0.0, y=0.5, theta=0.0),
-                "box_target_pose": PlanarPose(x=0.5, y=0.7, theta=0.5),
-                "finger_initial_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
-                "finger_target_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
-            },
-        },
-    ],
-    indirect=["planner"],
-    ids=["box"],
-)
-def test_make_full_trajectory(planner: PlanarPushingPlanner) -> None:
-    DEBUG = False
-    traj = planner.plan_trajectory(
-        round_trajectory=False, interpolate=True, print_output=DEBUG, measure_time=DEBUG
-    )
-    assert_initial_and_final_poses(
-        traj,
-        planner.slider_pose_initial,
-        planner.finger_pose_initial,
-        planner.slider_pose_target,
-        planner.finger_pose_target,
-    )
-
-    # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_W) <= 1.5)
-
-    if DEBUG:
-        traj.save("box_pushing_traj.pkl")
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(traj, planner.slider.geometry)

@@ -26,16 +26,21 @@ class PlanarPose:
         theta = RollPitchYaw(pose.rotation()).vector()[Z_AXIS]
         return cls(x, y, theta)
 
-    def to_pose(self, object_height: float) -> RigidTransform:
+    def to_pose(
+        self, z_value: float, z_axis_is_positive: bool = False
+    ) -> RigidTransform:
         """
-        Creates a RigidTransform from a planar pose, with the x-axis pointing downwards.
+        Creates a RigidTransform from a planar pose, with the z-axis pointing downwards.
 
-        @param object_height: Height of the object. This is required to set the z-value of the pose correctly.
+        @param z_value: Height of the object. This is required to set the z-value of the pose correctly.
+        @param z_axis_is_positive: Set to true to point z-axis upwards
 
         """
+        roll = 0 if z_axis_is_positive else np.pi
+
         pose = RigidTransform(
-            RollPitchYaw(np.array([np.pi, 0.0, self.theta])),  # type: ignore
-            np.array([self.x, self.y, object_height]),
+            RollPitchYaw(np.array([roll, 0.0, self.theta])),  # type: ignore
+            np.array([self.x, self.y, z_value]),
         )
         return pose
 
@@ -54,12 +59,12 @@ class PlanarPose:
         theta = RollPitchYaw(Quaternion(q_wxyz)).vector()[Z_AXIS]
         return cls(x, y, theta)
 
-    def to_generalized_coords(self, object_height: float) -> npt.NDArray[np.float64]:
+    def to_generalized_coords(self, z_value: float) -> npt.NDArray[np.float64]:
         """
         Returns the full RigidBody pose as generalized coordinates: [quaternion, translation]'
 
         """
-        pose = self.to_pose(object_height)
+        pose = self.to_pose(z_value)
         quat = pose.rotation().ToQuaternion().wxyz()
         trans = pose.translation()
         gen_coords = np.concatenate((quat, trans))

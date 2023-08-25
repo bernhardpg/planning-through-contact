@@ -22,9 +22,11 @@ from planning_through_contact.geometry.utilities import from_so2_to_so3
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
+# TODO(bernhardpg): We want to deprecate this in favor of SliderPusherTrajectory
+
 
 @dataclass
-class PlanarPushingTrajectory:
+class OldPlanarPushingTrajectory:
     dt: float
     R_WB: List[npt.NDArray[np.float64]]  # [(2,2) x traj_length]
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
@@ -50,7 +52,7 @@ class PlanarPushingTrajectory:
             pickle.dump(self, file)
 
     @staticmethod
-    def load(filename: str) -> "PlanarPushingTrajectory":
+    def load(filename: str) -> "OldPlanarPushingTrajectory":
         with open(Path(filename), "rb") as file:
             obj = pickle.load(file)
 
@@ -81,7 +83,7 @@ class PlanarTrajectoryBuilder:
         interpolate: bool = True,
         assert_determinants: bool = False,
         print_determinants: bool = False,
-    ) -> PlanarPushingTrajectory:
+    ) -> OldPlanarPushingTrajectory:
         dets = np.array([np.linalg.det(R) for p in self.path for R in p.R_WBs])
         if not all(np.isclose(dets, np.ones(dets.shape), atol=1e-04)):
             if assert_determinants:
@@ -132,7 +134,7 @@ class PlanarTrajectoryBuilder:
             # Fixed dt when replaying knot points
             dt = 0.8
 
-        return PlanarPushingTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
+        return OldPlanarPushingTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
 
     def _get_traj_by_interpolation(
         self,

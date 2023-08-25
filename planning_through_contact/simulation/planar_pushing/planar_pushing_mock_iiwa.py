@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import lcm
 import numpy as np
@@ -12,8 +13,14 @@ from pydrake.all import (
     Quaternion,
     StateInterpolatorWithDiscreteDerivative,
 )
+from pydrake.geometry import Box
 from pydrake.geometry import Box as DrakeBox
-from pydrake.geometry import MeshcatVisualizer, StartMeshcat
+from pydrake.geometry import (
+    GeometryInstance,
+    MakePhongIllustrationProperties,
+    MeshcatVisualizer,
+    StartMeshcat,
+)
 from pydrake.lcm import DrakeLcm
 from pydrake.manipulation.kuka_iiwa import IiwaCommandReceiver, IiwaStatusSender
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
@@ -38,6 +45,7 @@ from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.visualize.colors import COLORS
 
 
 # TODO: remove
@@ -75,14 +83,21 @@ def get_keypoints(x):
 
 
 class PlanarPushingDiagram(Diagram):
-    def __init__(self, add_visualizer: bool = False):
+    def __init__(
+        self,
+        add_visualizer: bool = False,
+        visualize_desired: bool = False,
+        desired_box_pose: Optional[PlanarPose] = None,
+    ):
         Diagram.__init__(self)
 
         self.h_mbp = 1e-3
 
         builder = DiagramBuilder()
-        self.mbp, self.sg = AddMultibodyPlantSceneGraph(builder, time_step=self.h_mbp)
-        self.parser = Parser(self.mbp, self.sg)
+        self.mbp, self.scene_graph = AddMultibodyPlantSceneGraph(
+            builder, time_step=self.h_mbp
+        )
+        self.parser = Parser(self.mbp, self.scene_graph)
 
         # Load ROS packages starting from current folder
         # NOTE: Depends on there being a `package.xml` file in the models/ folder in order to load all the models.
@@ -101,6 +116,10 @@ class PlanarPushingDiagram(Diagram):
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
+        if visualize_desired:
+            assert desired_box_pose is not None
+            self._visualize_desired_slider_pose(desired_box_pose)
+
         if add_visualizer:
             self.meshcat = StartMeshcat()  # type: ignore
             self.meshcat.SetTransform(
@@ -110,13 +129,33 @@ class PlanarPushingDiagram(Diagram):
                     0.01 * np.array([0.05, 0.0, 0.1]),
                 ).GetAsMatrix4(),
             )
-            self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.sg, self.meshcat)  # type: ignore
+            self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.scene_graph, self.meshcat)  # type: ignore
 
         self.add_controller(builder)
 
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
         builder.BuildInto(self)
+
+    def _visualize_desired_slider_pose(self, desired_box_pose: PlanarPose) -> None:
+        source_id = self.scene_graph.RegisterSource()
+        box_shape = self.get_box_shape()
+        box_desired_geometry_id = self.scene_graph.RegisterAnchoredGeometry(
+            source_id,
+            GeometryInstance(
+                desired_box_pose.to_pose(
+                    box_shape.height() / 2, z_axis_is_positive=True
+                ),
+                box_shape,
+                "box",
+            ),
+        )
+        BOX_COLOR = COLORS["emeraldgreen"]
+        self.scene_graph.AssignRole(
+            source_id,
+            box_desired_geometry_id,
+            MakePhongIllustrationProperties(BOX_COLOR.diffuse(0.4)),
+        )
 
     def add_controller(self, builder):
         self.controller_plant = MultibodyPlant(1e-3)
@@ -191,7 +230,7 @@ class PlanarPushingDiagram(Diagram):
         box_body = self.get_box_body()
         collision_geometries_ids = self.mbp.GetCollisionGeometriesForBody(box_body)
 
-        inspector = self.sg.model_inspector()
+        inspector = self.scene_graph.model_inspector()
         shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
         box_shape = next(shape for shape in shapes if isinstance(shape, DrakeBox))
 
@@ -213,7 +252,7 @@ class PlanarPushingDiagram(Diagram):
         pusher_body = self.mbp.GetBodyByName("pusher")
         collision_geometry_id = self.mbp.GetCollisionGeometriesForBody(pusher_body)[0]
 
-        inspector = self.sg.model_inspector()
+        inspector = self.scene_graph.model_inspector()
         pusher_shape = inspector.GetShape(collision_geometry_id)
 
         return pusher_shape
@@ -264,21 +303,33 @@ class KeyptsLCM(LeafSystem):
         # self.lc.publish("KEYPTS", msg.encode())
 
 
-class PlanarPushingSimulation:
+class PlanarPushingMockSimulation:
     """
     Planar pushing dynamical system, implemented in Drake.
     x: position of box and pusher, [x_box, y_box, theta_box, x_pusher, y_pusher]
     u: delta position command on the pusher.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        box_pose: PlanarPose = PlanarPose(x=0.5, y=0.0, theta=0.0),
+        visualize_desired: bool = False,
+        desired_box_pose: Optional[PlanarPose] = None,
+    ):
+        self.TABLE_BUFFER_DIST = 0.01
+
         self.DEFAULT_JOINT_POSITIONS = np.array(
             [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
         )
-        self.DEFAULT_BOX_POSITION = PlanarPose(x=0.5, y=0.0, theta=0.0)
 
         builder = DiagramBuilder()
-        self.station = builder.AddSystem(PlanarPushingDiagram(add_visualizer=True))
+        self.station = builder.AddSystem(
+            PlanarPushingDiagram(
+                add_visualizer=True,
+                visualize_desired=visualize_desired,
+                desired_box_pose=desired_box_pose,
+            )
+        )
 
         self.connect_lcm(builder, self.station)
         self.keypts_lcm = builder.AddSystem(
@@ -297,7 +348,7 @@ class PlanarPushingSimulation:
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
         self._set_joint_positions(self.DEFAULT_JOINT_POSITIONS)
-        self.set_box_planar_pose(self.DEFAULT_BOX_POSITION)
+        self.set_box_planar_pose(box_pose)
 
     def export_diagram(self, filename: str):
         import pydot
@@ -382,9 +433,6 @@ class PlanarPushingSimulation:
             iiwa_status.get_output_port(), iiwa_status_publisher.get_input_port()
         )
 
-        # self.TABLE_BUFFER_DIST = 0.01
-        self.TABLE_BUFFER_DIST = 0.04
-
     def get_box(self) -> RigidBody:
         return self.station.get_box()
 
@@ -393,12 +441,14 @@ class PlanarPushingSimulation:
 
     def set_box_planar_pose(self, box_pose: PlanarPose):
         box_height = self.station.get_box_shape().height()
-        q = box_pose.to_generalized_coords(box_height + self.TABLE_BUFFER_DIST)
+        # add a small height to avoid the box penetrating the table
+        q = box_pose.to_generalized_coords(box_height + 1e-2)
         self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
 
     def get_pusher_planar_pose(self):
         return self.station.get_pusher_planar_pose(self.mbp_context)
 
+    # TODO(bernhardpg): This will not work on the real system!
     def set_pusher_planar_pose(
         self, planar_pose: PlanarPose, disregard_angle: bool = True
     ):
@@ -412,7 +462,7 @@ class PlanarPushingSimulation:
         ik = InverseKinematics(self.station.mbp, self.mbp_context)
         pusher_shape = self.station.get_pusher_shape()
         pose = planar_pose.to_pose(
-            object_height=pusher_shape.length() + self.TABLE_BUFFER_DIST
+            z_value=pusher_shape.length() + self.TABLE_BUFFER_DIST
         )
 
         ik.AddPositionConstraint(
