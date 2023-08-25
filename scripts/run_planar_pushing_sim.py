@@ -27,7 +27,7 @@ from planning_through_contact.visualize.planar import (
 
 def run_sim(debug: bool = False):
     config = PlanarPushingSimConfig(
-        body="box",
+        body="t_pusher",
         contact_model=ContactModel.kHydroelastic,
         start_pose=PlanarPose(x=0.0, y=0.5, theta=0.0),
         goal_pose=PlanarPose(x=0.3, y=0.5, theta=0.5),
