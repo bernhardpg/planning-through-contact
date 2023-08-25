@@ -9,7 +9,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_position_
 def run_position_control(debug: bool = False):
     traj = PlanarPushingTrajectory.load("box_pushing.pkl")
 
-    position_control_node = PlanarPushingPositionControl(traj)
+    position_control_node = PlanarPushingPositionControl(traj, delay_before_start=3)
     if debug:
         position_control_node.export_diagram("position_control_diagram.png")
 

@@ -30,7 +30,7 @@ from pydrake.multibody.parsing import (
     Parser,
     ProcessModelDirectives,
 )
-from pydrake.multibody.plant import AddMultibodyPlantSceneGraph
+from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, ContactModel
 from pydrake.multibody.tree import Frame
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
 from pydrake.solvers import Solve
@@ -88,6 +88,7 @@ class PlanarPushingDiagram(Diagram):
         add_visualizer: bool = False,
         visualize_desired: bool = False,
         desired_box_pose: Optional[PlanarPose] = None,
+        hydroelastic: bool = False,
     ):
         Diagram.__init__(self)
 
@@ -104,10 +105,19 @@ class PlanarPushingDiagram(Diagram):
         # TODO: Is this really the best way to do something like this?
         self.models_folder = Path(__file__).parents[1] / "models"
         self.parser.package_map().PopulateFromFolder(str(self.models_folder))
-        directives = LoadModelDirectives(
-            str(self.models_folder / "planar_pushing_iiwa_plant.yaml")
+
+        plant_file = (
+            "planar_pushing_iiwa_plant_hydroelastic.yaml"
+            if hydroelastic
+            else "planar_pushing_iiwa_plant.yaml"
         )
+
+        directives = LoadModelDirectives(str(self.models_folder / plant_file))
         ProcessModelDirectives(directives, self.mbp, self.parser)  # type: ignore
+
+        if hydroelastic:
+            self.mbp.set_contact_model(ContactModel.kHydroelastic)
+
         self.mbp.Finalize()
 
         # TODO: rename these
@@ -315,6 +325,7 @@ class PlanarPushingMockSimulation:
         box_pose: PlanarPose = PlanarPose(x=0.5, y=0.0, theta=0.0),
         visualize_desired: bool = False,
         desired_box_pose: Optional[PlanarPose] = None,
+        hydroelastic: bool = False,
     ):
         self.TABLE_BUFFER_DIST = 0.01
 
@@ -328,6 +339,7 @@ class PlanarPushingMockSimulation:
                 add_visualizer=True,
                 visualize_desired=visualize_desired,
                 desired_box_pose=desired_box_pose,
+                hydroelastic=hydroelastic,
             )
         )
 
