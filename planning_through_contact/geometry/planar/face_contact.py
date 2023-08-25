@@ -292,15 +292,20 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
-        # TODO(bernhardpg): Experimental research feature, remove this
-        self.bound_variables = False
-        if self.bound_variables:
+        # TODO(bernhardpg): Variables should always be bounded. Get back to this
+        self.bound_forces = True
+        if self.bound_forces:
             # Bounds on forces
             for c_n, c_f in zip(
                 self.variables.normal_forces, self.variables.friction_forces
             ):
                 self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
 
+        # TODO(bernhardpg): Variables should always be bounded. Get back to this
+        # These are turned off to speed up solve times, as they do not seem to
+        # impact the solution (empirically)
+        self.bound_positions = False
+        if self.bound_positions:
             # Bounds on positions
             for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
                 self.prog.AddBoundingBoxConstraint(
@@ -310,6 +315,11 @@ class FaceContactMode(AbstractContactMode):
                     -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y
                 )
 
+        # TODO(bernhardpg): Variables should always be bounded. Get back to this
+        # These are turned off to speed up solve times, as they do not seem to
+        # impact the solution (empirically)
+        self.bound_sin_cos = False
+        if self.bound_sin_cos:
             # Bounds on cosines and sines
             for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
                 self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
