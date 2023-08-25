@@ -127,9 +127,20 @@ class PlanarPushingDiagram(Diagram):
             if use_hydroelastic
             else "planar_pushing_iiwa_plant.yaml"
         )
+        if not use_hydroelastic:
+            raise NotImplementedError()
 
         directives = LoadModelDirectives(str(self.models_folder / plant_file))
         ProcessModelDirectives(directives, self.mbp, self.parser)  # type: ignore
+
+        if config.body == "box":
+            slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
+        elif config.body == "t_pusher":
+            slider_sdf_url = "package://planning_through_contact/t_pusher.sdf"
+        else:
+            raise NotImplementedError(f"Body '{config.body}' not supported")
+
+        (self.slider,) = self.parser.AddModels(url=slider_sdf_url)
 
         if use_hydroelastic:
             self.mbp.set_contact_model(ContactModel.kHydroelastic)
@@ -137,8 +148,7 @@ class PlanarPushingDiagram(Diagram):
         self.mbp.Finalize()
 
         # TODO: rename these
-        # Get model instances for box and pusher.
-        self.box = self.mbp.GetModelInstanceByName("box")
+        # Get model instances for pusher and robot
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
@@ -249,7 +259,7 @@ class PlanarPushingDiagram(Diagram):
         )
 
     def get_box_body(self) -> DrakeRigidBody:
-        box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.box)
+        box_body = self.mbp.GetUniqueFreeBaseBodyOrThrow(self.slider)
         return box_body
 
     def get_box_shape(self) -> DrakeBox:
@@ -297,10 +307,10 @@ class PlanarPushingDiagram(Diagram):
 
 
 class KeyptsLCM(LeafSystem):
-    def __init__(self, box_index):
+    def __init__(self, slider_index):
         LeafSystem.__init__(self)
         # self.Abstract
-        self.box_index = box_index
+        self.slider_index = slider_index
         self.lc = lcm.LCM()
         self.input_port = self.DeclareAbstractInputPort(
             "body_poses", AbstractValue.Make([RigidTransform()])
@@ -308,7 +318,7 @@ class KeyptsLCM(LeafSystem):
         self.DeclarePeriodicPublishEvent(1.0 / 200.0, 0.0, self.publish)
 
     def publish(self, context):
-        X_WB = self.get_input_port().Eval(context)[self.box_index]  # type: ignore
+        X_WB = self.get_input_port().Eval(context)[self.slider_index]  # type: ignore
         q_wxyz = Quaternion(X_WB.rotation().matrix()).wxyz()
         p_xyz = X_WB.translation()
         qp_WB = np.concatenate((q_wxyz, p_xyz))
@@ -455,10 +465,11 @@ class PlanarPushingMockSimulation:
         return self.station.get_box_planar_pose(self.mbp_context)
 
     def set_box_planar_pose(self, box_pose: PlanarPose):
+        # TODO(bernhardpg): Generalize for T-pusher
         box_height = self.station.get_box_shape().height()
         # add a small height to avoid the box penetrating the table
         q = box_pose.to_generalized_coords(box_height + 1e-2)
-        self.station.mbp.SetPositions(self.mbp_context, self.station.box, q)
+        self.station.mbp.SetPositions(self.mbp_context, self.station.slider, q)
 
     def get_pusher_planar_pose(self):
         return self.station.get_pusher_planar_pose(self.mbp_context)
@@ -515,8 +526,10 @@ class PlanarPushingMockSimulation:
         prog = ik.get_mutable_prog()
         q = ik.q()
 
-        box_position = self.station.mbp.GetPositions(self.mbp_context, self.station.box)
-        q0 = np.concatenate([self.config.default_joint_positions, box_position])
+        slider_position = self.station.mbp.GetPositions(
+            self.mbp_context, self.station.slider
+        )
+        q0 = np.concatenate([self.config.default_joint_positions, slider_position])
         prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
         prog.SetInitialGuess(q, q0)
 

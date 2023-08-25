@@ -11,10 +11,6 @@ directives:
         translation: [0.0, 0.3, 0.0]
 
 - add_model:
-    name: box
-    file: package://planning_through_contact/box_hydroelastic.sdf
-
-- add_model:
     name: iiwa
     file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_no_collision.sdf
 
