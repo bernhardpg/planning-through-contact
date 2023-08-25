@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -35,7 +36,11 @@ def create_plan(
         body = RigidBody("t_pusher", TPusher2d(), mass)
 
     planner = PlanarPushingPlanner(
-        body, specs, avoid_object=True, use_redundant_dynamic_constraints=False
+        body,
+        specs,
+        avoid_object=True,
+        use_redundant_dynamic_constraints=False,
+        no_cycles=True,  # TODO(bernhardpg)
     )
 
     if traj_number == 1:
@@ -49,6 +54,9 @@ def create_plan(
     planner.set_initial_poses(finger_initial_pose, slider_initial_pose)
     planner.set_target_poses(finger_target_pose, slider_target_pose)
 
+    if debug:
+        planner.save_graph_diagram(Path("graph.svg"))
+
     traj = planner.plan_trajectory(
         round_trajectory=True, print_output=debug, measure_time=debug
     )
@@ -60,4 +68,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=1, debug=True)
+    create_plan(body_to_use="t_pusher", traj_number=1, debug=True)
