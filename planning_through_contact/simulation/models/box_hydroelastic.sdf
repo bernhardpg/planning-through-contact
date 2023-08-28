@@ -12,16 +12,14 @@
     <link name="box">
       <inertial>
         <mass>0.1</mass>
-        <!--
         <inertia>
-          <ixx>0.00001418</ixx>
+          <ixx>0.00020833</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>0.00000455</iyy>
+          <iyy>0.00020833</iyy>
           <iyz>0</iyz>
-          <izz>0.00001699</izz>
+          <izz>0.000375</izz>
         </inertia>
-        -->
       </inertial>
       <visual name="base_link_box">
         <pose>-0.0 0.0 0.0 0.0 0.0 0.0</pose>
@@ -34,27 +32,16 @@
           <diffuse> 0.26953125 0.54296875 0.453125 1. </diffuse>
         </material>
       </visual>
-      <!--
-      This places contact spheres on the corners of the visual box and a
-      *slightly* smaller inset contact box (centered on the visual origin). This
-      accounts for issues in the contact computation providing stable table
-      contact *and* supports grasping.
-      When the box is in stable contact with the ground plane, the corner
-      spheres will provide fixed contact points (simulating distributed contact
-      points around the face).  However, for arbitrary grip configuration, the
-      slightly inset box will provide contact with a *slight* offset (in this
-      case a deviation of 0.0005 m from the visual surface).
-     -->
       <collision name="box_collision">
         <geometry>
           <box>
-            <size>0.15 0.15 0.05</size>
+            <size>0.15 0.15 0.08</size>
           </box>
         </geometry>
         <drake:proximity_properties>
           <drake:compliant_hydroelastic/>
           <drake:hunt_crossley_dissipation>3.0</drake:hunt_crossley_dissipation>
-          <drake:hydroelastic_modulus>1e7</drake:hydroelastic_modulus>
+          <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
           <!-- geometry/box does not take mesh_resolution_hint into account
             because it always uses the coarsest mesh. We place it here in
             case you want to change the box to something else like capsules,

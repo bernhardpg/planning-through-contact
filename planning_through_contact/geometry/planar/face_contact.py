@@ -263,9 +263,6 @@ class FaceContactMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
         )
-        # TODO(bernhardpg): Should we use this?
-        self.enforce_equal_forces = True
-
         self._define_constraints()
         self._define_costs()
 
@@ -326,7 +323,7 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
         # TODO(bernhardpg): Experimental research feature, remove this
-        self.enforce_equal_forces = False
+        self.enforce_equal_forces = True
         if self.enforce_equal_forces:
             # Enforces forces are constant
             for c_n_curr, c_n_next in zip(
@@ -579,7 +576,8 @@ class FaceContactMode(AbstractContactMode):
         G = 9.81
         # TODO(bernhardpg): Compute f_max and tau_max correctly
         f_max = FRICTION_COEFF * G * OBJECT_MASS
-        tau_max = f_max * 0.2
+        const = np.sqrt(0.075**2 + 0.075**2) * 0.6
+        tau_max = f_max * const
 
         A = np.diag(
             # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
@@ -617,7 +615,8 @@ class FaceContactMode(AbstractContactMode):
         G = 9.81
         # TODO(bernhardpg): Compute f_max and tau_max correctly
         f_max = FRICTION_COEFF * G * OBJECT_MASS
-        tau_max = f_max * 0.2
+        const = np.sqrt(0.075**2 + 0.075**2) * 0.6
+        tau_max = f_max * const
 
         A = np.diag(
             # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]

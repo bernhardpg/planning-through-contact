@@ -48,6 +48,11 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.3, y=0.5, theta=0.5)
         finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
         finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
+    elif traj_number == 2:
+        slider_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
+        slider_target_pose = PlanarPose(x=-0.3, y=0.5, theta=0.5)
+        finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -68,4 +73,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="t_pusher", traj_number=1, debug=True)
+    create_plan(body_to_use="box", traj_number=1, debug=True)
