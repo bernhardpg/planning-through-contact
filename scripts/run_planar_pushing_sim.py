@@ -15,7 +15,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_mock_iiwa
 
 def run_sim(debug: bool = False):
     config = PlanarPushingSimConfig(
-        body="t_pusher",
+        body="box",
         contact_model=ContactModel.kHydroelastic,
         start_pose=PlanarPose(x=0.0, y=0.5, theta=0.0),
         goal_pose=PlanarPose(x=0.3, y=0.5, theta=0.5),
