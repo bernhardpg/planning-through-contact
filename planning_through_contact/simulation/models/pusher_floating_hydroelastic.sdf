@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+
+  <!-- Note:
+       This file defines the model for a box with two degrees of freedom
+       (DOFs): a) one DOF for the horizontal motion along the y axis and
+       b) one DOF for the vertical motion along the z axis.
+       To this end, this model defines a small "ghost body" between
+       the box and the world so that we can attach two prismatic joints for
+       these two DOFs. The ghost body has negligible mass.
+  -->
+  <!-- world->ghost_body_y->ghost_body_z_sphere-->
+  <model name="pusher">
+    <!-- The model for a solid box of uniform density. -->
+    <link name="pusher">
+      <inertial>
+        <mass>0.1</mass>
+
+        <inertia>
+          <ixx>1e-2</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-2</iyy>
+          <iyz>0</iyz>
+          <izz>1e-2</izz>
+        </inertia>
+      </inertial>
+      <pose>0 0 0 0 0 0</pose>
+
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius> 0.01 </radius>
+            <length> 0.15 </length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse> 0.80078125 0.1484375 0.1484375 1. </diffuse>
+        </material>
+      </visual>
+
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius> 0.01 </radius>
+            <length> 0.15 </length>
+          </cylinder>        
+        </geometry>
+        <drake:proximity_properties>
+          <drake:compliant_hydroelastic/>
+          <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
+          <drake:mesh_resolution_hint>0.005</drake:mesh_resolution_hint>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+          <drake:mu_static>1.0</drake:mu_static>
+        </drake:proximity_properties>
+      </collision>
+    </link>
+  </model>
+
+</sdf>

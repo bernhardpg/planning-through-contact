@@ -1,0 +1,34 @@
+directives:
+- add_model:
+    name: small_table
+    file: package://planning_through_contact/small_table_hydroelastic.urdf
+
+- add_weld:
+    parent: world
+    child: small_table::TableTop
+    X_PC:
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.0, 0.3, 0.0]
+
+- add_model:
+    name: iiwa
+    file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_no_collision.sdf
+
+- add_model:
+    name: pusher
+    file: package://planning_through_contact/pusher_floating_hydroelastic.sdf
+
+- add_frame:
+    name: pusher_base
+    X_PF:
+        base_frame: pusher::pusher
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.0, 0.0, -0.09]
+
+- add_weld:
+    parent: iiwa::iiwa_link_7
+    child: pusher_base
+
+- add_weld:
+    parent: world
+    child: iiwa::iiwa_link_0

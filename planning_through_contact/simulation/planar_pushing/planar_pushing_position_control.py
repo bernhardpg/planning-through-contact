@@ -60,7 +60,7 @@ class PlanarPushingPositionControl:
     following a pre-computed trajectory.
     """
 
-    def __init__(self, traj: PlanarPushingTrajectory):
+    def __init__(self, traj: PlanarPushingTrajectory, delay_before_start: float = 10):
         builder = DiagramBuilder()
 
         self.hardware_interface = builder.AddNamedSystem(
@@ -72,7 +72,7 @@ class PlanarPushingPositionControl:
         self._load_robot()
         self._add_ik_system(builder)
 
-        self._add_pose_publisher(builder, traj)
+        self._add_pose_publisher(builder, traj, delay_before_start)
 
         self.diagram = builder.Build()
 
@@ -149,14 +149,14 @@ class PlanarPushingPositionControl:
         )
 
     def _add_pose_publisher(
-        self, builder: DiagramBuilder, traj: PlanarPushingTrajectory
+        self, builder: DiagramBuilder, traj: PlanarPushingTrajectory, delay: float
     ) -> None:
         # TODO(bernhardpg): Should not hardcode this
         PUSHER_HEIGHT = 0.15
         BUFFER = 0.05  # TODO(bernhardpg): Turn down
         self.pose_publisher = builder.AddNamedSystem(
             "pusher_pose_publisher",
-            PusherPosePublisher(traj, PUSHER_HEIGHT + BUFFER),
+            PusherPosePublisher(traj, PUSHER_HEIGHT + BUFFER, delay_before_start=delay),
         )
         builder.Connect(
             self.pose_publisher.get_output_port(),

@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="box">
+    <!--
+    Axes:
+      +X - Left, when facing front (smaller dimension)
+      +Y - Towards Bottom (larger dimension)
+      +Z - Towards Front (with label)
+    Origin:
+      (0, 0, 0) at the center of the box.
+  -->
+    <link name="box">
+      <inertial>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.00020833</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.00020833</iyy>
+          <iyz>0</iyz>
+          <izz>0.000375</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_link_box">
+        <pose>-0.0 0.0 0.0 0.0 0.0 0.0</pose>
+        <geometry>
+          <box>
+            <size>0.15 0.15 0.05</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse> 0.26953125 0.54296875 0.453125 1. </diffuse>
+        </material>
+      </visual>
+      <collision name="box_collision">
+        <geometry>
+          <box>
+            <size>0.15 0.15 0.05</size>
+          </box>
+        </geometry>
+        <drake:proximity_properties>
+          <drake:rigid_hydroelastic/>
+          <!-- <drake:compliant_hydroelastic/> -->
+          <drake:hunt_crossley_dissipation>3.0</drake:hunt_crossley_dissipation>
+          <!-- <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus> -->
+          <!-- geometry/box does not take mesh_resolution_hint into account
+            because it always uses the coarsest mesh. We place it here in
+            case you want to change the box to something else like capsules,
+            cylinders, ellipsoids, or spheres.
+          -->
+          <drake:mesh_resolution_hint>0.005</drake:mesh_resolution_hint>
+          <!-- Both mu_dynamic and mu_static are used in Continuous system.
+            Only mu_dynamic is used in Discrete system.
+          -->
+          <drake:mu_dynamic>0.5</drake:mu_dynamic>
+          <drake:mu_static>0.5</drake:mu_static>
+        </drake:proximity_properties>
+      </collision>
+    </link>
+  </model>
+</sdf>
