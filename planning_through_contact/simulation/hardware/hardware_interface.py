@@ -1,4 +1,3 @@
-import pygame
 from drake.lcmt_iiwa_command import lcmt_iiwa_command
 from drake.lcmt_iiwa_status import lcmt_iiwa_status
 from pydrake.common.value import AbstractValue
@@ -10,7 +9,6 @@ from pydrake.systems.lcm import (
     LcmPublisherSystem,
     LcmSubscriberSystem,
 )
-from pygame.locals import *
 
 
 class ManipulationHardwareInterface(Diagram):

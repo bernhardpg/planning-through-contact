@@ -182,7 +182,7 @@ class Visualizer2d:
     WINDOW_HEIGHT = 900
     PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2]).reshape((-1, 1))
     PLOT_SCALE = 500
-    FORCE_SCALE = 0.4
+    FORCE_SCALE = 2.0
     POINT_RADIUS = 0.01
 
     def visualize(

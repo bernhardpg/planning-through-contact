@@ -52,6 +52,7 @@ class PlanarPushingPlanner:
         avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
         use_eq_elimination: bool = False,
         use_redundant_dynamic_constraints: bool = True,
+        no_cycles: bool = False,  # TODO(bernhardpg): Research feature, remove
     ):
         self.slider = slider
         self.plan_specs = plan_specs
@@ -61,6 +62,7 @@ class PlanarPushingPlanner:
         self.object_avoidance_cost = avoidance_cost_type
         self.use_eq_elimination = use_eq_elimination
         self.use_redundant_dynamic_constraints = use_redundant_dynamic_constraints
+        self.no_cycles = no_cycles
 
         self.source = None
         self.target = None
@@ -134,16 +136,23 @@ class PlanarPushingPlanner:
                 )
         else:
             # connect contact modes through NonCollisionSubGraphs
+            connections = list(combinations(range(self.num_contact_modes), 2))
+
             self.subgraphs = [
-                self._build_subgraph_between_contact_modes(mode_i, mode_j)
-                for mode_i, mode_j in combinations(range(self.num_contact_modes), 2)
+                self._build_subgraph_between_contact_modes(
+                    mode_i, mode_j, self.no_cycles
+                )
+                for mode_i, mode_j in connections
             ]
 
             self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
             self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
 
     def _build_subgraph_between_contact_modes(
-        self, first_contact_mode_idx: int, second_contact_mode_idx: int
+        self,
+        first_contact_mode_idx: int,
+        second_contact_mode_idx: int,
+        no_cycles: bool = False,
     ) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.create_with_gcs(
             self.gcs,
@@ -152,14 +161,41 @@ class PlanarPushingPlanner:
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
             avoid_object=self.avoid_object,
         )
-        for idx in (first_contact_mode_idx, second_contact_mode_idx):
+        if no_cycles:  # only connect lower idx faces to higher idx faces
+            if first_contact_mode_idx <= second_contact_mode_idx:
+                incoming_idx = first_contact_mode_idx
+                outgoing_idx = second_contact_mode_idx
+            else:  # second_contact_mode_idx <= first_contact_mode_idx
+                outgoing_idx = first_contact_mode_idx
+                incoming_idx = second_contact_mode_idx
+
             subgraph.connect_with_continuity_constraints(
-                idx,
+                incoming_idx,
                 VertexModePair(
-                    self.contact_vertices[idx],
-                    self.contact_modes[idx],
+                    self.contact_vertices[incoming_idx],
+                    self.contact_modes[incoming_idx],
                 ),
+                incoming=True,
+                outgoing=False,
             )
+            subgraph.connect_with_continuity_constraints(
+                outgoing_idx,
+                VertexModePair(
+                    self.contact_vertices[outgoing_idx],
+                    self.contact_modes[outgoing_idx],
+                ),
+                incoming=False,
+                outgoing=True,
+            )
+        else:
+            for idx in (first_contact_mode_idx, second_contact_mode_idx):
+                subgraph.connect_with_continuity_constraints(
+                    idx,
+                    VertexModePair(
+                        self.contact_vertices[idx],
+                        self.contact_modes[idx],
+                    ),
+                )
         return subgraph
 
     def _get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:

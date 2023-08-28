@@ -59,12 +59,14 @@ class PlanarPose:
         theta = RollPitchYaw(Quaternion(q_wxyz)).vector()[Z_AXIS]
         return cls(x, y, theta)
 
-    def to_generalized_coords(self, z_value: float) -> npt.NDArray[np.float64]:
+    def to_generalized_coords(
+        self, z_value: float, z_axis_is_positive: bool = False
+    ) -> npt.NDArray[np.float64]:
         """
         Returns the full RigidBody pose as generalized coordinates: [quaternion, translation]'
 
         """
-        pose = self.to_pose(z_value)
+        pose = self.to_pose(z_value, z_axis_is_positive)
         quat = pose.rotation().ToQuaternion().wxyz()
         trans = pose.translation()
         gen_coords = np.concatenate((quat, trans))

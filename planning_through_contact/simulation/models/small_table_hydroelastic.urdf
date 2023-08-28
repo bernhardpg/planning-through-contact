@@ -1,0 +1,197 @@
+ <?xml version="1.0"?>
+<robot name="table">
+  <material name="Brown">
+    <color rgba="0.75 0.6 0.5 0.8"/>
+  </material>
+  <material name="White">
+    <color rgba="1 1 1 1"/>
+  </material>
+  <material name="Grey">
+    <color rgba=".3 .3 .3 1"/>
+  </material>
+  <material name="Red">
+    <color rgba="1 0 0 1"/>
+  </material>
+
+  <link name="TableTop">
+    <inertial>
+      <mass value=".5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10" ixy="0" ixz="0" iyy="10" iyz="0" izz="10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.025" rpy="0 0 0"/>
+      <geometry>
+        <box size="1 1 .05"/>
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.025" rpy="0 0 0"/>
+      <geometry>
+        <box size="1 1 .05"/>
+      </geometry>
+      <material name="Brown"/>
+      <drake:proximity_properties>
+        <drake:rigid_hydroelastic/>
+        <drake:mesh_resolution_hint value="0.005"/>
+        <!-- Both mu_dynamic and mu_static are used in Continuous system.
+          Only mu_dynamic is used in Discrete system.
+        -->
+        <drake:mu_dynamic value="1.0"/>
+        <drake:mu_static value="1.0"/>
+      </drake:proximity_properties>
+    </collision>    
+  </link>
+
+  <link name="tableLegUL">
+    <inertial>
+      <mass value=".5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10" ixy="0" ixz="0" iyy="10" iyz="0" izz="10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+      <drake:proximity_properties>
+        <drake:rigid_hydroelastic/>
+        <drake:mesh_resolution_hint value="0.005"/>
+        <!-- Both mu_dynamic and mu_static are used in Continuous system.
+          Only mu_dynamic is used in Discrete system.
+        -->
+        <drake:mu_dynamic value="1.0"/>
+        <drake:mu_static value="1.0"/>
+      </drake:proximity_properties>
+    </collision>
+  </link>
+
+  <link name="tableLegUR">
+    <inertial>
+      <mass value=".5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10" ixy="0" ixz="0" iyy="10" iyz="0" izz="10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+      <drake:proximity_properties>
+        <drake:rigid_hydroelastic/>
+        <drake:mesh_resolution_hint value="0.005"/>
+        <!-- Both mu_dynamic and mu_static are used in Continuous system.
+          Only mu_dynamic is used in Discrete system.
+        -->
+        <drake:mu_dynamic value="1.0"/>
+        <drake:mu_static value="1.0"/>
+      </drake:proximity_properties>
+    </collision>
+  </link>
+
+  <link name="tableLegLR">
+    <inertial>
+      <mass value=".5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10" ixy="0" ixz="0" iyy="10" iyz="0" izz="10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+      <drake:proximity_properties>
+        <drake:rigid_hydroelastic/>
+        <drake:mesh_resolution_hint value="0.005"/>
+        <!-- Both mu_dynamic and mu_static are used in Continuous system.
+          Only mu_dynamic is used in Discrete system.
+        -->
+        <drake:mu_dynamic value="1.0"/>
+        <drake:mu_static value="1.0"/>
+      </drake:proximity_properties>
+    </collision>
+  </link>  
+
+  <link name="tableLegLL">
+    <inertial>
+      <mass value=".5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="10" ixy="0" ixz="0" iyy="10" iyz="0" izz="10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -.25" rpy="0 0 0"/>
+      <geometry>
+        <box size=".05 .05 .5"/>
+      </geometry>
+      <material name="Brown"/>
+      <drake:proximity_properties>
+        <drake:compliant_hydroelastic/>
+        <drake:mesh_resolution_hint value="0.005"/>
+        <drake:hydroelastic_modulus value="1e5"/>
+        <drake:hunt_crossley_dissipation value="1.0"/>
+        <!-- Both mu_dynamic and mu_static are used in Continuous system.
+          Only mu_dynamic is used in Discrete system.
+        -->
+        <drake:mu_dynamic value="0.5"/>
+        <drake:mu_static value="0.5"/>
+      </drake:proximity_properties>
+    </collision>
+  </link>    
+
+  <joint name="TableTopToLegUL" type="fixed">
+    <parent link="TableTop"/>
+    <child link="tableLegUL"/>
+    <origin xyz="0.375 0.375 -.05" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="TableTopToLegUR" type="fixed">
+    <parent link="TableTop"/>
+    <child link="tableLegUR"/>
+    <origin xyz="0.375 -0.375 -.05" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="TableTopToLegLR" type="fixed">
+    <parent link="TableTop"/>
+    <child link="tableLegLR"/>
+    <origin xyz="-0.375 0.375 -.05" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="TableTopToLegLL" type="fixed">
+    <parent link="TableTop"/>
+    <child link="tableLegLL"/>
+    <origin xyz="-0.375 -0.375 -0.05" rpy="0 0 0"/>
+  </joint>
+
+</robot>
