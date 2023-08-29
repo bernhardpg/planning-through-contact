@@ -35,7 +35,6 @@ class PusherPosePublisher(LeafSystem):
     def DoCalcOutput(self, context: Context, output):
         curr_t = context.get_time()
         end_effector_pose = self._calc_pose(curr_t)
-        print(end_effector_pose)
         output.set_value(end_effector_pose)
 
     @classmethod
