@@ -19,6 +19,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.hardware.hardware_interface import (
     ManipulationHardwareInterface,
 )
+from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+    PlanarPushingSimConfig,
+)
 from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
     PusherPoseToJointPos,
 )
@@ -33,7 +36,12 @@ class PlanarPushingPositionControlNode:
     following a pre-computed trajectory.
     """
 
-    def __init__(self, traj: PlanarPushingTrajectory, delay_before_start: float = 10):
+    def __init__(
+        self,
+        traj: PlanarPushingTrajectory,
+        delay_before_start: float = 10,
+        config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
+    ):
         builder = DiagramBuilder()
 
         self.hardware_interface = builder.AddNamedSystem(
@@ -47,6 +55,7 @@ class PlanarPushingPositionControlNode:
             iiwa_joint_position_input=self.hardware_interface.GetInputPort(
                 "iiwa_position"
             ),
+            time_step=config.time_step,
         )
 
         self.pose_publisher = PusherPosePublisher.add_to_builder(

@@ -27,6 +27,7 @@ def run_hardware_mock(debug: bool = False):
         start_pose=traj.initial_planar_pose,
         goal_pose=traj.target_planar_pose,
         visualize_desired=True,
+        time_step=1e-3,
     )
     sim = PlanarPushingHardwareMock(config)
 

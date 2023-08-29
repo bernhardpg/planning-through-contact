@@ -51,6 +51,7 @@ class PlanarPushingSimConfig:
             [0.666, 1.039, -0.7714, -2.0497, 1.3031, 0.6729, -1.0252]
         )
     )
+    time_step: float = 1e-3
 
 
 class PlanarPushingDiagram(Diagram):
@@ -58,14 +59,12 @@ class PlanarPushingDiagram(Diagram):
         self,
         add_visualizer: bool = False,
         config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
-        time_step: float = 1e-3,
     ):
         Diagram.__init__(self)
 
         builder = DiagramBuilder()
-        self.time_step = time_step
         self.mbp, self.scene_graph = AddMultibodyPlantSceneGraph(
-            builder, time_step=self.time_step
+            builder, time_step=config.time_step
         )
         self.parser = Parser(self.mbp, self.scene_graph)
 

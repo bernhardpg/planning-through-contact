@@ -48,8 +48,7 @@ class PlanarPushingSimulation:
         )
 
         self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
-            builder,
-            self.station.GetInputPort("iiwa_position"),
+            builder, self.station.GetInputPort("iiwa_position"), config.time_step
         )
 
         self.pusher_pose_pub = PusherPosePublisher.add_to_builder(
