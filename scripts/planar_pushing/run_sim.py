@@ -25,13 +25,10 @@ def run_sim(plan: str, debug: bool = False):
     )
 
     sim = PlanarPushingSimulation(traj, config)
-
-    sim.reset()
-    sim.run(1e-6)  # advance the sim to we can see anything
-
     if debug:
         sim.export_diagram("diagram.png")
 
+    sim.reset()
     sim.run()
 
 

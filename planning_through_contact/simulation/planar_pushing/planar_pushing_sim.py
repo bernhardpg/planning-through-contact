@@ -72,6 +72,11 @@ class PlanarPushingSimulation:
 
         self.config = config
 
+        q0 = self.station.GetOutputPort("iiwa_position_measured").Eval(
+            self.station.GetMyContextFromRoot(self.context)
+        )
+        self.pusher_pose_to_joint_pos.init_diff_ik(q0, self.context)
+
     def export_diagram(self, filename: str):
         import pydot
 
