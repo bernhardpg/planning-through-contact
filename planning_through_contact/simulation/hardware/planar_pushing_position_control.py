@@ -27,7 +27,7 @@ from planning_through_contact.simulation.systems.pusher_pose_publisher import (
 )
 
 
-class PlanarPushingPositionControl:
+class PlanarPushingPositionControlNode:
     """
     An LCM node that implements an IK position controller for the end-effector of the Iiwa,
     following a pre-computed trajectory.

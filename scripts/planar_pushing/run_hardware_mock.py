@@ -8,12 +8,12 @@ import lcm  # make sure we can import lcm
 
 from planning_through_contact.simulation.hardware.planar_pushing_mock_iiwa import (
     PlanarPose,
-    PlanarPushingMockSimulation,
+    PlanarPushingHardwareMock,
     PlanarPushingSimConfig,
 )
 
 
-def run_sim(debug: bool = False):
+def run_hardware_mock(debug: bool = False):
     config = PlanarPushingSimConfig(
         body="box",
         contact_model=ContactModel.kHydroelastic,
@@ -21,7 +21,7 @@ def run_sim(debug: bool = False):
         goal_pose=PlanarPose(x=-0.3, y=0.5, theta=0.5),
         visualize_desired=True,
     )
-    sim = PlanarPushingMockSimulation(config)
+    sim = PlanarPushingHardwareMock(config)
 
     sim.reset()
     sim.run(1e-6)  # advance the sim to we can see anything
@@ -33,4 +33,4 @@ def run_sim(debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(debug=False)
+    run_hardware_mock(debug=False)
