@@ -47,7 +47,7 @@ class PusherPosePublisher(LeafSystem):
         pose_input_port: InputPort,
     ) -> "PusherPosePublisher":
         # TODO(bernhardpg): Should not hardcode this
-        PUSHER_HEIGHT = 0.15
+        PUSHER_HEIGHT = 0.12
         BUFFER = 0.05  # TODO(bernhardpg): Turn down
         pusher_pose_pub = builder.AddNamedSystem(
             "PusherPosePublisher",
