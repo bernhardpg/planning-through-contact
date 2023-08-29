@@ -14,14 +14,13 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim impor
 
 def run_sim(plan: str, debug: bool = False):
     traj_name = "trajectories/box_pushing_2.pkl"
-    # TODO: Retrieve start pose and goal pose from trajectory
     traj = PlanarPushingTrajectory.load(traj_name)
 
     config = PlanarPushingSimConfig(
         body="box",
         contact_model=ContactModel.kHydroelastic,
-        start_pose=PlanarPose(x=0.0, y=0.5, theta=0.0),
-        goal_pose=PlanarPose(x=-0.3, y=0.5, theta=0.5),
+        start_pose=traj.initial_planar_pose,
+        goal_pose=traj.target_planar_pose,
         visualize_desired=True,
     )
 

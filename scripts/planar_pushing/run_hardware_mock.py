@@ -3,6 +3,10 @@ import sys
 
 from pydrake.multibody.plant import ContactModel
 
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
+
 sys.path.append("/Users/bernhardpg/software/lcm/build/python")
 import lcm  # make sure we can import lcm
 
@@ -14,11 +18,14 @@ from planning_through_contact.simulation.hardware.planar_pushing_mock_iiwa impor
 
 
 def run_hardware_mock(debug: bool = False):
+    traj_name = "trajectories/box_pushing_2.pkl"
+    traj = PlanarPushingTrajectory.load(traj_name)
+
     config = PlanarPushingSimConfig(
         body="box",
         contact_model=ContactModel.kHydroelastic,
-        start_pose=PlanarPose(x=0.0, y=0.5, theta=0.0),
-        goal_pose=PlanarPose(x=-0.3, y=0.5, theta=0.5),
+        start_pose=traj.initial_planar_pose,
+        goal_pose=traj.target_planar_pose,
         visualize_desired=True,
     )
     sim = PlanarPushingHardwareMock(config)

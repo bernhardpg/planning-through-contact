@@ -242,3 +242,17 @@ class PlanarPushingTrajectory:
         return PlanarTrajectoryBuilder(self.path_knot_points).get_trajectory(
             interpolate=True
         )
+
+    @property
+    def end_time(self) -> float:
+        start_time = self.traj_segments[0].start_time
+        return start_time + sum([seg.end_time for seg in self.traj_segments])
+
+    @property
+    def target_planar_pose(self) -> PlanarPose:
+        return self.get_box_planar_pose(self.end_time)
+
+    @property
+    def initial_planar_pose(self) -> PlanarPose:
+        start_time = self.traj_segments[0].start_time
+        return self.get_box_planar_pose(start_time)

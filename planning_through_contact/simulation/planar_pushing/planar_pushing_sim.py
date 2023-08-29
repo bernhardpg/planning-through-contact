@@ -28,7 +28,7 @@ class PlanarPushingSimulation:
         self,
         traj: PlanarPushingTrajectory,
         config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
-        delay_before_execution: float = 4.0,
+        delay_before_execution: float = 8.0,
     ):
         self.TABLE_BUFFER_DIST = 0.05
 
