@@ -30,6 +30,8 @@ def run_sim(plan: str, debug: bool = False):
         sim.export_diagram("diagram.png")
 
     sim.reset()
+    sim.run(2.0)
+
     sim.run()
 
 

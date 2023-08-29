@@ -2,9 +2,10 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import RotationMatrix
 from pydrake.multibody.inverse_kinematics import InverseKinematics
+from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, MultibodyPlant
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import DiagramBuilder, InputPort
+from pydrake.systems.framework import Context, DiagramBuilder, InputPort
 from pydrake.systems.primitives import ConstantVectorSource
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -97,18 +98,19 @@ class PlanarPushingSimulation:
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self.station.mbp.SetPositions(self.mbp_context, self.station.slider, q)
 
-    # TODO(bernhardpg): This will not work on the real system!
-    def set_pusher_planar_pose(
-        self, planar_pose: PlanarPose, disregard_angle: bool = True
-    ):
-        """
-        Sets the planar pose of the pusher.
+    # NOTE: This has never been used and is only kept around for future reference
+    def solve_ik(
+        self,
+        planar_pose: PlanarPose,
+        disregard_angle: bool = True,
+    ) -> npt.NDArray[np.float64]:
+        # Need to create a new context that the IK can use for solving the problem
+        context = self.diagram.CreateDefaultContext()
+        mbp_context = self.station.mbp.GetMyContextFromRoot(context)
 
-        @param planar_pose: Desired end-effector planar pose.
-        @param disregard_angle: Whether or not to enforce the z-axis rotation specified by the planar_pose.
-        """
+        # drake typing error
+        ik = InverseKinematics(self.station.mbp, mbp_context, with_joint_limits=True)  # type: ignore
 
-        ik = InverseKinematics(self.station.mbp, self.mbp_context)
         pusher_shape = self.station.get_pusher_shape()
         pose = planar_pose.to_pose(
             z_value=pusher_shape.length() + self.TABLE_BUFFER_DIST
@@ -156,8 +158,13 @@ class PlanarPushingSimulation:
         prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
         prog.SetInitialGuess(q, q0)
 
-        # Will automatically set the positions of the objects
-        Solve(ik.prog())
+        result = Solve(ik.prog())
+        assert result.is_success()
+
+        q_sol = result.GetSolution(q)
+        # TODO: Should call joint.Lock on slider, see https://drake.mit.edu/doxygen_cxx/classdrake_1_1multibody_1_1_inverse_kinematics.html
+        q_iiwa = q_sol[:7]
+        return q_iiwa
 
     def _set_joint_positions(self, joint_positions: npt.NDArray[np.float64]):
         self.station.mbp.SetPositions(

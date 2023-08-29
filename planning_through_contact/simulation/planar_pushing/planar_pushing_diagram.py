@@ -158,15 +158,23 @@ class PlanarPushingDiagram(Diagram):
                 MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
             )
 
-    def add_controller(self, builder):
-        self.controller_plant = MultibodyPlant(1e-3)
-        parser = Parser(self.controller_plant)
-        parser.package_map().PopulateFromFolder(str(self.models_folder))
+    @staticmethod
+    def get_controller_plant() -> MultibodyPlant:
+        models_folder = Path(__file__).parents[1] / "models"
+
+        controller_plant = MultibodyPlant(1e-3)
+        parser = Parser(controller_plant)
+        parser.package_map().PopulateFromFolder(str(models_folder))
         directives = LoadModelDirectives(
-            str(self.models_folder / "iiwa_controller_plant.yaml")
+            str(models_folder / "iiwa_controller_plant.yaml")
         )
-        ProcessModelDirectives(directives, self.controller_plant, parser)  # type: ignore
-        self.controller_plant.Finalize()
+        ProcessModelDirectives(directives, controller_plant, parser)  # type: ignore
+        controller_plant.Finalize()
+        return controller_plant
+
+    def add_controller(self, builder):
+        self.controller_plant = PlanarPushingDiagram.get_controller_plant()
+
         kp = 800 * np.ones(7)
         ki = 100 * np.ones(7)
         kd = 2 * np.sqrt(kp)
