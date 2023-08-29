@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+from pydrake.common.value import AbstractValue
 from pydrake.multibody.inverse_kinematics import (
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
@@ -12,7 +13,8 @@ from pydrake.multibody.parsing import (
     ProcessModelDirectives,
 )
 from pydrake.multibody.plant import MultibodyPlant
-from pydrake.systems.framework import Context, DiagramBuilder, InputPort
+from pydrake.systems.framework import Context, DiagramBuilder, InputPort, OutputPort
+from pydrake.systems.primitives import ConstantValueSource, Multiplexer
 
 
 class PusherPoseToJointPos:
@@ -46,7 +48,9 @@ class PusherPoseToJointPos:
         cls,
         builder: DiagramBuilder,
         iiwa_joint_position_input: InputPort,
-        time_step: float = 1e-3,
+        iiwa_state_measured: OutputPort,
+        time_step: float = 1 / 200,  # 200 Hz
+        use_diff_ik_feedback: bool = False,
     ) -> "PusherPoseToJointPos":
         robot = cls._load_robot(time_step)
 
@@ -79,6 +83,23 @@ class PusherPoseToJointPos:
         builder.Connect(
             differential_ik.GetOutputPort("joint_positions"),
             iiwa_joint_position_input,
+        )
+
+        if use_diff_ik_feedback:
+            const = builder.AddNamedSystem(
+                "true", ConstantValueSource(AbstractValue.Make(True))
+            )
+        else:
+            const = builder.AddNamedSystem(
+                "false", ConstantValueSource(AbstractValue.Make(False))
+            )
+
+        builder.Connect(
+            const.get_output_port(),
+            differential_ik.GetInputPort("use_robot_state"),
+        )
+        builder.Connect(
+            iiwa_state_measured, differential_ik.GetInputPort("robot_state")
         )
 
         pusher_pose_to_joint_pos = cls(time_step, robot, differential_ik)

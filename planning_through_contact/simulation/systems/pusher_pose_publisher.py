@@ -45,7 +45,7 @@ class PusherPosePublisher(LeafSystem):
         traj: PlanarPushingTrajectory,
         delay: float,
         pose_input_port: InputPort,
-        z_dist_buffer: float = 0.01,
+        z_dist_buffer: float = 0.03,
     ) -> "PusherPosePublisher":
         pusher_pose_pub = builder.AddNamedSystem(
             "PusherPosePublisher",

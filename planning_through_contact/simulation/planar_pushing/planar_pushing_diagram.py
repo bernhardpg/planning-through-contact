@@ -114,8 +114,8 @@ class PlanarPushingDiagram(Diagram):
 
         if config.draw_frames:
             for frame_name in [
-                "iiwa_link_7",
-                "pusher_base",
+                # "iiwa_link_7",
+                # "pusher_base",
                 "pusher_end",
             ]:
                 AddMultibodyTriad(self.mbp.GetFrameByName(frame_name), self.scene_graph)

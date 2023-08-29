@@ -49,7 +49,11 @@ class PlanarPushingSimulation:
         )
 
         self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
-            builder, self.station.GetInputPort("iiwa_position"), config.time_step
+            builder,
+            self.station.GetInputPort("iiwa_position"),
+            self.station.GetOutputPort("iiwa_state_measured"),
+            time_step=config.time_step,
+            use_diff_ik_feedback=False,
         )
 
         self.pusher_pose_pub = PusherPosePublisher.add_to_builder(
@@ -71,11 +75,6 @@ class PlanarPushingSimulation:
         self.set_slider_planar_pose(config.start_pose)
 
         self.config = config
-
-        q0 = self.station.GetOutputPort("iiwa_position_measured").Eval(
-            self.station.GetMyContextFromRoot(self.context)
-        )
-        self.pusher_pose_to_joint_pos.init_diff_ik(q0, self.context)
 
     def export_diagram(self, filename: str):
         import pydot
