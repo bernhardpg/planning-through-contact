@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -48,7 +47,6 @@ class PusherPoseToJointPos:
         builder: DiagramBuilder,
         iiwa_joint_position_input: InputPort,
         time_step: float = 1e-3,
-        converter: Literal["diff_ik"] = "diff_ik",
     ) -> "PusherPoseToJointPos":
         robot = cls._load_robot(time_step)
 
@@ -68,23 +66,20 @@ class PusherPoseToJointPos:
             )
         )
 
-        if converter == "diff_ik":
-            EE_FRAME = "iiwa_link_7"
-            differential_ik = builder.AddNamedSystem(
-                "DiffIk",
-                DifferentialInverseKinematicsIntegrator(
-                    robot,
-                    robot.GetFrameByName(EE_FRAME),
-                    time_step,
-                    ik_params,
-                ),
-            )
-            builder.Connect(
-                differential_ik.GetOutputPort("joint_positions"),
-                iiwa_joint_position_input,
-            )
-        else:
-            raise NotImplementedError("")
+        EE_FRAME = "pusher_end"
+        differential_ik = builder.AddNamedSystem(
+            "DiffIk",
+            DifferentialInverseKinematicsIntegrator(
+                robot,
+                robot.GetFrameByName(EE_FRAME),
+                time_step,
+                ik_params,
+            ),
+        )
+        builder.Connect(
+            differential_ik.GetOutputPort("joint_positions"),
+            iiwa_joint_position_input,
+        )
 
         pusher_pose_to_joint_pos = cls(time_step, robot, differential_ik)
         return pusher_pose_to_joint_pos

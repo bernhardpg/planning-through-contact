@@ -30,7 +30,8 @@ class PusherPosePublisher(LeafSystem):
         assert isinstance(p_c_W, type(np.array([])))
 
         planar_pose = PlanarPose(p_c_W[0].item(), p_c_W[1].item(), theta=0)
-        return planar_pose.to_pose(z_value=self.z_dist)
+        pose = planar_pose.to_pose(z_value=self.z_dist)
+        return pose
 
     def DoCalcOutput(self, context: Context, output):
         curr_t = context.get_time()
@@ -44,13 +45,11 @@ class PusherPosePublisher(LeafSystem):
         traj: PlanarPushingTrajectory,
         delay: float,
         pose_input_port: InputPort,
+        z_dist_buffer: float = 0.01,
     ) -> "PusherPosePublisher":
-        # TODO(bernhardpg): Should not hardcode this
-        PUSHER_HEIGHT = 0.12
-        BUFFER = 0.05  # TODO(bernhardpg): Turn down
         pusher_pose_pub = builder.AddNamedSystem(
             "PusherPosePublisher",
-            cls(traj, PUSHER_HEIGHT + BUFFER, delay_before_start=delay),
+            cls(traj, z_dist_buffer, delay_before_start=delay),
         )
         builder.Connect(
             pusher_pose_pub.get_output_port(),

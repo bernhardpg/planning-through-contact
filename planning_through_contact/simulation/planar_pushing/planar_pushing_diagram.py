@@ -4,6 +4,7 @@ from typing import List, Literal, Optional
 
 import numpy as np
 import numpy.typing as npt
+from manipulation.scenarios import AddMultibodyTriad
 from pydrake.all import (
     InverseDynamicsController,
     MultibodyPlant,
@@ -52,6 +53,7 @@ class PlanarPushingSimConfig:
         )
     )
     time_step: float = 1e-3
+    draw_frames: bool = False
 
 
 class PlanarPushingDiagram(Diagram):
@@ -109,6 +111,14 @@ class PlanarPushingDiagram(Diagram):
         if config.visualize_desired:
             assert config.goal_pose is not None
             self._visualize_desired_slider_pose(config.goal_pose)
+
+        if config.draw_frames:
+            for frame_name in [
+                "iiwa_link_7",
+                "pusher_base",
+                "pusher_end",
+            ]:
+                AddMultibodyTriad(self.mbp.GetFrameByName(frame_name), self.scene_graph)
 
         if add_visualizer:
             self.meshcat = StartMeshcat()  # type: ignore

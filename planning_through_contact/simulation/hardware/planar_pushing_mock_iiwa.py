@@ -98,8 +98,6 @@ class PlanarPushingHardwareMock:
     """
 
     def __init__(self, config: PlanarPushingSimConfig = PlanarPushingSimConfig()):
-        self.TABLE_BUFFER_DIST = 0.05
-
         builder = DiagramBuilder()
         self.station = builder.AddSystem(
             PlanarPushingDiagram(add_visualizer=True, config=config)
@@ -236,7 +234,7 @@ class PlanarPushingHardwareMock:
         ik = InverseKinematics(self.station.mbp, self.mbp_context)
         pusher_shape = self.station.get_pusher_shape()
         pose = planar_pose.to_pose(
-            z_value=pusher_shape.length() + self.TABLE_BUFFER_DIST
+            z_value=pusher_shape.length(),
         )
 
         ik.AddPositionConstraint(
