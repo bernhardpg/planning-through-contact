@@ -6,7 +6,7 @@ from pydrake.multibody.plant import ContactModel
 sys.path.append("/Users/bernhardpg/software/lcm/build/python")
 import lcm  # make sure we can import lcm
 
-from planning_through_contact.simulation.planar_pushing.planar_pushing_mock_iiwa import (
+from planning_through_contact.simulation.hardware.planar_pushing_mock_iiwa import (
     PlanarPose,
     PlanarPushingMockSimulation,
     PlanarPushingSimConfig,

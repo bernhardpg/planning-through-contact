@@ -1,7 +1,7 @@
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_position_control import (
+from planning_through_contact.simulation.hardware.planar_pushing_position_control import (
     PlanarPushingPositionControl,
 )
 

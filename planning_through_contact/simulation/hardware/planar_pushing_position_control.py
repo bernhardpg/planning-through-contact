@@ -120,7 +120,7 @@ class PlanarPushingPositionControl:
             self.robot.num_positions(), self.robot.num_velocities()
         )
 
-        time_step = 0.005
+        time_step = 0.001
         ik_params.set_time_step(time_step)
         # True velocity limits for the IIWA14
         # (in rad, rounded down to the first decimal)

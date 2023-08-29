@@ -31,7 +31,11 @@ from pydrake.multibody.parsing import (
     Parser,
     ProcessModelDirectives,
 )
-from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, ContactModel
+from pydrake.multibody.plant import (
+    AddMultibodyPlantSceneGraph,
+    ContactModel,
+    DiscreteContactSolver,
+)
 from pydrake.multibody.tree import Frame
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
 from pydrake.solvers import Solve
@@ -43,6 +47,7 @@ from pydrake.systems.lcm import (
     LcmSubscriberSystem,
 )
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
+from pydrake.visualization import AddDefaultVisualization
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
@@ -144,6 +149,7 @@ class PlanarPushingDiagram(Diagram):
 
         if use_hydroelastic:
             self.mbp.set_contact_model(ContactModel.kHydroelastic)
+            self.mbp.set_discrete_contact_solver(DiscreteContactSolver.kSap)
 
         self.mbp.Finalize()
 
@@ -167,7 +173,8 @@ class PlanarPushingDiagram(Diagram):
                     # 0.01 * np.array([0.05, 0.0, 0.1]),
                 ).GetAsMatrix4(),
             )
-            self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.scene_graph, self.meshcat)  # type: ignore
+            # self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.scene_graph, self.meshcat)  # type: ignore
+            AddDefaultVisualization(builder, self.meshcat)
 
         self.add_controller(builder)
 
@@ -361,7 +368,7 @@ class PlanarPushingMockSimulation:
     """
 
     def __init__(self, config: PlanarPushingSimConfig = PlanarPushingSimConfig()):
-        self.TABLE_BUFFER_DIST = 0.01
+        self.TABLE_BUFFER_DIST = 0.05
 
         builder = DiagramBuilder()
         self.station = builder.AddSystem(
