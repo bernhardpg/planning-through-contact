@@ -5,6 +5,7 @@ from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder, InputPort
+from pydrake.systems.primitives import ConstantVectorSource
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -13,6 +14,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
     PlanarPushingDiagram,
     PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
+    PusherPoseToJointPos,
 )
 from planning_through_contact.simulation.systems.pusher_pose_publisher import (
     PusherPosePublisher,
@@ -34,17 +38,26 @@ class PlanarPushingSimulation:
             PlanarPushingDiagram(add_visualizer=True, config=config),
         )
 
+        # TODO(bernhardpg): Do we want to compute a feedforward torque?
+        constant_source = builder.AddNamedSystem(
+            "const", ConstantVectorSource(np.zeros(7))
+        )
+        builder.Connect(
+            constant_source.get_output_port(),
+            self.station.GetInputPort("iiwa_feedforward_torque"),
+        )
+
+        self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
+            builder,
+            self.station.GetInputPort("iiwa_position"),
+        )
+
         self.pusher_pose_pub = PusherPosePublisher.add_to_builder(
             builder,
             traj,
             delay_before_execution,
-            self.differential_ik.GetInputPort("X_WE_desired"),
+            self.pusher_pose_to_joint_pos.get_input_port(),
         )
-
-        # TODO
-        # builder.Connect(
-        #     self.station.GetOutputPort("body_poses"), self.keypts_lcm.get_input_port()
-        # )
 
         self.diagram = builder.Build()
 
