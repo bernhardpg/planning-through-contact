@@ -4,7 +4,7 @@ from pydrake.math import RotationMatrix
 from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import DiagramBuilder
+from pydrake.systems.framework import DiagramBuilder, InputPort
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -14,6 +14,9 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram i
     PlanarPushingDiagram,
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.systems.pusher_pose_publisher import (
+    PusherPosePublisher,
+)
 
 
 class PlanarPushingSimulation:
@@ -21,12 +24,21 @@ class PlanarPushingSimulation:
         self,
         traj: PlanarPushingTrajectory,
         config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
+        delay_before_execution: float = 4.0,
     ):
         self.TABLE_BUFFER_DIST = 0.05
 
         builder = DiagramBuilder()
-        self.station = builder.AddSystem(
-            PlanarPushingDiagram(add_visualizer=True, config=config)
+        self.station = builder.AddNamedSystem(
+            "PlanarPushingDiagram",
+            PlanarPushingDiagram(add_visualizer=True, config=config),
+        )
+
+        self.pusher_pose_pub = PusherPosePublisher.add_to_builder(
+            builder,
+            traj,
+            delay_before_execution,
+            self.differential_ik.GetInputPort("X_WE_desired"),
         )
 
         # TODO

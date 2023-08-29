@@ -14,6 +14,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim impor
 
 def run_sim(plan: str, debug: bool = False):
     traj_name = "trajectories/box_pushing_2.pkl"
+    # TODO: Retrieve start pose and goal pose from trajectory
     traj = PlanarPushingTrajectory.load(traj_name)
 
     config = PlanarPushingSimConfig(

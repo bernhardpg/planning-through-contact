@@ -19,6 +19,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.hardware.hardware_interface import (
     ManipulationHardwareInterface,
 )
+from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
+    PusherPoseToJointPos,
+)
 from planning_through_contact.simulation.systems.pusher_pose_publisher import (
     PusherPosePublisher,
 )
@@ -39,10 +42,19 @@ class PlanarPushingPositionControl:
         )
         self.hardware_interface.Connect()
 
-        self._load_robot()
-        self._add_ik_system(builder)
+        self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
+            builder,
+            iiwa_joint_position_input=self.hardware_interface.GetInputPort(
+                "iiwa_position"
+            ),
+        )
 
-        self._add_pose_publisher(builder, traj, delay_before_start)
+        self.pose_publisher = PusherPosePublisher.add_to_builder(
+            builder,
+            traj,
+            delay_before_start,
+            self.pusher_pose_to_joint_pos.get_input_port(),
+        )
 
         self.diagram = builder.Build()
 
@@ -73,76 +85,12 @@ class PlanarPushingPositionControl:
 
         self._initialize_ik()
 
-    def _load_robot(self) -> None:
-        self.robot = MultibodyPlant(1e-3)
-        parser = Parser(self.robot)
-        models_folder = Path(__file__).parents[1] / "models"
-        parser.package_map().PopulateFromFolder(str(models_folder))
-
-        # Load the controller plant, i.e. the plant without the box
-        controller_plant_file = "iiwa_controller_plant.yaml"
-        directives = LoadModelDirectives(str(models_folder / controller_plant_file))
-        ProcessModelDirectives(directives, self.robot, parser)  # type: ignore
-        self.robot.Finalize()
-
-    def _add_ik_system(self, builder: DiagramBuilder) -> None:
-        ik_params = DifferentialInverseKinematicsParameters(
-            self.robot.num_positions(), self.robot.num_velocities()
-        )
-
-        time_step = 0.001
-        ik_params.set_time_step(time_step)
-        # True velocity limits for the IIWA14
-        # (in rad, rounded down to the first decimal)
-        iiwa14_velocity_limits = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 1.0
-        ik_params.set_joint_velocity_limits(
-            (
-                -velocity_limit_factor * iiwa14_velocity_limits,
-                velocity_limit_factor * iiwa14_velocity_limits,
-            )
-        )
-
-        self.differential_ik = builder.AddNamedSystem(
-            "diff_ik",
-            DifferentialInverseKinematicsIntegrator(
-                self.robot,
-                self.robot.GetFrameByName("iiwa_link_7"),
-                time_step,
-                ik_params,
-            ),
-        )
-
-        builder.Connect(
-            self.differential_ik.GetOutputPort("joint_positions"),
-            self.hardware_interface.GetInputPort("iiwa_position"),
-        )
-
-    def _add_pose_publisher(
-        self, builder: DiagramBuilder, traj: PlanarPushingTrajectory, delay: float
-    ) -> None:
-        # TODO(bernhardpg): Should not hardcode this
-        PUSHER_HEIGHT = 0.15
-        BUFFER = 0.05  # TODO(bernhardpg): Turn down
-        self.pose_publisher = builder.AddNamedSystem(
-            "pusher_pose_publisher",
-            PusherPosePublisher(traj, PUSHER_HEIGHT + BUFFER, delay_before_start=delay),
-        )
-        builder.Connect(
-            self.pose_publisher.get_output_port(),
-            self.differential_ik.GetInputPort("X_WE_desired"),
-        )
-
     def _initialize_ik(self) -> None:
         q0 = self.hardware_interface.GetOutputPort("iiwa_position_measured").Eval(
             self.hardware_interface_context
         )
-        self.differential_ik.get_mutable_parameters().set_nominal_joint_position(q0)
-        self.differential_ik.SetPositions(
-            self.differential_ik.GetMyMutableContextFromRoot(
-                self.simulator.get_mutable_context()
-            ),
-            q0,
+        self.pusher_pose_to_joint_pos.init_diff_ik(
+            q0, self.simulator.get_mutable_context()
         )
 
     def run(self, end_time: float = 1e8) -> None:

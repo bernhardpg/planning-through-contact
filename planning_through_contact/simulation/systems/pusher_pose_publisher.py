@@ -1,7 +1,7 @@
 import numpy as np
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
-from pydrake.systems.framework import Context, LeafSystem
+from pydrake.systems.framework import Context, DiagramBuilder, InputPort, LeafSystem
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -37,3 +37,24 @@ class PusherPosePublisher(LeafSystem):
         end_effector_pose = self._calc_pose(curr_t)
         print(end_effector_pose)
         output.set_value(end_effector_pose)
+
+    @classmethod
+    def add_to_builder(
+        cls,
+        builder: DiagramBuilder,
+        traj: PlanarPushingTrajectory,
+        delay: float,
+        pose_input_port: InputPort,
+    ) -> "PusherPosePublisher":
+        # TODO(bernhardpg): Should not hardcode this
+        PUSHER_HEIGHT = 0.15
+        BUFFER = 0.05  # TODO(bernhardpg): Turn down
+        pusher_pose_pub = builder.AddNamedSystem(
+            "PusherPosePublisher",
+            cls(traj, PUSHER_HEIGHT + BUFFER, delay_before_start=delay),
+        )
+        builder.Connect(
+            pusher_pose_pub.get_output_port(),
+            pose_input_port,
+        )
+        return pusher_pose_pub
