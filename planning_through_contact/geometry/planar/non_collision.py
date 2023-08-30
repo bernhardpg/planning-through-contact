@@ -81,7 +81,11 @@ class NonCollisionVariables(AbstractModeVariables):
 
     @classmethod
     def from_prog(
-        cls, prog: MathematicalProgram, num_knot_points: int, time_in_mode: float
+        cls,
+        prog: MathematicalProgram,
+        num_knot_points: int,
+        time_in_mode: float,
+        contact_location: PolytopeContactLocation,
     ) -> "NonCollisionVariables":
         # Finger location
         p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
@@ -96,6 +100,7 @@ class NonCollisionVariables(AbstractModeVariables):
         dt = time_in_mode / num_knot_points
 
         return NonCollisionVariables(
+            contact_location,
             num_knot_points,
             time_in_mode,
             dt,
@@ -109,6 +114,7 @@ class NonCollisionVariables(AbstractModeVariables):
 
     def eval_result(self, result: MathematicalProgramResult) -> "NonCollisionVariables":
         return NonCollisionVariables(
+            self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
@@ -240,7 +246,7 @@ class NonCollisionMode(AbstractContactMode):
             self.contact_location
         )
         self.variables = NonCollisionVariables.from_prog(
-            self.prog, self.num_knot_points, self.time_in_mode
+            self.prog, self.num_knot_points, self.time_in_mode, self.contact_location
         )
         self._define_constraints()
         self._define_cost()
@@ -319,6 +325,7 @@ class NonCollisionMode(AbstractContactMode):
         cos_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.cos_th, result)  # type: ignore
         sin_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.sin_th, result)  # type: ignore
         return NonCollisionVariables(
+            self.contact_location,
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
@@ -341,6 +348,7 @@ class NonCollisionMode(AbstractContactMode):
         cos_th = result.GetSolution(self.variables.cos_th)  # type: ignore
         sin_th = result.GetSolution(self.variables.sin_th)  # type: ignore
         return NonCollisionVariables(
+            self.contact_location,
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,

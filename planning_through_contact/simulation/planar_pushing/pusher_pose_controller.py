@@ -18,10 +18,17 @@ class PusherPoseController(LeafSystem):
         super().__init__()
         self.z_dist = z_dist_to_table
         self.object_geometry = object_geometry
-        breakpoint()
 
-        self.input_port = self.DeclareAbstractInputPort(
-            "planar_pose",
+        self.planar_pose_desired = self.DeclareAbstractInputPort(
+            "planar_pose_desired",
+            AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
+        )
+        self.slider_pose = self.DeclareAbstractInputPort(
+            "slider_pose",
+            AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
+        )
+        self.slider_pose = self.DeclareAbstractInputPort(
+            "slider_pose",
             AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
         )
         self.DeclareAbstractOutputPort(
@@ -29,6 +36,6 @@ class PusherPoseController(LeafSystem):
         )
 
     def DoCalcOutput(self, context: Context, output):
-        planar_pose: PlanarPose = self.input_port.Eval(context)  # type: ignore
+        planar_pose: PlanarPose = self.planar_pose_desired.Eval(context)  # type: ignore
         pose = planar_pose.to_pose(z_value=self.z_dist)
         output.set_value(pose)

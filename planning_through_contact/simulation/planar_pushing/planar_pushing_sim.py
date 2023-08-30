@@ -62,7 +62,7 @@ class PlanarPushingSimulation:
         )
         builder.Connect(
             self.planar_pose_pub.get_output_port(),
-            self.pusher_pose_controller.get_input_port(),
+            self.pusher_pose_controller.GetInputPort("planar_pose_desired"),
         )
 
         self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(

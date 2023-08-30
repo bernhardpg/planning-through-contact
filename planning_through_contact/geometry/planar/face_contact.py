@@ -86,6 +86,7 @@ class FaceContactVariables(AbstractModeVariables):
         dt = time_in_mode / num_knot_points
 
         return FaceContactVariables(
+            contact_location,
             num_knot_points,
             time_in_mode,
             dt,
@@ -114,6 +115,7 @@ class FaceContactVariables(AbstractModeVariables):
                 raise NotImplementedError(f"dtype {vec.dtype} not supported")
 
         return FaceContactVariables(
+            self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
@@ -143,6 +145,7 @@ class FaceContactVariables(AbstractModeVariables):
         ].flatten()
 
         return FaceContactVariables(
+            self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
@@ -474,6 +477,7 @@ class FaceContactMode(AbstractContactMode):
         p_WB_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_ys, result)  # type: ignore
 
         return FaceContactVariables(
+            self.contact_location,
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
@@ -503,6 +507,7 @@ class FaceContactMode(AbstractContactMode):
         p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
 
         return FaceContactVariables(
+            self.contact_location,
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,

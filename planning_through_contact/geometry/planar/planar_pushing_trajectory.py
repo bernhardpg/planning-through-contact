@@ -1,5 +1,6 @@
 import pickle
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Literal
 
@@ -17,6 +18,7 @@ from pydrake.trajectories import (
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -121,6 +123,15 @@ class LinTrajSegment:
         )
 
 
+# TODO(bernhardpg): Generalize
+class PlanarPushingContactMode(Enum):
+    NO_CONTACT = 0
+    FACE_0 = 1
+    FACE_1 = 2
+    FACE_2 = 3
+    FACE_3 = 4
+
+
 @dataclass
 class PlanarPushingTrajSegment:
     """
@@ -134,6 +145,7 @@ class PlanarPushingTrajSegment:
     R_WB: So3TrajSegment
     p_c_W: LinTrajSegment
     f_c_W: LinTrajSegment
+    mode: PlanarPushingContactMode
 
     @classmethod
     def from_knot_points(
@@ -146,7 +158,12 @@ class PlanarPushingTrajSegment:
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
 
-        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W)
+        if isinstance(knot_points, NonCollisionVariables):
+            mode = PlanarPushingContactMode.NO_CONTACT
+        else:  # FaceContactVariables
+            mode = PlanarPushingContactMode(1 + knot_points.contact_location.idx)
+
+        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W, mode)
 
 
 class PlanarPushingTrajectory:
