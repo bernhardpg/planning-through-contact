@@ -62,15 +62,18 @@ class PlanarPushingSimConfig:
     save_plots: bool = False
 
 
-class SliderPoseSelector(LeafSystem):
+class PusherSliderPoseSelector(LeafSystem):
     """
     Select the slider pose and spatial velocity and output these.
     """
 
-    def __init__(self, slider_idx: ModelInstanceIndex) -> None:
+    def __init__(
+        self, slider_idx: ModelInstanceIndex, pusher_idx: ModelInstanceIndex
+    ) -> None:
         super().__init__()
 
         self.slider_idx = slider_idx
+        self.pusher_idx = pusher_idx
 
         self.body_poses = self.DeclareAbstractInputPort(
             "body_poses",
@@ -90,6 +93,11 @@ class SliderPoseSelector(LeafSystem):
             lambda: AbstractValue.Make(SpatialVelocity()),
             self.DoCalcSliderSpatialVelocity,
         )
+        self.DeclareAbstractOutputPort(
+            "pusher_pose",
+            lambda: AbstractValue.Make(RigidTransform()),
+            self.DoCalcPusherPose,
+        )
 
     def DoCalcSliderPose(self, context: Context, output):
         body_poses: List[RigidTransform] = self.body_poses.Eval(context)  # type: ignore
@@ -100,6 +108,11 @@ class SliderPoseSelector(LeafSystem):
         spatial_velocities: List[SpatialVelocity] = self.body_spatial_velocities.Eval(context)  # type: ignore
         slider_spatial_vel = spatial_velocities[self.slider_idx]
         output.set_value(slider_spatial_vel)
+
+    def DoCalcPusherPose(self, context: Context, output):
+        body_poses: List[RigidTransform] = self.body_poses.Eval(context)  # type: ignore
+        pusher_pose = body_poses[self.pusher_idx]
+        output.set_value(pusher_pose)
 
 
 class PlanarPushingDiagram(Diagram):
@@ -292,24 +305,29 @@ class PlanarPushingDiagram(Diagram):
         self, builder: DiagramBuilder, body_name: Literal["box", "t_pusher"]
     ) -> None:
         slider_idx = self.mbp.GetBodyByName(body_name).index()
+        pusher_idx = self.mbp.GetBodyByName("pusher").index()
 
-        self.slider_pose_selector = builder.AddNamedSystem(
-            "SliderPoseSelector", SliderPoseSelector(slider_idx)
+        self.pusher_slider_pose_selector = builder.AddNamedSystem(
+            "SliderPoseSelector", PusherSliderPoseSelector(slider_idx, pusher_idx)
         )
         builder.Connect(
             self.mbp.get_body_poses_output_port(),
-            self.slider_pose_selector.GetInputPort("body_poses"),
+            self.pusher_slider_pose_selector.GetInputPort("body_poses"),
         )
         builder.Connect(
             self.mbp.get_body_spatial_velocities_output_port(),
-            self.slider_pose_selector.GetInputPort("body_spatial_velocities"),
+            self.pusher_slider_pose_selector.GetInputPort("body_spatial_velocities"),
         )
         builder.ExportOutput(
-            self.slider_pose_selector.GetOutputPort("slider_pose"), "slider_pose"
+            self.pusher_slider_pose_selector.GetOutputPort("slider_pose"), "slider_pose"
         )
         builder.ExportOutput(
-            self.slider_pose_selector.GetOutputPort("slider_spatial_velocity"),
+            self.pusher_slider_pose_selector.GetOutputPort("slider_spatial_velocity"),
             "slider_spatial_velocity",
+        )
+        builder.ExportOutput(
+            self.pusher_slider_pose_selector.GetOutputPort("pusher_pose"),
+            "pusher_pose",
         )
 
     def get_slider_body(self) -> DrakeRigidBody:

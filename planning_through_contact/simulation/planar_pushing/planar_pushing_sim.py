@@ -63,6 +63,7 @@ class PlanarPushingSimulation:
             slider,
             self.planar_pose_pub.GetOutputPort("contact_mode"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose"),
+            self.station.GetOutputPort("pusher_pose"),
             self.planar_pose_pub.GetOutputPort("slider_planar_pose"),
             self.planar_pose_pub.GetOutputPort("slider_theta_dot"),
             self.station.GetOutputPort("slider_pose"),

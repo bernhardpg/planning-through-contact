@@ -23,7 +23,7 @@ def get_slider_box() -> RigidBody:
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
-    traj_name = "trajectories/box_pushing_2.pkl"
+    traj_name = "trajectories/box_pushing_1.pkl"
     traj = PlanarPushingTrajectory.load(traj_name)
 
     slider = get_slider_box()
