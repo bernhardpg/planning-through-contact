@@ -179,7 +179,7 @@ class PlanarPushingDiagram(Diagram):
 
         self.add_controller(builder)
 
-        self.add_slider_pose_selector(builder)
+        self.add_slider_pose_selector(builder, config.body)
 
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
@@ -286,9 +286,13 @@ class PlanarPushingDiagram(Diagram):
             "iiwa_torque_external",
         )
 
-    def add_slider_pose_selector(self, builder: DiagramBuilder) -> None:
+    def add_slider_pose_selector(
+        self, builder: DiagramBuilder, body_name: Literal["box", "t_pusher"]
+    ) -> None:
+        slider_idx = self.mbp.GetBodyByName(body_name).index()
+
         self.slider_pose_selector = builder.AddNamedSystem(
-            "SliderPoseSelector", SliderPoseSelector(self.slider)
+            "SliderPoseSelector", SliderPoseSelector(slider_idx)
         )
         builder.Connect(
             self.mbp.get_body_poses_output_port(),

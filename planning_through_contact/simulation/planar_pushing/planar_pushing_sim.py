@@ -63,7 +63,8 @@ class PlanarPushingSimulation:
             builder,
             slider,
             self.planar_pose_pub.GetOutputPort("contact_mode"),
-            self.planar_pose_pub.GetOutputPort("planar_pose"),
+            self.planar_pose_pub.GetOutputPort("pusher_planar_pose"),
+            self.planar_pose_pub.GetOutputPort("slider_planar_pose"),
             self.station.GetOutputPort("slider_pose"),
             self.station.GetOutputPort("slider_spatial_velocity"),
         )

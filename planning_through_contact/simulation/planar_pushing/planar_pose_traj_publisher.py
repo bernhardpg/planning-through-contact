@@ -20,9 +20,15 @@ class PlanarPoseTrajPublisher(LeafSystem):
         self.delay = delay_before_start
 
         self.DeclareAbstractOutputPort(
-            "planar_pose",
+            "pusher_planar_pose",
             lambda: AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
-            self.DoCalcPoseOutput,
+            self.DoCalcPusherPoseOutput,
+        )
+
+        self.DeclareAbstractOutputPort(
+            "slider_planar_pose",
+            lambda: AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
+            self.DoCalcSliderPoseOutput,
         )
 
         self.DeclareAbstractOutputPort(
@@ -34,7 +40,7 @@ class PlanarPoseTrajPublisher(LeafSystem):
     def get_rel_t(self, t: float) -> float:
         return t - self.delay
 
-    def _calc_pose(self, t: float) -> PlanarPose:
+    def _calc_pusher_pose(self, t: float) -> PlanarPose:
         p_c_W = self.traj.get_value(self.get_rel_t(t), "p_c_W")
 
         # Avoid typing error
@@ -43,10 +49,26 @@ class PlanarPoseTrajPublisher(LeafSystem):
         planar_pose = PlanarPose(p_c_W[0].item(), p_c_W[1].item(), theta=0)
         return planar_pose
 
-    def DoCalcPoseOutput(self, context: Context, output):
+    def DoCalcPusherPoseOutput(self, context: Context, output):
         curr_t = context.get_time()
-        end_effector_pose = self._calc_pose(curr_t)
+        end_effector_pose = self._calc_pusher_pose(curr_t)
         output.set_value(end_effector_pose)
+
+    def _calc_slider_pose(self, t: float) -> PlanarPose:
+        p_WB = self.traj.get_value(self.get_rel_t(t), "p_WB")
+        theta = self.traj.get_value(self.get_rel_t(t), "theta")
+
+        # Avoid typing error
+        assert isinstance(p_WB, type(np.array([])))
+        assert isinstance(theta, float)
+
+        planar_pose = PlanarPose(p_WB[0].item(), p_WB[1].item(), theta)
+        return planar_pose
+
+    def DoCalcSliderPoseOutput(self, context: Context, output):
+        curr_t = context.get_time()
+        slider_pose = self._calc_slider_pose(curr_t)
+        output.set_value(slider_pose)
 
     def DoCalcModeOuput(self, context: Context, output):
         curr_t = context.get_time()

@@ -24,8 +24,12 @@ class PusherPoseController(LeafSystem):
         self.z_dist = z_dist_to_table
         self.object_geometry = object_geometry
 
-        self.planar_pose_desired = self.DeclareAbstractInputPort(
-            "planar_pose_desired",
+        self.pusher_planar_pose_desired = self.DeclareAbstractInputPort(
+            "pusher_planar_pose_desired",
+            AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
+        )
+        self.slider_planar_pose_desired = self.DeclareAbstractInputPort(
+            "slider_planar_pose_desired",
             AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
         )
         self.contact_mode_desired = self.DeclareAbstractInputPort(
@@ -50,9 +54,10 @@ class PusherPoseController(LeafSystem):
         builder: DiagramBuilder,
         slider: RigidBody,
         contact_mode_desired: OutputPort,
-        planar_pose_desired: OutputPort,
-        slider_pose: OutputPort,
-        slider_spatial_velocity: OutputPort,
+        pusher_planar_pose_desired: OutputPort,
+        slider_planar_pose_desired: OutputPort,
+        slider_pose_measured: OutputPort,
+        slider_spatial_velocity_measured: OutputPort,
     ) -> "PusherPoseController":
         pusher_pose_controller = builder.AddNamedSystem(
             "PusherPoseController",
@@ -63,25 +68,33 @@ class PusherPoseController(LeafSystem):
             pusher_pose_controller.GetInputPort("contact_mode_desired"),
         )
         builder.Connect(
-            planar_pose_desired,
-            pusher_pose_controller.GetInputPort("planar_pose_desired"),
+            pusher_planar_pose_desired,
+            pusher_pose_controller.GetInputPort("pusher_planar_pose_desired"),
         )
         builder.Connect(
-            slider_pose,
+            slider_planar_pose_desired,
+            pusher_pose_controller.GetInputPort("slider_planar_pose_desired"),
+        )
+        builder.Connect(
+            slider_pose_measured,
             pusher_pose_controller.GetInputPort("slider_pose"),
         )
         builder.Connect(
-            slider_spatial_velocity,
+            slider_spatial_velocity_measured,
             pusher_pose_controller.GetInputPort("slider_spatial_velocity"),
         )
         return pusher_pose_controller
 
     def DoCalcOutput(self, context: Context, output):
-        planar_pose: PlanarPose = self.planar_pose_desired.Eval(context)  # type: ignore
-        pose = planar_pose.to_pose(z_value=self.z_dist)
-        output.set_value(pose)
+        pusher_planar_pose_desired: PlanarPose = self.pusher_planar_pose_desired.Eval(context)  # type: ignore
+        slider_planar_pose_desired: PlanarPose = self.slider_planar_pose_desired.Eval(context)  # type: ignore
 
-        mode: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
+        mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
         slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
         slider_spatial_velocity: SpatialVelocity = self.slider_spatial_velocity.Eval(context)  # type: ignore
+
+        slider_planar_pose = PlanarPose.from_pose(slider_pose)
         breakpoint()
+
+        pose_desired = pusher_planar_pose_desired.to_pose(z_value=self.z_dist)
+        output.set_value(pose_desired)
