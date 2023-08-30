@@ -2,7 +2,10 @@ import numpy as np
 from pydrake.common.value import AbstractValue
 from pydrake.systems.framework import Context, LeafSystem
 
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pose import (
+    PlanarPose,
+    PlanarVelocity,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
     PlanarPushingTrajectory,
@@ -29,6 +32,12 @@ class PlanarPoseTrajPublisher(LeafSystem):
             "slider_planar_pose",
             lambda: AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
             self.DoCalcSliderPoseOutput,
+        )
+
+        self.DeclareAbstractOutputPort(
+            "slider_theta_dot",
+            lambda: AbstractValue.Make(float),
+            self.DoCalcSliderVelOutput,
         )
 
         self.DeclareAbstractOutputPort(
@@ -69,6 +78,19 @@ class PlanarPoseTrajPublisher(LeafSystem):
         curr_t = context.get_time()
         slider_pose = self._calc_slider_pose(curr_t)
         output.set_value(slider_pose)
+
+    def _calc_slider_vel(self, t: float) -> float:
+        theta_dot = self.traj.get_value(self.get_rel_t(t), "theta_dot")
+
+        # Avoid typing error
+        assert isinstance(theta_dot, float)
+
+        return theta_dot
+
+    def DoCalcSliderVelOutput(self, context: Context, output):
+        curr_t = context.get_time()
+        slider_vel = self._calc_slider_vel(curr_t)
+        output.set_value(slider_vel)
 
     def DoCalcModeOuput(self, context: Context, output):
         curr_t = context.get_time()

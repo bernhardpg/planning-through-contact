@@ -58,6 +58,8 @@ class PlanarPushingSimConfig:
     time_step: float = 1e-3
     draw_frames: bool = False
     use_realtime: bool = False
+    delay_before_execution: float = 5.0
+    save_plots: bool = False
 
 
 class SliderPoseSelector(LeafSystem):

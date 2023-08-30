@@ -50,8 +50,8 @@
           <drake:compliant_hydroelastic/>
           <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
           <drake:mesh_resolution_hint>0.005</drake:mesh_resolution_hint>
-          <drake:mu_dynamic>1.0</drake:mu_dynamic>
-          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>0.5</drake:mu_dynamic>
+          <drake:mu_static>0.5</drake:mu_static>
         </drake:proximity_properties>
       </collision>
     </link>

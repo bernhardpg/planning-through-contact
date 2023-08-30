@@ -73,4 +73,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=1, debug=True)
+    create_plan(body_to_use="box", traj_number=2, debug=True)

@@ -9,7 +9,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pose import (
+    PlanarPose,
+    PlanarVelocity,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
 )
@@ -35,6 +38,10 @@ class PusherPoseController(LeafSystem):
             "slider_planar_pose_desired",
             AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)),
         )
+        self.slider_theta_dot_desired = self.DeclareAbstractInputPort(
+            "slider_theta_dot_desired",
+            AbstractValue.Make(PlanarVelocity(v_x=0, v_y=0, omega=0)),
+        )
         self.contact_mode_desired = self.DeclareAbstractInputPort(
             "contact_mode_desired",
             AbstractValue.Make(PlanarPushingContactMode(0)),
@@ -59,6 +66,7 @@ class PusherPoseController(LeafSystem):
         contact_mode_desired: OutputPort,
         pusher_planar_pose_desired: OutputPort,
         slider_planar_pose_desired: OutputPort,
+        slider_theta_dot_desired: OutputPort,
         slider_pose_measured: OutputPort,
         slider_spatial_velocity_measured: OutputPort,
     ) -> "PusherPoseController":
@@ -79,6 +87,10 @@ class PusherPoseController(LeafSystem):
             pusher_pose_controller.GetInputPort("slider_planar_pose_desired"),
         )
         builder.Connect(
+            slider_theta_dot_desired,
+            pusher_pose_controller.GetInputPort("slider_theta_dot_desired"),
+        )
+        builder.Connect(
             slider_pose_measured,
             pusher_pose_controller.GetInputPort("slider_pose"),
         )
@@ -89,14 +101,26 @@ class PusherPoseController(LeafSystem):
         return pusher_pose_controller
 
     def _compute_control(
-        self, theta: float, theta_desired: float, loc: PolytopeContactLocation
+        self,
+        theta: float,
+        theta_desired: float,
+        theta_dot: float,
+        theta_dot_desired: float,
+        loc: PolytopeContactLocation,
     ) -> npt.NDArray[np.float64]:
         theta_error = theta_desired - theta
+        theta_dot_error = theta_dot_desired - theta_dot
 
-        K_P = 0.1
+        # K_P = 0.3
+        K_P = 0.6
+        # K_D = 2 * np.sqrt(K_P)
+        K_D = 0.01
+        # K_D = 0
+
+        print(f"theta: {theta_error}, theta_dot: {theta_dot_error}")
 
         # Commanded difference in position along contact face
-        delta_lam = -K_P * theta_error
+        delta_lam = -(K_P * theta_error + K_D * theta_dot_error)
 
         pv1, pv2 = self.object_geometry.get_proximate_vertices_from_location(loc)
 
@@ -111,6 +135,7 @@ class PusherPoseController(LeafSystem):
 
     def DoCalcOutput(self, context: Context, output):
         mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
+        # print(mode_desired)
         pusher_planar_pose_desired: PlanarPose = self.pusher_planar_pose_desired.Eval(context)  # type: ignore
 
         if mode_desired == PlanarPushingContactMode.NO_CONTACT:
@@ -125,10 +150,15 @@ class PusherPoseController(LeafSystem):
             slider_planar_pose_desired: PlanarPose = self.slider_planar_pose_desired.Eval(context)  # type: ignore
 
             slider_spatial_velocity: SpatialVelocity = self.slider_spatial_velocity.Eval(context)  # type: ignore
+            Z_AXIS = 2
+            slider_theta_dot = slider_spatial_velocity.rotational()[Z_AXIS]
+            slider_theta_dot_desired: float = self.slider_theta_dot_desired.Eval(context)  # type: ignore
 
             delta_p_W_c = self._compute_control(
                 slider_planar_pose.theta,
                 slider_planar_pose_desired.theta,
+                slider_theta_dot,
+                slider_theta_dot_desired,
                 mode_desired.to_contact_location(),
             )
             pusher_planar_pose_adjustment = PlanarPose(

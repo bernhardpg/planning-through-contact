@@ -35,7 +35,6 @@ class PlanarPushingSimulation:
         traj: PlanarPushingTrajectory,
         slider: RigidBody,
         config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
-        delay_before_execution: float = 8.0,
     ):
         self.TABLE_BUFFER_DIST = 0.05
 
@@ -56,7 +55,7 @@ class PlanarPushingSimulation:
 
         self.planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
-            PlanarPoseTrajPublisher(traj, delay_before_execution),
+            PlanarPoseTrajPublisher(traj, config.delay_before_execution),
         )
 
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
@@ -65,6 +64,7 @@ class PlanarPushingSimulation:
             self.planar_pose_pub.GetOutputPort("contact_mode"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose"),
             self.planar_pose_pub.GetOutputPort("slider_planar_pose"),
+            self.planar_pose_pub.GetOutputPort("slider_theta_dot"),
             self.station.GetOutputPort("slider_pose"),
             self.station.GetOutputPort("slider_spatial_velocity"),
         )
@@ -77,6 +77,9 @@ class PlanarPushingSimulation:
             time_step=config.time_step,
             use_diff_ik_feedback=False,
         )
+
+        if config.save_plots:
+            builder.AddNamedSystem("theta_source")
 
         self.diagram = builder.Build()
 

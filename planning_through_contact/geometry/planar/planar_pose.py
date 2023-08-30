@@ -103,3 +103,16 @@ class PlanarPose:
         return PlanarPose(
             x=self.x + other.x, y=self.y + other.y, theta=self.theta + other.theta
         )
+
+
+class PlanarVelocity(PlanarPose):
+    """
+    Wrapper class for a planar velocity. The inner workings of this class are exactly the same as PlanarPose.
+    """
+
+    def __init__(self, v_x: float, v_y: float, omega: float):
+        super().__init__(v_x, v_y, omega)
+
+        self.v_x = self.x
+        self.v_y = self.y
+        self.omega = self.theta

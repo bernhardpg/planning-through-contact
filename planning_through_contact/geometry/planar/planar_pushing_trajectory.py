@@ -41,19 +41,22 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
+@dataclass
 class So3TrajSegment:
-    def __init__(
-        self,
+    start_time: float
+    end_time: float
+    Rs: List[npt.NDArray[np.float64]]
+    traj: PiecewiseQuaternionSlerp
+
+    @classmethod
+    def from_knot_points(
+        cls,
         # NOTE: we don't really need the entire matrix for this,
         # but keep it around until we want to extend to SO(3)
         Rs: List[npt.NDArray],
         start_time: float,
         end_time: float,
-    ) -> None:
-        self.Rs = Rs
-        self.start_time = start_time
-        self.end_time = end_time
-
+    ) -> "So3TrajSegment":
         num_samples = len(Rs)
         if num_samples == 1:  # just a constant value throughout the traj time
             knot_point_times = np.array([start_time, end_time])
@@ -64,11 +67,21 @@ class So3TrajSegment:
 
         Rs_in_SO3 = [from_so2_to_so3(R) for R in samples]
 
-        self.traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
+        traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
+        return cls(start_time, end_time, Rs, traj)
 
     def eval_theta(self, t: float) -> float:
         R = self.traj.orientation(t).rotation()
         return np.arccos(R[0, 0])
+
+    def eval_omega(self, t: float) -> npt.NDArray[np.float64]:
+        omega = self.traj.angular_velocity(t)
+        return omega
+
+    def eval_theta_dot(self, t: float) -> float:
+        omega = self.eval_omega(t)
+        Z_AXIS = 2
+        return omega[Z_AXIS]
 
     def eval(self, t: float) -> npt.NDArray[np.float64]:
         R = self.traj.orientation(t).rotation()
@@ -178,7 +191,7 @@ class PlanarPushingTrajSegment:
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
         p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_c_Ws), start_time, end_time)  # type: ignore
-        R_WB = So3TrajSegment(knot_points.R_WBs, start_time, end_time)  # type: ignore
+        R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
 
@@ -222,7 +235,7 @@ class PlanarPushingTrajectory:
     def get_value(
         self,
         t: float,
-        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta"],
+        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta", "theta_dot"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         traj = self._get_traj_segment_for_time(t)
@@ -236,6 +249,8 @@ class PlanarPushingTrajectory:
             val = traj.f_c_W.eval(t)
         elif traj_to_get == "theta":
             val = traj.R_WB.eval_theta(t)
+        elif traj_to_get == "theta_dot":
+            val = traj.R_WB.eval_theta_dot(t)
 
         return val
 
