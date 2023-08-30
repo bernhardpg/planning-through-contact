@@ -3,16 +3,22 @@ from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
 from pydrake.systems.framework import Context, LeafSystem
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
 class PusherPoseController(LeafSystem):
     def __init__(
         self,
+        object_geometry: CollisionGeometry,
         z_dist_to_table: float = 0.5,
     ):
         super().__init__()
         self.z_dist = z_dist_to_table
+        self.object_geometry = object_geometry
+        breakpoint()
 
         self.input_port = self.DeclareAbstractInputPort(
             "planar_pose",

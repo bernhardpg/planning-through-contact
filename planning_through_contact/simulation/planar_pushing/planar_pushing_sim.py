@@ -11,6 +11,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
 )
@@ -30,6 +31,7 @@ class PlanarPushingSimulation:
     def __init__(
         self,
         traj: PlanarPushingTrajectory,
+        slider: RigidBody,
         config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
         delay_before_execution: float = 8.0,
     ):
@@ -56,7 +58,7 @@ class PlanarPushingSimulation:
         )
         self.pusher_pose_controller = builder.AddNamedSystem(
             "PusherPoseController",
-            PusherPoseController(z_dist_to_table=0.02),
+            PusherPoseController(slider.geometry, z_dist_to_table=0.02),
         )
         builder.Connect(
             self.planar_pose_pub.get_output_port(),
