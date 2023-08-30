@@ -191,7 +191,7 @@ class PlanarPushingDiagram(Diagram):
                     # RollPitchYaw([-np.pi / 2 + 0.2, 0.0, np.pi]),  # type: ignore
                     # np.array([0.0, 0.0, 0.0]),
                     RollPitchYaw([-np.pi / 8, 0.0, np.pi]),  # type: ignore
-                    0.01 * np.array([0.05, 0.0, 0.1]),
+                    np.array([-1, -1.0, -1]),
                 ).GetAsMatrix4(),
             )
             AddDefaultVisualization(builder, self.meshcat)

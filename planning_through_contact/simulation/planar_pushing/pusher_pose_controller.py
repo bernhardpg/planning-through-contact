@@ -122,11 +122,8 @@ class PusherPoseController(LeafSystem):
         theta_error = theta_desired - theta
         theta_dot_error = theta_dot_desired - theta_dot
 
-        # K_P = 0.3
-        K_P = 0.6
-        # K_D = 2 * np.sqrt(K_P)
-        K_D = 0.01
-        # K_D = 0
+        K_P = 0.5
+        K_D = 0.001
 
         # Commanded difference in position along contact face
         delta_lam = -(K_P * theta_error + K_D * theta_dot_error)
