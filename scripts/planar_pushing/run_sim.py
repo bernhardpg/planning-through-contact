@@ -13,7 +13,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim impor
 
 
 def run_sim(plan: str, debug: bool = False):
-    traj_name = "trajectories/box_pushing.pkl"
+    traj_name = "trajectories/box_pushing_2.pkl"
     traj = PlanarPushingTrajectory.load(traj_name)
 
     config = PlanarPushingSimConfig(

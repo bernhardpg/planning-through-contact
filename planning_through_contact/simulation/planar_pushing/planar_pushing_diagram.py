@@ -38,6 +38,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.visualize.colors import COLORS
 
 
+# TODO(bernhardpg): Move to planar_pushing_sim.py
 @dataclass
 class PlanarPushingSimConfig:
     body: Literal["box", "t_pusher"] = "box"

@@ -2,25 +2,27 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import RotationMatrix
 from pydrake.multibody.inverse_kinematics import InverseKinematics
-from pydrake.multibody.plant import AddMultibodyPlantSceneGraph, MultibodyPlant
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import Context, DiagramBuilder, InputPort
+from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.primitives import ConstantVectorSource
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
+from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
+    PlanarPoseTrajPublisher,
+)
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
     PlanarPushingDiagram,
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import (
+    PusherPoseController,
+)
 from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
     PusherPoseToJointPos,
-)
-from planning_through_contact.simulation.systems.pusher_pose_publisher import (
-    PusherPosePublisher,
 )
 
 
@@ -48,19 +50,26 @@ class PlanarPushingSimulation:
             self.station.GetInputPort("iiwa_feedforward_torque"),
         )
 
+        self.planar_pose_pub = builder.AddNamedSystem(
+            "PlanarPoseTrajPublisher",
+            PlanarPoseTrajPublisher(traj, delay_before_execution),
+        )
+        self.pusher_pose_controller = builder.AddNamedSystem(
+            "PusherPoseController",
+            PusherPoseController(z_dist_to_table=0.02),
+        )
+        builder.Connect(
+            self.planar_pose_pub.get_output_port(),
+            self.pusher_pose_controller.get_input_port(),
+        )
+
         self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
             builder,
+            self.pusher_pose_controller.get_output_port(),
             self.station.GetInputPort("iiwa_position"),
             self.station.GetOutputPort("iiwa_state_measured"),
             time_step=config.time_step,
             use_diff_ik_feedback=False,
-        )
-
-        self.pusher_pose_pub = PusherPosePublisher.add_to_builder(
-            builder,
-            traj,
-            delay_before_execution,
-            self.pusher_pose_to_joint_pos.get_input_port(),
         )
 
         self.diagram = builder.Build()
