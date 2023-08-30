@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
 from pydrake.multibody.math import SpatialVelocity
@@ -6,12 +7,14 @@ from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, Outpu
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
+    PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 
 
 class PusherPoseController(LeafSystem):
@@ -85,16 +88,57 @@ class PusherPoseController(LeafSystem):
         )
         return pusher_pose_controller
 
+    def _compute_control(
+        self, theta: float, theta_desired: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        theta_error = theta_desired - theta
+
+        K_P = 0.1
+
+        # Commanded difference in position along contact face
+        delta_lam = -K_P * theta_error
+
+        pv1, pv2 = self.object_geometry.get_proximate_vertices_from_location(loc)
+
+        # TODO(bernhardpg): consider not normalizing this
+        dir_vector = (pv2 - pv1) / np.linalg.norm(pv2 - pv1)
+        delta_p_B_c = delta_lam * dir_vector
+
+        R_WB = two_d_rotation_matrix_from_angle(theta_desired)
+        # We only care about the diffs here, i.e. no constant translation
+        delta_p_W_c = R_WB.dot(delta_p_B_c)
+        return delta_p_W_c
+
     def DoCalcOutput(self, context: Context, output):
-        pusher_planar_pose_desired: PlanarPose = self.pusher_planar_pose_desired.Eval(context)  # type: ignore
-        slider_planar_pose_desired: PlanarPose = self.slider_planar_pose_desired.Eval(context)  # type: ignore
-
         mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
-        slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
-        slider_spatial_velocity: SpatialVelocity = self.slider_spatial_velocity.Eval(context)  # type: ignore
+        pusher_planar_pose_desired: PlanarPose = self.pusher_planar_pose_desired.Eval(context)  # type: ignore
 
-        slider_planar_pose = PlanarPose.from_pose(slider_pose)
-        breakpoint()
+        if mode_desired == PlanarPushingContactMode.NO_CONTACT:
+            pusher_pose_desired = pusher_planar_pose_desired.to_pose(
+                z_value=self.z_dist
+            )
+            output.set_value(pusher_pose_desired)
+        else:  # do control of angle
+            slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
 
-        pose_desired = pusher_planar_pose_desired.to_pose(z_value=self.z_dist)
-        output.set_value(pose_desired)
+            slider_planar_pose = PlanarPose.from_pose(slider_pose)
+            slider_planar_pose_desired: PlanarPose = self.slider_planar_pose_desired.Eval(context)  # type: ignore
+
+            slider_spatial_velocity: SpatialVelocity = self.slider_spatial_velocity.Eval(context)  # type: ignore
+
+            delta_p_W_c = self._compute_control(
+                slider_planar_pose.theta,
+                slider_planar_pose_desired.theta,
+                mode_desired.to_contact_location(),
+            )
+            pusher_planar_pose_adjustment = PlanarPose(
+                delta_p_W_c[0, 0], delta_p_W_c[1, 0], theta=0
+            )
+
+            pusher_pose_planar_command = (
+                pusher_planar_pose_desired + pusher_planar_pose_adjustment
+            )
+            pusher_pose_command = pusher_pose_planar_command.to_pose(
+                z_value=self.z_dist
+            )
+            output.set_value(pusher_pose_command)

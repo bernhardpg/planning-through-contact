@@ -98,3 +98,8 @@ class PlanarPose:
 
     def sin(self) -> float:
         return np.sin(self.theta)
+
+    def __add__(self, other: "PlanarPose") -> "PlanarPose":
+        return PlanarPose(
+            x=self.x + other.x, y=self.y + other.y, theta=self.theta + other.theta
+        )

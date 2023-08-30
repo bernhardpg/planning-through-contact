@@ -16,6 +16,10 @@ from pydrake.trajectories import (
     Trajectory,
 )
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
@@ -131,6 +135,26 @@ class PlanarPushingContactMode(Enum):
     FACE_2 = 3
     FACE_3 = 4
 
+    @classmethod
+    def from_contact_location(
+        cls,
+        loc: PolytopeContactLocation,
+    ) -> "PlanarPushingContactMode":
+        return cls(1 + loc.idx)
+
+    def to_contact_location(self) -> PolytopeContactLocation:
+        if self == PlanarPushingContactMode.FACE_0:
+            idx = 0
+        elif self == PlanarPushingContactMode.FACE_1:
+            idx = 1
+        elif self == PlanarPushingContactMode.FACE_2:
+            idx = 2
+        elif self == PlanarPushingContactMode.FACE_3:
+            idx = 3
+        else:
+            raise NotImplementedError()
+        return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
+
 
 @dataclass
 class PlanarPushingTrajSegment:
@@ -161,7 +185,9 @@ class PlanarPushingTrajSegment:
         if isinstance(knot_points, NonCollisionVariables):
             mode = PlanarPushingContactMode.NO_CONTACT
         else:  # FaceContactVariables
-            mode = PlanarPushingContactMode(1 + knot_points.contact_location.idx)
+            mode = PlanarPushingContactMode.from_contact_location(
+                knot_points.contact_location
+            )
 
         return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W, mode)
 
