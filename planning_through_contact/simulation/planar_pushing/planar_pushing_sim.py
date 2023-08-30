@@ -56,13 +56,14 @@ class PlanarPushingSimulation:
             "PlanarPoseTrajPublisher",
             PlanarPoseTrajPublisher(traj, delay_before_execution),
         )
-        self.pusher_pose_controller = builder.AddNamedSystem(
-            "PusherPoseController",
-            PusherPoseController(slider.geometry, z_dist_to_table=0.02),
-        )
-        builder.Connect(
-            self.planar_pose_pub.get_output_port(),
-            self.pusher_pose_controller.GetInputPort("planar_pose_desired"),
+
+        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
+            builder,
+            slider,
+            self.planar_pose_pub.GetOutputPort("contact_mode"),
+            self.planar_pose_pub.GetOutputPort("planar_pose"),
+            self.station.GetOutputPort("slider_pose"),
+            self.station.GetOutputPort("slider_spatial_velocity"),
         )
 
         self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(

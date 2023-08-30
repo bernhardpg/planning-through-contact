@@ -213,6 +213,11 @@ class PlanarPushingTrajectory:
 
         return val
 
+    def get_mode(self, t: float) -> PlanarPushingContactMode:
+        t = self._t_or_end_time(t)
+        traj = self._get_traj_segment_for_time(t)
+        return traj.mode
+
     def get_box_planar_pose(self, t) -> PlanarPose:
         p_WB = self.get_value(t, "p_WB")
         theta = self.get_value(t, "theta")

@@ -10,6 +10,7 @@ from pydrake.all import (
     MultibodyPlant,
     StateInterpolatorWithDiscreteDerivative,
 )
+from pydrake.common.value import AbstractValue
 from pydrake.geometry import Box as DrakeBox
 from pydrake.geometry import Cylinder as DrakeCylinder
 from pydrake.geometry import (
@@ -18,6 +19,7 @@ from pydrake.geometry import (
     StartMeshcat,
 )
 from pydrake.math import RigidTransform, RollPitchYaw
+from pydrake.multibody.all import ModelInstanceIndex, SpatialVelocity
 from pydrake.multibody.parsing import (
     LoadModelDirectives,
     Parser,
@@ -30,7 +32,7 @@ from pydrake.multibody.plant import (
 )
 from pydrake.multibody.tree import Frame
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
-from pydrake.systems.framework import Context, Diagram, DiagramBuilder
+from pydrake.systems.framework import Context, Diagram, DiagramBuilder, LeafSystem
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 from pydrake.visualization import AddDefaultVisualization
 
@@ -55,6 +57,46 @@ class PlanarPushingSimConfig:
     )
     time_step: float = 1e-3
     draw_frames: bool = False
+
+
+class SliderPoseSelector(LeafSystem):
+    """
+    Select the slider pose and spatial velocity and output these.
+    """
+
+    def __init__(self, slider_idx: ModelInstanceIndex) -> None:
+        super().__init__()
+
+        self.slider_idx = slider_idx
+
+        self.body_poses = self.DeclareAbstractInputPort(
+            "body_poses",
+            AbstractValue.Make([RigidTransform()]),
+        )
+        self.body_spatial_velocities = self.DeclareAbstractInputPort(
+            "body_spatial_velocities",
+            AbstractValue.Make([SpatialVelocity()]),
+        )
+        self.DeclareAbstractOutputPort(
+            "slider_pose",
+            lambda: AbstractValue.Make(RigidTransform()),
+            self.DoCalcSliderPose,
+        )
+        self.DeclareAbstractOutputPort(
+            "slider_spatial_velocity",
+            lambda: AbstractValue.Make(SpatialVelocity()),
+            self.DoCalcSliderSpatialVelocity,
+        )
+
+    def DoCalcSliderPose(self, context: Context, output):
+        body_poses: List[RigidTransform] = self.body_poses.Eval(context)  # type: ignore
+        slider_pose = body_poses[self.slider_idx]
+        output.set_value(slider_pose)
+
+    def DoCalcSliderSpatialVelocity(self, context: Context, output):
+        spatial_velocities: List[SpatialVelocity] = self.body_spatial_velocities.Eval(context)  # type: ignore
+        slider_spatial_vel = spatial_velocities[self.slider_idx]
+        output.set_value(slider_spatial_vel)
 
 
 class PlanarPushingDiagram(Diagram):
@@ -136,6 +178,8 @@ class PlanarPushingDiagram(Diagram):
             AddDefaultVisualization(builder, self.meshcat)
 
         self.add_controller(builder)
+
+        self.add_slider_pose_selector(builder)
 
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
@@ -240,6 +284,26 @@ class PlanarPushingDiagram(Diagram):
         builder.ExportOutput(
             self.mbp.get_generalized_contact_forces_output_port(self.iiwa),
             "iiwa_torque_external",
+        )
+
+    def add_slider_pose_selector(self, builder: DiagramBuilder) -> None:
+        self.slider_pose_selector = builder.AddNamedSystem(
+            "SliderPoseSelector", SliderPoseSelector(self.slider)
+        )
+        builder.Connect(
+            self.mbp.get_body_poses_output_port(),
+            self.slider_pose_selector.GetInputPort("body_poses"),
+        )
+        builder.Connect(
+            self.mbp.get_body_spatial_velocities_output_port(),
+            self.slider_pose_selector.GetInputPort("body_spatial_velocities"),
+        )
+        builder.ExportOutput(
+            self.slider_pose_selector.GetOutputPort("slider_pose"), "slider_pose"
+        )
+        builder.ExportOutput(
+            self.slider_pose_selector.GetOutputPort("slider_spatial_velocity"),
+            "slider_spatial_velocity",
         )
 
     def get_slider_body(self) -> DrakeRigidBody:
