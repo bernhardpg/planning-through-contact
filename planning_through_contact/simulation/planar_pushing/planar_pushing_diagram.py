@@ -46,8 +46,11 @@ class PlanarPushingSimConfig:
     body: Literal["box", "t_pusher"] = "box"
     contact_model: ContactModel = ContactModel.kHydroelasticWithFallback
     visualize_desired: bool = False
-    goal_pose: Optional[PlanarPose] = None
-    start_pose: PlanarPose = field(
+    slider_goal_pose: Optional[PlanarPose] = None
+    pusher_start_pose: PlanarPose = field(
+        default_factory=lambda: PlanarPose(x=0.0, y=0.5, theta=0.0)
+    )
+    slider_start_pose: PlanarPose = field(
         default_factory=lambda: PlanarPose(x=0.0, y=0.5, theta=0.0)
     )
     default_joint_positions: npt.NDArray[np.float64] = field(
@@ -60,6 +63,7 @@ class PlanarPushingSimConfig:
     use_realtime: bool = False
     delay_before_execution: float = 5.0
     save_plots: bool = False
+    use_diff_ik: bool = True
 
 
 class PusherSliderPoseSelector(LeafSystem):
@@ -168,8 +172,8 @@ class PlanarPushingDiagram(Diagram):
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
         if config.visualize_desired:
-            assert config.goal_pose is not None
-            self._visualize_desired_slider_pose(config.goal_pose)
+            assert config.slider_goal_pose is not None
+            self._visualize_desired_slider_pose(config.slider_goal_pose)
 
         if config.draw_frames:
             for frame_name in [
@@ -199,6 +203,12 @@ class PlanarPushingDiagram(Diagram):
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")
         builder.BuildInto(self)
+
+    def get_slider_min_height(self) -> float:
+        shapes = self.get_slider_shapes()
+        heights = [shape.height() for shape in shapes]
+        min_height = min(heights)
+        return min_height
 
     def _visualize_desired_slider_pose(self, desired_planar_pose: PlanarPose) -> None:
         source_id = self.scene_graph.RegisterSource()
@@ -368,6 +378,10 @@ class PlanarPushingDiagram(Diagram):
         pusher_shape = inspector.GetShape(collision_geometry_id)
 
         return pusher_shape
+
+    def get_pusher_length(self) -> float:
+        shape = self.get_pusher_shape()
+        return shape.length()
 
     @property
     def pusher_frame(self) -> Frame:

@@ -259,7 +259,7 @@ class PlanarPushingTrajectory:
         traj = self._get_traj_segment_for_time(t)
         return traj.mode
 
-    def get_box_planar_pose(self, t) -> PlanarPose:
+    def get_slider_planar_pose(self, t) -> PlanarPose:
         p_WB = self.get_value(t, "p_WB")
         theta = self.get_value(t, "theta")
 
@@ -268,6 +268,16 @@ class PlanarPushingTrajectory:
         assert isinstance(theta, float)
 
         planar_pose = PlanarPose(p_WB[0, 0], p_WB[1, 0], theta)
+        return planar_pose
+
+    def get_pusher_planar_pose(self, t) -> PlanarPose:
+        p_c_W = self.get_value(t, "p_c_W")
+        theta = 0
+
+        # avoid typing errors
+        assert isinstance(p_c_W, type(np.array([])))
+
+        planar_pose = PlanarPose(p_c_W[0, 0], p_c_W[1, 0], theta)
         return planar_pose
 
     @classmethod
@@ -315,10 +325,15 @@ class PlanarPushingTrajectory:
         return self.traj_segments[-1].end_time
 
     @property
-    def target_planar_pose(self) -> PlanarPose:
-        return self.get_box_planar_pose(self.end_time)
+    def target_slider_planar_pose(self) -> PlanarPose:
+        return self.get_slider_planar_pose(self.end_time)
 
     @property
-    def initial_planar_pose(self) -> PlanarPose:
+    def initial_slider_planar_pose(self) -> PlanarPose:
         start_time = self.traj_segments[0].start_time
-        return self.get_box_planar_pose(start_time)
+        return self.get_slider_planar_pose(start_time)
+
+    @property
+    def initial_pusher_planar_pose(self) -> PlanarPose:
+        start_time = self.traj_segments[0].start_time
+        return self.get_pusher_planar_pose(start_time)

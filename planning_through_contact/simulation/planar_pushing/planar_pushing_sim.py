@@ -25,7 +25,9 @@ from planning_through_contact.simulation.planar_pushing.pusher_pose_controller i
     PusherPoseController,
 )
 from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
-    PusherPoseToJointPos,
+    PusherPoseInverseKinematics,
+    PusherPoseToJointPosDiffIk,
+    solve_ik,
 )
 
 
@@ -70,14 +72,24 @@ class PlanarPushingSimulation:
             self.station.GetOutputPort("slider_spatial_velocity"),
         )
 
-        self.pusher_pose_to_joint_pos = PusherPoseToJointPos.add_to_builder(
-            builder,
-            self.pusher_pose_controller.get_output_port(),
-            self.station.GetInputPort("iiwa_position"),
-            self.station.GetOutputPort("iiwa_state_measured"),
-            time_step=config.time_step,
-            use_diff_ik_feedback=False,
-        )
+        if config.use_diff_ik:
+            PusherPoseToJointPosDiffIk.add_to_builder(
+                builder,
+                self.pusher_pose_controller.get_output_port(),
+                self.station.GetInputPort("iiwa_position"),
+                self.station.GetOutputPort("iiwa_state_measured"),
+                time_step=config.time_step,
+                use_diff_ik_feedback=False,
+            )
+        else:
+            ik = PusherPoseInverseKinematics.AddTobuilder(
+                builder,
+                self.pusher_pose_controller.get_output_port(),
+                self.station.GetOutputPort("iiwa_position_measured"),
+                self.station.GetOutputPort("slider_pose"),
+                self.station.GetInputPort("iiwa_position"),
+                config.default_joint_positions,
+            )
 
         if config.save_plots:
             builder.AddNamedSystem("theta_source")
@@ -91,10 +103,21 @@ class PlanarPushingSimulation:
         self.context = self.simulator.get_mutable_context()
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
-        self._set_joint_positions(config.default_joint_positions)
-        self.set_slider_planar_pose(config.start_pose)
-
         self.config = config
+        self.set_slider_planar_pose(config.slider_start_pose)
+
+        BUFFER = 0.01
+        start_joint_positions = solve_ik(
+            self.diagram,
+            self.station,
+            config.pusher_start_pose.to_pose(self.station.get_pusher_length() + BUFFER),
+            config.slider_start_pose.to_pose(self.station.get_slider_min_height()),
+            config.default_joint_positions,
+        )
+        self._set_joint_positions(start_joint_positions)
+
+        if not config.use_diff_ik:
+            ik.init(self.diagram, self.station)
 
     def export_diagram(self, filename: str):
         import pydot
@@ -124,74 +147,6 @@ class PlanarPushingSimulation:
         # add a small height to avoid the box penetrating the table
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self.station.mbp.SetPositions(self.mbp_context, self.station.slider, q)
-
-    # NOTE: This has never been used and is only kept around for future reference
-    def solve_ik(
-        self,
-        planar_pose: PlanarPose,
-        disregard_angle: bool = True,
-    ) -> npt.NDArray[np.float64]:
-        # Need to create a new context that the IK can use for solving the problem
-        context = self.diagram.CreateDefaultContext()
-        mbp_context = self.station.mbp.GetMyContextFromRoot(context)
-
-        # drake typing error
-        ik = InverseKinematics(self.station.mbp, mbp_context, with_joint_limits=True)  # type: ignore
-
-        pusher_shape = self.station.get_pusher_shape()
-        pose = planar_pose.to_pose(
-            z_value=pusher_shape.length() + self.TABLE_BUFFER_DIST
-        )
-
-        ik.AddPositionConstraint(
-            self.station.pusher_frame,
-            np.zeros(3),
-            self.station.mbp.world_frame(),
-            pose.translation(),
-            pose.translation(),
-        )
-
-        if disregard_angle:
-            z_unit_vec = np.array([0, 0, 1])
-            ik.AddAngleBetweenVectorsConstraint(
-                self.station.pusher_frame,
-                z_unit_vec,
-                self.station.mbp.world_frame(),
-                -z_unit_vec,  # The pusher object has z-axis pointing up
-                0,
-                0,
-            )
-
-        else:
-            ik.AddOrientationConstraint(
-                self.station.pusher_frame,
-                RotationMatrix(),
-                self.station.mbp.world_frame(),
-                pose.rotation(),
-                0.0,
-            )
-
-        # Non-penetration
-        ik.AddMinimumDistanceConstraint(0.001, 0.1)
-
-        # Cost on deviation from default joint positions
-        prog = ik.get_mutable_prog()
-        q = ik.q()
-
-        slider_position = self.station.mbp.GetPositions(
-            self.mbp_context, self.station.slider
-        )
-        q0 = np.concatenate([self.config.default_joint_positions, slider_position])
-        prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
-        prog.SetInitialGuess(q, q0)
-
-        result = Solve(ik.prog())
-        assert result.is_success()
-
-        q_sol = result.GetSolution(q)
-        # TODO: Should call joint.Lock on slider, see https://drake.mit.edu/doxygen_cxx/classdrake_1_1multibody_1_1_inverse_kinematics.html
-        q_iiwa = q_sol[:7]
-        return q_iiwa
 
     def _set_joint_positions(self, joint_positions: npt.NDArray[np.float64]):
         self.station.mbp.SetPositions(

@@ -31,12 +31,14 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     config = PlanarPushingSimConfig(
         body="box",
         contact_model=ContactModel.kHydroelastic,
-        start_pose=traj.initial_planar_pose,
-        goal_pose=traj.target_planar_pose,
+        pusher_start_pose=traj.initial_pusher_planar_pose,
+        slider_start_pose=traj.initial_slider_planar_pose,
+        slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=2.0,
+        use_diff_ik=False,
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
