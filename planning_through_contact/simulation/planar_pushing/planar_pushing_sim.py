@@ -106,11 +106,11 @@ class PlanarPushingSimulation:
         self.config = config
         self.set_slider_planar_pose(config.slider_start_pose)
 
-        BUFFER = 0.01
+        BUFFER = 0.02
         start_joint_positions = solve_ik(
             self.diagram,
             self.station,
-            config.pusher_start_pose.to_pose(self.station.get_pusher_length() + BUFFER),
+            config.pusher_start_pose.to_pose(BUFFER),
             config.slider_start_pose.to_pose(self.station.get_slider_min_height()),
             config.default_joint_positions,
         )

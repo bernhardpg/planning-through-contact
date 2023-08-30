@@ -385,7 +385,7 @@ class PlanarPushingDiagram(Diagram):
 
     @property
     def pusher_frame(self) -> Frame:
-        P = self.mbp.GetFrameByName("pusher_base")
+        P = self.mbp.GetFrameByName("pusher_end")
         return P
 
     def get_pusher_planar_pose(self, context: Context):

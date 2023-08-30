@@ -26,7 +26,7 @@ from pydrake.systems.framework import (
     LeafSystem,
     OutputPort,
 )
-from pydrake.systems.primitives import ConstantValueSource, Multiplexer
+from pydrake.systems.primitives import ConstantValueSource, Multiplexer, ZeroOrderHold
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
@@ -169,25 +169,25 @@ class PusherPoseInverseKinematics(LeafSystem):
             self.default_joint_positions,
             current_joint_pos,
         )
-        # output.set_value(joint_positions)
-        output.set_value(current_joint_pos)
+        output.set_value(joint_positions)
 
     @classmethod
     def AddTobuilder(
         cls,
         builder: DiagramBuilder,
-        pusher_pose_output_port: OutputPort,
+        pusher_pose_desired: OutputPort,
         iiwa_joint_position_measured: OutputPort,
         slider_pose_desired: OutputPort,
         iiwa_joint_position_cmd: InputPort,
         default_joint_positions: npt.NDArray[np.float64],
+        rate: float = 100,
     ) -> "PusherPoseInverseKinematics":
         ik = builder.AddNamedSystem(
             "PusherPoseInverseKinematics",
             PusherPoseInverseKinematics(default_joint_positions),
         )
         builder.Connect(
-            pusher_pose_output_port,
+            pusher_pose_desired,
             ik.GetInputPort("pusher_pose_desired"),
         )
         builder.Connect(
@@ -198,7 +198,15 @@ class PusherPoseInverseKinematics(LeafSystem):
             slider_pose_desired,
             ik.slider_pose_measured,
         )
-        builder.Connect(ik.get_output_port(), iiwa_joint_position_cmd)
+
+        period_sec = 1 / rate
+        zero_order_hold = builder.AddNamedSystem(
+            "zero_order_hold",
+            ZeroOrderHold(period_sec, ik.get_output_port().size()),
+        )
+        builder.Connect(ik.get_output_port(), zero_order_hold.get_input_port())
+        builder.Connect(zero_order_hold.get_output_port(), iiwa_joint_position_cmd)
+
         return ik
 
 
