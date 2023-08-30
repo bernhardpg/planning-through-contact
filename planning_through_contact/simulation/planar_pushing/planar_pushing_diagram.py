@@ -57,6 +57,7 @@ class PlanarPushingSimConfig:
     )
     time_step: float = 1e-3
     draw_frames: bool = False
+    use_realtime: bool = False
 
 
 class SliderPoseSelector(LeafSystem):
@@ -168,13 +169,12 @@ class PlanarPushingDiagram(Diagram):
             self.meshcat.SetTransform(
                 path="/Cameras/default",
                 matrix=RigidTransform(
-                    RollPitchYaw([-np.pi / 2 + 0.2, 0.0, np.pi]),  # type: ignore
-                    np.array([0.0, 0.0, 0.0]),
-                    # RollPitchYaw([-np.pi / 8, 0.0, np.pi / 2]),  # type: ignore
-                    # 0.01 * np.array([0.05, 0.0, 0.1]),
+                    # RollPitchYaw([-np.pi / 2 + 0.2, 0.0, np.pi]),  # type: ignore
+                    # np.array([0.0, 0.0, 0.0]),
+                    RollPitchYaw([-np.pi / 8, 0.0, np.pi]),  # type: ignore
+                    0.01 * np.array([0.05, 0.0, 0.1]),
                 ).GetAsMatrix4(),
             )
-            # self.visualizer = MeshcatVisualizer.AddToBuilder(builder, self.scene_graph, self.meshcat)  # type: ignore
             AddDefaultVisualization(builder, self.meshcat)
 
         self.add_controller(builder)

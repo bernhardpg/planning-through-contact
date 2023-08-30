@@ -42,8 +42,9 @@ def run_sim(plan: str, debug: bool = False):
         sim.export_diagram("diagram.png")
 
     sim.reset()
-    sim.run()
+    recording_name = traj_name.split(".")[0] + ".html"
+    sim.run(traj.end_time, save_recording_as=recording_name)
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_1.pkl", debug=True)
+    run_sim(plan="trajectories/box_pushing_1.pkl", debug=False)

@@ -266,9 +266,12 @@ class PlanarPushingTrajectory:
         )
 
     @property
+    def start_time(self) -> float:
+        return self.traj_segments[0].start_time
+
+    @property
     def end_time(self) -> float:
-        start_time = self.traj_segments[0].start_time
-        return start_time + sum([seg.end_time for seg in self.traj_segments])
+        return self.traj_segments[-1].end_time
 
     @property
     def target_planar_pose(self) -> PlanarPose:

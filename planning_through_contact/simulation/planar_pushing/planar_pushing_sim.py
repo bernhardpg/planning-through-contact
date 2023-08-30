@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import RotationMatrix
@@ -78,7 +80,8 @@ class PlanarPushingSimulation:
         self.diagram = builder.Build()
 
         self.simulator = Simulator(self.diagram)
-        self.simulator.set_target_realtime_rate(1.0)
+        if config.use_realtime:
+            self.simulator.set_target_realtime_rate(1.0)
 
         self.context = self.simulator.get_mutable_context()
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
@@ -99,8 +102,16 @@ class PlanarPushingSimulation:
     def reset(self) -> None:
         self.simulator.Initialize()
 
-    def run(self, timeout=1e8):
+    def run(self, timeout=1e8, save_recording_as: Optional[str] = None) -> None:
+        if save_recording_as:
+            self.station.meshcat.StartRecording()
         self.simulator.AdvanceTo(timeout)
+        if save_recording_as:
+            self.station.meshcat.StopRecording()
+            self.station.meshcat.PublishRecording()
+            res = self.station.meshcat.StaticHtml()
+            with open(save_recording_as, "w") as f:
+                f.write(res)
 
     def set_slider_planar_pose(self, pose: PlanarPose):
         min_height = min([shape.height() for shape in self.station.get_slider_shapes()])
