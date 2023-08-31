@@ -8,6 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.common.value import Value
+from pydrake.math import RotationMatrix
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.framework import BasicVector, Context, LeafSystem, OutputPort
 from pydrake.trajectories import (
@@ -71,8 +72,9 @@ class So3TrajSegment:
         return cls(start_time, end_time, Rs, traj)
 
     def eval_theta(self, t: float) -> float:
-        R = self.traj.orientation(t).rotation()
-        return np.arccos(R[0, 0])
+        R = RotationMatrix(self.traj.orientation(t).rotation())
+        theta = R.ToRollPitchYaw().yaw_angle()
+        return theta
 
     def eval_omega(self, t: float) -> npt.NDArray[np.float64]:
         omega = self.traj.angular_velocity(t)

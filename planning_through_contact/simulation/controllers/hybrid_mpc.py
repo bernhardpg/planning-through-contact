@@ -121,7 +121,6 @@ class HybridMpc:
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
-        print(f"theta_error: {x_bar_curr[2]}")
         prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
         # Dynamic constraints
@@ -198,10 +197,11 @@ class HybridMpc:
             *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
         )
         results = [Solve(prog) for prog in progs]  # type: ignore
-        for result in results:
-            assert result.is_success()
 
-        costs = [result.get_optimal_cost() for result in results]
+        costs = [
+            result.get_optimal_cost() if result.is_success() else np.inf
+            for result in results
+        ]  # we do not allow infeasible results
         best_idx = np.argmin(costs)
 
         state = states[best_idx]

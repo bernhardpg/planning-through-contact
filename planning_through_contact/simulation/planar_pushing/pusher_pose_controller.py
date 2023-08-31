@@ -168,7 +168,6 @@ class PusherPoseController(LeafSystem):
             and np.cross(pv1.flatten(), p_B_c_cmd.flatten()) <= 0
         )
         if not cmd_between_pv1_and_pv2:  # saturate control
-            print("saturate")
             delta_p_B_c = np.zeros((2, 1))
 
         # We only care about the diffs here, i.e. no constant translation
@@ -209,7 +208,7 @@ class PusherPoseController(LeafSystem):
         ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        x_dot_curr, _ = controller.compute_control(x_curr, x_traj, u_traj)
+        x_dot_curr, u_input = controller.compute_control(x_curr, x_traj, u_traj)
 
         h = 1 / self.mpc_config.rate_Hz
         x_at_next_mpc_step = x_curr + h * x_dot_curr
