@@ -40,7 +40,7 @@ class HybridModes(Enum):
     SLIDING_RIGHT = 2
 
 
-class HybridModelPredictiveControl(LeafSystem):
+class HybridModelPredictiveControlSystem(LeafSystem):
     def __init__(
         self, model: System, config: HybridMpcConfig = HybridMpcConfig()
     ) -> None:

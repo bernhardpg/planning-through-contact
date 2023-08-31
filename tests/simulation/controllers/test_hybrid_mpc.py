@@ -19,7 +19,7 @@ from planning_through_contact.geometry.planar.face_contact import (
     FaceContactVariables,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
-    HybridModelPredictiveControl,
+    HybridModelPredictiveControlSystem,
     HybridModes,
     HybridMpcConfig,
 )
@@ -53,17 +53,17 @@ from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
 @pytest.fixture
 def hybrid_mpc(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
-) -> HybridModelPredictiveControl:
+) -> HybridModelPredictiveControlSystem:
     config = HybridMpcConfig(
         step_size=0.1,
         horizon=10,
         num_sliding_steps=5,
     )
-    mpc = HybridModelPredictiveControl(slider_pusher_system, config)
+    mpc = HybridModelPredictiveControlSystem(slider_pusher_system, config)
     return mpc
 
 
-def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
+def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControlSystem) -> None:
     linear_system = hybrid_mpc._get_linear_system(
         np.array([0, 0, 0, 0.5]), np.array([1.0, 0, 0])
     )
@@ -94,7 +94,7 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
 
 
 def test_get_control_no_movement(
-    hybrid_mpc: HybridModelPredictiveControl,
+    hybrid_mpc: HybridModelPredictiveControlSystem,
 ) -> None:
     N = hybrid_mpc.cfg.horizon
     current_state = np.array([0, 0, 0, 0.5])
@@ -134,7 +134,7 @@ def test_get_control_no_movement(
 
 def test_get_control_with_plan(
     one_contact_mode_vars: List[FaceContactVariables],
-    hybrid_mpc: HybridModelPredictiveControl,
+    hybrid_mpc: HybridModelPredictiveControlSystem,
 ) -> None:
     """
     The plan should follow the desired trajectory exactly.
@@ -188,7 +188,7 @@ def test_get_control_with_plan(
 def test_hybrid_mpc_controller(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
-    hybrid_mpc: HybridModelPredictiveControl,
+    hybrid_mpc: HybridModelPredictiveControlSystem,
 ) -> None:  # type: ignore
     slider_geometry = face_contact_mode.object.geometry
     contact_location = face_contact_mode.contact_location
