@@ -225,7 +225,6 @@ class PusherPoseToJointPosDiffIk:
     def add_to_builder(
         cls,
         builder: DiagramBuilder,
-        pusher_pose_output_port: OutputPort,
         iiwa_joint_position_input: InputPort,
         iiwa_state_measured: OutputPort,
         time_step: float = 1 / 200,  # 200 Hz
@@ -261,9 +260,6 @@ class PusherPoseToJointPosDiffIk:
         )
         pusher_pose_to_joint_pos = cls(time_step, robot, differential_ik)
 
-        builder.Connect(
-            pusher_pose_output_port, pusher_pose_to_joint_pos.get_pose_input_port()
-        )
         builder.Connect(
             differential_ik.GetOutputPort("joint_positions"),
             iiwa_joint_position_input,

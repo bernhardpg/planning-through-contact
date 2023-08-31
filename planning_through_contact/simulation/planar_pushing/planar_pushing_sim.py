@@ -62,26 +62,16 @@ class PlanarPushingSimulation:
             ),
         )
 
-        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
-            builder,
-            slider,
-            self.planar_pose_pub.GetOutputPort("contact_mode"),
-            self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
-            self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
-            self.station.GetOutputPort("pusher_pose"),
-            self.station.GetOutputPort("slider_pose"),
-        )
-
         if config.use_diff_ik:
-            PusherPoseToJointPosDiffIk.add_to_builder(
+            self.pusher_pose_to_joint_pos = PusherPoseToJointPosDiffIk.add_to_builder(
                 builder,
-                self.pusher_pose_controller.get_output_port(),
                 self.station.GetInputPort("iiwa_position"),
                 self.station.GetOutputPort("iiwa_state_measured"),
                 time_step=config.time_step,
                 use_diff_ik_feedback=False,
             )
         else:
+            # TODO: outdated, fix
             ik = PusherPoseInverseKinematics.AddTobuilder(
                 builder,
                 self.pusher_pose_controller.get_output_port(),
@@ -90,6 +80,17 @@ class PlanarPushingSimulation:
                 self.station.GetInputPort("iiwa_position"),
                 config.default_joint_positions,
             )
+
+        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
+            builder,
+            slider,
+            self.planar_pose_pub.GetOutputPort("contact_mode"),
+            self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
+            self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            self.station.GetOutputPort("pusher_pose"),
+            self.station.GetOutputPort("slider_pose"),
+            self.pusher_pose_to_joint_pos.get_pose_input_port(),
+        )
 
         if config.save_plots:
             builder.AddNamedSystem("theta_source")

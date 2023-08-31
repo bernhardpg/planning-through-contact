@@ -2,7 +2,14 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
-from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, OutputPort
+from pydrake.systems.framework import (
+    Context,
+    DiagramBuilder,
+    InputPort,
+    LeafSystem,
+    OutputPort,
+)
+from pydrake.systems.primitives import ZeroOrderHold
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -46,7 +53,7 @@ class PusherPoseController(LeafSystem):
             "slider_pose",
             AbstractValue.Make(RigidTransform()),
         )
-        self.DeclareAbstractOutputPort(
+        self.output = self.DeclareAbstractOutputPort(
             "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
         )
 
@@ -60,11 +67,14 @@ class PusherPoseController(LeafSystem):
         pusher_planar_pose_traj: OutputPort,
         pusher_planar_pose_measured: OutputPort,
         slider_pose_measured: OutputPort,
+        pose_cmd: InputPort,
+        rate_Hz: int = 200,
     ) -> "PusherPoseController":
         pusher_pose_controller = builder.AddNamedSystem(
             "PusherPoseController",
-            PusherPoseController(slider.geometry, z_dist_to_table=0.02),
+            cls(slider.geometry, z_dist_to_table=0.02),
         )
+
         builder.Connect(
             contact_mode_desired,
             pusher_pose_controller.GetInputPort("contact_mode_desired"),
@@ -85,6 +95,15 @@ class PusherPoseController(LeafSystem):
             slider_pose_measured,
             pusher_pose_controller.GetInputPort("slider_pose"),
         )
+
+        period = 1 / rate_Hz
+        zero_order_hold = builder.AddNamedSystem(
+            "ZeroOrderHold", ZeroOrderHold(period, AbstractValue.Make(RigidTransform()))
+        )
+        builder.Connect(
+            pusher_pose_controller.get_output_port(), zero_order_hold.get_input_port()
+        )
+        builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
         return pusher_pose_controller
 
     def _compute_control(
