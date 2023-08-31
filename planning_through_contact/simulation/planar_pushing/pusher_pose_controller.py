@@ -223,17 +223,8 @@ class PusherPoseController(LeafSystem):
         ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        u_next = controller.compute_control(
-            x_curr, x_traj, u_traj
-        )  # [c_n, c_f, lam_dot]
-
-        lam_dot = u_next[2]
-        lam_curr = x_curr[3]
-        loc = mode.to_contact_location()
-        p_B_c_next = self._get_next_p_B_c_from_lam_dot(lam_dot, lam_curr, loc)
-        p_W_c_next = self._get_p_W_c_from_p_B_c(curr_slider_pose, p_B_c_next)
-
-        next_pusher_pose = PlanarPose(p_W_c_next[0, 0], p_W_c_next[1, 0], theta=0)
+        x_next, _ = controller.compute_control(x_curr, x_traj, u_traj)
+        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_next)
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):

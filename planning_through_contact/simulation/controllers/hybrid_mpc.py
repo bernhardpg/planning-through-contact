@@ -191,9 +191,9 @@ class HybridMpc:
         x_curr: npt.NDArray[np.float64],
         x_traj: List[npt.NDArray[np.float64]],
         u_traj: List[npt.NDArray[np.float64]],
-    ) -> npt.NDArray[np.float64]:
+    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         # Solve one prog per contact mode
-        progs, _, controls = zip(
+        progs, states, controls = zip(
             *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
         )
         results = [Solve(prog) for prog in progs]  # type: ignore
@@ -203,13 +203,16 @@ class HybridMpc:
         costs = [result.get_optimal_cost() for result in results]
         best_idx = np.argmin(costs)
 
+        state = states[best_idx]
         control = controls[best_idx]
         result = results[best_idx]
 
+        state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
+        x_next = state_sol[:, 1]
+
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
-        breakpoint()
-        return u_next
+        return x_next, u_next
 
 
 class HybridModelPredictiveControlSystem(LeafSystem):
@@ -241,7 +244,7 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
 
-        control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+        _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
         output.SetFromVector(control_next)  # type: ignore
 
     def get_control_port(self) -> OutputPort:
