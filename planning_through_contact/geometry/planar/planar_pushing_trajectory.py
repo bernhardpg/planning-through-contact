@@ -1,5 +1,6 @@
 import pickle
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Literal
 
@@ -15,8 +16,13 @@ from pydrake.trajectories import (
     Trajectory,
 )
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -35,19 +41,22 @@ GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 
 
+@dataclass
 class So3TrajSegment:
-    def __init__(
-        self,
+    start_time: float
+    end_time: float
+    Rs: List[npt.NDArray[np.float64]]
+    traj: PiecewiseQuaternionSlerp
+
+    @classmethod
+    def from_knot_points(
+        cls,
         # NOTE: we don't really need the entire matrix for this,
         # but keep it around until we want to extend to SO(3)
         Rs: List[npt.NDArray],
         start_time: float,
         end_time: float,
-    ) -> None:
-        self.Rs = Rs
-        self.start_time = start_time
-        self.end_time = end_time
-
+    ) -> "So3TrajSegment":
         num_samples = len(Rs)
         if num_samples == 1:  # just a constant value throughout the traj time
             knot_point_times = np.array([start_time, end_time])
@@ -58,11 +67,21 @@ class So3TrajSegment:
 
         Rs_in_SO3 = [from_so2_to_so3(R) for R in samples]
 
-        self.traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
+        traj = PiecewiseQuaternionSlerp(knot_point_times, Rs_in_SO3)  # type: ignore
+        return cls(start_time, end_time, Rs, traj)
 
     def eval_theta(self, t: float) -> float:
         R = self.traj.orientation(t).rotation()
         return np.arccos(R[0, 0])
+
+    def eval_omega(self, t: float) -> npt.NDArray[np.float64]:
+        omega = self.traj.angular_velocity(t)
+        return omega
+
+    def eval_theta_dot(self, t: float) -> float:
+        omega = self.eval_omega(t)
+        Z_AXIS = 2
+        return omega[Z_AXIS]
 
     def eval(self, t: float) -> npt.NDArray[np.float64]:
         R = self.traj.orientation(t).rotation()
@@ -121,6 +140,35 @@ class LinTrajSegment:
         )
 
 
+# TODO(bernhardpg): Generalize
+class PlanarPushingContactMode(Enum):
+    NO_CONTACT = 0
+    FACE_0 = 1
+    FACE_1 = 2
+    FACE_2 = 3
+    FACE_3 = 4
+
+    @classmethod
+    def from_contact_location(
+        cls,
+        loc: PolytopeContactLocation,
+    ) -> "PlanarPushingContactMode":
+        return cls(1 + loc.idx)
+
+    def to_contact_location(self) -> PolytopeContactLocation:
+        if self == PlanarPushingContactMode.FACE_0:
+            idx = 0
+        elif self == PlanarPushingContactMode.FACE_1:
+            idx = 1
+        elif self == PlanarPushingContactMode.FACE_2:
+            idx = 2
+        elif self == PlanarPushingContactMode.FACE_3:
+            idx = 3
+        else:
+            raise NotImplementedError()
+        return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
+
+
 @dataclass
 class PlanarPushingTrajSegment:
     """
@@ -134,6 +182,7 @@ class PlanarPushingTrajSegment:
     R_WB: So3TrajSegment
     p_c_W: LinTrajSegment
     f_c_W: LinTrajSegment
+    mode: PlanarPushingContactMode
 
     @classmethod
     def from_knot_points(
@@ -142,11 +191,18 @@ class PlanarPushingTrajSegment:
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
         p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_c_Ws), start_time, end_time)  # type: ignore
-        R_WB = So3TrajSegment(knot_points.R_WBs, start_time, end_time)  # type: ignore
+        R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
 
-        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W)
+        if isinstance(knot_points, NonCollisionVariables):
+            mode = PlanarPushingContactMode.NO_CONTACT
+        else:  # FaceContactVariables
+            mode = PlanarPushingContactMode.from_contact_location(
+                knot_points.contact_location
+            )
+
+        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W, mode)
 
 
 class PlanarPushingTrajectory:
@@ -179,7 +235,7 @@ class PlanarPushingTrajectory:
     def get_value(
         self,
         t: float,
-        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta"],
+        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta", "theta_dot"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         traj = self._get_traj_segment_for_time(t)
@@ -193,10 +249,17 @@ class PlanarPushingTrajectory:
             val = traj.f_c_W.eval(t)
         elif traj_to_get == "theta":
             val = traj.R_WB.eval_theta(t)
+        elif traj_to_get == "theta_dot":
+            val = traj.R_WB.eval_theta_dot(t)
 
         return val
 
-    def get_box_planar_pose(self, t) -> PlanarPose:
+    def get_mode(self, t: float) -> PlanarPushingContactMode:
+        t = self._t_or_end_time(t)
+        traj = self._get_traj_segment_for_time(t)
+        return traj.mode
+
+    def get_slider_planar_pose(self, t) -> PlanarPose:
         p_WB = self.get_value(t, "p_WB")
         theta = self.get_value(t, "theta")
 
@@ -205,6 +268,16 @@ class PlanarPushingTrajectory:
         assert isinstance(theta, float)
 
         planar_pose = PlanarPose(p_WB[0, 0], p_WB[1, 0], theta)
+        return planar_pose
+
+    def get_pusher_planar_pose(self, t) -> PlanarPose:
+        p_c_W = self.get_value(t, "p_c_W")
+        theta = 0
+
+        # avoid typing errors
+        assert isinstance(p_c_W, type(np.array([])))
+
+        planar_pose = PlanarPose(p_c_W[0, 0], p_c_W[1, 0], theta)
         return planar_pose
 
     @classmethod
@@ -242,3 +315,25 @@ class PlanarPushingTrajectory:
         return PlanarTrajectoryBuilder(self.path_knot_points).get_trajectory(
             interpolate=True
         )
+
+    @property
+    def start_time(self) -> float:
+        return self.traj_segments[0].start_time
+
+    @property
+    def end_time(self) -> float:
+        return self.traj_segments[-1].end_time
+
+    @property
+    def target_slider_planar_pose(self) -> PlanarPose:
+        return self.get_slider_planar_pose(self.end_time)
+
+    @property
+    def initial_slider_planar_pose(self) -> PlanarPose:
+        start_time = self.traj_segments[0].start_time
+        return self.get_slider_planar_pose(start_time)
+
+    @property
+    def initial_pusher_planar_pose(self) -> PlanarPose:
+        start_time = self.traj_segments[0].start_time
+        return self.get_pusher_planar_pose(start_time)

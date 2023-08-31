@@ -96,6 +96,7 @@ class ContinuityVariables:
 
 @dataclass
 class AbstractModeVariables(ABC):
+    contact_location: PolytopeContactLocation
     num_knot_points: int
     time_in_mode: float
     dt: float

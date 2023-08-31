@@ -25,6 +25,7 @@ pytest = "^7.4.0"
 ffmpeg = "^1.4"
 ffmpeg-python = "^0.2.0"
 pygame = "^2.5.1"
+manipulation = "^2023.5.29"
 
 [tool.poetry.dev-dependencies]
 
