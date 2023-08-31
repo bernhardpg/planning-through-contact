@@ -126,11 +126,20 @@ def SliderPusherSystem_(T):
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
             return state
 
-        def get_input_from_contact_force(
-            self, force: npt.NDArray[np.float64], slider_pose: PlanarPose
+        def get_control_from_contact_force(
+            self, f_c_W: npt.NDArray[np.float64], slider_pose: PlanarPose
         ) -> npt.NDArray[np.float64]:
             lam_dot = 0  # We never plan to move the finger
-            ...
+
+            R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
+
+            f_c_B = R_WB.T.dot(f_c_W)
+            c_n, c_f = self.slider_geometry.get_force_comps_from_f_c_B(
+                f_c_B, self.contact_location
+            )
+
+            control = np.array([c_n, c_f, lam_dot])
+            return control
 
         def calc_dynamics(
             self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]

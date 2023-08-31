@@ -88,6 +88,7 @@ class PlanarPushingSimulation:
             self.planar_pose_pub.GetOutputPort("contact_mode"),
             self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            self.planar_pose_pub.GetOutputPort("contact_force_traj"),
             self.station.GetOutputPort("pusher_pose"),
             self.station.GetOutputPort("slider_pose"),
             self.pusher_pose_to_joint_pos.get_pose_input_port(),

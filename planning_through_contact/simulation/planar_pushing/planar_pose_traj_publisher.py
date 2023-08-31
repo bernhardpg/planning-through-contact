@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -41,6 +41,12 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
 
         self.DeclareAbstractOutputPort(
+            "contact_force_traj",
+            lambda: AbstractValue.Make([np.array([])]),
+            self.DoCalcForceTrajOutput,
+        )
+
+        self.DeclareAbstractOutputPort(
             "contact_mode",
             lambda: AbstractValue.Make(PlanarPushingContactMode(0)),
             self.DoCalcModeOuput,
@@ -49,11 +55,9 @@ class PlanarPoseTrajPublisher(LeafSystem):
     def _get_rel_t(self, t: float) -> float:
         return t - self.delay
 
-    def _get_traj(
-        self,
-        curr_t: float,
-        func: Callable[[float], PlanarPose],
-    ) -> List[PlanarPose]:
+    T = TypeVar("T")
+
+    def _get_traj(self, curr_t: float, func: Callable[[float], T]) -> List[T]:
         h = self.mpc_config.step_size
         N = self.mpc_config.horizon
 
@@ -92,6 +96,13 @@ class PlanarPoseTrajPublisher(LeafSystem):
         curr_t = context.get_time()
         slider_traj = self._get_traj(self._get_rel_t(curr_t), self._calc_slider_pose)
         output.set_value(slider_traj)
+
+    def DoCalcForceTrajOutput(self, context: Context, output) -> None:
+        curr_t = context.get_time()
+        force_traj = self._get_traj(
+            self._get_rel_t(curr_t), lambda t: self.traj.get_value(t, "f_c_W")
+        )
+        output.set_value(force_traj)
 
     def DoCalcModeOuput(self, context: Context, output):
         curr_t = context.get_time()

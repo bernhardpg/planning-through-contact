@@ -106,3 +106,9 @@ class CollisionGeometry(ABC):
         self, lam: float, loc: PolytopeContactLocation, project: bool = False
     ) -> npt.NDArray[np.float64]:
         pass
+
+    @abstractmethod
+    def get_force_comps_from_f_c_B(
+        self, f_c_B, loc: PolytopeContactLocation
+    ) -> Tuple[float, float]:
+        pass

@@ -382,3 +382,11 @@ class Box2d(CollisionGeometry):
         u2 = pv2 - pv1
         lam = u1.T.dot(u2).item() / np.linalg.norm(u2)
         return lam
+
+    def get_force_comps_from_f_c_B(
+        self, f_c_B, loc: PolytopeContactLocation
+    ) -> Tuple[float, float]:
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        c_n = f_c_B.T.dot(n).item()
+        c_f = f_c_B.T.dot(t).item()
+        return c_n, c_f

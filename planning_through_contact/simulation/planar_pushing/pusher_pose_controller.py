@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import AbstractValue
@@ -58,6 +60,10 @@ class PusherPoseController(LeafSystem):
             "slider_planar_pose_traj",
             AbstractValue.Make([PlanarPose(x=0, y=0, theta=0)]),
         )
+        self.contact_force_traj = self.DeclareAbstractInputPort(
+            "contact_force_traj",
+            AbstractValue.Make([np.array([])]),
+        )
         self.pusher_pose_measured = self.DeclareAbstractInputPort(
             "pusher_pose_measured",
             AbstractValue.Make(RigidTransform()),
@@ -83,6 +89,7 @@ class PusherPoseController(LeafSystem):
         contact_mode_desired: OutputPort,
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
+        contact_force_traj: OutputPort,
         pusher_planar_pose_measured: OutputPort,
         slider_pose_measured: OutputPort,
         pose_cmd: InputPort,
@@ -107,6 +114,10 @@ class PusherPoseController(LeafSystem):
         builder.Connect(
             slider_planar_pose_traj,
             pusher_pose_controller.GetInputPort("slider_planar_pose_traj"),
+        )
+        builder.Connect(
+            contact_force_traj,
+            pusher_pose_controller.GetInputPort("contact_force_traj"),
         )
         builder.Connect(
             slider_pose_measured,
@@ -172,6 +183,33 @@ class PusherPoseController(LeafSystem):
         loc = mode.to_contact_location()
         return self.systems[loc]
 
+    def _call_mpc(
+        self,
+        curr_slider_pose: PlanarPose,
+        curr_pusher_pose: PlanarPose,
+        slider_pose_traj: List[PlanarPose],
+        pusher_pose_traj: List[PlanarPose],
+        contact_force_traj: List[npt.NDArray[np.float64]],
+        mode: PlanarPushingContactMode,
+    ):
+        controller = self._get_mpc_for_mode(mode)
+        system = self._get_system_for_mode(mode)
+
+        x_traj = [
+            system.get_state_from_planar_poses(slider_pose, pusher_pose)
+            for slider_pose, pusher_pose in zip(slider_pose_traj, pusher_pose_traj)
+        ]
+        u_traj = [
+            system.get_control_from_contact_force(force, slider_pose)
+            for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
+        ]
+        x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
+
+        u_next = controller.compute_control(x_curr, x_traj, u_traj)
+
+        breakpoint()
+        ...
+
     def DoCalcOutput(self, context: Context, output):
         mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
@@ -189,29 +227,15 @@ class PusherPoseController(LeafSystem):
             pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
             pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
 
-            controller = self._get_mpc_for_mode(mode_desired)
-            system = self._get_system_for_mode(mode_desired)
-
-            x_traj = [
-                system.get_state_from_planar_poses(slider_pose, pusher_pose)
-                for slider_pose, pusher_pose in zip(
-                    slider_planar_pose_traj, pusher_planar_pose_traj
-                )
-            ]
-            u_traj = [
-                system.get_input_from_contact_force(force, slider_pose)
-                for force, slider_pose in zip(
-                    contact_force_traj, slider_planar_pose_traj
-                )
-            ]
-            x_curr = system.get_state_from_planar_poses(
-                slider_planar_pose, pusher_planar_pose
+            contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
+            self._call_mpc(
+                slider_planar_pose,
+                pusher_planar_pose,
+                slider_planar_pose_traj,
+                pusher_planar_pose_traj,
+                contact_force_traj,
+                mode_desired,
             )
-            breakpoint()
-
-            u_next = controller.compute_control(x_curr, x_traj, u_traj)
-
-            breakpoint()
 
             # pusher_planar_pose_adjustment = PlanarPose(
             #     delta_p_W_c[0, 0], delta_p_W_c[1, 0], theta=0
