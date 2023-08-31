@@ -121,6 +121,7 @@ class HybridMpc:
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
+        print(f"theta_error: {x_bar_curr[2]}")
         prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
         # Dynamic constraints
@@ -210,9 +211,11 @@ class HybridMpc:
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
         x_next = state_sol[:, 1]
 
+        x_dot_curr = (x_next - x_curr) / self.cfg.step_size
+
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
-        return x_next, u_next
+        return x_dot_curr, u_next
 
 
 class HybridModelPredictiveControlSystem(LeafSystem):

@@ -79,7 +79,9 @@ def SliderPusherSystem_(T):
             )
 
         def _get_p_B_c(self, lam: float) -> npt.NDArray[np.float64]:
-            return self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
+            return self.slider_geometry.get_p_B_c_from_lam(
+                lam, self.contact_location, radius=0.01
+            )
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
             p_B_c = self._get_p_B_c(lam).flatten()
@@ -121,7 +123,9 @@ def SliderPusherSystem_(T):
             p_W_c = pusher_pose.pos()
             p_WB = slider_pose.pos()
             p_B_c = R_WB.T.dot(p_W_c - p_WB)
-            lam = self.slider_geometry.get_lam_from_p_B_c(p_B_c, self.contact_location)
+            lam = self.slider_geometry.get_lam_from_p_B_c(
+                p_B_c, self.contact_location, radius=0.01
+            )
 
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
             return state
@@ -134,7 +138,9 @@ def SliderPusherSystem_(T):
             R_WB = two_d_rotation_matrix_from_angle(theta)
             slider_planar_pose = PlanarPose(x, y, theta)
             p_WB = slider_planar_pose.pos()
-            p_B_c = self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
+            p_B_c = self.slider_geometry.get_p_B_c_from_lam(
+                lam, self.contact_location, radius=0.01
+            )
 
             p_W_c = p_WB + R_WB.dot(p_B_c)
             return PlanarPose(p_W_c[0, 0], p_W_c[1, 0], theta=0)

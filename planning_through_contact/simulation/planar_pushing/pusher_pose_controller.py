@@ -31,6 +31,9 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
     SliderPusherSystem,
 )
 
+# TODO(bernhardpg): Fix!
+RADIUS = 0.01
+
 
 class PusherPoseController(LeafSystem):
     def __init__(
@@ -184,23 +187,6 @@ class PusherPoseController(LeafSystem):
         loc = mode.to_contact_location()
         return self.systems[loc]
 
-    def _get_next_p_B_c_from_lam_dot(
-        self, lam_dot: float, lam_curr: float, loc: PolytopeContactLocation
-    ) -> npt.NDArray[np.float64]:
-        h = 1 / self.mpc_config.rate_Hz
-        lam_next = lam_curr + h * lam_dot
-
-        p_B_c_next = self.object_geometry.get_p_B_c_from_lam(lam_next, loc)
-        return p_B_c_next
-
-    def _get_p_W_c_from_p_B_c(
-        self, curr_slider_pose: PlanarPose, p_B_c: npt.NDArray[np.float64]
-    ) -> npt.NDArray[np.float64]:
-        R_WB = two_d_rotation_matrix_from_angle(curr_slider_pose.theta)
-        p_WB = curr_slider_pose.pos()
-        p_W_c = p_WB + R_WB.dot(p_B_c)
-        return p_W_c
-
     def _call_mpc(
         self,
         curr_slider_pose: PlanarPose,
@@ -223,8 +209,11 @@ class PusherPoseController(LeafSystem):
         ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        x_next, _ = controller.compute_control(x_curr, x_traj, u_traj)
-        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_next)
+        x_dot_curr, _ = controller.compute_control(x_curr, x_traj, u_traj)
+
+        h = 1 / self.mpc_config.rate_Hz
+        x_at_next_mpc_step = x_curr + h * x_dot_curr
+        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_at_next_mpc_step)
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
