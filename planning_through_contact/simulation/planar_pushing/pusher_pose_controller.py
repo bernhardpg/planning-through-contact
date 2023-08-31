@@ -193,9 +193,21 @@ class PusherPoseController(LeafSystem):
             system = self._get_system_for_mode(mode_desired)
 
             x_traj = [
-                system.get_state_from_planar_poses(slider_pose, pusher_planar_pose)
-                for slider_pose in slider_planar_pose_traj
+                system.get_state_from_planar_poses(slider_pose, pusher_pose)
+                for slider_pose, pusher_pose in zip(
+                    slider_planar_pose_traj, pusher_planar_pose_traj
+                )
             ]
+            u_traj = [
+                system.get_input_from_contact_force(force, slider_pose)
+                for force, slider_pose in zip(
+                    contact_force_traj, slider_planar_pose_traj
+                )
+            ]
+            x_curr = system.get_state_from_planar_poses(
+                slider_planar_pose, pusher_planar_pose
+            )
+            breakpoint()
 
             u_next = controller.compute_control(x_curr, x_traj, u_traj)
 

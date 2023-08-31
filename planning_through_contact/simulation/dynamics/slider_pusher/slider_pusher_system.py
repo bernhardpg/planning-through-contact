@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 
 
 @TemplateSystem.define("SliderPusherSystem_")
@@ -77,12 +78,12 @@ def SliderPusherSystem_(T):
                 self, other.slider_geometry, other.contact_location, converter=converter
             )
 
-        def _get_p_c_B(self, lam: float) -> npt.NDArray[np.float64]:
+        def _get_p_B_c(self, lam: float) -> npt.NDArray[np.float64]:
             return self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
-            p_c_B = self._get_p_c_B(lam).flatten()
-            J_c = np.array([[1.0, 0.0, -p_c_B[1]], [0.0, 1.0, p_c_B[0]]])  # type: ignore
+            p_B_c = self._get_p_B_c(lam).flatten()
+            J_c = np.array([[1.0, 0.0, -p_B_c[1]], [0.0, 1.0, p_B_c[0]]])  # type: ignore
             return J_c
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
@@ -112,12 +113,21 @@ def SliderPusherSystem_(T):
             return R
 
         def get_state_from_planar_poses(
-            self, slider_pose: PlanarPose, pusher_pose: PlanarPose
+            self,
+            slider_pose: PlanarPose,
+            pusher_pose: PlanarPose,
         ) -> npt.NDArray[np.float64]:
-            breakpoint()
+            R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
+            p_W_c = pusher_pose.pos()
+            p_WB = slider_pose.pos()
+            p_B_c = R_WB.T.dot(p_W_c - p_WB)
+            lam = self.slider_geometry.get_lam_from_p_B_c(p_B_c, self.contact_location)
+
+            state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
+            return state
 
         def get_input_from_contact_force(
-            self, slider_pose: PlanarPose, pusher_pose: PlanarPose
+            self, force: npt.NDArray[np.float64], slider_pose: PlanarPose
         ) -> npt.NDArray[np.float64]:
             lam_dot = 0  # We never plan to move the finger
             ...

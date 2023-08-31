@@ -367,3 +367,18 @@ class Box2d(CollisionGeometry):
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
         return lam * pv1 + (1 - lam) * pv2
+
+    def get_lam_from_p_B_c(
+        self,
+        p_B_c: npt.NDArray[np.float64],
+        loc: PolytopeContactLocation,
+    ) -> float:
+        assert loc.pos == ContactLocation.FACE
+        assert p_B_c.shape == (2, 1)
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+
+        # project p_B_c onto vector from v1 to v2 to find lam
+        u1 = p_B_c - pv1
+        u2 = pv2 - pv1
+        lam = u1.T.dot(u2).item() / np.linalg.norm(u2)
+        return lam
