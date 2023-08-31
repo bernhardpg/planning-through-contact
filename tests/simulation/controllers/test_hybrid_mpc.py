@@ -20,6 +20,7 @@ from planning_through_contact.geometry.planar.face_contact import (
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
     HybridModelPredictiveControl,
+    HybridModes,
     HybridMpcConfig,
 )
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
@@ -69,8 +70,8 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
     A_target = np.array(
         [
             [0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, -0.46, 0.0],
-            [0.0, 0.0, 0.0, 3.45],
+            [0.0, 0.0, 4.15644441, 0.0],
+            [0.0, 0.0, 0.0, 153.9423856],
             [0.0, 0.0, 0.0, 0.0],
         ]
     )
@@ -82,7 +83,12 @@ def test_get_linear_system(hybrid_mpc: HybridModelPredictiveControl) -> None:
     assert linear_system.A()[1, 2] != 0
 
     B_target = np.array(
-        [[-0.46, 0.0, 0.0], [-0.0, -0.46, 0.0], [0.0, -1.725, 0.0], [0.0, 0.0, 1.0]]
+        [
+            [4.15644441, -0.0, 0.0],
+            [0.0, 4.15644441, 0.0],
+            [0.0, -76.9711928, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
     )
     assert np.allclose(linear_system.B(), B_target)
 
@@ -94,7 +100,9 @@ def test_get_control_no_movement(
     current_state = np.array([0, 0, 0, 0.5])
     desired_state = [current_state] * N
     desired_control = [np.zeros((3,))] * N
-    prog, x, u = hybrid_mpc._setup_QP(current_state, desired_state, desired_control)
+    prog, x, u = hybrid_mpc._setup_QP(
+        current_state, desired_state, desired_control, mode=HybridModes.STICKING
+    )
 
     dt = hybrid_mpc.cfg.step_size
     times = np.arange(0, dt * N, dt)
@@ -135,11 +143,11 @@ def test_get_control_with_plan(
     feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.cfg)
     context = feeder.CreateDefaultContext()
 
-    desired_state = feeder.get_state_traj_feedforward_port().Eval(context)
-    desired_control = feeder.get_control_traj_feedforward_port().Eval(context)
-    initial_state = feeder.get_state(0) + np.array([0.005, -0.005, 0.02, 0])
+    desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
+    desired_control_traj = feeder.get_control_traj_feedforward_port().Eval(context)
+    initial_state = feeder.get_state(0)
 
-    prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state, desired_control)  # type: ignore
+    prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state_traj, desired_control_traj, mode=HybridModes.STICKING)  # type: ignore
 
     result = Solve(prog)
     assert result.is_success()
@@ -154,19 +162,19 @@ def test_get_control_with_plan(
 
     actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
     desired = PlanarPushingLog.from_np(
-        times, np.vstack(desired_state).T, np.vstack(desired_control).T  # type: ignore
+        times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T  # type: ignore
     )
 
     # No deviation should happen
     state_treshold = 0.1
-    for state, state_desired in zip(state_sol.T, desired_state):  # type: ignore
+    for state, state_desired in zip(state_sol.T, desired_state_traj):  # type: ignore
         assert np.all(
             np.abs(state - state_desired) <= np.full(state.shape, state_treshold)
         )
 
     # No control should be applied
     control_treshold = 0.4
-    for control, control_desired in zip(control_sol.T, desired_control):  # type: ignore
+    for control, control_desired in zip(control_sol.T, desired_control_traj):  # type: ignore
         assert np.all(
             np.abs(control - control_desired)
             <= np.full(control.shape, control_treshold)
@@ -272,7 +280,7 @@ def test_hybrid_mpc_controller(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    x_initial = feeder.get_state(0)
+    x_initial = feeder.get_state(0) + np.array([0.05, 0.05, -0.2, 0])
     context.SetContinuousState(x_initial)
 
     if DEBUG:

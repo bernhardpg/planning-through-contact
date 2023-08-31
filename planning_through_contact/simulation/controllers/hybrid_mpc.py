@@ -182,8 +182,8 @@ class HybridModelPredictiveControl(LeafSystem):
                 prog.AddLinearConstraint(c_f == -FRICTION_COEFF * c_n)
 
         # State constraints
-        for x in x.T:
-            lam = x[3]
+        for state in x.T:
+            lam = state[3]
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
