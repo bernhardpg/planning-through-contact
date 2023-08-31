@@ -57,19 +57,19 @@ class PlanarPushingSimulation:
 
         self.planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
-            PlanarPoseTrajPublisher(traj, config.delay_before_execution),
+            PlanarPoseTrajPublisher(
+                traj, config.mpc_config, config.delay_before_execution
+            ),
         )
 
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
             builder,
             slider,
             self.planar_pose_pub.GetOutputPort("contact_mode"),
-            self.planar_pose_pub.GetOutputPort("pusher_planar_pose"),
+            self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
+            self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
             self.station.GetOutputPort("pusher_pose"),
-            self.planar_pose_pub.GetOutputPort("slider_planar_pose"),
-            self.planar_pose_pub.GetOutputPort("slider_theta_dot"),
             self.station.GetOutputPort("slider_pose"),
-            self.station.GetOutputPort("slider_spatial_velocity"),
         )
 
         if config.use_diff_ik:
@@ -122,7 +122,7 @@ class PlanarPushingSimulation:
     def export_diagram(self, filename: str):
         import pydot
 
-        pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_png(  # type: ignore
+        pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_pdf(  # type: ignore
             filename
         )
         print(f"Saved diagram to: {filename}")

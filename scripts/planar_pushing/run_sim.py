@@ -6,6 +6,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
     PlanarPushingSimConfig,
 )
@@ -39,16 +40,16 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=True,
         delay_before_execution=2.0,
         use_diff_ik=True,
+        mpc_config=HybridMpcConfig(),
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
+    # if debug:
+    #     sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
     recording_name = traj_name.split(".")[0] + ".html" if save_recording else None
     sim.run(traj.end_time, save_recording_as=recording_name)
-
-    if debug:
-        sim.export_diagram("diagram.png")
 
 
 if __name__ == "__main__":

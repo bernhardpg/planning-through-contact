@@ -37,6 +37,7 @@ from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 from pydrake.visualization import AddDefaultVisualization
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.visualize.colors import COLORS
 
 
@@ -64,6 +65,7 @@ class PlanarPushingSimConfig:
     delay_before_execution: float = 5.0
     save_plots: bool = False
     use_diff_ik: bool = True
+    mpc_config: HybridMpcConfig = field(default_factory=lambda: HybridMpcConfig())
 
 
 class PusherSliderPoseSelector(LeafSystem):
