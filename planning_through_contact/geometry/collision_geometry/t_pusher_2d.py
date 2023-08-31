@@ -209,7 +209,7 @@ class TPusher2d(CollisionGeometry):
     def get_face_length(self, location: PolytopeContactLocation) -> float:
         raise NotImplementedError("Face length not yet implemented for the TPusher.")
 
-    def get_p_c_B_from_lam(
+    def get_p_B_c_from_lam(
         self, lam: float, loc: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
         assert loc.pos == ContactLocation.FACE

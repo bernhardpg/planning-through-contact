@@ -361,7 +361,7 @@ class Box2d(CollisionGeometry):
 
         return planes
 
-    def get_p_c_B_from_lam(
+    def get_p_B_c_from_lam(
         self, lam: float, loc: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
         assert loc.pos == ContactLocation.FACE

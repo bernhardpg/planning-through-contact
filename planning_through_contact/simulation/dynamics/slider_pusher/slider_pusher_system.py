@@ -8,6 +8,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
 @TemplateSystem.define("SliderPusherSystem_")
@@ -77,7 +78,7 @@ def SliderPusherSystem_(T):
             )
 
         def _get_p_c_B(self, lam: float) -> npt.NDArray[np.float64]:
-            return self.slider_geometry.get_p_c_B_from_lam(lam, self.contact_location)
+            return self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
             p_c_B = self._get_p_c_B(lam).flatten()
@@ -109,6 +110,17 @@ def SliderPusherSystem_(T):
                 [[cos(theta), -sin(theta), 0], [sin(theta), cos(theta), 0], [0, 0, 1]]
             )
             return R
+
+        def get_state_from_planar_poses(
+            self, slider_pose: PlanarPose, pusher_pose: PlanarPose
+        ) -> npt.NDArray[np.float64]:
+            breakpoint()
+
+        def get_input_from_contact_force(
+            self, slider_pose: PlanarPose, pusher_pose: PlanarPose
+        ) -> npt.NDArray[np.float64]:
+            lam_dot = 0  # We never plan to move the finger
+            ...
 
         def calc_dynamics(
             self, x: npt.NDArray[np.float64], u: npt.NDArray[np.float64]

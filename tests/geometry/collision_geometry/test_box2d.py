@@ -78,10 +78,10 @@ def test_tangent_vecs(box_geometry: Box2d) -> None:
 def test_get_p_c_B(box_geometry: Box2d) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, idx=0)
     lam = 0.5
-    p_c_B = box_geometry.get_p_c_B_from_lam(lam, loc)
-    assert p_c_B.shape == (2, 1)
-    assert p_c_B[0, 0] == 0
-    assert p_c_B[1, 0] == box_geometry.height / 2
+    p_B_c = box_geometry.get_p_B_c_from_lam(lam, loc)
+    assert p_B_c.shape == (2, 1)
+    assert p_B_c[0, 0] == 0
+    assert p_B_c[1, 0] == box_geometry.height / 2
 
 
 # TODO: Complete test coverage

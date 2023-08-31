@@ -167,8 +167,8 @@ class GeneralSliderPusherGeometry(LeafSystem):
         output.get_mutable_value().set_value(id=self.slider_frame_id, value=pose)  # type: ignore
 
         lam = state[3]
-        p_c_B = self.slider_geometry.get_p_c_B_from_lam(lam, self.contact_location)
+        p_B_c = self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
         pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_c_B.flatten(), [0]))  # type: ignore
+            RotationMatrix.Identity(), np.concatenate((p_B_c.flatten(), [0]))  # type: ignore
         )
         output.get_mutable_value().set_value(id=self.pusher_frame_id, value=pose)  # type: ignore

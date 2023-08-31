@@ -84,6 +84,7 @@ class PlanarPushingSimulation:
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
             builder,
             slider,
+            config.mpc_config,
             self.planar_pose_pub.GetOutputPort("contact_mode"),
             self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
