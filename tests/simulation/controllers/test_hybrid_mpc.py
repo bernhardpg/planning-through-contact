@@ -14,8 +14,10 @@ from pydrake.systems.planar_scenegraph_visualizer import (
 )
 from pydrake.systems.primitives import VectorLogSink, ZeroOrderHold_
 
-from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.face_contact import (
+    FaceContactMode,
+    FaceContactVariables,
+)
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
     HybridModelPredictiveControl,
     HybridMpcConfig,
@@ -117,7 +119,7 @@ def test_get_control_no_movement(
 
 
 def test_get_control_with_plan(
-    one_contact_mode_vars: List[AbstractModeVariables],
+    one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc: HybridModelPredictiveControl,
 ) -> None:
     """
@@ -171,7 +173,7 @@ def test_get_control_with_plan(
 
 def test_hybrid_mpc_controller(
     face_contact_mode: FaceContactMode,
-    one_contact_mode_vars: List[AbstractModeVariables],
+    one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc: HybridModelPredictiveControl,
 ) -> None:  # type: ignore
     slider_geometry = face_contact_mode.object.geometry

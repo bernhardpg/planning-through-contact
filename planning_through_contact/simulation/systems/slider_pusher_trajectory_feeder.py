@@ -59,7 +59,7 @@ class SliderPusherTrajSegment:
         p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time)  # type: ignore
         p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time)  # type: ignore
         lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time)  # type: ignore
-        R_WB = So3TrajSegment(knot_points.R_WBs, start_time, end_time)  # type: ignore
+        R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time)  # type: ignore
         c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time)  # type: ignore
