@@ -229,6 +229,8 @@ class PlanarPushingTrajectory:
             return self.end_times[
                 -1
             ]  # repeat last element when we want trajectory after end time
+        elif t <= 0:
+            return 0
         else:
             return t
 

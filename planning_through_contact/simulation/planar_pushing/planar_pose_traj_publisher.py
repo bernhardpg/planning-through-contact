@@ -64,7 +64,7 @@ class PlanarPoseTrajPublisher(LeafSystem):
         return traj
 
     def _calc_pusher_pose(self, t: float) -> PlanarPose:
-        p_c_W = self.traj.get_value(self._get_rel_t(t), "p_c_W")
+        p_c_W = self.traj.get_value(t, "p_c_W")
 
         # Avoid typing error
         assert isinstance(p_c_W, type(np.array([])))
@@ -78,8 +78,8 @@ class PlanarPoseTrajPublisher(LeafSystem):
         output.set_value(pusher_traj)
 
     def _calc_slider_pose(self, t: float) -> PlanarPose:
-        p_WB = self.traj.get_value(self._get_rel_t(t), "p_WB")
-        theta = self.traj.get_value(self._get_rel_t(t), "theta")
+        p_WB = self.traj.get_value(t, "p_WB")
+        theta = self.traj.get_value(t, "theta")
 
         # Avoid typing error
         assert isinstance(p_WB, type(np.array([])))
