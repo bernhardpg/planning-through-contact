@@ -183,9 +183,16 @@ class FaceContactVariables(AbstractModeVariables):
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
+    def _get_p_B_c(self, lam: float):
+        # TODO(bernhardpg): Move!
+        radius = 0.01
+        point_on_surface = lam * self.pv1 + (1 - lam) * self.pv2
+        radius_displacement = -self.normal_vec * radius
+        return point_on_surface + radius_displacement
+
     @property
     def p_c_Bs(self):
-        return [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
+        return [self._get_p_B_c(lam) for lam in self.lams]
 
     @property
     def v_WBs(self):
