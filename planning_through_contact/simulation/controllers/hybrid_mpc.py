@@ -208,6 +208,7 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
+        breakpoint()
         return u_next
 
 

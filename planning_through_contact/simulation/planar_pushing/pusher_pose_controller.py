@@ -51,6 +51,7 @@ class PusherPoseController(LeafSystem):
         self.mpc_controllers = {
             loc: HybridMpc(system, mpc_config) for loc, system in self.systems.items()
         }
+        self.mpc_config = mpc_config
 
         self.pusher_planar_pose_traj = self.DeclareAbstractInputPort(
             "pusher_planar_pose_traj",
@@ -183,6 +184,23 @@ class PusherPoseController(LeafSystem):
         loc = mode.to_contact_location()
         return self.systems[loc]
 
+    def _get_next_p_B_c_from_lam_dot(
+        self, lam_dot: float, lam_curr: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        h = 1 / self.mpc_config.rate_Hz
+        lam_next = lam_curr + h * lam_dot
+
+        p_B_c_next = self.object_geometry.get_p_B_c_from_lam(lam_next, loc)
+        return p_B_c_next
+
+    def _get_p_W_c_from_p_B_c(
+        self, curr_slider_pose: PlanarPose, p_B_c: npt.NDArray[np.float64]
+    ) -> npt.NDArray[np.float64]:
+        R_WB = two_d_rotation_matrix_from_angle(curr_slider_pose.theta)
+        p_WB = curr_slider_pose.pos()
+        p_W_c = p_WB + R_WB.dot(p_B_c)
+        return p_W_c
+
     def _call_mpc(
         self,
         curr_slider_pose: PlanarPose,
@@ -191,7 +209,7 @@ class PusherPoseController(LeafSystem):
         pusher_pose_traj: List[PlanarPose],
         contact_force_traj: List[npt.NDArray[np.float64]],
         mode: PlanarPushingContactMode,
-    ):
+    ) -> PlanarPose:
         controller = self._get_mpc_for_mode(mode)
         system = self._get_system_for_mode(mode)
 
@@ -205,10 +223,18 @@ class PusherPoseController(LeafSystem):
         ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        u_next = controller.compute_control(x_curr, x_traj, u_traj)
+        u_next = controller.compute_control(
+            x_curr, x_traj, u_traj
+        )  # [c_n, c_f, lam_dot]
 
-        breakpoint()
-        ...
+        lam_dot = u_next[2]
+        lam_curr = x_curr[3]
+        loc = mode.to_contact_location()
+        p_B_c_next = self._get_next_p_B_c_from_lam_dot(lam_dot, lam_curr, loc)
+        p_W_c_next = self._get_p_W_c_from_p_B_c(curr_slider_pose, p_B_c_next)
+
+        next_pusher_pose = PlanarPose(p_W_c_next[0, 0], p_W_c_next[1, 0], theta=0)
+        return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
         mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
@@ -228,7 +254,7 @@ class PusherPoseController(LeafSystem):
             pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
 
             contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
-            self._call_mpc(
+            pusher_planar_pose_cmd = self._call_mpc(
                 slider_planar_pose,
                 pusher_planar_pose,
                 slider_planar_pose_traj,
@@ -237,14 +263,5 @@ class PusherPoseController(LeafSystem):
                 mode_desired,
             )
 
-            # pusher_planar_pose_adjustment = PlanarPose(
-            #     delta_p_W_c[0, 0], delta_p_W_c[1, 0], theta=0
-            # )
-            #
-            # pusher_pose_planar_command = (
-            #     pusher_planar_pose_traj[0] + pusher_planar_pose_adjustment
-            # )
-            # pusher_pose_command = pusher_pose_planar_command.to_pose(
-            #     z_value=self.z_dist
-            # )
+            pusher_pose_command = pusher_planar_pose_cmd.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_command)

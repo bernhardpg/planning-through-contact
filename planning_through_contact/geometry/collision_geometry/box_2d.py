@@ -366,7 +366,8 @@ class Box2d(CollisionGeometry):
     ) -> npt.NDArray[np.float64]:
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
-        return lam * pv1 + (1 - lam) * pv2
+        p_B_c = lam * pv1 + (1 - lam) * pv2
+        return p_B_c
 
     def get_lam_from_p_B_c(
         self,
@@ -378,9 +379,9 @@ class Box2d(CollisionGeometry):
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
 
         # project p_B_c onto vector from v1 to v2 to find lam
-        u1 = p_B_c - pv1
-        u2 = pv2 - pv1
-        lam = u1.T.dot(u2).item() / np.linalg.norm(u2)
+        u1 = p_B_c - pv2
+        u2 = pv1 - pv2
+        lam = 1 - u1.T.dot(u2).item() / np.linalg.norm(u2)
         return lam
 
     def get_force_comps_from_f_c_B(
