@@ -56,6 +56,7 @@ def hybrid_mpc(
     config = HybridMpcConfig(
         step_size=0.1,
         horizon=10,
+        num_sliding_steps=5,
     )
     mpc = HybridModelPredictiveControl(slider_pusher_system, config)
     return mpc

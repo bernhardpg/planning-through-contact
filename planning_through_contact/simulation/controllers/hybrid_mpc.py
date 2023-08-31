@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import List, Tuple
 
 import numpy as np
@@ -30,6 +31,13 @@ from planning_through_contact.tools.types import NpVariableArray
 class HybridMpcConfig:
     horizon: int = 10
     step_size: float = 0.1
+    num_sliding_steps: int = 5
+
+
+class HybridModes(Enum):
+    STICKING = 0
+    SLIDING_LEFT = 1
+    SLIDING_RIGHT = 2
 
 
 class HybridModelPredictiveControl(LeafSystem):
@@ -116,9 +124,11 @@ class HybridModelPredictiveControl(LeafSystem):
         x_curr: npt.NDArray[np.float64],
         x_traj: List[npt.NDArray[np.float64]],
         u_traj: List[npt.NDArray[np.float64]],
+        mode: HybridModes,
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
         N = self.cfg.horizon
         h = self.cfg.step_size
+        num_sliding_steps = self.cfg.num_sliding_steps
 
         prog = MathematicalProgram()
 
@@ -153,14 +163,23 @@ class HybridModelPredictiveControl(LeafSystem):
         u = u_bar + np.vstack(u_traj).T
 
         # Control constraints
-        for u_i in u.T:
+        FRICTION_COEFF = 0.5
+        for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
             lam_dot = u_i[2]
-            FRICTION_COEFF = 0.5
+
             prog.AddLinearConstraint(c_n >= 0)
-            prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-            prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+
+            if mode == HybridModes.STICKING or i > num_sliding_steps:
+                prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+
+            elif mode == HybridModes.SLIDING_LEFT:
+                prog.AddLinearConstraint(c_f == FRICTION_COEFF * c_n)
+
+            else:  # SLIDING_RIGHT
+                prog.AddLinearConstraint(c_f == -FRICTION_COEFF * c_n)
 
         # State constraints
         for x in x.T:
@@ -185,15 +204,25 @@ class HybridModelPredictiveControl(LeafSystem):
         return prog, x, u  # type: ignore
 
     def CalcControl(self, context: Context, output: BasicVector):
-        state = self.state_port.Eval(context)
-        x_traj = self.desired_state_port.Eval(context)
-        u_traj = self.desired_control_port.Eval(context)
-        prog, state, control = self._setup_QP(state, x_traj, u_traj)  # type: ignore
+        state: npt.NDArray[np.float64] = self.state_port.Eval(context)  # type: ignore
+        x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
+        u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
 
-        result = Solve(prog)
-        assert result.is_success()
+        # Solve one prog per contact mode
+        progs, _, controls = zip(
+            *[self._setup_QP(state, x_traj, u_traj, mode) for mode in HybridModes]
+        )
+        results = [Solve(prog) for prog in progs]  # type: ignore
+        for result in results:
+            assert result.is_success()
 
-        control_sol = sym.Evaluate(result.GetSolution(control))
+        costs = [result.get_optimal_cost() for result in results]
+        best_idx = np.argmin(costs)
+
+        control = controls[best_idx]
+        result = results[best_idx]
+
+        control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         control_next = control_sol[:, 0]
 
         output.SetFromVector(control_next)  # type: ignore
