@@ -13,6 +13,7 @@ from pydrake.geometry import (
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, OutputPort
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
@@ -51,10 +52,15 @@ class SliderPusherGeometry(LeafSystem):
         self.slider_frame_id = scene_graph.RegisterFrame(
             self.source_id, GeometryFrame("slider")
         )
+        assert isinstance(slider_geometry, Box2d)
         self.slider_geometry_id = scene_graph.RegisterGeometry(
             self.source_id,
             self.slider_frame_id,
-            GeometryInstance(RigidTransform.Identity(), Box(0.3, 0.3, 0.3), "slider"),
+            GeometryInstance(
+                RigidTransform.Identity(),
+                Box(slider_geometry.width, slider_geometry.height, 0.05),
+                "slider",
+            ),
         )
         BOX_COLOR = COLORS["aquamarine4"]
         scene_graph.AssignRole(

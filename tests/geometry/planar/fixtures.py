@@ -75,6 +75,7 @@ def non_collision_vars() -> NonCollisionVariables:
         prog,
         num_knot_points,
         time_in_contact,
+        PolytopeContactLocation(ContactLocation.FACE, 0),
     )
     return vars
 

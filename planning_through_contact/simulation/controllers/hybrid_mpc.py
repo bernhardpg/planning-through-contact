@@ -63,6 +63,15 @@ class HybridModelPredictiveControl(LeafSystem):
     def _get_linear_system(
         self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
     ) -> AffineSystem:
+        """
+        Linearizes around 'state' and 'control', and returns an affine system
+
+        x_dot = A x + B u + f_0
+
+        where f_0 = x_dot_0 - A x_0 - B u_u
+        where _0 denotes the nominal state and input
+
+        """
         # TODO(bernhardpg): This causes a segfault. Look into this
         # self.model_context.SetContinuousState(state)
         # self.model.get_input_port().FixValue(self.model_context, input)
@@ -104,37 +113,47 @@ class HybridModelPredictiveControl(LeafSystem):
 
     def _setup_QP(
         self,
-        current_state: npt.NDArray[np.float64],
-        desired_state: List[npt.NDArray[np.float64]],
-        desired_control: List[npt.NDArray[np.float64]],
+        x_curr: npt.NDArray[np.float64],
+        x_traj: List[npt.NDArray[np.float64]],
+        u_traj: List[npt.NDArray[np.float64]],
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
         N = self.cfg.horizon
+        h = self.cfg.step_size
+
         prog = MathematicalProgram()
-        error_state = prog.NewContinuousVariables(self.num_states, N, "error_state")
-        error_control = prog.NewContinuousVariables(self.num_inputs, N, "error_control")
+
+        # Formulate the problem in the local coordinates around the nominal trajectory
+        x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
+        u_bar = prog.NewContinuousVariables(self.num_inputs, N, "u_bar")
 
         # Initial value constraint
-        curr_error_state = current_state - desired_state[0]
-        prog.AddLinearConstraint(eq(error_state[:, 0], curr_error_state))
+        x_bar_curr = x_curr - x_traj[0]
+        prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
         # Dynamic constraints
         lin_systems = [
             self._get_linear_system(state, control)
-            for state, control in zip(desired_state, desired_control)
+            for state, control in zip(x_traj, u_traj)
         ][
             :-1
         ]  # only need N-1 linear systems
+
+        assert len(lin_systems) == N - 1
+
         As = [sys.A() for sys in lin_systems]
         Bs = [sys.B() for sys in lin_systems]
         for i, (A, B) in enumerate(zip(As, Bs)):
-            error_state_dot = A.dot(error_state[:, i]) + B.dot(error_control[:, i])
-            forward_euler = error_state[:, i] + self.cfg.step_size * error_state_dot
-            prog.AddLinearConstraint(eq(error_state[:, i + 1], forward_euler))
+            x_bar_dot = A.dot(x_bar[:, i]) + B.dot(u_bar[:, i])
+            forward_euler = x_bar[:, i] + h * x_bar_dot
+            prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
 
-        # error_state = state - desired_state
-        state = error_state + np.vstack(desired_state).T
-        control = error_control + np.vstack(desired_control).T
-        for u_i in control.T:
+        # x_bar = x - x_traj
+        x = x_bar + np.vstack(x_traj).T
+        # u_bar = u - u_traj
+        u = u_bar + np.vstack(u_traj).T
+
+        # Control constraints
+        for u_i in u.T:
             c_n = u_i[0]
             c_f = u_i[1]
             lam_dot = u_i[2]
@@ -143,36 +162,33 @@ class HybridModelPredictiveControl(LeafSystem):
             prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
             prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
-        for x in state.T:
+        # State constraints
+        for x in x.T:
             lam = x[3]
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([10, 10, 10, 1])
-        R = np.eye(self.num_inputs) * 0.5
-        # NOTE: For some reason, the system is not stabilizable
-        # TODO(bernhardpg): Get back to this
-        # Use the infinite horizon ricatti solution as the terminal cost
-        # Q_N = ContinuousAlgebraicRiccatiEquation(As[-1], Bs[-1], Q, R)
+        Q = np.diag([1, 1, 1, 0]) * 10
+        R = np.diag([1, 1, 1]) * 0.01
         Q_N = Q
 
-        terminal_cost = error_state[:, -1].T.dot(Q_N).dot(error_state[:, -1])
+        terminal_cost = x_bar[:, -1].T.dot(Q_N).dot(x_bar[:, -1])
         state_running_cost = sum(
-            [error_state[:, i].T.dot(Q).dot(error_state[:, i]) for i in range(N)]
+            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N)]
         )
         input_running_cost = sum(
-            [error_control[:, i].T.dot(R).dot(error_control[:, i]) for i in range(N)]
+            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N)]
         )
         prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
-        return prog, state, control  # type: ignore
+        return prog, x, u  # type: ignore
 
     def CalcControl(self, context: Context, output: BasicVector):
         state = self.state_port.Eval(context)
-        desired_state_traj = self.desired_state_port.Eval(context)
-        desired_control_traj = self.desired_control_port.Eval(context)
-        prog, state, control = self._setup_QP(state, desired_state_traj, desired_control_traj)  # type: ignore
+        x_traj = self.desired_state_port.Eval(context)
+        u_traj = self.desired_control_port.Eval(context)
+        prog, state, control = self._setup_QP(state, x_traj, u_traj)  # type: ignore
 
         result = Solve(prog)
         assert result.is_success()
@@ -181,6 +197,7 @@ class HybridModelPredictiveControl(LeafSystem):
         control_next = control_sol[:, 0]
 
         output.SetFromVector(control_next)  # type: ignore
+        # output.SetFromVector(u_traj[0])  # type: ignore
 
     def get_control_port(self) -> OutputPort:
         return self.control_port

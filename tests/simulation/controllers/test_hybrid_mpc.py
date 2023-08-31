@@ -39,10 +39,12 @@ from planning_through_contact.visualize.analysis import (
 from tests.geometry.planar.fixtures import face_contact_mode, t_pusher
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
+    face_idx,
     rigid_body_box,
     slider_pusher_system,
 )
 from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
+    contact_mode_example,
     one_contact_mode_vars,
 )
 
@@ -51,7 +53,10 @@ from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
 def hybrid_mpc(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
 ) -> HybridModelPredictiveControl:
-    config = HybridMpcConfig()
+    config = HybridMpcConfig(
+        step_size=0.1,
+        horizon=10,
+    )
     mpc = HybridModelPredictiveControl(slider_pusher_system, config)
     return mpc
 
@@ -233,7 +238,7 @@ def test_hybrid_mpc_controller(
         alpha=0.1,
     )
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -276,15 +281,13 @@ def test_hybrid_mpc_controller(
     simulator.Initialize()
     simulator.AdvanceTo(face_contact_mode.time_in_mode)
 
-    DEBUG = False
-
     if DEBUG:
-        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_pdf("hybrid_mpc_diagram.pdf")  # type: ignore
 
         visualizer.stop_recording()  # type: ignore
         ani = visualizer.get_recording_as_animation()  # type: ignore
         # Playback the recording and save the output.
-        ani.save("test.mp4", fps=30)
+        ani.save("hybrid_mpc.mp4", fps=30)
 
         state_log = state_logger.FindLog(context)
         desired_state_log = state_desired_logger.FindLog(context)
