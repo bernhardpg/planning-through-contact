@@ -40,33 +40,15 @@ class HybridModes(Enum):
     SLIDING_RIGHT = 2
 
 
-class HybridModelPredictiveControlSystem(LeafSystem):
+class HybridMpc:
     def __init__(
         self, model: System, config: HybridMpcConfig = HybridMpcConfig()
     ) -> None:
-        super().__init__()
-
         self.model = model
-        self.model_context = self.model.CreateDefaultContext()
         self.cfg = config
 
         self.num_states = model.num_continuous_states()
-        self.state_port = self.DeclareVectorInputPort("state", self.num_states)
-
-        self.desired_state_port = self.DeclareAbstractInputPort(
-            "desired_state",
-            Value([np.array([])]),
-        )
-
-        assert model.num_input_ports() == 1
         self.num_inputs = model.get_input_port().size()
-        self.control_port = self.DeclareVectorOutputPort(
-            "control", self.num_inputs, self.CalcControl
-        )
-        self.desired_control_port = self.DeclareAbstractInputPort(
-            "desired_control",
-            Value([np.array([])]),
-        )
 
     def _get_linear_system(
         self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
@@ -203,14 +185,15 @@ class HybridModelPredictiveControlSystem(LeafSystem):
 
         return prog, x, u  # type: ignore
 
-    def CalcControl(self, context: Context, output: BasicVector):
-        state: npt.NDArray[np.float64] = self.state_port.Eval(context)  # type: ignore
-        x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
-        u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
-
+    def compute_control(
+        self,
+        x_curr: npt.NDArray[np.float64],
+        x_traj: List[npt.NDArray[np.float64]],
+        u_traj: List[npt.NDArray[np.float64]],
+    ) -> npt.NDArray[np.float64]:
         # Solve one prog per contact mode
         progs, _, controls = zip(
-            *[self._setup_QP(state, x_traj, u_traj, mode) for mode in HybridModes]
+            *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
         )
         results = [Solve(prog) for prog in progs]  # type: ignore
         for result in results:
@@ -223,10 +206,41 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         result = results[best_idx]
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
-        control_next = control_sol[:, 0]
+        u_next = control_sol[:, 0]
+        return u_next
 
+
+class HybridModelPredictiveControlSystem(LeafSystem):
+    def __init__(
+        self, model: System, config: HybridMpcConfig = HybridMpcConfig()
+    ) -> None:
+        super().__init__()
+
+        self.mpc = HybridMpc(model, config)
+        self.cfg = self.mpc.cfg
+
+        self.state_port = self.DeclareVectorInputPort("state", self.mpc.num_states)
+
+        self.desired_state_port = self.DeclareAbstractInputPort(
+            "desired_state",
+            Value([np.array([])]),
+        )
+
+        self.control_port = self.DeclareVectorOutputPort(
+            "control", self.mpc.num_inputs, self.CalcControl
+        )
+        self.desired_control_port = self.DeclareAbstractInputPort(
+            "desired_control",
+            Value([np.array([])]),
+        )
+
+    def CalcControl(self, context: Context, output: BasicVector):
+        x_curr: npt.NDArray[np.float64] = self.state_port.Eval(context)  # type: ignore
+        x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
+        u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
+
+        control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
         output.SetFromVector(control_next)  # type: ignore
-        # output.SetFromVector(u_traj[0])  # type: ignore
 
     def get_control_port(self) -> OutputPort:
         return self.control_port
