@@ -212,7 +212,9 @@ class PlanarPushingTrajectory:
         self,
         path_knot_points: List[AbstractModeVariables],
     ) -> None:
+        self.pusher_radius = path_knot_points[0].pusher_radius
         self.path_knot_points = path_knot_points
+
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
         self.start_times = start_and_end_times[:-1]

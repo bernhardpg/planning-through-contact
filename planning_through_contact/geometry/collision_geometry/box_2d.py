@@ -341,9 +341,7 @@ class Box2d(CollisionGeometry):
         if not location.pos == ContactLocation.FACE:
             raise ValueError("Can only get collision free region for a face")
 
-        planes = [
-            self.faces[location.idx]
-        ]  # we always want the hyperplane for the current face
+        planes = []
         if location.idx == 0:
             planes.append(construct_2d_plane_from_points(self._v0, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v1))

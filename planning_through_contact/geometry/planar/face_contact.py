@@ -60,6 +60,7 @@ class FaceContactVariables(AbstractModeVariables):
         contact_location: PolytopeContactLocation,
         num_knot_points: int,
         time_in_mode: float,
+        pusher_radius: float,
     ) -> "FaceContactVariables":
         # Contact positions
         lams = prog.NewContinuousVariables(num_knot_points, "lam")
@@ -90,6 +91,7 @@ class FaceContactVariables(AbstractModeVariables):
             num_knot_points,
             time_in_mode,
             dt,
+            pusher_radius,
             lams,
             normal_forces,
             friction_forces,
@@ -119,6 +121,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
+            self.pusher_radius,
             get_float_from_result(self.lams),
             get_float_from_result(self.normal_forces),
             get_float_from_result(self.friction_forces),
@@ -149,6 +152,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
+            self.pusher_radius,
             get_original_vars_from_reduced(self.lams),
             get_original_vars_from_reduced(self.normal_forces),
             get_original_vars_from_reduced(self.friction_forces),
@@ -183,16 +187,14 @@ class FaceContactVariables(AbstractModeVariables):
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
-    def _get_p_B_c(self, lam: float):
-        # TODO(bernhardpg): Move!
-        radius = 0.01
+    def _get_p_B_c(self, lam: float, pusher_radius: float):
         point_on_surface = lam * self.pv1 + (1 - lam) * self.pv2
-        radius_displacement = -self.normal_vec * radius
+        radius_displacement = -self.normal_vec * pusher_radius
         return point_on_surface + radius_displacement
 
     @property
     def p_c_Bs(self):
-        return [self._get_p_B_c(lam) for lam in self.lams]
+        return [self._get_p_B_c(lam, self.pusher_radius) for lam in self.lams]
 
     @property
     def v_WBs(self):
@@ -259,6 +261,7 @@ class FaceContactMode(AbstractContactMode):
             specs.time_in_contact,
             contact_location,
             object,
+            specs.pusher_radius,
             prog,
             use_eq_elimination=use_eq_elimination,
             use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
@@ -272,6 +275,7 @@ class FaceContactMode(AbstractContactMode):
             self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
+            self.pusher_radius,
         )
         self._define_constraints()
         self._define_costs()
@@ -488,6 +492,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
+            self.pusher_radius,
             lams,
             normal_forces,
             friction_forces,
@@ -518,6 +523,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
+            self.pusher_radius,
             lams,
             normal_forces,
             friction_forces,

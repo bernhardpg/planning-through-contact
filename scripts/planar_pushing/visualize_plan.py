@@ -9,8 +9,10 @@ from planning_through_contact.visualize.planar import (
 
 def visualize_plan(debug: bool = False):
     box_geometry = Box2d(width=0.15, height=0.15)
-    traj = PlanarPushingTrajectory.load("trajectories/box_pushing_3.pkl")
-    visualize_planar_pushing_trajectory(traj.to_old_format(), box_geometry)
+    traj = PlanarPushingTrajectory.load("trajectories/box_pushing_4.pkl")
+    visualize_planar_pushing_trajectory(
+        traj.to_old_format(), box_geometry, traj.pusher_radius
+    )
 
 
 if __name__ == "__main__":

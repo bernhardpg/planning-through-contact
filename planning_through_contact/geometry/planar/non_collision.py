@@ -44,7 +44,6 @@ def check_finger_pose_in_contact_location(
     mode = NonCollisionMode.create_from_plan_spec(loc, specs, body, one_knot_point=True)
 
     mode.set_finger_initial_pose(finger_pose)
-    mode.set_slider_pose(body_pose)
 
     result = Solve(mode.prog)
     return result.is_success()
@@ -86,6 +85,7 @@ class NonCollisionVariables(AbstractModeVariables):
         num_knot_points: int,
         time_in_mode: float,
         contact_location: PolytopeContactLocation,
+        pusher_radius: float,
     ) -> "NonCollisionVariables":
         # Finger location
         p_BF_xs = prog.NewContinuousVariables(num_knot_points, "p_BF_x")
@@ -104,6 +104,7 @@ class NonCollisionVariables(AbstractModeVariables):
             num_knot_points,
             time_in_mode,
             dt,
+            pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -118,6 +119,7 @@ class NonCollisionVariables(AbstractModeVariables):
             self.num_knot_points,
             self.time_in_mode,
             self.dt,
+            self.pusher_radius,
             result.GetSolution(self.p_BF_xs),
             result.GetSolution(self.p_BF_ys),
             result.GetSolution(self.p_WB_x),  # type: ignore
@@ -207,6 +209,7 @@ class NonCollisionMode(AbstractContactMode):
             specs.time_non_collision,
             contact_location,
             slider,
+            specs.pusher_radius,
             prog,
             avoid_object,
             avoidance_cost_type,
@@ -242,11 +245,18 @@ class NonCollisionMode(AbstractContactMode):
     def __post_init__(self) -> None:
         self.dt = self.time_in_mode / self.num_knot_points
 
-        self.planes = self.object.geometry.get_planes_for_collision_free_region(
-            self.contact_location
+        self.contact_plane = self.object.geometry.faces[self.contact_location.idx]
+        self.collision_free_space_planes = (
+            self.object.geometry.get_planes_for_collision_free_region(
+                self.contact_location
+            )
         )
         self.variables = NonCollisionVariables.from_prog(
-            self.prog, self.num_knot_points, self.time_in_mode, self.contact_location
+            self.prog,
+            self.num_knot_points,
+            self.time_in_mode,
+            self.contact_location,
+            self.pusher_radius,
         )
         self._define_constraints()
         self._define_cost()
@@ -255,8 +265,19 @@ class NonCollisionMode(AbstractContactMode):
         for k in range(self.num_knot_points):
             p_BF = self.variables.p_BFs[k]
 
-            for plane in self.planes:
-                self.prog.AddLinearConstraint(plane.dist_to(p_BF) >= 0)
+            exprs = self._create_collision_free_space_constraints(p_BF)
+            for expr in exprs:
+                self.prog.AddLinearConstraint(expr)
+
+    def _create_collision_free_space_constraints(
+        self, pusher_pos: NpVariableArray
+    ) -> List[sym.Formula]:
+        avoid_contact = self.contact_plane.dist_to(pusher_pos) - self.pusher_radius >= 0
+        stay_in_region = [
+            plane.dist_to(pusher_pos) >= 0 for plane in self.collision_free_space_planes
+        ]
+        exprs = [avoid_contact] + stay_in_region
+        return exprs
 
     def _define_cost(self) -> None:
         position_diffs = [
@@ -329,6 +350,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
+            self.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -352,6 +374,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
+            self.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -397,9 +420,9 @@ class NonCollisionMode(AbstractContactMode):
         temp_prog = MathematicalProgram()
         x = temp_prog.NewContinuousVariables(NUM_DIMS, "x")
 
-        for plane in self.planes:
-            dist_to_face = plane.a.T.dot(x) - plane.b  # a'x >= b
-            temp_prog.AddLinearConstraint(ge(dist_to_face, 0))
+        exprs = self._create_collision_free_space_constraints(x)
+        for e in exprs:
+            temp_prog.AddLinearConstraint(e)
 
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.

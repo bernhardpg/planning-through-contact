@@ -86,7 +86,7 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     num_knot_points = mode.num_knot_points
 
     # We should have three planes for a collision free region for a normal box
-    num_planes = len(mode.planes)
+    num_planes = len(mode.collision_free_space_planes)
     assert num_planes == 3
 
     # One linear constraint per plane, per knot point

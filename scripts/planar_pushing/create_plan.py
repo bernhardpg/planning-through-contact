@@ -24,7 +24,10 @@ def create_plan(
     traj_number: int = 1,
 ):
     specs = PlanarPlanSpecs(
-        time_non_collision=2.0, time_in_contact=2.0, num_knot_points_non_collision=4
+        time_non_collision=2.0,
+        time_in_contact=2.0,
+        num_knot_points_non_collision=4,
+        pusher_radius=0.01,
     )
 
     if body_to_use == "box":
@@ -79,7 +82,9 @@ def create_plan(
     traj.save(traj_name)
 
     if debug:
-        visualize_planar_pushing_trajectory(traj.to_old_format(), body.geometry)
+        visualize_planar_pushing_trajectory(
+            traj.to_old_format(), body.geometry, specs.pusher_radius
+        )
 
 
 if __name__ == "__main__":
