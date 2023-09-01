@@ -43,7 +43,7 @@ def create_plan(
         no_cycles=True,  # TODO(bernhardpg)
     )
 
-    if traj_number == 1:
+    if traj_number == 1:  # gives a kind of weird small touch
         slider_initial_pose = PlanarPose(x=-0.2, y=0.65, theta=0.0)
         slider_target_pose = PlanarPose(x=0.2, y=0.65, theta=-0.5)
         finger_initial_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
@@ -51,6 +51,16 @@ def create_plan(
     elif traj_number == 2:
         slider_initial_pose = PlanarPose(x=0.2, y=0.65, theta=0.0)
         slider_target_pose = PlanarPose(x=-0.2, y=0.65, theta=0.5)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 3:
+        slider_initial_pose = PlanarPose(x=0.0, y=0.65, theta=0.5)
+        slider_target_pose = PlanarPose(x=-0.3, y=0.55, theta=-0.2)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 4:
+        slider_initial_pose = PlanarPose(x=0.1, y=0.60, theta=-0.2)
+        slider_target_pose = PlanarPose(x=-0.2, y=0.70, theta=0.5)
         finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
         finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
     else:
@@ -73,4 +83,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=1, debug=True)
+    create_plan(body_to_use="box", traj_number=4, debug=True)

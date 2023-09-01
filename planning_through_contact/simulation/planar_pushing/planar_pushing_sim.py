@@ -139,6 +139,7 @@ class PlanarPushingSimulation:
         self.simulator.AdvanceTo(timeout)
         if save_recording_as:
             self.station.meshcat.StopRecording()
+            self.station.meshcat.SetProperty("/drake/contact_forces", "visible", False)
             self.station.meshcat.PublishRecording()
             res = self.station.meshcat.StaticHtml()
             with open(save_recording_as, "w") as f:

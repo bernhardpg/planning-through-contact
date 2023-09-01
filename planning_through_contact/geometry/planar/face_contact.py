@@ -300,7 +300,7 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
 
         # TODO(bernhardpg): Variables should always be bounded. Get back to this
-        self.bound_forces = True
+        self.bound_forces = False
         if self.bound_forces:
             # Bounds on forces
             for c_n, c_f in zip(
