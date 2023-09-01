@@ -33,6 +33,7 @@ class HybridMpcConfig:
     step_size: float = 0.1
     num_sliding_steps: int = 5
     rate_Hz: int = 200
+    pusher_radius: float = 0.01
 
 
 class HybridModes(Enum):

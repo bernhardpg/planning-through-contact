@@ -31,9 +31,6 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
     SliderPusherSystem,
 )
 
-# TODO(bernhardpg): Fix!
-RADIUS = 0.01
-
 
 class PusherPoseController(LeafSystem):
     def __init__(
@@ -47,7 +44,7 @@ class PusherPoseController(LeafSystem):
         self.object_geometry = object_geometry
 
         self.systems = {
-            loc: SliderPusherSystem(object_geometry, loc)
+            loc: SliderPusherSystem(object_geometry, mpc_config.pusher_radius, loc)
             for loc in object_geometry.contact_locations
         }
         # one controller per face

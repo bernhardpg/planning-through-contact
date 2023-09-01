@@ -100,13 +100,13 @@ class CollisionGeometry(ABC):
 
     @abstractmethod
     def get_p_B_c_from_lam(
-        self, lam: float, loc: PolytopeContactLocation
+        self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
         pass
 
     @abstractmethod
     def get_lam_from_p_B_c(
-        self, lam: float, loc: PolytopeContactLocation, project: bool = False
+        self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
         pass
 

@@ -39,7 +39,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=False,
         delay_before_execution=2.0,
         use_diff_ik=True,
-        mpc_config=HybridMpcConfig(rate_Hz=50),
+        mpc_config=HybridMpcConfig(rate_Hz=50, pusher_radius=traj.pusher_radius),
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)

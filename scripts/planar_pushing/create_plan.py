@@ -27,7 +27,7 @@ def create_plan(
         time_non_collision=2.0,
         time_in_contact=2.0,
         num_knot_points_non_collision=4,
-        pusher_radius=0.01,
+        pusher_radius=0.03,
     )
 
     if body_to_use == "box":

@@ -34,6 +34,7 @@ def SliderPusherSystem_(T):
         def _construct(
             self,
             slider_geometry: CollisionGeometry,
+            pusher_radius: float,
             contact_location: PolytopeContactLocation,
             converter=None,
         ) -> None:
@@ -41,6 +42,7 @@ def SliderPusherSystem_(T):
 
             self.contact_location = contact_location
             self.slider_geometry = slider_geometry
+            self.pusher_radius = pusher_radius
             self.pv1, self.pv2 = slider_geometry.get_proximate_vertices_from_location(
                 contact_location
             )
@@ -75,12 +77,16 @@ def SliderPusherSystem_(T):
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
-                self, other.slider_geometry, other.contact_location, converter=converter
+                self,
+                other.slider_geometry,
+                other.pusher_radius,
+                other.contact_location,
+                converter=converter,
             )
 
         def _get_p_B_c(self, lam: float) -> npt.NDArray[np.float64]:
             return self.slider_geometry.get_p_B_c_from_lam(
-                lam, self.contact_location, radius=0.01
+                lam, self.contact_location, radius=self.pusher_radius
             )
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
@@ -124,7 +130,7 @@ def SliderPusherSystem_(T):
             p_WB = slider_pose.pos()
             p_B_c = R_WB.T.dot(p_W_c - p_WB)
             lam = self.slider_geometry.get_lam_from_p_B_c(
-                p_B_c, self.contact_location, radius=0.01
+                p_B_c, self.contact_location, radius=self.pusher_radius
             )
 
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
@@ -139,7 +145,7 @@ def SliderPusherSystem_(T):
             slider_planar_pose = PlanarPose(x, y, theta)
             p_WB = slider_planar_pose.pos()
             p_B_c = self.slider_geometry.get_p_B_c_from_lam(
-                lam, self.contact_location, radius=0.01
+                lam, self.contact_location, radius=self.pusher_radius
             )
 
             p_W_c = p_WB + R_WB.dot(p_B_c)
