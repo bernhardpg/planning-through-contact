@@ -138,44 +138,6 @@ class PusherPoseController(LeafSystem):
         builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
         return pusher_pose_controller
 
-    def _compute_control(
-        self,
-        theta: float,
-        theta_desired: float,
-        p_W_c: npt.NDArray[np.float64],
-        p_WB: npt.NDArray[np.float64],
-        loc: PolytopeContactLocation,
-    ) -> npt.NDArray[np.float64]:
-        theta_error = theta_desired - theta
-
-        K_P = 0.5
-
-        # Commanded difference in position along contact face
-        delta_lam = -K_P * theta_error
-
-        pv1, pv2 = self.object_geometry.get_proximate_vertices_from_location(loc)
-
-        # TODO(bernhardpg): consider not normalizing this
-        dir_vector = (pv2 - pv1) / np.linalg.norm(pv2 - pv1)
-        delta_p_B_c = delta_lam * dir_vector
-
-        R_WB = two_d_rotation_matrix_from_angle(theta)
-        p_B_c = R_WB.T.dot(p_W_c - p_WB)
-
-        p_B_c_cmd = p_B_c + delta_p_B_c
-        cmd_between_pv1_and_pv2 = (
-            np.cross(pv2.flatten(), p_B_c_cmd.flatten()) >= 0
-            and np.cross(pv1.flatten(), p_B_c_cmd.flatten()) <= 0
-        )
-        if not cmd_between_pv1_and_pv2:  # saturate control
-            delta_p_B_c = np.zeros((2, 1))
-
-        # We only care about the diffs here, i.e. no constant translation
-        R_WB_desired = two_d_rotation_matrix_from_angle(theta_desired)
-        delta_p_W_c = R_WB_desired.dot(delta_p_B_c)
-
-        return delta_p_W_c
-
     def _get_mpc_for_mode(self, mode: PlanarPushingContactMode) -> HybridMpc:
         loc = mode.to_contact_location()
         return self.mpc_controllers[loc]
