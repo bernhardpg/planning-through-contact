@@ -100,6 +100,7 @@ class AbstractModeVariables(ABC):
     num_knot_points: int
     time_in_mode: float
     dt: float
+    pusher_radius: float
 
     @abstractmethod
     def eval_result(self, result: MathematicalProgramResult) -> "AbstractModeVariables":
@@ -154,6 +155,7 @@ class AbstractContactMode(ABC):
     time_in_mode: float
     contact_location: PolytopeContactLocation
     object: RigidBody
+    pusher_radius: float
     prog: MathematicalProgram
 
     @abstractmethod

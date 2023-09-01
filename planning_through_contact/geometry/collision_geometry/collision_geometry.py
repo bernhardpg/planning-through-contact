@@ -93,10 +93,25 @@ class CollisionGeometry(ABC):
     def get_planes_for_collision_free_region(
         self, location: PolytopeContactLocation
     ) -> List[Hyperplane]:
+        """
+        Returns the hyperplanes defining the collision-free region, but not the plane
+        of the contact face.
+        """
+
+    @abstractmethod
+    def get_p_B_c_from_lam(
+        self, lam: float, loc: PolytopeContactLocation, radius: float
+    ) -> npt.NDArray[np.float64]:
         pass
 
     @abstractmethod
-    def get_p_c_B_from_lam(
-        self, lam: float, loc: PolytopeContactLocation
+    def get_lam_from_p_B_c(
+        self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
+        pass
+
+    @abstractmethod
+    def get_force_comps_from_f_c_B(
+        self, f_c_B, loc: PolytopeContactLocation
+    ) -> Tuple[float, float]:
         pass

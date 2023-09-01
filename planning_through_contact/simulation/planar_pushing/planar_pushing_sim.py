@@ -57,31 +57,21 @@ class PlanarPushingSimulation:
 
         self.planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
-            PlanarPoseTrajPublisher(traj, config.delay_before_execution),
-        )
-
-        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
-            builder,
-            slider,
-            self.planar_pose_pub.GetOutputPort("contact_mode"),
-            self.planar_pose_pub.GetOutputPort("pusher_planar_pose"),
-            self.station.GetOutputPort("pusher_pose"),
-            self.planar_pose_pub.GetOutputPort("slider_planar_pose"),
-            self.planar_pose_pub.GetOutputPort("slider_theta_dot"),
-            self.station.GetOutputPort("slider_pose"),
-            self.station.GetOutputPort("slider_spatial_velocity"),
+            PlanarPoseTrajPublisher(
+                traj, config.mpc_config, config.delay_before_execution
+            ),
         )
 
         if config.use_diff_ik:
-            PusherPoseToJointPosDiffIk.add_to_builder(
+            self.pusher_pose_to_joint_pos = PusherPoseToJointPosDiffIk.add_to_builder(
                 builder,
-                self.pusher_pose_controller.get_output_port(),
                 self.station.GetInputPort("iiwa_position"),
                 self.station.GetOutputPort("iiwa_state_measured"),
                 time_step=config.time_step,
                 use_diff_ik_feedback=False,
             )
         else:
+            # TODO: outdated, fix
             ik = PusherPoseInverseKinematics.AddTobuilder(
                 builder,
                 self.pusher_pose_controller.get_output_port(),
@@ -90,6 +80,19 @@ class PlanarPushingSimulation:
                 self.station.GetInputPort("iiwa_position"),
                 config.default_joint_positions,
             )
+
+        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
+            builder,
+            slider,
+            config.mpc_config,
+            self.planar_pose_pub.GetOutputPort("contact_mode"),
+            self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
+            self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            self.planar_pose_pub.GetOutputPort("contact_force_traj"),
+            self.station.GetOutputPort("pusher_pose"),
+            self.station.GetOutputPort("slider_pose"),
+            self.pusher_pose_to_joint_pos.get_pose_input_port(),
+        )
 
         if config.save_plots:
             builder.AddNamedSystem("theta_source")
@@ -122,7 +125,7 @@ class PlanarPushingSimulation:
     def export_diagram(self, filename: str):
         import pydot
 
-        pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_png(  # type: ignore
+        pydot.graph_from_dot_data(self.diagram.GetGraphvizString())[0].write_pdf(  # type: ignore
             filename
         )
         print(f"Saved diagram to: {filename}")
@@ -136,6 +139,7 @@ class PlanarPushingSimulation:
         self.simulator.AdvanceTo(timeout)
         if save_recording_as:
             self.station.meshcat.StopRecording()
+            self.station.meshcat.SetProperty("/drake/contact_forces", "visible", False)
             self.station.meshcat.PublishRecording()
             res = self.station.meshcat.StaticHtml()
             with open(save_recording_as, "w") as f:

@@ -27,20 +27,25 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 
 @pytest.fixture
 def box_geometry() -> Box2d:
-    return Box2d(width=0.3, height=0.3)
+    return Box2d(width=0.15, height=0.15)
 
 
 @pytest.fixture
 def rigid_body_box(box_geometry: Box2d) -> RigidBody:
-    mass = 0.3
+    mass = 0.1
     box = RigidBody("box", box_geometry, mass)
     return box
 
 
 @pytest.fixture
-def slider_pusher_system(rigid_body_box: RigidBody) -> SliderPusherSystem:  # type: ignore
+def face_idx() -> int:
+    return 3
+
+
+@pytest.fixture
+def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
-        rigid_body_box.geometry, PolytopeContactLocation(ContactLocation.FACE, 1)
+        rigid_body_box.geometry, PolytopeContactLocation(ContactLocation.FACE, face_idx)
     )
     return slider_pusher
 

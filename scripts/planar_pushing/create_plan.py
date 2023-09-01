@@ -24,7 +24,10 @@ def create_plan(
     traj_number: int = 1,
 ):
     specs = PlanarPlanSpecs(
-        time_non_collision=2.0, time_in_contact=2.0, num_knot_points_non_collision=4
+        time_non_collision=2.0,
+        time_in_contact=2.0,
+        num_knot_points_non_collision=4,
+        pusher_radius=0.03,
     )
 
     if body_to_use == "box":
@@ -43,16 +46,26 @@ def create_plan(
         no_cycles=True,  # TODO(bernhardpg)
     )
 
-    if traj_number == 1:
-        slider_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
-        slider_target_pose = PlanarPose(x=0.3, y=0.5, theta=0.5)
-        finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
+    if traj_number == 1:  # gives a kind of weird small touch
+        slider_initial_pose = PlanarPose(x=-0.2, y=0.65, theta=0.0)
+        slider_target_pose = PlanarPose(x=0.2, y=0.65, theta=-0.5)
+        finger_initial_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.0, y=-0.2, theta=0.0)
     elif traj_number == 2:
-        slider_initial_pose = PlanarPose(x=0.0, y=0.5, theta=0.0)
-        slider_target_pose = PlanarPose(x=-0.3, y=0.5, theta=0.5)
-        finger_initial_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=0.3, y=0.0, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.2, y=0.65, theta=0.0)
+        slider_target_pose = PlanarPose(x=-0.2, y=0.65, theta=0.5)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 3:
+        slider_initial_pose = PlanarPose(x=0.0, y=0.65, theta=0.5)
+        slider_target_pose = PlanarPose(x=-0.3, y=0.55, theta=-0.2)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 4:
+        slider_initial_pose = PlanarPose(x=0.1, y=0.60, theta=-0.2)
+        slider_target_pose = PlanarPose(x=-0.2, y=0.70, theta=0.5)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -69,8 +82,10 @@ def create_plan(
     traj.save(traj_name)
 
     if debug:
-        visualize_planar_pushing_trajectory(traj.to_old_format(), body.geometry)
+        visualize_planar_pushing_trajectory(
+            traj.to_old_format(), body.geometry, specs.pusher_radius
+        )
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=2, debug=True)
+    create_plan(body_to_use="box", traj_number=4, debug=True)

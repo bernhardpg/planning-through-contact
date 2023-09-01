@@ -183,7 +183,7 @@ class Visualizer2d:
     PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2]).reshape((-1, 1))
     PLOT_SCALE = 500
     FORCE_SCALE = 2.0
-    POINT_RADIUS = 0.01
+    POINT_RADIUS = 1.0
 
     def visualize(
         self,
@@ -226,7 +226,7 @@ class Visualizer2d:
 
         if draw_origin:
             origin = VisualizationPoint2d(np.zeros((1, 2)), COLORS["cornsilk4"])
-            origin.change_radius(4.0)
+            origin.change_radius(0.15)
 
         for frame_idx in range(num_frames):
             self.canvas.delete("all")

@@ -8,6 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.common.value import Value
+from pydrake.math import RotationMatrix
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.framework import BasicVector, Context, LeafSystem, OutputPort
 from pydrake.trajectories import (
@@ -71,8 +72,9 @@ class So3TrajSegment:
         return cls(start_time, end_time, Rs, traj)
 
     def eval_theta(self, t: float) -> float:
-        R = self.traj.orientation(t).rotation()
-        return np.arccos(R[0, 0])
+        R = RotationMatrix(self.traj.orientation(t).rotation())
+        theta = R.ToRollPitchYaw().yaw_angle()
+        return theta
 
     def eval_omega(self, t: float) -> npt.NDArray[np.float64]:
         omega = self.traj.angular_velocity(t)
@@ -210,7 +212,9 @@ class PlanarPushingTrajectory:
         self,
         path_knot_points: List[AbstractModeVariables],
     ) -> None:
+        self.pusher_radius = path_knot_points[0].pusher_radius
         self.path_knot_points = path_knot_points
+
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
         self.start_times = start_and_end_times[:-1]
@@ -229,6 +233,8 @@ class PlanarPushingTrajectory:
             return self.end_times[
                 -1
             ]  # repeat last element when we want trajectory after end time
+        elif t <= 0:
+            return 0
         else:
             return t
 

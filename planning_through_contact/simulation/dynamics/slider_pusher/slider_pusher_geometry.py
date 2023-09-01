@@ -13,6 +13,7 @@ from pydrake.geometry import (
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, OutputPort
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     PolytopeContactLocation,
@@ -51,10 +52,15 @@ class SliderPusherGeometry(LeafSystem):
         self.slider_frame_id = scene_graph.RegisterFrame(
             self.source_id, GeometryFrame("slider")
         )
+        assert isinstance(slider_geometry, Box2d)
         self.slider_geometry_id = scene_graph.RegisterGeometry(
             self.source_id,
             self.slider_frame_id,
-            GeometryInstance(RigidTransform.Identity(), Box(0.3, 0.3, 0.3), "slider"),
+            GeometryInstance(
+                RigidTransform.Identity(),
+                Box(slider_geometry.width, slider_geometry.height, 0.05),
+                "slider",
+            ),
         )
         BOX_COLOR = COLORS["aquamarine4"]
         scene_graph.AssignRole(
@@ -116,7 +122,7 @@ class SliderPusherGeometry(LeafSystem):
         output.get_mutable_value().set_value(id=self.slider_frame_id, value=pose)  # type: ignore
 
         lam = state[3]
-        p_c_B = self.slider_geometry.get_p_c_B_from_lam(lam, self.contact_location)
+        p_c_B = self.slider_geometry.get_p_B_c_from_lam(lam, self.contact_location)
         pose = RigidTransform(
             RotationMatrix.Identity(), np.concatenate((p_c_B.flatten(), [0]))  # type: ignore
         )

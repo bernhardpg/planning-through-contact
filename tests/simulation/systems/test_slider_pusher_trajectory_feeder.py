@@ -10,6 +10,10 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.primitives import ConstantVectorSource
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -21,6 +25,8 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
 )
@@ -33,42 +39,51 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    face_contact_mode,
-    rigid_body_box,
-    t_pusher,
-)
+from tests.geometry.planar.fixtures import box_geometry, rigid_body_box, t_pusher
+from tests.simulation.dynamics.test_slider_pusher_system import face_idx
+
+
+@pytest.fixture
+def contact_mode_example(rigid_body_box: RigidBody, face_idx: int) -> FaceContactMode:
+    rigid_body = rigid_body_box
+
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
+    specs = PlanarPlanSpecs()
+    mode = FaceContactMode.create_from_plan_spec(
+        contact_location, specs, rigid_body, use_eq_elimination=False
+    )
+    return mode
 
 
 @pytest.fixture
 def one_contact_mode_vars(
-    face_contact_mode: FaceContactMode,
+    contact_mode_example: FaceContactMode,
 ) -> List[FaceContactVariables]:
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0, 0.8)
+    final_pose = PlanarPose(0.3, 0.1, 0.4)
 
-    face_contact_mode.set_slider_initial_pose(initial_pose)
-    face_contact_mode.set_slider_final_pose(final_pose)
+    contact_mode_example.set_slider_initial_pose(initial_pose)
+    contact_mode_example.set_slider_final_pose(final_pose)
 
-    face_contact_mode.formulate_convex_relaxation()
-    assert face_contact_mode.relaxed_prog is not None
-    relaxed_result = Solve(face_contact_mode.relaxed_prog)
+    contact_mode_example.formulate_convex_relaxation()
+    assert contact_mode_example.relaxed_prog is not None
+    relaxed_result = Solve(contact_mode_example.relaxed_prog)
     assert relaxed_result.is_success()
 
-    prog = assemble_progs_from_contact_modes([face_contact_mode])
+    prog = assemble_progs_from_contact_modes([contact_mode_example])
     initial_guess = relaxed_result.GetSolution(
-        face_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
+        contact_mode_example.relaxed_prog.decision_variables()[: prog.num_vars()]
     )
     prog.SetInitialGuess(prog.decision_variables(), initial_guess)
     result = Solve(prog)
 
-    vars = face_contact_mode.variables.eval_result(result)
+    vars = contact_mode_example.variables.eval_result(result)
+    # vars = contact_mode_example.variables.eval_result(relaxed_result)
 
     DEBUG = False
     if DEBUG:
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory(traj, contact_mode_example.object.geometry)
     return [vars]
 
 

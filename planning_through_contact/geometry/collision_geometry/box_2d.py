@@ -341,9 +341,7 @@ class Box2d(CollisionGeometry):
         if not location.pos == ContactLocation.FACE:
             raise ValueError("Can only get collision free region for a face")
 
-        planes = [
-            self.faces[location.idx]
-        ]  # we always want the hyperplane for the current face
+        planes = []
         if location.idx == 0:
             planes.append(construct_2d_plane_from_points(self._v0, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v1))
@@ -361,9 +359,43 @@ class Box2d(CollisionGeometry):
 
         return planes
 
-    def get_p_c_B_from_lam(
-        self, lam: float, loc: PolytopeContactLocation
+    def get_p_B_c_from_lam(
+        self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
-        return lam * pv1 + (1 - lam) * pv2
+        point_on_surface = lam * pv1 + (1 - lam) * pv2
+
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        radius_offset = -n * radius
+
+        p_B_c = radius_offset + point_on_surface
+        return p_B_c
+
+    def get_lam_from_p_B_c(
+        self,
+        p_B_c: npt.NDArray[np.float64],
+        loc: PolytopeContactLocation,
+        radius: float,
+    ) -> float:
+        assert loc.pos == ContactLocation.FACE
+        assert p_B_c.shape == (2, 1)
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        radius_offset = -n * radius
+        point_on_surface = p_B_c - radius_offset
+
+        # project p_B_c onto vector from v1 to v2 to find lam
+        u1 = point_on_surface - pv2
+        u2 = pv1 - pv2
+        lam = u1.T.dot(u2).item() / np.linalg.norm(u2) ** 2
+        return lam
+
+    def get_force_comps_from_f_c_B(
+        self, f_c_B, loc: PolytopeContactLocation
+    ) -> Tuple[float, float]:
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        c_n = f_c_B.T.dot(n).item()
+        c_f = f_c_B.T.dot(t).item()
+        return c_n, c_f

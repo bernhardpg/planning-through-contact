@@ -1,4 +1,4 @@
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -11,7 +11,9 @@ class Hyperplane(NamedTuple):
     def __eq__(self, other: "Hyperplane") -> bool:
         return np.allclose(self.a, other.a) and np.allclose(self.b, other.b)
 
-    def dist_to(self, point: npt.NDArray[np.float64]):
+    T = TypeVar("T")
+
+    def dist_to(self, point: npt.NDArray[T]) -> T:  # type: ignore
         assert self.a.shape[0] == point.shape[0]
         return (self.a.T.dot(point) - self.b).item()  # a'x >= b
 
