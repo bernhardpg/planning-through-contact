@@ -94,14 +94,17 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
 
     assert isinstance(mode.contact_plane, Hyperplane)
 
-    # One linear constraint per plane, per knot point
     num_linear_constraints = len(mode.prog.linear_constraints()) + len(
         mode.prog.bounding_box_constraints()
     )
-    assert num_linear_constraints == num_knot_points * (num_planes + 1)
+    num_planes = 3
+    num_workspace_constraints = 1
+    assert num_linear_constraints == num_knot_points * (
+        num_planes + num_workspace_constraints
+    )
 
     # The next two tests may fail for more complex geometries than boxes. If so, update them!
-    assert len(mode.prog.bounding_box_constraints()) == 2
+    assert len(mode.prog.bounding_box_constraints()) == 4
     assert len(mode.prog.linear_constraints()) == 4
 
     assert len(mode.prog.linear_equality_constraints()) == 0
@@ -163,16 +166,16 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     res_1 = check_finger_pose_in_contact_location(finger_pose_1, loc, rigid_body_box)
     assert res_1 == False  # penetrates the box
 
-    finger_pose_2 = PlanarPose(0, -0.6, 0)
+    finger_pose_2 = PlanarPose(0, -0.3, 0)
     res_2 = check_finger_pose_in_contact_location(finger_pose_2, loc, rigid_body_box)
     assert res_2 == True
 
-    finger_pose_3 = PlanarPose(0.1, -0.6, 0)
+    finger_pose_3 = PlanarPose(0.1, -0.3, 0)
     res_3 = check_finger_pose_in_contact_location(finger_pose_3, loc, rigid_body_box)
     assert res_3 == True
 
     loc_2 = PolytopeContactLocation(ContactLocation.FACE, 3)
-    finger_pose_4 = PlanarPose(-0.4, 0, 0)
+    finger_pose_4 = PlanarPose(-0.2, 0, 0)
     res_4 = check_finger_pose_in_contact_location(finger_pose_4, loc_2, rigid_body_box)
     assert res_4 == True
 
@@ -300,8 +303,6 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
 
     mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
 
-    # assert len(mode.prog.quadratic_costs()) == 1
-
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
 
@@ -327,7 +328,7 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     assert_object_is_avoided(rigid_body_box.geometry, traj.p_c_B)
 
     # Pusher should move away from object
-    assert vars.p_BF_xs[2] <= -0.4
+    assert vars.p_BF_xs[2] <= -0.25
 
     if DEBUG:
         visualize_planar_pushing_trajectory(

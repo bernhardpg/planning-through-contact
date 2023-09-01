@@ -266,6 +266,15 @@ class NonCollisionMode(AbstractContactMode):
             for expr in exprs:
                 self.prog.AddLinearConstraint(expr)
 
+        self._add_workspace_constraints()
+
+    def _add_workspace_constraints(self) -> None:
+        for k in range(self.num_knot_points):
+            p_BF = self.variables.p_BFs[k]
+
+            lb, ub = self.config.workspace.pusher.bounds
+            self.prog.AddBoundingBoxConstraint(lb, ub, p_BF)
+
     def _create_collision_free_space_constraints(
         self, pusher_pos: NpVariableArray
     ) -> List[sym.Formula]:

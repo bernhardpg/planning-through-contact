@@ -36,14 +36,11 @@ def create_plan(
         body = RigidBody("box", box_geometry, mass)
     elif body_to_use == "t_pusher":
         mass = 0.2
-        body = RigidBody("t_pusher", TPusher2d(), mass)
+        body = RigidBody("t_pusher", TPusher2d(0.01), mass)
 
     planner = PlanarPushingPlanner(
         body,
         config,
-        avoid_object=True,
-        use_redundant_dynamic_constraints=False,
-        no_cycles=True,  # TODO(bernhardpg)
     )
 
     if traj_number == 1:  # gives a kind of weird small touch
@@ -88,4 +85,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=4, debug=True)
+    create_plan(body_to_use="t_pusher", traj_number=4, debug=True)
