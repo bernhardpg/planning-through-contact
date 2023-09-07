@@ -76,6 +76,7 @@ def non_collision_vars() -> NonCollisionVariables:
         num_knot_points,
         time_in_contact,
         PolytopeContactLocation(ContactLocation.FACE, 0),
+        pusher_radius=0,
     )
     return vars
 
@@ -83,7 +84,7 @@ def non_collision_vars() -> NonCollisionVariables:
 @pytest.fixture
 def non_collision_mode(rigid_body_box: RigidBody) -> NonCollisionMode:
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-    specs = PlanarPlanSpecs()
+    specs = PlanarPlanSpecs(pusher_radius=0.02)
     mode = NonCollisionMode.create_from_plan_spec(
         contact_location, specs, rigid_body_box
     )
