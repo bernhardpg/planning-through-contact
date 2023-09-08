@@ -194,7 +194,7 @@ class NonCollisionMode(AbstractContactMode):
         name: Optional[str] = None,
         one_knot_point: bool = False,
         avoid_object: bool = False,
-        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
+        avoidance_cost_type: Literal["linear", "quadratic", "socp"] = "quadratic",
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -304,13 +304,31 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearCost(
                     -self.cost_param_avoidance_lin * np.sum(dists)
                 )  # maximize distances
-            else:  # quadratic
+
+            elif self.avoidance_cost_type == "quadratic":
                 squared_dists = [
                     self.cost_param_avoidance_quad_weight
                     * (d - self.cost_param_avoidance_quad_dist) ** 2
                     for d in dists
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
+
+            else:  # socp
+                slacks = self.prog.NewContinuousVariables(self.num_knot_points - 2, "s")
+                dists_except_first_and_last = dists[1:-1]
+                for d, s in zip(dists_except_first_and_last, slacks):
+                    # Let d := dist >= 0
+                    # we want infinite cost for being close to object:
+                    #   minimize 1 / d
+                    # reformulate as:
+                    #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
+                    #   <=>
+                    #   minimize s s.t. s d >= 1, d >= 0
+                    # which is exactly a rotated lorentz constraint:
+                    # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
+
+                    self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
+                    self.prog.AddLinearCost(s)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose

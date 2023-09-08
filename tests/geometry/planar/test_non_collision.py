@@ -291,10 +291,10 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     mode = NonCollisionMode.create_from_plan_spec(
-        loc, specs, rigid_body_box, avoid_object=True
+        loc, specs, rigid_body_box, avoid_object=True, avoidance_cost_type="socp"
     )
 
-    assert len(mode.prog.quadratic_costs()) == 2
+    assert len(mode.prog.quadratic_costs()) == 1
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -321,7 +321,7 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     assert_object_is_avoided(rigid_body_box.geometry, traj.p_c_B)
 
     # Pusher should move away from object
-    assert vars.p_BF_xs[2] <= -0.27
+    assert vars.p_BF_xs[2] <= -0.4
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
