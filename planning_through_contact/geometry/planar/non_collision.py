@@ -180,6 +180,7 @@ class NonCollisionVariables(AbstractModeVariables):
 class NonCollisionMode(AbstractContactMode):
     avoid_object: bool = False
     avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic"
+    minimize_squared_eucl_dist: bool = True
     cost_param_avoidance_lin: float = 0.1
     cost_param_avoidance_quad_dist: float = 0.2
     cost_param_avoidance_quad_weight: float = 0.4
@@ -195,6 +196,7 @@ class NonCollisionMode(AbstractContactMode):
         one_knot_point: bool = False,
         avoid_object: bool = False,
         avoidance_cost_type: Literal["linear", "quadratic", "socp"] = "quadratic",
+        minimize_squared_eucl_dist: bool = True,
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -213,6 +215,7 @@ class NonCollisionMode(AbstractContactMode):
             prog,
             avoid_object,
             avoidance_cost_type,
+            minimize_squared_eucl_dist,
         )
 
     @classmethod
@@ -280,22 +283,43 @@ class NonCollisionMode(AbstractContactMode):
         return exprs
 
     def _define_cost(self) -> None:
-        position_diffs = [
-            p_next - p_curr
-            for p_next, p_curr in zip(
-                self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+        if self.minimize_squared_eucl_dist:
+            position_diffs = [
+                p_next - p_curr
+                for p_next, p_curr in zip(
+                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                )
+            ]
+            if self.num_knot_points == 1:
+                # Can't vstack only one array
+                position_diffs = np.array(position_diffs)
+            else:
+                position_diffs = np.vstack(position_diffs)
+            # position_diffs is now one long vector with diffs in each entry
+            squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+            self.prog.AddQuadraticCost(
+                self.cost_param_eucl * squared_eucl_dist, is_convex=True
             )
-        ]
-        if self.num_knot_points == 1:
-            # Can't vstack only one array
-            position_diffs = np.array(position_diffs)
-        else:
-            position_diffs = np.vstack(position_diffs)
-        # position_diffs is now one long vector with diffs in each entry
-        squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-        self.prog.AddQuadraticCost(
-            self.cost_param_eucl * squared_eucl_dist, is_convex=True
-        )
+
+        else:  # Minimize total Euclidean distance
+            position_diffs = [
+                p_next - p_curr
+                for p_next, p_curr in zip(
+                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                )
+            ]
+            slacks = self.prog.NewContinuousVariables(len(position_diffs), "t")
+            for d, s in zip(position_diffs, slacks):
+                # Let d := diff
+                # we want to minimize the Euclidean distance:
+                #   minimize sqrt(d_1^2 + d_2^2)
+                # reformulate as:
+                #   minimize s s.t. s >= sqrt(d_1^2 + d_2^2)
+                # which is exactly a Lorentz cone constraint:
+                # (s,d) \in LorentzCone <=> s >= sqrt(d_1^2 + d_2^2)
+                vec = np.vstack([[s], d]).flatten()  # (s, x_diff, y_diff)
+                self.prog.AddLorentzConeConstraint(vec)
+                self.prog.AddLinearCost(s)
 
         if self.avoid_object:
             plane = self.object.geometry.faces[self.contact_location.idx]
@@ -314,8 +338,10 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
             else:  # socp
-                slacks = self.prog.NewContinuousVariables(self.num_knot_points - 2, "s")
                 dists_except_first_and_last = dists[1:-1]
+                slacks = self.prog.NewContinuousVariables(
+                    len(dists_except_first_and_last), "s"
+                )
                 for d, s in zip(dists_except_first_and_last, slacks):
                     # Let d := dist >= 0
                     # we want infinite cost for being close to object:
@@ -324,7 +350,7 @@ class NonCollisionMode(AbstractContactMode):
                     #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
                     #   <=>
                     #   minimize s s.t. s d >= 1, d >= 0
-                    # which is exactly a rotated lorentz constraint:
+                    # which is exactly a rotated Lorentz cone constraint:
                     # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
 
                     self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))

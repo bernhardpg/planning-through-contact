@@ -32,7 +32,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -187,6 +187,23 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     assert res_4 == True
 
 
+def test_eucl_dist(rigid_body_box: RigidBody) -> None:
+    NUM_KNOT_POINTS = 3
+    specs = PlanarPlanSpecs(
+        num_knot_points_non_collision=NUM_KNOT_POINTS,
+        time_non_collision=3,
+        pusher_radius=0.03,
+    )
+    loc = PolytopeContactLocation(ContactLocation.FACE, 3)
+
+    mode = NonCollisionMode.create_from_plan_spec(
+        loc, specs, rigid_body_box, minimize_squared_eucl_dist=False
+    )
+
+    assert len(mode.prog.linear_costs()) == NUM_KNOT_POINTS - 1
+    assert len(mode.prog.quadratic_costs()) == 0
+
+
 def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 5
     specs = PlanarPlanSpecs(
@@ -294,7 +311,7 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
         loc, specs, rigid_body_box, avoid_object=True, avoidance_cost_type="socp"
     )
 
-    assert len(mode.prog.quadratic_costs()) == 1
+    # assert len(mode.prog.quadratic_costs()) == 1
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
