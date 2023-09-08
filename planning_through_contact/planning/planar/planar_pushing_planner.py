@@ -75,7 +75,7 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.config.penalize_mode_transition:
+        if self.config.penalize_mode_transitions:
             for v in self.contact_vertices:
                 v.AddCost(self.cost_param_transition_cost)
 

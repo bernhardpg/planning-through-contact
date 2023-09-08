@@ -27,7 +27,8 @@ def create_plan(
         time_non_collision=2.0,
         time_in_contact=2.0,
         num_knot_points_non_collision=4,
-        pusher_radius=0.03,
+        pusher_radius=0.02,
+        no_cycles=True,
     )
 
     if body_to_use == "box":
@@ -36,7 +37,7 @@ def create_plan(
         body = RigidBody("box", box_geometry, mass)
     elif body_to_use == "t_pusher":
         mass = 0.2
-        body = RigidBody("t_pusher", TPusher2d(0.01), mass)
+        body = RigidBody("t_pusher", TPusher2d(), mass)
 
     planner = PlanarPushingPlanner(
         body,

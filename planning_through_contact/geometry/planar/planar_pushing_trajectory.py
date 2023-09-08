@@ -149,6 +149,10 @@ class PlanarPushingContactMode(Enum):
     FACE_1 = 2
     FACE_2 = 3
     FACE_3 = 4
+    FACE_4 = 5
+    FACE_5 = 6
+    FACE_6 = 7
+    FACE_7 = 8
 
     @classmethod
     def from_contact_location(

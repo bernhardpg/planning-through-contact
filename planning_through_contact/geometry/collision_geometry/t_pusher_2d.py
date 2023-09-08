@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple
 
 import numpy as np
@@ -21,11 +21,72 @@ from planning_through_contact.geometry.utilities import normalize_vec
 
 @dataclass
 class TPusher2d(CollisionGeometry):
-    scale: float = 0.05
+    """
+    Constructed such that box 1 stacks on top, and box 2 lies on the bottom:
+
+     ____________
+    |   box 1    |
+    |____________|
+        | b2 |
+        |    |
+        |    |
+        |____|
+
+    Origin is placed at the center of box 1.
+
+    """
+
+    box_1: Box2d = field(default_factory=lambda: Box2d(0.2, 0.05))
+    box_2: Box2d = field(default_factory=lambda: Box2d(0.05, 0.15))
 
     @classmethod
     def from_drake(cls, drake_shape: DrakeShape):
         raise NotImplementedError()
+
+    @property
+    def vertices(self) -> List[npt.NDArray[np.float64]]:
+        """
+        v0___________v1
+        |              |
+        v7___v6___v3___v2
+            |    |
+            |    |
+            |    |
+            v5____v4
+
+        """
+        v0 = self.box_1.vertices[0]
+        v1 = self.box_1.vertices[1]
+        v2 = self.box_1.vertices[2]
+
+        box_2_center = np.array(
+            [0, -self.box_1.height / 2 - self.box_2.height / 2]
+        ).reshape((-1, 1))
+        v3 = box_2_center + self.box_2.vertices[1]
+        v4 = box_2_center + self.box_2.vertices[2]
+        v5 = box_2_center + self.box_2.vertices[3]
+        v6 = box_2_center + self.box_2.vertices[0]
+
+        v7 = self.box_1.vertices[3]
+        return [v0, v1, v2, v3, v4, v5, v6, v7]
+
+    @property
+    def num_vertices(self) -> int:
+        return len(self.vertices)
+
+    @property
+    def faces(self) -> List[Hyperplane]:
+        wrap_around = lambda num: num % self.num_vertices
+        pairwise_indices = [
+            (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
+        ]
+        hyperplane_points = [
+            (self.vertices[i], self.vertices[j]) for i, j in pairwise_indices
+        ]
+        hyperplanes = [
+            construct_2d_plane_from_points(p1, p2) for p1, p2 in hyperplane_points
+        ]
+        return hyperplanes
 
     @property
     def contact_locations(self) -> List[PolytopeContactLocation]:
@@ -36,28 +97,6 @@ class TPusher2d(CollisionGeometry):
             for idx in range(len(self.faces))
         ]
         return locs
-
-    @property
-    def num_vertices(self) -> int:
-        return len(self.vertices)
-
-    @property
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
-        return [
-            np.expand_dims(np.array(v), 1) * self.scale
-            for v in reversed(
-                [
-                    [1, -4],
-                    [1, 0],
-                    [3, 0],
-                    [3, 2],
-                    [-3, 2],
-                    [-3, 0],
-                    [-1, 0],
-                    [-1, -4],
-                ]
-            )
-        ]
 
     def get_planes_for_collision_free_region(
         self, location: PolytopeContactLocation
@@ -97,20 +136,6 @@ class TPusher2d(CollisionGeometry):
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
         vertices = np.hstack([self.vertices[idx] for idx in range(self.num_vertices)])
         return vertices
-
-    @property
-    def faces(self) -> List[Hyperplane]:
-        wrap_around = lambda num: num % self.num_vertices
-        pairwise_indices = [
-            (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
-        ]
-        hyperplane_points = [
-            (self.vertices[i], self.vertices[j]) for i, j in pairwise_indices
-        ]
-        hyperplanes = [
-            construct_2d_plane_from_points(p1, p2) for p1, p2 in hyperplane_points
-        ]
-        return hyperplanes
 
     def get_proximate_vertices_from_location(
         self, location: PolytopeContactLocation
