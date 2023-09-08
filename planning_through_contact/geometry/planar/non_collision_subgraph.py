@@ -15,7 +15,7 @@ from planning_through_contact.geometry.planar.face_contact import FaceContactMod
 from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -46,8 +46,7 @@ class NonCollisionSubGraph:
     non_collision_modes: List[NonCollisionMode]
     non_collision_vertices: List[GcsVertex]
     body: RigidBody
-    plan_specs: PlanarPlanSpecs
-    avoid_object: bool
+    config: PlanarPlanConfig
     source: Optional[VertexModePair] = None
     target: Optional[VertexModePair] = None
 
@@ -56,10 +55,8 @@ class NonCollisionSubGraph:
         cls,
         gcs: opt.GraphOfConvexSets,
         body: RigidBody,
-        plan_specs: PlanarPlanSpecs,
+        config: PlanarPlanConfig,
         subgraph_name: str,
-        avoid_object: bool = False,
-        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
     ) -> "NonCollisionSubGraph":
         """
         Constructs a subgraph of non-collision modes. An edge is added to
@@ -73,10 +70,8 @@ class NonCollisionSubGraph:
         non_collision_modes = [
             NonCollisionMode.create_from_plan_spec(
                 loc,
-                plan_specs,
+                config,
                 body,
-                avoid_object=avoid_object,
-                avoidance_cost_type=avoidance_cost_type,
             )
             for loc in body.geometry.contact_locations
         ]
@@ -110,8 +105,7 @@ class NonCollisionSubGraph:
             non_collision_modes,
             non_collision_vertices,
             body,
-            plan_specs,
-            avoid_object,
+            config,
         )
 
     @staticmethod
@@ -158,7 +152,7 @@ class NonCollisionSubGraph:
         initial_or_final: Literal["initial", "final"],
     ) -> None:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.plan_specs, slider_pose, pusher_pose, self.body, initial_or_final
+            self.config, slider_pose, pusher_pose, self.body, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
 

@@ -8,7 +8,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
@@ -23,7 +23,7 @@ def create_plan(
     body_to_use: Literal["box", "t_pusher"] = "box",
     traj_number: int = 1,
 ):
-    specs = PlanarPlanSpecs(
+    config = PlanarPlanConfig(
         time_non_collision=2.0,
         time_in_contact=2.0,
         num_knot_points_non_collision=4,
@@ -40,7 +40,7 @@ def create_plan(
 
     planner = PlanarPushingPlanner(
         body,
-        specs,
+        config,
         avoid_object=True,
         use_redundant_dynamic_constraints=False,
         no_cycles=True,  # TODO(bernhardpg)
@@ -83,7 +83,7 @@ def create_plan(
 
     if debug:
         visualize_planar_pushing_trajectory(
-            traj.to_old_format(), body.geometry, specs.pusher_radius
+            traj.to_old_format(), body.geometry, config.pusher_radius
         )
 
 

@@ -29,7 +29,7 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import forward_differences
 
@@ -238,9 +238,6 @@ class FaceContactVariables(AbstractModeVariables):
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
-    use_eq_elimination: bool = False
-    # NOTE(bernhardpg): Currently rounding doesn't seem to work with these redundant constraints
-    use_redundant_dynamic_constraints: bool = True
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
 
@@ -248,23 +245,20 @@ class FaceContactMode(AbstractContactMode):
     def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
-        specs: PlanarPlanSpecs,
+        config: PlanarPlanConfig,
         object: RigidBody,
-        use_eq_elimination: bool = False,
-        use_redundant_dynamic_constraints: bool = True,
     ) -> "FaceContactMode":
         prog = MathematicalProgram()
         name = str(contact_location)
         return cls(
             name,
-            specs.num_knot_points_contact,
-            specs.time_in_contact,
+            config.num_knot_points_contact,
+            config.time_in_contact,
             contact_location,
             object,
-            specs.pusher_radius,
+            config.pusher_radius,
             prog,
-            use_eq_elimination=use_eq_elimination,
-            use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
+            config,
         )
 
     def __post_init__(self) -> None:
@@ -374,7 +368,7 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddConstraint(row)
 
             # quasi-static dynamics in B
-            if self.use_redundant_dynamic_constraints:
+            if self.config.use_redundant_dynamic_constraints:
                 x_dot, dyn = self.quasi_static_dynamics_in_B(
                     v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
                 )
@@ -438,7 +432,7 @@ class FaceContactMode(AbstractContactMode):
         self.slider_final_pose = pose
 
     def formulate_convex_relaxation(self) -> None:
-        if self.use_eq_elimination:
+        if self.config.use_eq_elimination:
             self.original_prog = self.prog
             (
                 self.reduced_prog,

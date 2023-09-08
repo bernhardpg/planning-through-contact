@@ -23,7 +23,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
@@ -59,7 +59,7 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
     for edge in subgraph.gcs.Edges():
         assert len(edge.GetConstraints()) == num_continuity_variables
 
-    if subgraph.avoid_object:
+    if subgraph.config.avoid_object and subgraph.config.avoidance_cost == "quadratic":
         # Check costs are correctly added to GCS instance
         for v in subgraph.gcs.Vertices():
             if v.name() in ("source", "target"):
@@ -85,7 +85,7 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
             NUM_DIMS = 2
             assert (
                 len(cost.variables())
-                == subgraph.plan_specs.num_knot_points_non_collision * NUM_DIMS
+                == subgraph.config.num_knot_points_non_collision * NUM_DIMS
             )
 
             # Squared eucl distance
@@ -98,14 +98,14 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
         {
             "boundary_conds": True,
             "avoid_object": False,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0, 0),
         },
         {
             "boundary_conds": True,
             "avoid_object": True,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0, 0),
         },
     ],
     indirect=["subgraph"],
@@ -113,20 +113,22 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
 def test_non_collision_subgraph_initial_and_final(
     subgraph: NonCollisionSubGraph,
 ):
+    assert subgraph.source is not None
     source_mode = subgraph.source.mode
 
     assert isinstance(source_mode, NonCollisionMode)
 
     assert source_mode.contact_location == find_first_matching_location(
-        source_mode.finger_initial_pose, source_mode.slider_pose, subgraph.body
+        source_mode.finger_initial_pose, subgraph.body
     )
+    assert subgraph.target is not None
 
     target_mode = subgraph.target.mode
 
     assert isinstance(target_mode, NonCollisionMode)
 
     assert target_mode.contact_location == find_first_matching_location(
-        target_mode.finger_final_pose, target_mode.slider_pose, subgraph.body
+        target_mode.finger_final_pose, subgraph.body
     )
 
     # We should have added 2 more edges with initial and final modes
@@ -139,26 +141,26 @@ def test_non_collision_subgraph_initial_and_final(
         {
             "boundary_conds": True,
             "avoid_object": False,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, -0.1, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, -0.1, 0),
         },
         {
             "boundary_conds": True,
             "avoid_object": False,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0.1, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0.1, 0),
         },
         {
             "boundary_conds": True,
             "avoid_object": True,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, -0.1, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, -0.1, 0),
         },
         {
             "boundary_conds": True,
             "avoid_object": True,
-            "finger_initial": PlanarPose(-0.15, 0, 0),
-            "finger_final": PlanarPose(0.15, 0.1, 0),
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0.1, 0),
         },
     ],
     indirect=["subgraph"],
@@ -224,7 +226,7 @@ def test_subgraph_planning(
         ]
     assert all([v == t for v, t in zip(vertex_names, targets)])
 
-    if subgraph.avoid_object:
+    if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         assert_object_is_avoided(
             subgraph.body.geometry,
@@ -238,7 +240,7 @@ def test_subgraph_planning(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry)
+        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry, 0.01)
 
 
 @pytest.mark.parametrize(
@@ -278,15 +280,17 @@ def test_subgraph_with_contact_modes(
     This unit test tests much of the code that is implemented in the PlanarPushingPlanner.
     """
 
+    subgraph.config.use_eq_elimination = use_eq_elimination
+
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     source_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_start, subgraph.plan_specs, subgraph.body, use_eq_elimination
+        contact_location_start, subgraph.config, subgraph.body
     )
     source_mode.set_finger_pos(0.5)
 
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 2)
     target_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_end, subgraph.plan_specs, subgraph.body, use_eq_elimination
+        contact_location_end, subgraph.config, subgraph.body
     )
     target_mode.set_finger_pos(0.5)
 
@@ -327,11 +331,11 @@ def test_subgraph_with_contact_modes(
     # Make sure we are not leaving the object
     assert np.all(np.abs(traj.p_c_B) <= 1.0)
 
-    if subgraph.avoid_object:
-        first_segment_start_idx = subgraph.plan_specs.num_knot_points_contact
+    if subgraph.config.avoid_object:
+        first_segment_start_idx = subgraph.config.num_knot_points_contact
         first_segment_end_idx = (
-            subgraph.plan_specs.num_knot_points_contact
-            + subgraph.plan_specs.num_knot_points_non_collision
+            subgraph.config.num_knot_points_contact
+            + subgraph.config.num_knot_points_non_collision
             + 1
         )
         first_segment = traj.p_c_B[:, first_segment_start_idx:first_segment_end_idx]
@@ -344,7 +348,7 @@ def test_subgraph_with_contact_modes(
         )
 
         second_segment_end_idx = (
-            first_segment_end_idx + subgraph.plan_specs.num_knot_points_non_collision
+            first_segment_end_idx + subgraph.config.num_knot_points_non_collision
         )
         second_segment = traj.p_c_B[:, first_segment_end_idx:second_segment_end_idx]
         assert_object_is_avoided(

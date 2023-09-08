@@ -45,7 +45,10 @@ def assemble_progs_from_contact_modes(
 
         # TODO(bernhardpg): Look at this into more detail
         # For some reason, we need to remove the redundant dynamic constraints when rounding
-        if isinstance(mode, FaceContactMode) and mode.use_redundant_dynamic_constraints:
+        if (
+            isinstance(mode, FaceContactMode)
+            and mode.config.use_redundant_dynamic_constraints
+        ):
             for c in mode.quasi_static_dynamics_constraints_in_B:
                 mode_prog.RemoveConstraint(c)
 
