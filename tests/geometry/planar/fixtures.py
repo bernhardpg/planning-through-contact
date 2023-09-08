@@ -9,7 +9,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
-from planning_through_contact.geometry.planar.abstract_mode import PlanarPlanSpecs
+from planning_through_contact.geometry.planar.abstract_mode import PlanarPlanConfig
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -60,6 +60,7 @@ def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
         contact_location,
         num_knot_points,
         time_in_contact,
+        pusher_radius=0,
     )
     return vars
 
@@ -84,9 +85,9 @@ def non_collision_vars() -> NonCollisionVariables:
 @pytest.fixture
 def non_collision_mode(rigid_body_box: RigidBody) -> NonCollisionMode:
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-    specs = PlanarPlanSpecs(pusher_radius=0.02)
+    config = PlanarPlanConfig(pusher_radius=0.02)
     mode = NonCollisionMode.create_from_plan_spec(
-        contact_location, specs, rigid_body_box
+        contact_location, config, rigid_body_box
     )
 
     return mode
@@ -105,14 +106,14 @@ def face_contact_mode(
         rigid_body = t_pusher
 
     face_idx = request.param.get("face_idx", 3)
+    config = PlanarPlanConfig(pusher_radius=0)
+    config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
-    specs = PlanarPlanSpecs()
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
-        specs,
+        config,
         rigid_body,
-        request.param.get("use_eq_elimination", False),
     )
     return mode
 
@@ -138,19 +139,22 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
 
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=num_knot_points)
+    config = PlanarPlanConfig(
+        num_knot_points_non_collision=num_knot_points,
+        avoid_object=request.param["avoid_object"],
+        pusher_radius=0,
+    )
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
         gcs,
         rigid_body_box,
-        plan_specs,
+        config,
         "Subgraph_TEST",
-        avoid_object=request.param["avoid_object"],
     )
 
     if request.param["boundary_conds"]:
-        slider_pose = PlanarPose(0.3, 0, 0)
+        slider_pose = PlanarPose(0.3, 0.3, 0)
         finger_initial_pose = request.param["finger_initial"]
         finger_final_pose = request.param["finger_final"]
 
@@ -177,29 +181,25 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
         contact_locations = body.geometry.contact_locations
 
     if request.param.get("avoid_object"):
-        specs = PlanarPlanSpecs(num_knot_points_non_collision=4)
+        config = PlanarPlanConfig(num_knot_points_non_collision=4)
     else:
-        specs = PlanarPlanSpecs()
+        config = PlanarPlanConfig()
 
-    avoid_object = request.param.get("avoid_object", False)
-    allow_teleportation = request.param.get("allow_teleportation", False)
-    penalize_mode_transition = request.param.get("penalize_mode_transition", False)
-    avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
-    use_eq_elimination = request.param.get("use_eq_elimination", False)
-    use_redundant_dynamic_constraints = request.param.get(
+    config.avoid_object = request.param.get("avoid_object", False)
+    config.allow_teleportation = request.param.get("allow_teleportation", False)
+    config.penalize_mode_transition = request.param.get(
+        "penalize_mode_transition", False
+    )
+    config.avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
+    config.use_eq_elimination = request.param.get("use_eq_elimination", False)
+    config.use_redundant_dynamic_constraints = request.param.get(
         "use_redundant_dynamic_constraints", True
     )
 
     planner = PlanarPushingPlanner(
         body,
-        specs,
+        config,
         contact_locations=contact_locations,
-        avoid_object=avoid_object,
-        allow_teleportation=allow_teleportation,
-        penalize_mode_transition=penalize_mode_transition,
-        avoidance_cost_type=avoidance_cost_type,
-        use_eq_elimination=use_eq_elimination,
-        use_redundant_dynamic_constraints=use_redundant_dynamic_constraints,
     )
 
     if request.param.get("boundary_conds"):

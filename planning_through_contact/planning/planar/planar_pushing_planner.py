@@ -25,7 +25,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -44,35 +44,21 @@ class PlanarPushingPlanner:
     def __init__(
         self,
         slider: RigidBody,
-        plan_specs: PlanarPlanSpecs,
+        config: PlanarPlanConfig,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
-        avoid_object: bool = False,
-        allow_teleportation: bool = False,
-        penalize_mode_transition: bool = False,
-        avoidance_cost_type: Literal["linear", "quadratic"] = "quadratic",
-        use_eq_elimination: bool = False,
-        use_redundant_dynamic_constraints: bool = True,
-        no_cycles: bool = False,  # TODO(bernhardpg): Research feature, remove
     ):
         self.slider = slider
-        self.plan_specs = plan_specs
-        self.avoid_object = avoid_object
-        self.allow_teleportation = allow_teleportation
-        self.penalize_mode_transition = penalize_mode_transition
-        self.object_avoidance_cost = avoidance_cost_type
-        self.use_eq_elimination = use_eq_elimination
-        self.use_redundant_dynamic_constraints = use_redundant_dynamic_constraints
-        self.no_cycles = no_cycles
+        self.config = config
 
         self.source = None
         self.target = None
 
-        if self.avoid_object and plan_specs.num_knot_points_non_collision <= 2:
+        if self.config.avoid_object and config.num_knot_points_non_collision <= 2:
             raise ValueError(
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if self.avoid_object and self.allow_teleportation:
+        if self.config.avoid_object and self.config.allow_teleportation:
             raise ValueError("Cannot avoid object while allowing teleportation")
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
@@ -89,7 +75,7 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.penalize_mode_transition:
+        if self.config.penalize_mode_transition:
             for v in self.contact_vertices:
                 v.AddCost(self.cost_param_transition_cost)
 
@@ -106,10 +92,8 @@ class PlanarPushingPlanner:
         self.contact_modes = [
             FaceContactMode.create_from_plan_spec(
                 loc,
-                self.plan_specs,
+                self.config,
                 self.slider,
-                self.use_eq_elimination,
-                self.use_redundant_dynamic_constraints,
             )
             for loc in self.contact_locations
         ]
@@ -120,7 +104,7 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        if self.allow_teleportation:
+        if self.config.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
                 gcs_add_edge_with_continuity(
                     self.gcs,
@@ -140,7 +124,7 @@ class PlanarPushingPlanner:
 
             self.subgraphs = [
                 self._build_subgraph_between_contact_modes(
-                    mode_i, mode_j, self.no_cycles
+                    mode_i, mode_j, self.config.no_cycles
                 )
                 for mode_i, mode_j in connections
             ]
@@ -157,9 +141,8 @@ class PlanarPushingPlanner:
         subgraph = NonCollisionSubGraph.create_with_gcs(
             self.gcs,
             self.slider,
-            self.plan_specs,
+            self.config,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
-            avoid_object=self.avoid_object,
         )
         if no_cycles:  # only connect lower idx faces to higher idx faces
             if first_contact_mode_idx <= second_contact_mode_idx:
@@ -203,7 +186,7 @@ class PlanarPushingPlanner:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.contact_vertices, self.contact_modes)
         }
-        if self.allow_teleportation:
+        if self.config.allow_teleportation:
             assert self.source is not None
             assert self.target is not None
 
@@ -229,7 +212,7 @@ class PlanarPushingPlanner:
             kwargs = {"outgoing": False, "incoming": True}
 
         subgraph = NonCollisionSubGraph.create_with_gcs(
-            self.gcs, self.slider, self.plan_specs, name, avoid_object=self.avoid_object
+            self.gcs, self.slider, self.config, name
         )
 
         for idx, (vertex, mode) in enumerate(
@@ -248,7 +231,7 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
-        if self.allow_teleportation:
+        if self.config.allow_teleportation:
             self.source = self._add_single_source_or_target(
                 finger_pose, slider_pose, "initial"
             )
@@ -264,7 +247,7 @@ class PlanarPushingPlanner:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
 
-        if self.allow_teleportation:
+        if self.config.allow_teleportation:
             self.target = self._add_single_source_or_target(
                 finger_pose, slider_pose, "final"
             )
@@ -279,7 +262,7 @@ class PlanarPushingPlanner:
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.plan_specs, slider_pose, finger_pose, self.slider, initial_or_final
+            self.config, slider_pose, finger_pose, self.slider, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)

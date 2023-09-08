@@ -26,7 +26,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
 )
@@ -48,9 +48,9 @@ def contact_mode_example(rigid_body_box: RigidBody, face_idx: int) -> FaceContac
     rigid_body = rigid_body_box
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
-    specs = PlanarPlanSpecs()
+    config = PlanarPlanConfig()
     mode = FaceContactMode.create_from_plan_spec(
-        contact_location, specs, rigid_body, use_eq_elimination=False
+        contact_location, config, rigid_body, use_eq_elimination=False
     )
     return mode
 

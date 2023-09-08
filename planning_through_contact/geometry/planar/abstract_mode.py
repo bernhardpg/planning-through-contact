@@ -13,7 +13,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -157,6 +157,7 @@ class AbstractContactMode(ABC):
     object: RigidBody
     pusher_radius: float
     prog: MathematicalProgram
+    config: PlanarPlanConfig
 
     @abstractmethod
     def get_convex_set(self, make_bounded: bool) -> opt.ConvexSet:
@@ -189,7 +190,7 @@ class AbstractContactMode(ABC):
     def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
-        specs: PlanarPlanSpecs,
+        cfg: PlanarPlanConfig,
         object: RigidBody,
     ) -> "AbstractContactMode":
         pass

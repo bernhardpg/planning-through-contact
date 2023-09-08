@@ -20,7 +20,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
@@ -33,16 +33,16 @@ from tests.geometry.planar.tools import assert_initial_and_final_poses
 def test_add_continuity_constraints_between_non_collision_modes(
     rigid_body_box: RigidBody,
 ) -> None:
-    plan_specs = PlanarPlanSpecs(num_knot_points_non_collision=2)
+    config = PlanarPlanConfig(num_knot_points_non_collision=2)
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
 
     source_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_start, plan_specs, rigid_body_box, "source"
+        contact_location_start, config, rigid_body_box, "source"
     )
     target_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_end, plan_specs, rigid_body_box, "target"
+        contact_location_end, config, rigid_body_box, "target"
     )
 
     slider_pose = PlanarPose(0.3, 0, 0)
@@ -108,21 +108,17 @@ def test_add_continuity_between_non_coll_and_face_contact(
     use_eq_elimination: bool,
 ) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
-    plan_specs = PlanarPlanSpecs()
+    config = PlanarPlanConfig()
 
     slider_initial_pose = PlanarPose(0.3, 0, 0)
     slider_final_pose = PlanarPose(0.5, 0, 0.4)
     finger_final_pose = PlanarPose(-0.4, 0, 0)
 
-    source_mode = FaceContactMode.create_from_plan_spec(
-        loc, plan_specs, rigid_body_box, use_eq_elimination
-    )
+    source_mode = FaceContactMode.create_from_plan_spec(loc, config, rigid_body_box)
     source_mode.set_slider_initial_pose(slider_initial_pose)
     source_mode.set_finger_pos(0.5)
 
-    target_mode = NonCollisionMode.create_from_plan_spec(
-        loc, plan_specs, rigid_body_box
-    )
+    target_mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
     target_mode.set_slider_pose(slider_final_pose)
     target_mode.set_finger_final_pose(finger_final_pose)
 

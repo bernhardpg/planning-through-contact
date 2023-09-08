@@ -17,7 +17,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_specs import PlanarPlanSpecs
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
@@ -158,47 +158,36 @@ def test_infeasible_non_collision_mode(non_collision_mode: NonCollisionMode) -> 
 
 def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 2)
-    body_pose = PlanarPose(0, 0, 0)
 
     finger_pose_1 = PlanarPose(0, 0, 0)
-    res_1 = check_finger_pose_in_contact_location(
-        finger_pose_1, loc, rigid_body_box, body_pose
-    )
+    res_1 = check_finger_pose_in_contact_location(finger_pose_1, loc, rigid_body_box)
     assert res_1 == False  # penetrates the box
 
     finger_pose_2 = PlanarPose(0, -0.6, 0)
-    res_2 = check_finger_pose_in_contact_location(
-        finger_pose_2, loc, rigid_body_box, body_pose
-    )
+    res_2 = check_finger_pose_in_contact_location(finger_pose_2, loc, rigid_body_box)
     assert res_2 == True
 
     finger_pose_3 = PlanarPose(0.1, -0.6, 0)
-    res_3 = check_finger_pose_in_contact_location(
-        finger_pose_3, loc, rigid_body_box, body_pose
-    )
+    res_3 = check_finger_pose_in_contact_location(finger_pose_3, loc, rigid_body_box)
     assert res_3 == True
 
     loc_2 = PolytopeContactLocation(ContactLocation.FACE, 3)
-    body_pose_2 = PlanarPose(0.1, 0, 0)
     finger_pose_4 = PlanarPose(-0.4, 0, 0)
-    res_4 = check_finger_pose_in_contact_location(
-        finger_pose_4, loc_2, rigid_body_box, body_pose_2
-    )
+    res_4 = check_finger_pose_in_contact_location(finger_pose_4, loc_2, rigid_body_box)
     assert res_4 == True
 
 
 def test_eucl_dist(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 3
-    specs = PlanarPlanSpecs(
+    config = PlanarPlanConfig(
         num_knot_points_non_collision=NUM_KNOT_POINTS,
         time_non_collision=3,
         pusher_radius=0.03,
+        minimize_squared_eucl_dist=False,
     )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, specs, rigid_body_box, minimize_squared_eucl_dist=False
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
 
     assert len(mode.prog.linear_costs()) == NUM_KNOT_POINTS - 1
     assert len(mode.prog.quadratic_costs()) == 0
@@ -206,14 +195,14 @@ def test_eucl_dist(rigid_body_box: RigidBody) -> None:
 
 def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 5
-    specs = PlanarPlanSpecs(
+    config = PlanarPlanConfig(
         num_knot_points_non_collision=NUM_KNOT_POINTS,
         time_non_collision=3,
         pusher_radius=0.03,
     )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(loc, specs, rigid_body_box)
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -244,23 +233,23 @@ def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, pusher_radius=specs.pusher_radius
+            traj, mode.object.geometry, pusher_radius=config.pusher_radius
         )
 
 
 # TODO(bernhardpg): remove this, we want to remove both the quadratic and linear objectives!
 def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 5
-    specs = PlanarPlanSpecs(
+    config = PlanarPlanConfig(
         num_knot_points_non_collision=NUM_KNOT_POINTS,
         time_non_collision=3,
         pusher_radius=0.02,
+        avoid_object=True,
+        avoidance_cost="quadratic",
     )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, specs, rigid_body_box, avoid_object=True
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
 
     assert len(mode.prog.quadratic_costs()) == 2
 
@@ -293,23 +282,23 @@ def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, specs.pusher_radius
+            traj, mode.object.geometry, config.pusher_radius
         )
 
 
 # TODO(bernhardpg): remove this, we want to remove both the quadratic and linear objectives!
 def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 5
-    specs = PlanarPlanSpecs(
+    config = PlanarPlanConfig(
         num_knot_points_non_collision=NUM_KNOT_POINTS,
         time_non_collision=3,
         pusher_radius=0.02,
+        avoid_object=True,
+        avoidance_cost="socp",
     )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, specs, rigid_body_box, avoid_object=True, avoidance_cost_type="socp"
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
 
     # assert len(mode.prog.quadratic_costs()) == 1
 
@@ -342,5 +331,5 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, specs.pusher_radius
+            traj, mode.object.geometry, config.pusher_radius
         )
