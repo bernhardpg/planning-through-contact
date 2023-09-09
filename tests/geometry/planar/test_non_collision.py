@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 import pydrake.symbolic as sym
 import pytest
@@ -34,7 +36,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -94,7 +96,7 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     num_planes = len(mode.collision_free_space_planes)
     assert num_planes == 2
 
-    assert isinstance(mode.contact_plane, Hyperplane)
+    assert isinstance(mode.contact_planes[0], Hyperplane)
 
     num_linear_constraints = len(mode.prog.linear_constraints()) + len(
         mode.prog.bounding_box_constraints()
@@ -338,29 +340,44 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
 
 
 @pytest.mark.parametrize(
-    "loc, initial, target",
+    "loc, initial, target, cost",
     [
         (
             PolytopeContactLocation(ContactLocation.FACE, 0),
             PlanarPose(-0.1, 0.1, 0),
             PlanarPose(0.1, 0.1, 0),
-        )
+            "quadratic",
+        ),
+        (
+            PolytopeContactLocation(ContactLocation.FACE, 2),
+            PlanarPose(0.05, -0.06, 0),
+            PlanarPose(0.1, -0.06, 0),
+            "quadratic",
+        ),
+        (
+            PolytopeContactLocation(ContactLocation.FACE, 2),
+            PlanarPose(0.05, -0.06, 0),
+            PlanarPose(0.1, -0.06, 0),
+            "socp",
+        ),
     ],
+    ids=[1, 2, 3],
 )
-def test_avoid_object_socp_t_pusher(
-    loc: PolytopeContactLocation, initial: PlanarPose, target: PlanarPose
+def test_avoid_object_t_pusher(
+    loc: PolytopeContactLocation,
+    initial: PlanarPose,
+    target: PlanarPose,
+    cost: Literal["quadratic", "socp"],
 ) -> None:
     NUM_KNOT_POINTS = 5
     config = PlanarPlanConfig(
         num_knot_points_non_collision=NUM_KNOT_POINTS,
         time_non_collision=3,
-        pusher_radius=0.02,
+        pusher_radius=0.015,
         avoid_object=True,
-        avoidance_cost="socp",
+        avoidance_cost=cost,
     )
     tee = TPusher2d()
-
-    loc = PolytopeContactLocation(ContactLocation.FACE, 0)
 
     mode = NonCollisionMode.create_from_plan_spec(
         loc, config, RigidBody("T", tee, mass=0.2)

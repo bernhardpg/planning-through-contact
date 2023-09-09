@@ -162,6 +162,18 @@ class TPusher2d(CollisionGeometry):
                     )
                 )
                 return planes
+            if loc.idx == 2:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[2] + DR, self.vertices[2]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[4], self.vertices[4] + DR
+                    )
+                )
+                return planes
             else:
                 raise NotImplementedError("Currently only face 0 is supported")
 
