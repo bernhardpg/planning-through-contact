@@ -274,7 +274,7 @@ def test_planner_with_teleportation(
                 "partial": True,
                 "avoid_object": False,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -299,7 +299,7 @@ def test_planner_with_teleportation(
                 "avoidance_cost_type": "quadratic",
                 "avoid_object": True,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -313,7 +313,7 @@ def test_planner_with_teleportation(
                 "avoidance_cost_type": "linear",
                 "avoid_object": True,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -327,7 +327,7 @@ def test_planner_with_teleportation(
                 "avoidance_cost_type": "linear",
                 "avoid_object": True,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0.0, y=0.0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -443,4 +443,6 @@ def test_make_plan(
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
+        visualize_planar_pushing_trajectory(
+            traj, planner.slider.geometry, planner.config.pusher_radius
+        )

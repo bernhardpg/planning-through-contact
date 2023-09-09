@@ -185,6 +185,8 @@ def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushing
     else:
         config = PlanarPlanConfig()
 
+    config.pusher_radius = 0.015
+
     config.avoid_object = request.param.get("avoid_object", False)
     config.allow_teleportation = request.param.get("allow_teleportation", False)
     config.penalize_mode_transition = request.param.get(
