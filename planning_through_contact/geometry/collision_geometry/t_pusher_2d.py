@@ -76,6 +76,16 @@ class TPusher2d(CollisionGeometry):
 
     @property
     def faces(self) -> List[Hyperplane]:
+        """
+        ______f0________
+        f7              f1
+        |_f6________f2__|
+            |    |
+            f5   f3
+            |    |
+            |_f4_|
+
+        """
         wrap_around = lambda num: num % self.num_vertices
         pairwise_indices = [
             (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
@@ -98,35 +108,60 @@ class TPusher2d(CollisionGeometry):
         ]
         return locs
 
+    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
+        """
+        Gets the contact faces for each collision-free set.
+        This function is hand designed for the object geometry.
+        """
+        if location.idx == 2 or location.idx == 3:
+            return [self.faces[2], self.faces[3]]
+        elif location.idx == 5 or location.idx == 6:
+            return [self.faces[5], self.faces[6]]
+        else:
+            return [self.faces[location.idx]]
+
     def get_planes_for_collision_free_region(
-        self, location: PolytopeContactLocation
+        self, loc: PolytopeContactLocation
     ) -> List[Hyperplane]:
         """
         Gets the faces that defines the collision free sets outside of each face.
-        This function is hand designed for the object geometry!
+        This function is hand designed for the object geometry.
+       
+           \       0      /
+            \____________/
+        7   |            | 1
+            |____________|
+           /    |    |    \
+          /     |    | 2,3 \
+           5,6  |    |
+                |____|
+               /      \
+              /    4   \
+            
         """
-        if not location.pos == ContactLocation.FACE:
+        if not loc.pos == ContactLocation.FACE:
             raise NotImplementedError(
                 "Can only find faces for collisionfree regions for faces."
             )
         else:
-            face_idx = location.idx
-            if face_idx == 0:
-                return [self.faces[0], self.faces[1]]  # normals pointing outwards
-            elif face_idx == 1:
-                return [self.faces[0], self.faces[1]]  # normals pointing outwards
-            elif face_idx == 2:
-                return [self.faces[2]]
-            elif face_idx == 3:
-                return [self.faces[3]]
-            elif face_idx == 4:
-                return [self.faces[4]]
-            elif face_idx == 5:
-                return [self.faces[5], self.faces[6]]
-            elif face_idx == 6:
-                return [self.faces[5], self.faces[6]]
-            elif face_idx == 7:
-                return [self.faces[7]]
+            UL = np.array([-1, 1]).reshape((-1, 1))
+            UR = np.array([1, 1]).reshape((-1, 1))
+            DR = np.array([1, -1]).reshape((-1, 1))
+            DL = np.array([-1, -1]).reshape((-1, 1))
+
+            planes = []
+            if loc.idx == 0:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[0] + UL, self.vertices[0]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[1], self.vertices[1] + UR
+                    )
+                )
+                return planes
             else:
                 raise NotImplementedError("Currently only face 0 is supported")
 

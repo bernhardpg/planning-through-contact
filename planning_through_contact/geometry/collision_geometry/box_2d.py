@@ -335,6 +335,9 @@ class Box2d(CollisionGeometry):
         else:
             raise ValueError(f"Can not get length for face {location.idx} for a box")
 
+    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
+        return [self.faces[location.idx]]
+
     def get_planes_for_collision_free_region(
         self, location: PolytopeContactLocation
     ) -> List[Hyperplane]:

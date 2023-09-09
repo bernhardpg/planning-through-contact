@@ -1,11 +1,13 @@
 import numpy as np
 import pydrake.symbolic as sym
+import pytest
 from pydrake.solvers import Solve
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.hyperplane import Hyperplane
 from planning_through_contact.geometry.planar.non_collision import (
     NonCollisionMode,
@@ -32,7 +34,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = False
+DEBUG = True
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -289,7 +291,6 @@ def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
         )
 
 
-# TODO(bernhardpg): remove this, we want to remove both the quadratic and linear objectives!
 def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     NUM_KNOT_POINTS = 5
     config = PlanarPlanConfig(
@@ -329,6 +330,63 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
 
     # Pusher should move away from object
     assert vars.p_BF_xs[2] <= -0.25
+
+    if DEBUG:
+        visualize_planar_pushing_trajectory(
+            traj, mode.object.geometry, config.pusher_radius
+        )
+
+
+@pytest.mark.parametrize(
+    "loc, initial, target",
+    [
+        (
+            PolytopeContactLocation(ContactLocation.FACE, 0),
+            PlanarPose(-0.1, 0.1, 0),
+            PlanarPose(0.1, 0.1, 0),
+        )
+    ],
+)
+def test_avoid_object_socp_t_pusher(
+    loc: PolytopeContactLocation, initial: PlanarPose, target: PlanarPose
+) -> None:
+    NUM_KNOT_POINTS = 5
+    config = PlanarPlanConfig(
+        num_knot_points_non_collision=NUM_KNOT_POINTS,
+        time_non_collision=3,
+        pusher_radius=0.02,
+        avoid_object=True,
+        avoidance_cost="socp",
+    )
+    tee = TPusher2d()
+
+    loc = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    mode = NonCollisionMode.create_from_plan_spec(
+        loc, config, RigidBody("T", tee, mass=0.2)
+    )
+
+    slider_pose = PlanarPose(0.3, 0.3, 0)
+    mode.set_slider_pose(slider_pose)
+
+    mode.set_finger_initial_pose(initial)
+    mode.set_finger_final_pose(target)
+
+    result = Solve(mode.prog)
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses(
+        traj,
+        slider_pose,
+        initial,
+        slider_pose,
+        target,
+    )
+
+    assert_object_is_avoided(tee, traj.p_c_B)
 
     if DEBUG:
         visualize_planar_pushing_trajectory(

@@ -183,6 +183,7 @@ class NonCollisionMode(AbstractContactMode):
     cost_param_avoidance_lin: float = 0.1
     cost_param_avoidance_quad_dist: float = 0.2
     cost_param_avoidance_quad_weight: float = 0.4
+    cost_param_avoidance_socp_weight: float = 0.001
     cost_param_eucl: float = 1.0
 
     @classmethod
@@ -242,7 +243,9 @@ class NonCollisionMode(AbstractContactMode):
     def __post_init__(self) -> None:
         self.dt = self.time_in_mode / self.num_knot_points
 
-        self.contact_plane = self.object.geometry.faces[self.contact_location.idx]
+        self.contact_planes = self.object.geometry.get_contact_planes(
+            self.contact_location
+        )
         self.collision_free_space_planes = (
             self.object.geometry.get_planes_for_collision_free_region(
                 self.contact_location
@@ -278,11 +281,14 @@ class NonCollisionMode(AbstractContactMode):
     def _create_collision_free_space_constraints(
         self, pusher_pos: NpVariableArray
     ) -> List[sym.Formula]:
-        avoid_contact = self.contact_plane.dist_to(pusher_pos) - self.pusher_radius >= 0
+        avoid_contact = [
+            plane.dist_to(pusher_pos) - self.pusher_radius >= 0
+            for plane in self.contact_planes
+        ]
         stay_in_region = [
             plane.dist_to(pusher_pos) >= 0 for plane in self.collision_free_space_planes
         ]
-        exprs = [avoid_contact] + stay_in_region
+        exprs = avoid_contact + stay_in_region
         return exprs
 
     def _define_cost(self) -> None:
@@ -357,7 +363,7 @@ class NonCollisionMode(AbstractContactMode):
                     # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
 
                     self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-                    self.prog.AddLinearCost(s)
+                    self.prog.AddLinearCost(self.cost_param_avoidance_socp_weight * s)
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose

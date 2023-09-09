@@ -99,6 +99,12 @@ class CollisionGeometry(ABC):
         """
 
     @abstractmethod
+    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
+        """
+        Return the contact plane(s) that define the current collision-free region
+        """
+
+    @abstractmethod
     def get_p_B_c_from_lam(
         self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
