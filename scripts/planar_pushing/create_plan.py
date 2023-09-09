@@ -26,8 +26,11 @@ def create_plan(
     config = PlanarPlanConfig(
         time_non_collision=2.0,
         time_in_contact=2.0,
-        num_knot_points_non_collision=4,
-        pusher_radius=0.02,
+        num_knot_points_contact=3,
+        num_knot_points_non_collision=3,
+        pusher_radius=0.015,
+        avoid_object=False,
+        avoidance_cost="quadratic",
         no_cycles=True,
     )
 
@@ -74,10 +77,11 @@ def create_plan(
         planner.save_graph_diagram(Path("graph.svg"))
 
     traj = planner.plan_trajectory(
-        round_trajectory=True, print_output=debug, measure_time=debug
+        round_trajectory=True, print_output=debug, measure_time=debug, print_path=debug
     )
     traj_name = f"trajectories/{body_to_use}_pushing_{traj_number}.pkl"
     traj.save(traj_name)
+    breakpoint()
 
     if debug:
         visualize_planar_pushing_trajectory(

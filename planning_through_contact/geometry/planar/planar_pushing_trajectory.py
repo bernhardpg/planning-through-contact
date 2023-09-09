@@ -299,10 +299,14 @@ class PlanarPushingTrajectory:
         target_vertex: GcsVertex,
         pairs: Dict[str, VertexModePair],
         round_solution: bool = False,
+        print_path: bool = False,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
         )
+        if print_path:
+            print(f"path: {path.get_path_names()}")
+
         if round_solution:
             return cls(path.get_rounded_vars())
         else:

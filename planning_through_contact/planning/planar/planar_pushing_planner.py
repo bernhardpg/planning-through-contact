@@ -342,6 +342,7 @@ class PlanarPushingPlanner:
         print_output: bool = False,
         measure_time: bool = False,
         round_trajectory: bool = False,
+        print_path: bool = False,
     ) -> PlanarPushingTrajectory:
         assert self.source is not None
         assert self.target is not None
@@ -365,6 +366,7 @@ class PlanarPushingPlanner:
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
             round_trajectory,
+            print_path,
         )
 
         return traj

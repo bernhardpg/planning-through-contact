@@ -162,7 +162,19 @@ class TPusher2d(CollisionGeometry):
                     )
                 )
                 return planes
-            if loc.idx == 2:
+            if loc.idx == 1:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[1] + UR, self.vertices[1]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[2], self.vertices[2] + DR
+                    )
+                )
+                return planes
+            if loc.idx == 2 or loc.idx == 3:
                 planes.append(
                     construct_2d_plane_from_points(
                         self.vertices[2] + DR, self.vertices[2]
@@ -171,6 +183,42 @@ class TPusher2d(CollisionGeometry):
                 planes.append(
                     construct_2d_plane_from_points(
                         self.vertices[4], self.vertices[4] + DR
+                    )
+                )
+                return planes
+            if loc.idx == 4:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[4] + DR, self.vertices[4]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[5], self.vertices[5] + DL
+                    )
+                )
+                return planes
+            if loc.idx == 5 or loc.idx == 6:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[5] + DL, self.vertices[5]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[7], self.vertices[7] + DL
+                    )
+                )
+                return planes
+            if loc.idx == 7:
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[7] + DL, self.vertices[7]
+                    )
+                )
+                planes.append(
+                    construct_2d_plane_from_points(
+                        self.vertices[0], self.vertices[0] + UL
                     )
                 )
                 return planes
