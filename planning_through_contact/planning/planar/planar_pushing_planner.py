@@ -153,7 +153,9 @@ class PlanarPushingPlanner:
                 incoming_idx = second_contact_mode_idx
 
             subgraph.connect_with_continuity_constraints(
-                incoming_idx,
+                self.slider.geometry.get_collision_free_region_for_loc_idx(
+                    incoming_idx
+                ),
                 VertexModePair(
                     self.contact_vertices[incoming_idx],
                     self.contact_modes[incoming_idx],
@@ -162,7 +164,9 @@ class PlanarPushingPlanner:
                 outgoing=False,
             )
             subgraph.connect_with_continuity_constraints(
-                outgoing_idx,
+                self.slider.geometry.get_collision_free_region_for_loc_idx(
+                    outgoing_idx
+                ),
                 VertexModePair(
                     self.contact_vertices[outgoing_idx],
                     self.contact_modes[outgoing_idx],
@@ -173,7 +177,7 @@ class PlanarPushingPlanner:
         else:
             for idx in (first_contact_mode_idx, second_contact_mode_idx):
                 subgraph.connect_with_continuity_constraints(
-                    idx,
+                    self.slider.geometry.get_collision_free_region_for_loc_idx(idx),
                     VertexModePair(
                         self.contact_vertices[idx],
                         self.contact_modes[idx],
@@ -219,7 +223,9 @@ class PlanarPushingPlanner:
             zip(self.contact_vertices, self.contact_modes)
         ):
             subgraph.connect_with_continuity_constraints(
-                idx, VertexModePair(vertex, mode), **kwargs
+                self.slider.geometry.get_collision_free_region_for_loc_idx(idx),
+                VertexModePair(vertex, mode),
+                **kwargs,
             )
         return subgraph
 

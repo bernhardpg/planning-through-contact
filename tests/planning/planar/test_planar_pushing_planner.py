@@ -324,7 +324,7 @@ def test_planner_with_teleportation(
         (
             {
                 "partial": True,
-                "avoidance_cost_type": "linear",
+                "avoidance_cost_type": "quadratic",
                 "avoid_object": True,
                 "boundary_conds": {
                     "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),

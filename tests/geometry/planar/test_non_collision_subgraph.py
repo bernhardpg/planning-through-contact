@@ -454,7 +454,7 @@ def test_subgraph_contact_modes_t_pusher(avoid_object: bool, gcs_options):
         "Subgraph_test_T",
     )
 
-    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 7)
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 1)
     source_mode = FaceContactMode.create_from_plan_spec(
         contact_location_start, subgraph.config, subgraph.body
     )
@@ -472,7 +472,7 @@ def test_subgraph_contact_modes_t_pusher(avoid_object: bool, gcs_options):
     source_mode.add_cost_to_vertex(source_vertex)
     source = VertexModePair(source_vertex, source_mode)
 
-    slider_final_pose = PlanarPose(0.5, 0.3, 0.4)
+    slider_final_pose = PlanarPose(-0.5, 0.3, 0.4)
     target_mode.set_slider_final_pose(slider_final_pose)
     target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "target")
     target_mode.add_cost_to_vertex(target_vertex)

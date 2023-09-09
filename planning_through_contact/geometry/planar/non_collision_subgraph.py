@@ -7,6 +7,10 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import Binding, QuadraticCost
 
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     add_continuity_constraints_btwn_modes,
@@ -69,11 +73,11 @@ class NonCollisionSubGraph:
 
         non_collision_modes = [
             NonCollisionMode.create_from_plan_spec(
-                loc,
+                PolytopeContactLocation(ContactLocation.FACE, idx),
                 config,
                 body,
             )
-            for loc in body.geometry.contact_locations
+            for idx in range(body.geometry.num_collision_free_regions)
         ]
 
         vertex_names = [f"{subgraph_name}_{mode.name}" for mode in non_collision_modes]

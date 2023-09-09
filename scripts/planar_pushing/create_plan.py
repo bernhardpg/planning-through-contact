@@ -90,4 +90,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="t_pusher", traj_number=4, debug=True)
+    create_plan(body_to_use="t_pusher", traj_number=1, debug=True)

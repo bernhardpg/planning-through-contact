@@ -98,6 +98,28 @@ class TPusher2d(CollisionGeometry):
         ]
         return hyperplanes
 
+    def get_collision_free_region_for_loc_idx(
+        self, loc_idx: PolytopeContactLocation
+    ) -> int:
+        if loc_idx == 0:
+            return 0
+        elif loc_idx == 1:
+            return 1
+        elif loc_idx == 2:
+            return 2
+        elif loc_idx == 3:
+            return 2
+        elif loc_idx == 4:
+            return 3
+        elif loc_idx == 5:
+            return 4
+        elif loc_idx == 6:
+            return 4
+        elif loc_idx == 7:
+            return 5
+        else:
+            raise ValueError(f"No collision-free region for loc_idx {loc_idx}")
+
     @property
     def contact_locations(self) -> List[PolytopeContactLocation]:
         # TODO(bernhardpg): Only returns FACEs, should ideally return
@@ -108,122 +130,103 @@ class TPusher2d(CollisionGeometry):
         ]
         return locs
 
-    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
+    def get_contact_planes(self, idx: int) -> List[Hyperplane]:
         """
         Gets the contact faces for each collision-free set.
         This function is hand designed for the object geometry.
         """
-        if location.idx == 2 or location.idx == 3:
+        if idx == 0:
+            return [self.faces[0]]
+        elif idx == 1:
+            return [self.faces[1]]
+        elif idx == 2:
             return [self.faces[2], self.faces[3]]
-        elif location.idx == 5 or location.idx == 6:
+        elif idx == 3:
+            return [self.faces[4]]
+        elif idx == 4:
             return [self.faces[5], self.faces[6]]
+        elif idx == 5:
+            return [self.faces[7]]
         else:
-            return [self.faces[location.idx]]
+            raise ValueError(f"No collision-free region for idx {idx}")
 
-    def get_planes_for_collision_free_region(
-        self, loc: PolytopeContactLocation
-    ) -> List[Hyperplane]:
+    @property
+    def num_collision_free_regions(self) -> int:
+        return 6
+
+    def get_planes_for_collision_free_region(self, idx: int) -> List[Hyperplane]:
         """
-        Gets the faces that defines the collision free sets outside of each face.
+        Gets the faces that defines the collision free sets (except for the contact face)
         This function is hand designed for the object geometry.
        
            \       0      /
             \____________/
-        7   |            | 1
+        5   |            | 1
             |____________|
            /    |    |    \
-          /     |    | 2,3 \
-           5,6  |    |
+          /     |    | 2   \
+           4    |    |
                 |____|
                /      \
-              /    4   \
+              /    3   \
             
         """
-        if not loc.pos == ContactLocation.FACE:
-            raise NotImplementedError(
-                "Can only find faces for collisionfree regions for faces."
-            )
-        else:
-            UL = np.array([-1, 1]).reshape((-1, 1))
-            UR = np.array([1, 1]).reshape((-1, 1))
-            DR = np.array([1, -1]).reshape((-1, 1))
-            DL = np.array([-1, -1]).reshape((-1, 1))
+        UL = np.array([-1, 1]).reshape((-1, 1))
+        UR = np.array([1, 1]).reshape((-1, 1))
+        DR = np.array([1, -1]).reshape((-1, 1))
+        DL = np.array([-1, -1]).reshape((-1, 1))
 
-            planes = []
-            if loc.idx == 0:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[0] + UL, self.vertices[0]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[1], self.vertices[1] + UR
-                    )
-                )
-                return planes
-            if loc.idx == 1:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[1] + UR, self.vertices[1]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[2], self.vertices[2] + DR
-                    )
-                )
-                return planes
-            if loc.idx == 2 or loc.idx == 3:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[2] + DR, self.vertices[2]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[4], self.vertices[4] + DR
-                    )
-                )
-                return planes
-            if loc.idx == 4:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[4] + DR, self.vertices[4]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[5], self.vertices[5] + DL
-                    )
-                )
-                return planes
-            if loc.idx == 5 or loc.idx == 6:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[5] + DL, self.vertices[5]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[7], self.vertices[7] + DL
-                    )
-                )
-                return planes
-            if loc.idx == 7:
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[7] + DL, self.vertices[7]
-                    )
-                )
-                planes.append(
-                    construct_2d_plane_from_points(
-                        self.vertices[0], self.vertices[0] + UL
-                    )
-                )
-                return planes
-            else:
-                raise NotImplementedError("Currently only face 0 is supported")
+        planes = []
+        if idx == 0:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[0] + UL, self.vertices[0])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[1], self.vertices[1] + UR)
+            )
+            return planes
+        if idx == 1:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[1] + UR, self.vertices[1])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[2], self.vertices[2] + DR)
+            )
+            return planes
+        if idx == 2:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[2] + DR, self.vertices[2])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[4], self.vertices[4] + DR)
+            )
+            return planes
+        if idx == 3:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[4] + DR, self.vertices[4])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[5], self.vertices[5] + DL)
+            )
+            return planes
+        if idx == 4:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[5] + DL, self.vertices[5])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[7], self.vertices[7] + DL)
+            )
+            return planes
+        if idx == 5:
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[7] + DL, self.vertices[7])
+            )
+            planes.append(
+                construct_2d_plane_from_points(self.vertices[0], self.vertices[0] + UL)
+            )
+            return planes
+        else:
+            raise NotImplementedError("Currently only face 0 is supported")
 
     # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 

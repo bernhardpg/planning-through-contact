@@ -20,6 +20,7 @@ from pydrake.solvers import (
 )
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.abstract_mode import (
@@ -58,7 +59,10 @@ def find_first_matching_location(
 ) -> PolytopeContactLocation:
     # we always add all non-collision modes, even when we don't add all contact modes
     # (think of maneuvering around the object etc)
-    locations = slider.geometry.contact_locations
+    locations = [
+        PolytopeContactLocation(ContactLocation.FACE, idx)
+        for idx in range(slider.geometry.num_collision_free_regions)
+    ]
     matching_locs = [
         loc
         for loc in locations
@@ -244,11 +248,11 @@ class NonCollisionMode(AbstractContactMode):
         self.dt = self.time_in_mode / self.num_knot_points
 
         self.contact_planes = self.object.geometry.get_contact_planes(
-            self.contact_location
+            self.contact_location.idx
         )
         self.collision_free_space_planes = (
             self.object.geometry.get_planes_for_collision_free_region(
-                self.contact_location
+                self.contact_location.idx
             )
         )
         self.variables = NonCollisionVariables.from_prog(
@@ -337,7 +341,7 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearCost(s)
 
         if self.config.avoid_object:
-            planes = self.object.geometry.get_contact_planes(self.contact_location)
+            planes = self.object.geometry.get_contact_planes(self.contact_location.idx)
             dists_for_each_plane = [
                 [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
                 for plane in planes
