@@ -185,7 +185,7 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     cost_param_avoidance_lin: float = 0.1
-    cost_param_avoidance_quad_dist: float = 0.4
+    cost_param_avoidance_quad_dist: float = 0.3
     cost_param_avoidance_quad_weight: float = 0.4
     cost_param_avoidance_socp_weight: float = 0.001
     cost_param_eucl: float = 1.0

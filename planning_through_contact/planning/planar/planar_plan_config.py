@@ -43,7 +43,7 @@ class PlanarPushingWorkspace:
     # constraints, which really slows down the optimization!
     slider: BoxWorkspace = field(
         default_factory=lambda: BoxWorkspace(
-            width=2.0, height=2.0, center=np.array([0.0, 0.35])
+            width=1.0, height=1.0, center=np.array([0.4, 0.0])
         )
     )
     pusher: BoxWorkspace = field(

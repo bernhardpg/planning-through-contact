@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
+
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -24,11 +26,11 @@ def create_plan(
     traj_number: int = 1,
 ):
     config = PlanarPlanConfig(
-        time_non_collision=2.0,
-        time_in_contact=2.0,
+        time_non_collision=4.0,
+        time_in_contact=4.0,
         num_knot_points_contact=3,
-        num_knot_points_non_collision=3,
-        pusher_radius=0.015,
+        num_knot_points_non_collision=4,
+        pusher_radius=0.04,
         avoid_object=True,
         avoidance_cost="quadratic",
         no_cycles=True,
@@ -67,6 +69,11 @@ def create_plan(
         slider_target_pose = PlanarPose(x=-0.2, y=0.70, theta=0.5)
         finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
         finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 5:
+        slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.80, y=0.0, theta=np.pi / 2)
+        finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+        finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -85,9 +92,12 @@ def create_plan(
 
     if debug:
         visualize_planar_pushing_trajectory(
-            traj.to_old_format(), body.geometry, config.pusher_radius
+            traj.to_old_format(),
+            body.geometry,
+            config.pusher_radius,
+            visualize_robot_base=True,
         )
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="t_pusher", traj_number=1, debug=True)
+    create_plan(body_to_use="t_pusher", traj_number=5, debug=True)
