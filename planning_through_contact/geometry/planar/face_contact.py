@@ -278,7 +278,7 @@ class FaceContactMode(AbstractContactMode):
         # TODO: take this from drake simulation
         FRICTION_COEFF = 0.5
         MAX_FORCE = FRICTION_COEFF * self.object.mass * 9.81
-        TABLE_SIZE = 1.0
+        TABLE_SIZE = 2.0
 
         for lam in self.variables.lams:
             self.prog.AddBoundingBoxConstraint(0, 1, lam)

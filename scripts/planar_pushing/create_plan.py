@@ -29,7 +29,7 @@ def create_plan(
         num_knot_points_contact=3,
         num_knot_points_non_collision=3,
         pusher_radius=0.015,
-        avoid_object=False,
+        avoid_object=True,
         avoidance_cost="quadratic",
         no_cycles=True,
     )
