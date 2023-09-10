@@ -116,26 +116,27 @@ class HybridMpc:
         u_traj: List[npt.NDArray[np.float64]],
         mode: HybridModes,
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
-        N = len(u_traj)
+        N = len(x_traj)
         h = self.config.step_size
         num_sliding_steps = self.config.num_sliding_steps
 
         prog = MathematicalProgram()
 
         # Formulate the problem in the local coordinates around the nominal trajectory
-        x_bar = prog.NewContinuousVariables(self.num_states, N + 1, "x_bar")
-        u_bar = prog.NewContinuousVariables(self.num_inputs, N, "u_bar")
+        x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
+        u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
-        print(x_bar_curr)
         prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
         # Dynamic constraints
         lin_systems = [
             self._get_linear_system(state, control)
             for state, control in zip(x_traj, u_traj)
-        ]
+        ][
+            : N - 1
+        ]  # we only have N-1 controls
 
         As = [sys.A() for sys in lin_systems]
         Bs = [sys.B() for sys in lin_systems]
@@ -144,15 +145,19 @@ class HybridMpc:
             forward_euler = x_bar[:, i] + h * x_bar_dot
             prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
 
-        prog.AddLinearConstraint(eq(x_bar[:, N], np.zeros(x_traj[-1].shape)))
+        # Last error state should be exactly 0
+        prog.AddLinearConstraint(eq(x_bar[:, N - 1], np.zeros(x_traj[-1].shape)))
 
         # x_bar = x - x_traj
         x = x_bar + np.vstack(x_traj).T
+
+        if len(u_traj) == N:  # make sure u_traj is not too long
+            u_traj = u_traj[: N - 1]
         # u_bar = u - u_traj
         u = u_bar + np.vstack(u_traj).T
 
         # Control constraints
-        FRICTION_COEFF = 0.4
+        mu = self.dynamics_config.friction_coeff_slider_pusher
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -161,14 +166,14 @@ class HybridMpc:
             prog.AddLinearConstraint(c_n >= 0)
 
             if mode == HybridModes.STICKING or i > num_sliding_steps:
-                prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-                prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f <= mu * c_n)
+                prog.AddLinearConstraint(c_f >= -mu * c_n)
 
             elif mode == HybridModes.SLIDING_LEFT:
-                prog.AddLinearConstraint(c_f == FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f == mu * c_n)
 
             else:  # SLIDING_RIGHT
-                prog.AddLinearConstraint(c_f == -FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f == -mu * c_n)
 
         # State constraints
         for state in x.T:
@@ -177,17 +182,17 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0.1]) * 10
-        R = np.diag([1, 1, 0.1]) * 0.001
+        Q = np.diag([1, 1, 1, 0]) * 10
+        R = np.diag([1, 1, 1]) * 0.01
         Q_N = Q
 
-        terminal_cost = x_bar[:, -1].T.dot(Q_N).dot(x_bar[:, -1])
         state_running_cost = sum(
-            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N)]
+            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
         )
         input_running_cost = sum(
-            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N)]
+            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
         )
+        terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
         prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
         return prog, x, u  # type: ignore
@@ -232,8 +237,8 @@ class HybridModelPredictiveControlSystem(LeafSystem):
     ) -> None:
         super().__init__()
 
-        self.mpc = HybridMpc(model, config)
-        self.config = self.mpc.cfg
+        self.mpc = HybridMpc(model, config, model.config)  # type: ignore
+        self.config = self.mpc.config
 
         self.state_port = self.DeclareVectorInputPort("state", self.mpc.num_states)
 

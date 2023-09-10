@@ -29,6 +29,7 @@ class SliderPusherGeometry(LeafSystem):
     def __init__(
         self,
         slider_geometry: CollisionGeometry,
+        pusher_radius: float,
         contact_location: PolytopeContactLocation,
         scene_graph: SceneGraph,
         alpha: float = 1.0,
@@ -36,6 +37,7 @@ class SliderPusherGeometry(LeafSystem):
         super().__init__()
 
         self.slider_geometry = slider_geometry
+        self.pusher_radius = pusher_radius
         self.contact_location = contact_location
 
         NUM_CONTACT_POINTS = 1
@@ -92,6 +94,7 @@ class SliderPusherGeometry(LeafSystem):
         builder: DiagramBuilder,
         slider_pusher_output_port: OutputPort,
         slider_geometry: CollisionGeometry,
+        pusher_radius: float,
         contact_location: PolytopeContactLocation,
         scene_graph: SceneGraph,
         name: str = "slider_pusher_geometry",
@@ -99,7 +102,13 @@ class SliderPusherGeometry(LeafSystem):
     ) -> "SliderPusherGeometry":
         slider_pusher_geometry = builder.AddNamedSystem(
             name,
-            cls(slider_geometry, contact_location, scene_graph, alpha=alpha),
+            cls(
+                slider_geometry,
+                pusher_radius,
+                contact_location,
+                scene_graph,
+                alpha=alpha,
+            ),
         )
         builder.Connect(
             slider_pusher_output_port, slider_pusher_geometry.get_input_port()
@@ -122,7 +131,9 @@ class SliderPusherGeometry(LeafSystem):
         output.get_mutable_value().set_value(id=self.slider_frame_id, value=pose)  # type: ignore
 
         lam = state[3]
-        p_BP = self.slider_geometry.get_p_BP_from_lam(lam, self.contact_location)
+        p_BP = self.slider_geometry.get_p_BP_from_lam(
+            lam, self.contact_location, self.pusher_radius
+        )
         pose = RigidTransform(
             RotationMatrix.Identity(), np.concatenate((p_BP.flatten(), [0]))  # type: ignore
         )
