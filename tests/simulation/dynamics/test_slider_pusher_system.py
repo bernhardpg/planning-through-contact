@@ -53,7 +53,6 @@ def config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 @pytest.fixture
 def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int, config: SliderPusherSystemConfig) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
-        rigid_body_box.geometry,
         contact_location=PolytopeContactLocation(ContactLocation.FACE, face_idx),
         config=config,
     )

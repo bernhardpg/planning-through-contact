@@ -37,7 +37,6 @@ def SliderPusherSystem_(T):
 
         def _construct(
             self,
-            slider_geometry: CollisionGeometry,
             contact_location: PolytopeContactLocation,
             config: SliderPusherSystemConfig,
             converter=None,
@@ -45,16 +44,22 @@ def SliderPusherSystem_(T):
             super().__init__(converter)
 
             self.contact_location = contact_location
-            self.slider_geometry = slider_geometry
+            self.slider_geometry = config.slider.geometry
             self.config = config
+            self.pusher_radius = self.config.pusher_radius
 
-            self.pv1, self.pv2 = slider_geometry.get_proximate_vertices_from_location(
+            (
+                self.pv1,
+                self.pv2,
+            ) = self.slider_geometry.get_proximate_vertices_from_location(
                 contact_location
             )
             (
                 self.normal_vec,
                 self.tangent_vec,
-            ) = slider_geometry.get_norm_and_tang_vecs_from_location(contact_location)
+            ) = self.slider_geometry.get_norm_and_tang_vecs_from_location(
+                contact_location
+            )
 
             NUM_CONTACT_POINTS = 1
             NUM_SLIDER_STATES = 3  # x, y, theta
@@ -71,7 +76,6 @@ def SliderPusherSystem_(T):
         def _construct_copy(self, other, converter=None):
             Impl._construct(
                 self,
-                other.slider_geometry,
                 other.contact_location,
                 other.config,
                 converter=converter,

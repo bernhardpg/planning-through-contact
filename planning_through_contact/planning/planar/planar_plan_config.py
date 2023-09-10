@@ -80,6 +80,7 @@ class SliderPusherSystemConfig:
         if isinstance(geometry, Box2d):
             return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
         else:
+            return 0.6
             raise NotImplementedError(
                 f"Integration constant for {type(geometry)} is not implemented"
             )

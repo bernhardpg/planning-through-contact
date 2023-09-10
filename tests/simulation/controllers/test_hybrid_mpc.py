@@ -225,7 +225,7 @@ def test_hybrid_mpc_controller(
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
         "slider_pusher",
-        SliderPusherSystem(slider_geometry, config.pusher_radius, contact_location),
+        SliderPusherSystem(config.pusher_radius, contact_location),
     )
 
     # state logger

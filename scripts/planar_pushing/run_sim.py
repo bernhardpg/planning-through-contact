@@ -19,32 +19,26 @@ from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     traj = PlanarPushingTrajectory.load(plan)
 
-    if "box" in plan:
-        slider = get_slider_box()
-        body = "box"
-    elif "t_pusher" in plan:
-        slider = get_tee()
-        body = "t_pusher"
-    else:
-        raise NotImplementedError()
+    slider = traj.config.dynamics_config.slider
 
     mpc_config = HybridMpcConfig(rate_Hz=50, horizon=20, step_size=0.05)
-    config = PlanarPushingSimConfig(
-        body=body,
+    sim_config = PlanarPushingSimConfig(
+        slider=slider,
         contact_model=ContactModel.kHydroelastic,
         pusher_start_pose=traj.initial_pusher_planar_pose,
         slider_start_pose=traj.initial_slider_planar_pose,
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
-        use_realtime=True,
+        use_realtime=False,
         delay_before_execution=2.0,
         use_diff_ik=True,
         closed_loop=True,
         mpc_config=mpc_config,
+        dynamics_config=traj.config.dynamics_config,
     )
 
-    sim = PlanarPushingSimulation(traj, slider, config)
+    sim = PlanarPushingSimulation(traj, sim_config)
     if debug:
         sim.export_diagram("simulation_diagram.pdf")
 

@@ -36,7 +36,13 @@ from pydrake.systems.framework import Context, Diagram, DiagramBuilder, LeafSyst
 from pydrake.systems.primitives import Adder, Demultiplexer, PassThrough
 from pydrake.visualization import AddDefaultVisualization
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.visualize.colors import COLORS
 
@@ -44,7 +50,8 @@ from planning_through_contact.visualize.colors import COLORS
 # TODO(bernhardpg): Move to planar_pushing_sim.py
 @dataclass
 class PlanarPushingSimConfig:
-    body: Literal["box", "t_pusher"] = "box"
+    dynamics_config: SliderPusherSystemConfig
+    slider: RigidBody
     contact_model: ContactModel = ContactModel.kHydroelasticWithFallback
     visualize_desired: bool = False
     slider_goal_pose: Optional[PlanarPose] = None
@@ -125,14 +132,14 @@ class PusherSliderPoseSelector(LeafSystem):
 class PlanarPushingDiagram(Diagram):
     def __init__(
         self,
+        sim_config: PlanarPushingSimConfig,
         add_visualizer: bool = False,
-        config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
     ):
         Diagram.__init__(self)
 
         builder = DiagramBuilder()
         self.mbp, self.scene_graph = AddMultibodyPlantSceneGraph(
-            builder, time_step=config.time_step
+            builder, time_step=sim_config.time_step
         )
         self.parser = Parser(self.mbp, self.scene_graph)
 
@@ -142,7 +149,7 @@ class PlanarPushingDiagram(Diagram):
         self.models_folder = Path(__file__).parents[1] / "models"
         self.parser.package_map().PopulateFromFolder(str(self.models_folder))
 
-        use_hydroelastic = config.contact_model == ContactModel.kHydroelastic
+        use_hydroelastic = sim_config.contact_model == ContactModel.kHydroelastic
         plant_file = (
             "planar_pushing_iiwa_plant_hydroelastic.yaml"
             if use_hydroelastic
@@ -154,12 +161,14 @@ class PlanarPushingDiagram(Diagram):
         directives = LoadModelDirectives(str(self.models_folder / plant_file))
         ProcessModelDirectives(directives, self.mbp, self.parser)  # type: ignore
 
-        if config.body == "box":
+        if isinstance(sim_config.slider.geometry, Box2d):
+            body_name = "box"
             slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
-        elif config.body == "t_pusher":
+        elif isinstance(sim_config.slider.geometry, TPusher2d):
+            body_name = "t_pusher"
             slider_sdf_url = "package://planning_through_contact/t_pusher.sdf"
         else:
-            raise NotImplementedError(f"Body '{config.body}' not supported")
+            raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
 
         (self.slider,) = self.parser.AddModels(url=slider_sdf_url)
 
@@ -174,11 +183,11 @@ class PlanarPushingDiagram(Diagram):
         self.pusher = self.mbp.GetModelInstanceByName("pusher")
         self.iiwa = self.mbp.GetModelInstanceByName("iiwa")
 
-        if config.visualize_desired:
-            assert config.slider_goal_pose is not None
-            self._visualize_desired_slider_pose(config.slider_goal_pose)
+        if sim_config.visualize_desired:
+            assert sim_config.slider_goal_pose is not None
+            self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
-        if config.draw_frames:
+        if sim_config.draw_frames:
             for frame_name in [
                 # "iiwa_link_7",
                 # "pusher_base",
@@ -201,7 +210,7 @@ class PlanarPushingDiagram(Diagram):
 
         self.add_controller(builder)
 
-        self.add_slider_pose_selector(builder, config.body)
+        self.add_slider_pose_selector(builder, body_name)
 
         # Export states
         builder.ExportOutput(self.mbp.get_body_poses_output_port(), "body_poses")

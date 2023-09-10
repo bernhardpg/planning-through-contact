@@ -36,6 +36,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.utilities import from_so2_to_so3
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -222,9 +223,11 @@ class PlanarPushingTrajSegment:
 class PlanarPushingTrajectory:
     def __init__(
         self,
+        config: PlanarPlanConfig,
         path_knot_points: List[AbstractModeVariables],
     ) -> None:
-        self.pusher_radius = path_knot_points[0].pusher_radius
+        self.config = config
+        self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
 
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
@@ -301,6 +304,7 @@ class PlanarPushingTrajectory:
     @classmethod
     def from_result(
         cls,
+        config: PlanarPlanConfig,
         result: MathematicalProgramResult,
         gcs: opt.GraphOfConvexSets,
         source_vertex: GcsVertex,
@@ -316,21 +320,21 @@ class PlanarPushingTrajectory:
             print(f"path: {path.get_path_names()}")
 
         if round_solution:
-            return cls(path.get_rounded_vars())
+            return cls(config, path.get_rounded_vars())
         else:
-            return cls(path.get_vars())
+            return cls(config, path.get_vars())
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
-            # NOTE: We save the path knot points, not this object, as some Drake objects are not serializable
-            pickle.dump(self.path_knot_points, file)
+            # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
+            pickle.dump((self.config, self.path_knot_points), file)
 
     @classmethod
     def load(cls, filename: str) -> "PlanarPushingTrajectory":
         with open(Path(filename), "rb") as file:
-            var_path = pickle.load(file)
+            config, var_path = pickle.load(file)
 
-            return cls(var_path)
+            return cls(config, var_path)
 
     # TODO(bernhardpg): Remove
     def to_old_format(self) -> OldPlanarPushingTrajectory:

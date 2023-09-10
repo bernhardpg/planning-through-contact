@@ -361,6 +361,7 @@ class PlanarPushingPlanner:
             print(f"Total elapsed optimization time: {elapsed_time}")
 
         traj = PlanarPushingTrajectory.from_result(
+            self.config,
             result,
             self.gcs,
             self.source.vertex,
