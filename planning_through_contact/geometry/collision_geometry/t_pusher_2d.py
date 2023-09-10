@@ -332,13 +332,6 @@ class TPusher2d(CollisionGeometry):
     def get_face_length(self, location: PolytopeContactLocation) -> float:
         raise NotImplementedError("Face length not yet implemented for the TPusher.")
 
-    def get_p_B_c_from_lam(
-        self, lam: float, loc: PolytopeContactLocation
-    ) -> npt.NDArray[np.float64]:
-        assert loc.pos == ContactLocation.FACE
-        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
-        return lam * pv1 + (1 - lam) * pv2
-
     def get_as_boxes(
         self, z_value: float = 0.0
     ) -> Tuple[List[Box2d], List[RigidTransform]]:
@@ -356,13 +349,3 @@ class TPusher2d(CollisionGeometry):
         transform_2 = RigidTransform(RotationMatrix.Identity(), np.array([0, 2, z_value / self.scale]) * self.scale)  # type: ignore
 
         return [box_1, box_2], [transform_1, transform_2]
-
-    def get_lam_from_p_B_c(
-        self, lam: float, loc: PolytopeContactLocation, project: bool = False
-    ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError()
-
-    def get_force_comps_from_f_c_B(
-        self, f_c_B, loc: PolytopeContactLocation
-    ) -> Tuple[float, float]:
-        raise NotImplementedError()

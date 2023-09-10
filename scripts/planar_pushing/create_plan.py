@@ -20,6 +20,19 @@ from planning_through_contact.visualize.planar import (
 )
 
 
+def get_slider_box() -> RigidBody:
+    mass = 0.1
+    box_geometry = Box2d(width=0.15, height=0.15)
+    slider = RigidBody("box", box_geometry, mass)
+    return slider
+
+
+def get_tee() -> RigidBody:
+    mass = 0.2
+    body = RigidBody("t_pusher", TPusher2d(), mass)
+    return body
+
+
 def create_plan(
     debug: bool = False,
     body_to_use: Literal["box", "t_pusher"] = "box",
@@ -37,12 +50,9 @@ def create_plan(
     )
 
     if body_to_use == "box":
-        mass = 0.1
-        box_geometry = Box2d(width=0.15, height=0.15)
-        body = RigidBody("box", box_geometry, mass)
+        body = get_slider_box()
     elif body_to_use == "t_pusher":
-        mass = 0.2
-        body = RigidBody("t_pusher", TPusher2d(), mass)
+        body = get_tee()
 
     planner = PlanarPushingPlanner(
         body,
@@ -74,6 +84,11 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.80, y=0.0, theta=np.pi / 2)
         finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
         finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    elif traj_number == 6:
+        slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.80, y=0.0, theta=np.pi / 6)
+        finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+        finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -100,4 +115,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="t_pusher", traj_number=5, debug=True)
+    create_plan(body_to_use="t_pusher", traj_number=6, debug=True)

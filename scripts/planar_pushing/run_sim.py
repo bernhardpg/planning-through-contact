@@ -13,20 +13,18 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram i
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
     PlanarPushingSimulation,
 )
-
-
-# TODO(bernhardpg): Generalize this
-def get_slider_box() -> RigidBody:
-    mass = 0.1
-    box_geometry = Box2d(width=0.15, height=0.15)
-    slider = RigidBody("box", box_geometry, mass)
-    return slider
+from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     traj = PlanarPushingTrajectory.load(plan)
 
-    slider = get_slider_box()
+    if "box" in plan:
+        slider = get_slider_box()
+    elif "t_pusher" in plan:
+        slider = get_tee()
+    else:
+        raise NotImplementedError()
 
     config = PlanarPushingSimConfig(
         body="box",
@@ -53,4 +51,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_4.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/t_pusher_pushing_5.pkl", save_recording=True, debug=True)
