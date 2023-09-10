@@ -43,11 +43,10 @@ class PlanarPushingPlanner:
 
     def __init__(
         self,
-        slider: RigidBody,
         config: PlanarPlanConfig,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
     ):
-        self.slider = slider
+        self.slider = config.dynamics_config.slider
         self.config = config
 
         self.source = None
@@ -65,7 +64,7 @@ class PlanarPushingPlanner:
         # object to only pass faces as contact locations
         self.contact_locations = contact_locations
         if self.contact_locations is None:
-            self.contact_locations = slider.geometry.contact_locations
+            self.contact_locations = self.slider.geometry.contact_locations
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -93,7 +92,6 @@ class PlanarPushingPlanner:
             FaceContactMode.create_from_plan_spec(
                 loc,
                 self.config,
-                self.slider,
             )
             for loc in self.contact_locations
         ]
@@ -140,7 +138,6 @@ class PlanarPushingPlanner:
     ) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.create_with_gcs(
             self.gcs,
-            self.slider,
             self.config,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
         )
@@ -215,9 +212,7 @@ class PlanarPushingPlanner:
             name = "EXIT"
             kwargs = {"outgoing": False, "incoming": True}
 
-        subgraph = NonCollisionSubGraph.create_with_gcs(
-            self.gcs, self.slider, self.config, name
-        )
+        subgraph = NonCollisionSubGraph.create_with_gcs(self.gcs, self.config, name)
 
         for idx, (vertex, mode) in enumerate(
             zip(self.contact_vertices, self.contact_modes)
@@ -268,7 +263,7 @@ class PlanarPushingPlanner:
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, finger_pose, self.slider, initial_or_final
+            self.config, slider_pose, finger_pose, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)

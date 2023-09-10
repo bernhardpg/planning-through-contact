@@ -19,12 +19,16 @@ from planning_through_contact.visualize.planar import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
+    dynamics_config,
     face_contact_mode,
+    plan_config,
     planner,
     rigid_body_box,
     t_pusher,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
+
+DEBUG = False
 
 
 def test_rounding_one_mode(face_contact_mode: FaceContactMode) -> None:
@@ -53,9 +57,10 @@ def test_rounding_one_mode(face_contact_mode: FaceContactMode) -> None:
 
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
-    DEBUG = False
     if DEBUG:
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory(
+            traj, face_contact_mode.config.slider_geometry, 0.01
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
@@ -70,7 +75,7 @@ def test_rounding_one_mode(face_contact_mode: FaceContactMode) -> None:
                 "allow_teleportation": True,
                 "penalize_mode_transition": False,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -159,7 +164,6 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
     ],
 )
 def test_path_rounding(planner: PlanarPushingPlanner) -> None:
-    DEBUG = False
     result = planner._solve(print_output=DEBUG)
     assert result.is_success()
 

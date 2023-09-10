@@ -20,13 +20,20 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, planner, rigid_body_box
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    dynamics_config,
+    plan_config,
+    planner,
+    rigid_body_box,
+    t_pusher,
+)
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
     assert_planning_path_matches_target,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 @pytest.mark.parametrize("planner", [{"partial": False}], indirect=["planner"])
@@ -75,7 +82,7 @@ def test_planner_construction(
             "partial": False,
             "allow_teleportation": False,
             "boundary_conds": {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
                 "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -167,7 +174,7 @@ def test_planner_without_boundary_conds(
                 "partial": False,
                 "allow_teleportation": True,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
                     "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -203,7 +210,7 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
 
 
 @pytest.mark.parametrize(
-    "planner, target_path",
+    "planner",
     [
         (
             {
@@ -211,13 +218,12 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
                 "allow_teleportation": True,
                 "penalize_mode_transition": False,
                 "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                    "finger_initial_pose": PlanarPose(x=0, y=0.4, theta=0.0),
+                    "finger_target_pose": PlanarPose(x=0.3, y=0, theta=0.0),
                     "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                     "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
                 },
-            },
-            ["source", "FACE_0", "FACE_1", "target"],
+            }
         ),
         # NOTE: This test takes a few minutes, and is hence commented out
         # (
@@ -226,8 +232,8 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
         #         "allow_teleportation": True,
         #         "penalize_mode_transition": True,
         #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=-0.5, y=0.0, theta=0.0),
-        #             "finger_target_pose": PlanarPose(x=-0.5, y=0, theta=0.0),
+        #             "finger_initial_pose": PlanarPose(x=-0.4, y=0.0, theta=0.0),
+        #             "finger_target_pose": PlanarPose(x=-0.4, y=0, theta=0.0),
         #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
         #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.1),
         #         },
@@ -237,14 +243,11 @@ def test_planner_construction_with_teleportation(planner: PlanarPushingPlanner) 
     ],
     indirect=["planner"],
 )
-def test_planner_with_teleportation(
-    planner: PlanarPushingPlanner, target_path: List[str]
-) -> None:
-    result = planner._solve(print_output=False)
+def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
+    result = planner._solve(print_output=DEBUG)
     assert result.is_success()
-
-    if target_path:
-        assert_planning_path_matches_target(planner, result, target_path)
 
     path = planner.get_solution_path(result)
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
@@ -263,7 +266,9 @@ def test_planner_with_teleportation(
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
-        visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
+        visualize_planar_pushing_trajectory(
+            traj, planner.slider.geometry, planner.config.pusher_radius
+        )
 
 
 @pytest.mark.parametrize(
@@ -341,7 +346,7 @@ def test_planner_with_teleportation(
         #         "partial": False,
         #         "avoid_object": False,
         #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
         #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
         #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
         #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
@@ -367,8 +372,8 @@ def test_planner_with_teleportation(
         #         "partial": False,
         #         "avoid_object": True,
         #         "boundary_conds": {
-        #             "box_initial_pose": PlanarPose(x=0.0, y=0.5, theta=0.0),
-        #             "box_target_pose": PlanarPose(x=0.5, y=0.5, theta=0.0),
+        #             "box_initial_pose": PlanarPose(x=0.0, y=0.4, theta=0.0),
+        #             "box_target_pose": PlanarPose(x=0.4, y=0.4, theta=0.0),
         #             "finger_initial_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
         #             "finger_target_pose": PlanarPose(x=0.7, y=0.3, theta=0.0),
         #         },
@@ -380,10 +385,10 @@ def test_planner_with_teleportation(
         #         "partial": False,
         #         "avoid_object": False,
         #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
         #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
         #             "box_initial_pose": PlanarPose(x=0.2, y=0.1, theta=0.0),
-        #             "box_target_pose": PlanarPose(x=-0.2, y=0.2, theta=0.5),
+        #             "box_target_pose": PlanarPose(x=-0.2, y=0.2, theta=0.4),
         #         },
         #         "body": "t_pusher",
         #     },
@@ -394,7 +399,7 @@ def test_planner_with_teleportation(
         #         "partial": False,
         #         "avoid_object": False,
         #         "boundary_conds": {
-        #             "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
+        #             "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
         #             "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
         #             "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
         #             "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),

@@ -124,7 +124,7 @@ def test_non_collision_subgraph_initial_and_final(
     assert isinstance(source_mode, NonCollisionMode)
 
     assert source_mode.contact_location == find_first_matching_location(
-        source_mode.finger_initial_pose, subgraph.slider
+        source_mode.finger_initial_pose, subgraph.config
     )
     assert subgraph.target is not None
 
@@ -133,7 +133,7 @@ def test_non_collision_subgraph_initial_and_final(
     assert isinstance(target_mode, NonCollisionMode)
 
     assert target_mode.contact_location == find_first_matching_location(
-        target_mode.finger_final_pose, subgraph.slider
+        target_mode.finger_final_pose, subgraph.config
     )
 
     # We should have added 2 more edges with initial and final modes

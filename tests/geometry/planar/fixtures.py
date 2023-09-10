@@ -1,3 +1,4 @@
+import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -24,6 +25,7 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    BoxWorkspace,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
@@ -169,42 +171,44 @@ def subgraph(
 
 
 @pytest.fixture
-def planner(rigid_body_box: RigidBody, request: FixtureRequest) -> PlanarPushingPlanner:
+def planner(
+    plan_config: PlanarPlanConfig, t_pusher: RigidBody, request: FixtureRequest
+) -> PlanarPushingPlanner:
+    plan_config.workspace.slider = BoxWorkspace(
+        width=2, height=2, center=np.array([0.0, 0.35])
+    )
+    plan_config.workspace.pusher = BoxWorkspace(width=2, height=2)
+
     body_to_use = request.param.get("body", "rigid_body_box")
-    if body_to_use == "rigid_body_box":
-        body = rigid_body_box
-    elif body_to_use == "t_pusher":
-        mass = 0.3
-        body = RigidBody("t_pusher", TPusher2d(), mass)
-    else:
-        body = rigid_body_box
+    if body_to_use == "t_pusher":
+        plan_config.dynamics_config.slider = t_pusher
 
     if request.param.get("partial"):
-        contact_locations = body.geometry.contact_locations[0:2]
+        contact_locations = plan_config.slider_geometry.contact_locations[0:2]
     else:
-        contact_locations = body.geometry.contact_locations
+        contact_locations = plan_config.slider_geometry.contact_locations
 
     if request.param.get("avoid_object"):
-        config = PlanarPlanConfig(num_knot_points_non_collision=4)
+        plan_config.num_knot_points_non_collision = 4
+        plan_config.avoid_object = True
     else:
-        config = PlanarPlanConfig()
+        plan_config.avoid_object = False
 
-    config.pusher_radius = 0.015
+    plan_config.dynamics_config.pusher_radius = 0.015
 
-    config.avoid_object = request.param.get("avoid_object", False)
-    config.allow_teleportation = request.param.get("allow_teleportation", False)
-    config.penalize_mode_transition = request.param.get(
+    plan_config.avoid_object = request.param.get("avoid_object", False)
+    plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
+    plan_config.penalize_mode_transitions = request.param.get(
         "penalize_mode_transition", False
     )
-    config.avoidance_cost_type = request.param.get("avoidance_cost_type", "quadratic")
-    config.use_eq_elimination = request.param.get("use_eq_elimination", False)
-    config.use_redundant_dynamic_constraints = request.param.get(
+    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
+    plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
+    plan_config.use_redundant_dynamic_constraints = request.param.get(
         "use_redundant_dynamic_constraints", True
     )
 
     planner = PlanarPushingPlanner(
-        body,
-        config,
+        plan_config,
         contact_locations=contact_locations,
     )
 
