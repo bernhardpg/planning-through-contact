@@ -21,13 +21,15 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
     if "box" in plan:
         slider = get_slider_box()
+        body = "box"
     elif "t_pusher" in plan:
         slider = get_tee()
+        body = "t_pusher"
     else:
         raise NotImplementedError()
 
     config = PlanarPushingSimConfig(
-        body="box",
+        body=body,
         contact_model=ContactModel.kHydroelastic,
         pusher_start_pose=traj.initial_pusher_planar_pose,
         slider_start_pose=traj.initial_slider_planar_pose,

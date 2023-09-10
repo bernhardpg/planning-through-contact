@@ -17,7 +17,7 @@
         <pose>0.0 0.0 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
-            <size>0.3 0.1 0.05</size>
+            <size>0.2 0.05 0.05</size>
           </box>
         </geometry>
         <material>
@@ -27,7 +27,7 @@
       <collision name="t_pusher_top">
         <geometry>
           <box>
-            <size>0.3 0.1 0.05</size>
+            <size>0.2 0.05 0.05</size>
           </box>
         </geometry>
         <drake:proximity_properties>
@@ -44,7 +44,7 @@
         <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
-            <size>0.1 0.3 0.05</size>
+            <size>0.05 0.15 0.05</size>
           </box>
         </geometry>
         <material>
@@ -55,7 +55,7 @@
         <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
-            <size>0.1 0.3 0.05</size>
+            <size>0.05 0.15 0.05</size>
           </box>
         </geometry>
         <drake:proximity_properties>
