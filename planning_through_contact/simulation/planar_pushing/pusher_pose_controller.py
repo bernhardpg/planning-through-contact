@@ -66,9 +66,9 @@ class PusherPoseController(LeafSystem):
             "contact_force_traj",
             AbstractValue.Make([np.array([])]),
         )
-        self.contact_mode_desired = self.DeclareAbstractInputPort(
-            "contact_mode_desired",
-            AbstractValue.Make(PlanarPushingContactMode(0)),
+        self.contact_mode_traj = self.DeclareAbstractInputPort(
+            "contact_mode_traj",
+            AbstractValue.Make([PlanarPushingContactMode(0)]),
         )
         self.output = self.DeclareAbstractOutputPort(
             "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
@@ -91,7 +91,7 @@ class PusherPoseController(LeafSystem):
         builder: DiagramBuilder,
         slider: RigidBody,
         mpc_config: HybridMpcConfig,
-        contact_mode_desired: OutputPort,
+        contact_mode_traj: OutputPort,
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
         contact_force_traj: OutputPort,
@@ -111,8 +111,8 @@ class PusherPoseController(LeafSystem):
         )
 
         builder.Connect(
-            contact_mode_desired,
-            pusher_pose_controller.GetInputPort("contact_mode_desired"),
+            contact_mode_traj,
+            pusher_pose_controller.GetInputPort("contact_mode_traj"),
         )
         builder.Connect(
             pusher_planar_pose_traj,
@@ -190,7 +190,8 @@ class PusherPoseController(LeafSystem):
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
-        mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
+        mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
+        mode_desired = mode_traj[0]
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
 
         if not self.closed_loop or mode_desired == PlanarPushingContactMode.NO_CONTACT:

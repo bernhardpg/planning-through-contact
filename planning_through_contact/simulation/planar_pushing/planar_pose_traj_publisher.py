@@ -47,9 +47,9 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
 
         self.DeclareAbstractOutputPort(
-            "contact_mode",
-            lambda: AbstractValue.Make(PlanarPushingContactMode(0)),
-            self.DoCalcModeOuput,
+            "contact_mode_traj",
+            lambda: AbstractValue.Make([PlanarPushingContactMode(0)]),
+            self.DoCalcModeTrajOutput,
         )
 
     def _get_rel_t(self, t: float) -> float:
@@ -104,7 +104,9 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
         output.set_value(force_traj)
 
-    def DoCalcModeOuput(self, context: Context, output):
+    def DoCalcModeTrajOutput(self, context: Context, output):
         curr_t = context.get_time()
-        mode = self.traj.get_mode(self._get_rel_t(curr_t))
-        output.set_value(mode)
+        mode_traj = self._get_traj(
+            self._get_rel_t(curr_t), lambda t: self.traj.get_mode(t)
+        )
+        output.set_value(mode_traj)
