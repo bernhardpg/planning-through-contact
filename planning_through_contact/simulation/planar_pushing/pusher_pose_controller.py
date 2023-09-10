@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -38,6 +38,7 @@ class PusherPoseController(LeafSystem):
         object_geometry: CollisionGeometry,
         mpc_config: HybridMpcConfig = HybridMpcConfig(),
         z_dist_to_table: float = 0.5,
+        closed_loop: bool = True,
     ):
         super().__init__()
         self.z_dist = z_dist_to_table
@@ -65,21 +66,24 @@ class PusherPoseController(LeafSystem):
             "contact_force_traj",
             AbstractValue.Make([np.array([])]),
         )
-        self.pusher_pose_measured = self.DeclareAbstractInputPort(
-            "pusher_pose_measured",
-            AbstractValue.Make(RigidTransform()),
-        )
         self.contact_mode_desired = self.DeclareAbstractInputPort(
             "contact_mode_desired",
             AbstractValue.Make(PlanarPushingContactMode(0)),
         )
-        self.slider_pose = self.DeclareAbstractInputPort(
-            "slider_pose",
-            AbstractValue.Make(RigidTransform()),
-        )
         self.output = self.DeclareAbstractOutputPort(
             "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
         )
+
+        self.closed_loop = closed_loop
+        if self.closed_loop:
+            self.pusher_pose_measured = self.DeclareAbstractInputPort(
+                "pusher_pose_measured",
+                AbstractValue.Make(RigidTransform()),
+            )
+            self.slider_pose = self.DeclareAbstractInputPort(
+                "slider_pose",
+                AbstractValue.Make(RigidTransform()),
+            )
 
     @classmethod
     def AddToBuilder(
@@ -91,22 +95,24 @@ class PusherPoseController(LeafSystem):
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
         contact_force_traj: OutputPort,
-        pusher_planar_pose_measured: OutputPort,
-        slider_pose_measured: OutputPort,
         pose_cmd: InputPort,
+        closed_loop: bool = True,
+        pusher_planar_pose_measured: Optional[OutputPort] = None,
+        slider_pose_measured: Optional[OutputPort] = None,
     ) -> "PusherPoseController":
         pusher_pose_controller = builder.AddNamedSystem(
             "PusherPoseController",
-            cls(slider.geometry, mpc_config, z_dist_to_table=0.02),
+            cls(
+                slider.geometry,
+                mpc_config,
+                z_dist_to_table=0.02,
+                closed_loop=closed_loop,
+            ),
         )
 
         builder.Connect(
             contact_mode_desired,
             pusher_pose_controller.GetInputPort("contact_mode_desired"),
-        )
-        builder.Connect(
-            pusher_planar_pose_measured,
-            pusher_pose_controller.GetInputPort("pusher_pose_measured"),
         )
         builder.Connect(
             pusher_planar_pose_traj,
@@ -120,10 +126,19 @@ class PusherPoseController(LeafSystem):
             contact_force_traj,
             pusher_pose_controller.GetInputPort("contact_force_traj"),
         )
-        builder.Connect(
-            slider_pose_measured,
-            pusher_pose_controller.GetInputPort("slider_pose"),
-        )
+
+        if closed_loop:
+            assert pusher_planar_pose_measured is not None
+            assert slider_pose_measured is not None
+
+            builder.Connect(
+                slider_pose_measured,
+                pusher_pose_controller.GetInputPort("slider_pose"),
+            )
+            builder.Connect(
+                pusher_planar_pose_measured,
+                pusher_pose_controller.GetInputPort("pusher_pose_measured"),
+            )
 
         period = 1 / mpc_config.rate_Hz
         zero_order_hold = builder.AddNamedSystem(
@@ -178,7 +193,7 @@ class PusherPoseController(LeafSystem):
         mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
 
-        if mode_desired == PlanarPushingContactMode.NO_CONTACT:
+        if not self.closed_loop or mode_desired == PlanarPushingContactMode.NO_CONTACT:
             curr_planar_pose = pusher_planar_pose_traj[0]
             pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_desired)

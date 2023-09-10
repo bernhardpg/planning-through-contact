@@ -39,12 +39,13 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=False,
         delay_before_execution=2.0,
         use_diff_ik=True,
+        closed_loop=False,
         mpc_config=HybridMpcConfig(rate_Hz=50, pusher_radius=traj.pusher_radius),
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
-    # if debug:
-    #     sim.export_diagram("simulation_diagram.pdf")
+    if debug:
+        sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
     recording_name = plan.split(".")[0] + ".html" if save_recording else None

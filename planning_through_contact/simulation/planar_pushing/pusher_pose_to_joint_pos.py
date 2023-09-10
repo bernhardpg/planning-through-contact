@@ -225,8 +225,8 @@ class PusherPoseToJointPosDiffIk:
     def add_to_builder(
         cls,
         builder: DiagramBuilder,
-        iiwa_joint_position_input: InputPort,
-        iiwa_state_measured: OutputPort,
+        iiwa_joint_position_input: Optional[InputPort] = None,
+        iiwa_state_measured: Optional[OutputPort] = None,
         time_step: float = 1 / 200,  # 200 Hz
         use_diff_ik_feedback: bool = False,
     ) -> "PusherPoseToJointPosDiffIk":
@@ -260,10 +260,11 @@ class PusherPoseToJointPosDiffIk:
         )
         pusher_pose_to_joint_pos = cls(time_step, robot, differential_ik)
 
-        builder.Connect(
-            differential_ik.GetOutputPort("joint_positions"),
-            iiwa_joint_position_input,
-        )
+        if iiwa_joint_position_input is not None:
+            builder.Connect(
+                pusher_pose_to_joint_pos.get_output_port(),
+                iiwa_joint_position_input,
+            )
 
         if use_diff_ik_feedback:
             const = builder.AddNamedSystem(
@@ -278,11 +279,17 @@ class PusherPoseToJointPosDiffIk:
             const.get_output_port(),
             differential_ik.GetInputPort("use_robot_state"),
         )
-        builder.Connect(
-            iiwa_state_measured, differential_ik.GetInputPort("robot_state")
-        )
+
+        if iiwa_state_measured is not None:
+            # TODO set open loop!
+            builder.Connect(
+                iiwa_state_measured, differential_ik.GetInputPort("robot_state")
+            )
 
         return pusher_pose_to_joint_pos
+
+    def get_output_port(self) -> OutputPort:
+        return self.diff_ik.GetOutputPort("joint_positions")
 
     def get_pose_input_port(self) -> InputPort:
         return self.diff_ik.GetInputPort("X_WE_desired")
