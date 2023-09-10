@@ -124,17 +124,29 @@ class CollisionGeometry(ABC):
         lam = u1.T.dot(u2).item() / np.linalg.norm(u2) ** 2
         return lam
 
+    def get_p_Bc_from_lam(
+        self, lam: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        """
+        Get the position of the contact point in the body frame.
+        """
+        assert loc.pos == ContactLocation.FACE
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+        p_Bc = lam * pv1 + (1 - lam) * pv2
+        return p_Bc
+
     def get_p_BP_from_lam(
         self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
-        assert loc.pos == ContactLocation.FACE
-        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
-        point_on_surface = lam * pv1 + (1 - lam) * pv2
-
-        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        """
+        Get the position of the pusher in the body frame (note: requires the
+        radius to compute the position!)
+        """
+        p_Bc = self.get_p_Bc_from_lam(lam, loc)
+        n, _ = self.get_norm_and_tang_vecs_from_location(loc)
         radius_offset = -n * radius
 
-        p_BP = radius_offset + point_on_surface
+        p_BP = radius_offset + p_Bc
         return p_BP
 
     def get_force_comps_from_f_c_B(

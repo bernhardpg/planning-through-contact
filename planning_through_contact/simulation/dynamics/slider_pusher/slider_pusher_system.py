@@ -85,13 +85,18 @@ def SliderPusherSystem_(T):
             )
 
         def _get_p_BP(self, lam: float) -> npt.NDArray[np.float64]:
-            return self.slider_geometry.get_p_BP_from_lam(
+            p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
+            return p_BP
+
+        def _get_p_Bc(self, lam: float) -> npt.NDArray[np.float64]:
+            p_Bc = self.slider_geometry.get_p_Bc_from_lam(lam, self.contact_location)
+            return p_Bc
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
-            p_BP = self._get_p_BP(lam).flatten()
-            J_c = np.array([[1.0, 0.0, -p_BP[1]], [0.0, 1.0, p_BP[0]]])  # type: ignore
+            p_Bc = self._get_p_Bc(lam).flatten()
+            J_c = np.array([[1.0, 0.0, -p_Bc[1]], [0.0, 1.0, p_Bc[0]]])  # type: ignore
             return J_c
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
