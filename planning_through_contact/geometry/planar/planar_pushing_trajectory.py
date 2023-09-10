@@ -170,6 +170,14 @@ class PlanarPushingContactMode(Enum):
             idx = 2
         elif self == PlanarPushingContactMode.FACE_3:
             idx = 3
+        elif self == PlanarPushingContactMode.FACE_4:
+            idx = 4
+        elif self == PlanarPushingContactMode.FACE_5:
+            idx = 5
+        elif self == PlanarPushingContactMode.FACE_6:
+            idx = 6
+        elif self == PlanarPushingContactMode.FACE_7:
+            idx = 7
         else:
             raise NotImplementedError()
         return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)

@@ -49,9 +49,7 @@ def contact_mode_example(rigid_body_box: RigidBody, face_idx: int) -> FaceContac
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     config = PlanarPlanConfig()
-    mode = FaceContactMode.create_from_plan_spec(
-        contact_location, config, rigid_body, use_eq_elimination=False
-    )
+    mode = FaceContactMode.create_from_plan_spec(contact_location, config, rigid_body)
     return mode
 
 

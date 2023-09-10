@@ -62,7 +62,7 @@ def SliderPusherSystem_(T):
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
             G = 9.81
-            FRICTION_COEFF = 0.1
+            FRICTION_COEFF = 0.4
             # TODO(bernhardpg): Compute f_max and tau_max correctly
             OBJECT_MASS = 0.1
             f_max = FRICTION_COEFF * G * OBJECT_MASS

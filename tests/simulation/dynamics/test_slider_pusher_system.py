@@ -45,7 +45,9 @@ def face_idx() -> int:
 @pytest.fixture
 def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
-        rigid_body_box.geometry, PolytopeContactLocation(ContactLocation.FACE, face_idx)
+        rigid_body_box.geometry,
+        pusher_radius=0.15,
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, face_idx),
     )
     return slider_pusher
 

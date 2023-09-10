@@ -110,29 +110,26 @@ class HybridMpc:
         u_traj: List[npt.NDArray[np.float64]],
         mode: HybridModes,
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
-        N = self.cfg.horizon
+        N = len(u_traj)
         h = self.cfg.step_size
         num_sliding_steps = self.cfg.num_sliding_steps
 
         prog = MathematicalProgram()
 
         # Formulate the problem in the local coordinates around the nominal trajectory
-        x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
+        x_bar = prog.NewContinuousVariables(self.num_states, N + 1, "x_bar")
         u_bar = prog.NewContinuousVariables(self.num_inputs, N, "u_bar")
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
+        print(x_bar_curr)
         prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
         # Dynamic constraints
         lin_systems = [
             self._get_linear_system(state, control)
             for state, control in zip(x_traj, u_traj)
-        ][
-            :-1
-        ]  # only need N-1 linear systems
-
-        assert len(lin_systems) == N - 1
+        ]
 
         As = [sys.A() for sys in lin_systems]
         Bs = [sys.B() for sys in lin_systems]
@@ -141,13 +138,15 @@ class HybridMpc:
             forward_euler = x_bar[:, i] + h * x_bar_dot
             prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
 
+        prog.AddLinearConstraint(eq(x_bar[:, N], np.zeros(x_traj[-1].shape)))
+
         # x_bar = x - x_traj
         x = x_bar + np.vstack(x_traj).T
         # u_bar = u - u_traj
         u = u_bar + np.vstack(u_traj).T
 
         # Control constraints
-        FRICTION_COEFF = 0.1
+        FRICTION_COEFF = 0.4
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -172,7 +171,7 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 10, 0]) * 10
+        Q = np.diag([1, 1, 1, 0.1]) * 10
         R = np.diag([1, 1, 0.1]) * 0.001
         Q_N = Q
 
@@ -210,6 +209,8 @@ class HybridMpc:
         result = results[best_idx]
 
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
+        if state_sol.shape[1] == 1:
+            breakpoint()
         x_next = state_sol[:, 1]
 
         x_dot_curr = (x_next - x_curr) / self.cfg.step_size

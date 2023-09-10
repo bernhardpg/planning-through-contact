@@ -50,6 +50,8 @@ from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
     one_contact_mode_vars,
 )
 
+DEBUG = True
+
 
 @pytest.fixture
 def hybrid_mpc(
@@ -139,7 +141,6 @@ def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
     for control, control_desired in zip(control_sol.T, desired_control):
         assert np.allclose(control, control_desired)
 
-    DEBUG = False
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
 
@@ -192,7 +193,6 @@ def test_get_control_with_plan(
             <= np.full(control.shape, control_treshold)
         )
 
-    DEBUG = False
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
 
@@ -206,6 +206,7 @@ def test_hybrid_mpc_controller(
 
     slider_geometry = face_contact_mode.object.geometry
     contact_location = face_contact_mode.contact_location
+    config = face_contact_mode.config
 
     builder = DiagramBuilder()
 
@@ -217,7 +218,8 @@ def test_hybrid_mpc_controller(
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
-        "slider_pusher", SliderPusherSystem(slider_geometry, contact_location)
+        "slider_pusher",
+        SliderPusherSystem(slider_geometry, config.pusher_radius, contact_location),
     )
 
     # state logger
@@ -261,7 +263,6 @@ def test_hybrid_mpc_controller(
         alpha=0.1,
     )
 
-    DEBUG = True
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]

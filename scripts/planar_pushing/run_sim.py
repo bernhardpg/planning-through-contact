@@ -40,7 +40,9 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         delay_before_execution=2.0,
         use_diff_ik=True,
         closed_loop=True,
-        mpc_config=HybridMpcConfig(rate_Hz=50, pusher_radius=traj.pusher_radius),
+        mpc_config=HybridMpcConfig(
+            rate_Hz=50, pusher_radius=traj.pusher_radius, horizon=20, step_size=0.05
+        ),
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
@@ -53,4 +55,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/t_pusher_pushing_5.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/t_pusher_pushing_6.pkl", save_recording=True, debug=True)

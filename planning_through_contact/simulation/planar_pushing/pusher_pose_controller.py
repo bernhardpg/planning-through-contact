@@ -167,8 +167,9 @@ class PusherPoseController(LeafSystem):
         slider_pose_traj: List[PlanarPose],
         pusher_pose_traj: List[PlanarPose],
         contact_force_traj: List[npt.NDArray[np.float64]],
-        mode: PlanarPushingContactMode,
+        mode_traj: List[PlanarPushingContactMode],
     ) -> PlanarPose:
+        mode = mode_traj[0]
         controller = self._get_mpc_for_mode(mode)
         system = self._get_system_for_mode(mode)
 
@@ -179,10 +180,25 @@ class PusherPoseController(LeafSystem):
         u_traj = [
             system.get_control_from_contact_force(force, slider_pose)
             for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
-        ]
+        ][:-1]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        x_dot_curr, u_input = controller.compute_control(x_curr, x_traj, u_traj)
+        modes_eq_to_curr = [m == mode for m in mode_traj]
+        if not all(modes_eq_to_curr):
+            N = modes_eq_to_curr.index(False)
+
+            # repeat last element of the trajectory that is still in contact
+            for idx in range(N, len(x_traj)):
+                x_traj[idx] = x_traj[N - 1]
+
+            for idx in range(N, len(u_traj)):
+                u_traj[idx] = u_traj[N - 1]
+        else:
+            N = len(x_traj)
+
+        x_dot_curr, u_input = controller.compute_control(
+            x_curr, x_traj[: N + 1], u_traj[:N]
+        )
 
         h = 1 / self.mpc_config.rate_Hz
         x_at_next_mpc_step = x_curr + h * x_dot_curr
@@ -191,10 +207,13 @@ class PusherPoseController(LeafSystem):
 
     def DoCalcOutput(self, context: Context, output):
         mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
-        mode_desired = mode_traj[0]
+        curr_mode_desired = mode_traj[0]
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
 
-        if not self.closed_loop or mode_desired == PlanarPushingContactMode.NO_CONTACT:
+        if (
+            not self.closed_loop
+            or curr_mode_desired == PlanarPushingContactMode.NO_CONTACT
+        ):
             curr_planar_pose = pusher_planar_pose_traj[0]
             pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_desired)
@@ -214,7 +233,7 @@ class PusherPoseController(LeafSystem):
                 slider_planar_pose_traj,
                 pusher_planar_pose_traj,
                 contact_force_traj,
-                mode_desired,
+                mode_traj,
             )
 
             pusher_pose_command = pusher_planar_pose_cmd.to_pose(z_value=self.z_dist)
