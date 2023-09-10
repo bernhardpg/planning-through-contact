@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -59,18 +59,11 @@ class HybridMpc:
         self.num_states = model.num_continuous_states()
         self.num_inputs = model.get_input_port().size()
 
-    def _get_linear_system(
-        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
-    ) -> AffineSystem:
-        """
-        Linearizes around 'state' and 'control', and returns an affine system
+        self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
-        x_dot = A x + B u + f_0
-
-        where f_0 = x_dot_0 - A x_0 - B u_u
-        where _0 denotes the nominal state and input
-
-        """
+    def _calculate_symbolic_system(
+        self,
+    ) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
         # TODO(bernhardpg): This causes a segfault. Look into this
         # self.model_context.SetContinuousState(state)
         # self.model.get_input_port().FixValue(self.model_context, input)
@@ -93,17 +86,33 @@ class HybridMpc:
         A_sym = sym.Jacobian(x_dot, state_sym)
         B_sym = sym.Jacobian(x_dot, control_sym)
 
-        env = {
-            x: state[0],
-            y: state[1],
-            theta: state[2],
-            lam: state[3],
-            c_n: control[0],
-            c_f: control[1],
-            lam_dot: control[2],
-        }
-        A = sym.Evaluate(A_sym, env)
-        B = sym.Evaluate(B_sym, env)
+        sym_vars = np.concatenate([state_sym, control_sym])
+
+        return A_sym, B_sym, sym_vars  # type: ignore
+
+    def _create_env(
+        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+    ) -> Dict[sym.Variable, float]:
+        var_vals = np.concatenate([state, control])
+        env = {sym: val for sym, val in zip(self.sym_vars, var_vals)}
+        return env
+
+    def _get_linear_system(
+        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+    ) -> AffineSystem:
+        """
+        Linearizes around 'state' and 'control', and returns an affine system
+
+        x_dot = A x + B u + f_0
+
+        where f_0 = x_dot_0 - A x_0 - B u_u
+        where _0 denotes the nominal state and input
+
+        """
+
+        env = self._create_env(state, control)
+        A = sym.Evaluate(self.A_sym, env)
+        B = sym.Evaluate(self.B_sym, env)
 
         x_dot_desired = self.model.calc_dynamics(state, control).flatten()  # type: ignore
         f = x_dot_desired - A.dot(state) - B.dot(control)
@@ -220,6 +229,9 @@ class HybridMpc:
         state = states[best_idx]
         control = controls[best_idx]
         result = results[best_idx]
+
+        print(best_idx)
+        breakpoint()
 
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
         if state_sol.shape[1] == 1:
