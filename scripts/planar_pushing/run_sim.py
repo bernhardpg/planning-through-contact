@@ -36,20 +36,20 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
-        use_realtime=False,
+        use_realtime=True,
         delay_before_execution=2.0,
         use_diff_ik=True,
-        closed_loop=False,
+        closed_loop=True,
         mpc_config=HybridMpcConfig(rate_Hz=50, pusher_radius=traj.pusher_radius),
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
-    if debug:
-        sim.export_diagram("simulation_diagram.pdf")
+    # if debug:
+    #     sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
     recording_name = plan.split(".")[0] + ".html" if save_recording else None
-    sim.run(traj.end_time, save_recording_as=recording_name)
+    sim.run(traj.end_time + 5, save_recording_as=recording_name)
 
 
 if __name__ == "__main__":

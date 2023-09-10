@@ -28,7 +28,7 @@ def get_slider_box() -> RigidBody:
 
 
 def get_tee() -> RigidBody:
-    mass = 0.2
+    mass = 0.1
     body = RigidBody("t_pusher", TPusher2d(), mass)
     return body
 

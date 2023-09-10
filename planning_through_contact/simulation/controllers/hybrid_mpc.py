@@ -147,7 +147,7 @@ class HybridMpc:
         u = u_bar + np.vstack(u_traj).T
 
         # Control constraints
-        FRICTION_COEFF = 0.5
+        FRICTION_COEFF = 0.1
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -172,8 +172,8 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0]) * 10
-        R = np.diag([1, 1, 1]) * 0.01
+        Q = np.diag([1, 1, 10, 0]) * 10
+        R = np.diag([1, 1, 0.1]) * 0.001
         Q_N = Q
 
         terminal_cost = x_bar[:, -1].T.dot(Q_N).dot(x_bar[:, -1])

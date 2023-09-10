@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import List, Tuple
 
 import numpy as np
@@ -43,7 +44,7 @@ class TPusher2d(CollisionGeometry):
     def from_drake(cls, drake_shape: DrakeShape):
         raise NotImplementedError()
 
-    @property
+    @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
         """
         v0___________v1
@@ -74,7 +75,7 @@ class TPusher2d(CollisionGeometry):
     def num_vertices(self) -> int:
         return len(self.vertices)
 
-    @property
+    @cached_property
     def faces(self) -> List[Hyperplane]:
         """
         ______f0________
@@ -275,7 +276,7 @@ class TPusher2d(CollisionGeometry):
                 f"Cannot get hyperplane from location {location.pos}: {location.idx}"
             )
 
-    @property
+    @cached_property
     def normal_vecs(self) -> List[npt.NDArray[np.float64]]:
         normals = [
             -face.a for face in self.faces
@@ -289,7 +290,7 @@ class TPusher2d(CollisionGeometry):
         """
         return np.array([-v[1], v[0]]).reshape((-1, 1))
 
-    @property
+    @cached_property
     def tangent_vecs(self) -> List[npt.NDArray[np.float64]]:
         tangents = [
             self._get_tangent_vec(self.normal_vecs[idx])
@@ -297,7 +298,7 @@ class TPusher2d(CollisionGeometry):
         ]
         return tangents
 
-    @property
+    @cached_property
     def corner_normal_vecs(self) -> List[npt.NDArray[np.float64]]:
         wrap_around = lambda idx: idx % self.num_vertices
         indices = [(wrap_around(idx - 1), idx) for idx in range(self.num_vertices)]
@@ -306,7 +307,7 @@ class TPusher2d(CollisionGeometry):
         ]
         return corner_normals
 
-    @property
+    @cached_property
     def corner_tangent_vecs(self) -> List[npt.NDArray[np.float64]]:
         tangents = [
             self._get_tangent_vec(self.corner_normal_vecs[idx])
