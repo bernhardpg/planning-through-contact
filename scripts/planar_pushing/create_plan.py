@@ -10,7 +10,10 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
@@ -38,24 +41,25 @@ def create_plan(
     body_to_use: Literal["box", "t_pusher"] = "box",
     traj_number: int = 1,
 ):
-    config = PlanarPlanConfig(
-        time_non_collision=4.0,
-        time_in_contact=4.0,
-        num_knot_points_contact=3,
-        num_knot_points_non_collision=4,
-        pusher_radius=0.04,
-        avoid_object=True,
-        avoidance_cost="quadratic",
-        no_cycles=True,
-    )
-
     if body_to_use == "box":
         body = get_slider_box()
     elif body_to_use == "t_pusher":
         body = get_tee()
 
+    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
+
+    config = PlanarPlanConfig(
+        time_non_collision=4.0,
+        time_in_contact=4.0,
+        num_knot_points_contact=3,
+        num_knot_points_non_collision=4,
+        avoid_object=True,
+        avoidance_cost="quadratic",
+        no_cycles=True,
+        dynamics_config=dynamics_config,
+    )
+
     planner = PlanarPushingPlanner(
-        body,
         config,
     )
 

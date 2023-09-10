@@ -45,8 +45,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)
-    # if debug:
-    #     sim.export_diagram("simulation_diagram.pdf")
+    if debug:
+        sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
     recording_name = plan.split(".")[0] + ".html" if save_recording else None
@@ -54,4 +54,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/t_pusher_pushing_6.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/t_pusher_pushing_5.pkl", save_recording=True, debug=True)
