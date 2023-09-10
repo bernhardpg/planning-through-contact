@@ -87,7 +87,7 @@ def plot_planar_pushing_trajectory(
     MIN_AXIS_SIZE = 0.1
 
     pos = np.vstack((actual.x, actual.y))
-    max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE)
+    max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
 
     axes[0].plot(actual.t, actual.x, label="Actual")
     axes[0].plot(actual.t, desired.x, linestyle="--", label="Desired")
@@ -101,7 +101,7 @@ def plot_planar_pushing_trajectory(
     axes[1].legend()
     axes[1].set_ylim(-max_pos_change, max_pos_change)
 
-    th_change = max(np.ptp(actual.theta), MIN_AXIS_SIZE)  # type: ignore
+    th_change = max(np.ptp(actual.theta), MIN_AXIS_SIZE) * 2.0  # type: ignore
 
     axes[2].plot(actual.t, actual.theta, label="Actual")
     axes[2].plot(actual.t, desired.theta, linestyle="--", label="Desired")
@@ -128,7 +128,7 @@ def plot_planar_pushing_trajectory(
     else:
         raise ValueError("Mismatch in data length")
 
-    max_force_change = max(max(np.ptp(actual.c_n), np.ptp(actual.c_f)), MIN_AXIS_SIZE)  # type: ignore
+    max_force_change = max(max(np.ptp(actual.c_n), np.ptp(actual.c_f)), MIN_AXIS_SIZE) * 2  # type: ignore
 
     # Plot lines on each subplot
     axes[0].plot(actual.t, actual.c_n, label="Actual")
@@ -143,7 +143,7 @@ def plot_planar_pushing_trajectory(
     axes[1].legend()
     axes[1].set_ylim(-max_force_change, max_force_change)
 
-    max_lam_dot_change = max(np.ptp(actual.lam_dot), MIN_AXIS_SIZE)  # type: ignore
+    max_lam_dot_change = max(np.ptp(actual.lam_dot), MIN_AXIS_SIZE) * 1.3  # type: ignore
     axes[2].plot(actual.t, actual.lam_dot, label="Actual")
     axes[2].plot(actual.t, desired.lam_dot, linestyle="--", label="Desired")
     axes[2].set_title("lam_dot")

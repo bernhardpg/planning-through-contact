@@ -64,9 +64,10 @@ def hybrid_mpc(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
 ) -> HybridMpc:
     config = HybridMpcConfig(
-        step_size=0.1,
+        step_size=0.2,
         horizon=10,
         num_sliding_steps=5,
+        rate_Hz=50,
     )
     mpc = HybridMpc(slider_pusher_system, config, slider_pusher_system.config)
     return mpc
@@ -208,6 +209,41 @@ def test_get_control_with_plan(
         plot_planar_pushing_trajectory(actual, desired)
 
 
+def test_get_control_with_plan_disturbance(
+    one_contact_mode_vars: List[FaceContactVariables],
+    hybrid_mpc: HybridMpc,
+) -> None:
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
+    context = feeder.CreateDefaultContext()
+
+    desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
+    desired_control_traj = feeder.get_control_traj_feedforward_port().Eval(context)[:-1]  # type: ignore
+    initial_state = feeder.get_state(0) + np.array([0.1, 0.1, 0.1, 0])
+
+    prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state_traj, desired_control_traj, mode=HybridModes.STICKING)  # type: ignore
+
+    result = Solve(prog)
+    assert result.is_success()
+
+    # must evaluate to get rid of expression type
+    state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
+    control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
+
+    N = hybrid_mpc.config.horizon
+    dt = hybrid_mpc.config.step_size
+    times = np.arange(0, dt * N, dt)
+
+    actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
+    desired = PlanarPushingLog.from_np(
+        times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T  # type: ignore
+    )
+
+    # Make sure we are able to stabilize the system in one plan
+    assert np.isclose(actual.x[-1], desired.x[-1], atol=0.01)
+    assert np.isclose(actual.y[-1], desired.y[-1], atol=0.01)
+    assert np.isclose(actual.theta[-1], desired.theta[-1], atol=0.01)
+
+
 def test_hybrid_mpc_controller(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
@@ -309,7 +345,7 @@ def test_hybrid_mpc_controller(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    x_initial = feeder.get_state(0) + np.array([0.02, 0.02, -0.2, 0])
+    x_initial = feeder.get_state(0) + np.array([-0.02, 0.02, 0.1, 0])
     context.SetContinuousState(x_initial)
 
     if DEBUG:

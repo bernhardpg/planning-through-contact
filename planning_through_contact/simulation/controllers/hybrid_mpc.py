@@ -36,6 +36,7 @@ class HybridMpcConfig:
     step_size: float = 0.1
     num_sliding_steps: int = 5
     rate_Hz: int = 200
+    enforce_hard_end_constraint: bool = False
 
 
 class HybridModes(Enum):
@@ -146,7 +147,8 @@ class HybridMpc:
             prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
 
         # Last error state should be exactly 0
-        prog.AddLinearConstraint(eq(x_bar[:, N - 1], np.zeros(x_traj[-1].shape)))
+        if self.config.enforce_hard_end_constraint:
+            prog.AddLinearConstraint(eq(x_bar[:, N - 1], np.zeros(x_traj[-1].shape)))
 
         # x_bar = x - x_traj
         x = x_bar + np.vstack(x_traj).T
@@ -182,8 +184,8 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0]) * 10
-        R = np.diag([1, 1, 1]) * 0.01
+        Q = np.diag([1, 1, 1, 0]) * 100
+        R = np.diag([1, 1, 1]) * 0.1
         Q_N = Q
 
         state_running_cost = sum(
