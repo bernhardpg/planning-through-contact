@@ -276,9 +276,7 @@ class FaceContactMode(AbstractContactMode):
         self._define_costs()
 
     def _define_constraints(self) -> None:
-        # TODO: take this from drake simulation
-        FRICTION_COEFF = 0.5
-        MAX_FORCE = FRICTION_COEFF * self.dynamics_config.slider.mass * 9.81
+        # TODO(bernhardpg): replace with workspace constraints!
         TABLE_SIZE = 2.0
 
         for lam in self.variables.lams:
@@ -290,13 +288,14 @@ class FaceContactMode(AbstractContactMode):
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddBoundingBoxConstraint(0, MAX_FORCE, c_n)
+            self.prog.AddBoundingBoxConstraint(0, self.dynamics_config.f_max, c_n)
 
+        mu = self.dynamics_config.friction_coeff_slider_pusher
         for c_n, c_f in zip(
             self.variables.normal_forces, self.variables.friction_forces
         ):
-            self.prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-            self.prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+            self.prog.AddLinearConstraint(c_f <= mu * c_n)
+            self.prog.AddLinearConstraint(c_f >= -mu * c_n)
 
         # TODO(bernhardpg): Variables should always be bounded. Get back to this
         self.bound_forces = False
@@ -305,21 +304,18 @@ class FaceContactMode(AbstractContactMode):
             for c_n, c_f in zip(
                 self.variables.normal_forces, self.variables.friction_forces
             ):
-                self.prog.AddBoundingBoxConstraint(-MAX_FORCE, MAX_FORCE, c_f)
+                self.prog.AddBoundingBoxConstraint(
+                    -self.dynamics_config.f_max, self.dynamics_config.f_max, c_f
+                )
 
         # TODO(bernhardpg): Variables should always be bounded. Get back to this
         # These are turned off to speed up solve times, as they do not seem to
         # impact the solution (empirically)
         self.bound_positions = False
         if self.bound_positions:
-            # Bounds on positions
-            for p_WB_x, p_WB_y in zip(self.variables.p_WB_xs, self.variables.p_WB_ys):
-                self.prog.AddBoundingBoxConstraint(
-                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_x
-                )
-                self.prog.AddBoundingBoxConstraint(
-                    -TABLE_SIZE / 2, TABLE_SIZE / 2, p_WB_y
-                )
+            lb, ub = self.config.workspace.slider.bounds
+            for p_WB in self.variables.p_WBs:
+                self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
 
         # TODO(bernhardpg): Variables should always be bounded. Get back to this
         # These are turned off to speed up solve times, as they do not seem to
@@ -367,8 +363,7 @@ class FaceContactMode(AbstractContactMode):
                 f_c_B,
                 p_BP,
                 R_WB,
-                FRICTION_COEFF,
-                self.dynamics_config.slider.mass,
+                self.dynamics_config.ellipsoidal_limit_surface,
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
@@ -382,8 +377,7 @@ class FaceContactMode(AbstractContactMode):
                     f_c_B,
                     p_BP,
                     R_WB,
-                    FRICTION_COEFF,
-                    self.dynamics_config.slider.mass,
+                    self.dynamics_config.ellipsoidal_limit_surface,
                 )
                 quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
                 self.quasi_static_dynamics_constraints_in_B = []
@@ -595,19 +589,9 @@ class FaceContactMode(AbstractContactMode):
         f_c_B,
         p_BP,
         R_WB,
-        FRICTION_COEFF,
-        OBJECT_MASS,
+        ellipsoidal_limit_surface,
     ):
-        G = 9.81
-        # TODO(bernhardpg): Compute f_max and tau_max correctly
-        f_max = FRICTION_COEFF * G * OBJECT_MASS
-        const = np.sqrt(0.075**2 + 0.075**2) * 0.6
-        tau_max = f_max * const
-
-        A = np.diag(
-            # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-        )  # Ellipsoidal Limit surface approximation
+        D = ellipsoidal_limit_surface
 
         # We need to add an entry for multiplication with the wrench,
         # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
@@ -621,7 +605,7 @@ class FaceContactMode(AbstractContactMode):
         x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
         wrench_W = R.dot(wrench_B)
-        dynamics_in_W = A.dot(
+        dynamics_in_W = D.dot(
             wrench_W
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 
@@ -634,19 +618,9 @@ class FaceContactMode(AbstractContactMode):
         f_c_B,
         p_BP,
         R_WB,
-        FRICTION_COEFF,
-        OBJECT_MASS,
+        ellipsoidal_limit_surface,
     ):
-        G = 9.81
-        # TODO(bernhardpg): Compute f_max and tau_max correctly
-        f_max = FRICTION_COEFF * G * OBJECT_MASS
-        const = np.sqrt(0.075**2 + 0.075**2) * 0.6
-        tau_max = f_max * const
-
-        A = np.diag(
-            # [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-        )  # Ellipsoidal Limit surface approximation
+        D = ellipsoidal_limit_surface
 
         # We need to add an entry for multiplication with the wrench,
         # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
@@ -661,7 +635,7 @@ class FaceContactMode(AbstractContactMode):
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
 
         x_dot_in_B = R.T.dot(x_dot_in_W)
-        dynamics_in_B = A.dot(
+        dynamics_in_B = D.dot(
             wrench_B
         )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
 

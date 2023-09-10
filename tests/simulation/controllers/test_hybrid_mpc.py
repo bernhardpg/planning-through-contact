@@ -309,7 +309,7 @@ def test_hybrid_mpc_controller(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    x_initial = feeder.get_state(0) + np.array([0.05, 0.05, -0.2, 0])
+    x_initial = feeder.get_state(0) + np.array([0.02, 0.02, -0.2, 0])
     context.SetContinuousState(x_initial)
 
     if DEBUG:
