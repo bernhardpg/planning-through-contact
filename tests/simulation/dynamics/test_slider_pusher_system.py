@@ -17,6 +17,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
 )
@@ -43,11 +46,16 @@ def face_idx() -> int:
 
 
 @pytest.fixture
-def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int) -> SliderPusherSystem:  # type: ignore
+def config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
+    return SliderPusherSystemConfig(slider=rigid_body_box)
+
+
+@pytest.fixture
+def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int, config: SliderPusherSystemConfig) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
         rigid_body_box.geometry,
-        pusher_radius=0.015,
         contact_location=PolytopeContactLocation(ContactLocation.FACE, face_idx),
+        config=config,
     )
     return slider_pusher
 

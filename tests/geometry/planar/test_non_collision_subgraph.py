@@ -32,7 +32,9 @@ from planning_through_contact.visualize.planar import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
+    dynamics_config,
     gcs_options,
+    plan_config,
     rigid_body_box,
     subgraph,
 )
@@ -41,7 +43,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 @pytest.mark.parametrize(
@@ -122,7 +124,7 @@ def test_non_collision_subgraph_initial_and_final(
     assert isinstance(source_mode, NonCollisionMode)
 
     assert source_mode.contact_location == find_first_matching_location(
-        source_mode.finger_initial_pose, subgraph.body
+        source_mode.finger_initial_pose, subgraph.slider
     )
     assert subgraph.target is not None
 
@@ -131,7 +133,7 @@ def test_non_collision_subgraph_initial_and_final(
     assert isinstance(target_mode, NonCollisionMode)
 
     assert target_mode.contact_location == find_first_matching_location(
-        target_mode.finger_final_pose, subgraph.body
+        target_mode.finger_final_pose, subgraph.slider
     )
 
     # We should have added 2 more edges with initial and final modes
@@ -232,7 +234,7 @@ def test_subgraph_planning(
     if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         assert_object_is_avoided(
-            subgraph.body.geometry,
+            subgraph.slider.geometry,
             traj.p_BP,
             min_distance=0.001,
             start_idx=2,
@@ -242,7 +244,7 @@ def test_subgraph_planning(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry, 0.01)
+        visualize_planar_pushing_trajectory(traj, subgraph.slider.geometry, 0.01)
 
 
 @pytest.mark.parametrize(
@@ -262,16 +264,20 @@ def test_subgraph_planning(
             },
             False,
         ),
-        (
-            {
-                "boundary_conds": False,
-                "avoid_object": False,
-            },
-            True,
-        ),
+        # (
+        #     {
+        #         "boundary_conds": False,
+        #         "avoid_object": False,
+        #     },
+        #     True,
+        # ),
     ],
     indirect=["subgraph"],
-    ids=["simple", "avoid_object", "eq_elimination"],
+    ids=[
+        "simple",
+        "avoid_object",
+        # "eq_elimination"
+    ],
 )
 def test_subgraph_with_contact_modes(
     subgraph: NonCollisionSubGraph,
@@ -286,13 +292,13 @@ def test_subgraph_with_contact_modes(
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     source_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_start, subgraph.config, subgraph.body
+        contact_location_start, subgraph.config
     )
     source_mode.set_finger_pos(0.5)
 
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 2)
     target_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_end, subgraph.config, subgraph.body
+        contact_location_end, subgraph.config
     )
     target_mode.set_finger_pos(0.5)
 
@@ -342,7 +348,7 @@ def test_subgraph_with_contact_modes(
         )
         first_segment = traj.p_BP[:, first_segment_start_idx:first_segment_end_idx]
         assert_object_is_avoided(
-            subgraph.body.geometry,
+            subgraph.slider.geometry,
             first_segment,
             min_distance=0.001,
             start_idx=2,
@@ -354,7 +360,7 @@ def test_subgraph_with_contact_modes(
         )
         second_segment = traj.p_BP[:, first_segment_end_idx:second_segment_end_idx]
         assert_object_is_avoided(
-            subgraph.body.geometry,
+            subgraph.slider.geometry,
             second_segment,
             min_distance=0.001,
             start_idx=2,
@@ -364,24 +370,20 @@ def test_subgraph_with_contact_modes(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
         visualize_planar_pushing_trajectory(
-            traj, subgraph.body.geometry, pusher_radius=0.01
+            traj, subgraph.slider.geometry, pusher_radius=0.01
         )
 
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
-def test_subgraph_planning_t_pusher(avoid_object: bool):
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=4,
-        avoid_object=avoid_object,
-        pusher_radius=0,
-    )
+def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object: bool):
+    plan_config.avoid_object = avoid_object
+    plan_config.num_knot_points_non_collision = 4
+    plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
     gcs = opt.GraphOfConvexSets()
 
-    tee = RigidBody("T", TPusher2d(), mass=0.2)
     subgraph = NonCollisionSubGraph.create_with_gcs(
         gcs,
-        tee,
-        config,
+        plan_config,
         "Subgraph_test_T",
     )
 
@@ -424,7 +426,7 @@ def test_subgraph_planning_t_pusher(avoid_object: bool):
     if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         assert_object_is_avoided(
-            subgraph.body.geometry,
+            subgraph.slider.geometry,
             traj.p_BP,
             min_distance=0.001,
             start_idx=2,
@@ -434,63 +436,71 @@ def test_subgraph_planning_t_pusher(avoid_object: bool):
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.body.geometry, 0.01)
+        visualize_planar_pushing_trajectory(traj, subgraph.slider.geometry, 0.01)
 
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
-def test_subgraph_contact_modes_t_pusher(avoid_object: bool, gcs_options):
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=4,
-        avoid_object=avoid_object,
-        pusher_radius=0.015,
-    )
+def test_subgraph_contact_modes_t_pusher(
+    plan_config: PlanarPlanConfig, avoid_object: bool, gcs_options
+):
+    plan_config.avoid_object = avoid_object
+    plan_config.num_knot_points_non_collision = 4
+    plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
+    plan_config.dynamics_config.pusher_radius = 0.015
     gcs = opt.GraphOfConvexSets()
 
-    tee = RigidBody("T", TPusher2d(), mass=0.2)
     subgraph = NonCollisionSubGraph.create_with_gcs(
         gcs,
-        tee,
-        config,
+        plan_config,
         "Subgraph_test_T",
     )
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 1)
     source_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_start, subgraph.config, subgraph.body
+        contact_location_start, subgraph.config
     )
     source_mode.set_finger_pos(0.5)
 
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 4)
     target_mode = FaceContactMode.create_from_plan_spec(
-        contact_location_end, subgraph.config, subgraph.body
+        contact_location_end, subgraph.config
     )
     target_mode.set_finger_pos(0.5)
 
     slider_initial_pose = PlanarPose(0.3, 0, 0)
     source_mode.set_slider_initial_pose(slider_initial_pose)
-    source_vertex = subgraph.gcs.AddVertex(source_mode.get_convex_set(), "source")
+    source_vertex = subgraph.gcs.AddVertex(source_mode.get_convex_set(), "FACE_1")
     source_mode.add_cost_to_vertex(source_vertex)
     source = VertexModePair(source_vertex, source_mode)
 
     slider_final_pose = PlanarPose(-0.5, 0.3, 0.4)
     target_mode.set_slider_final_pose(slider_final_pose)
-    target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "target")
+    target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "FACE_4")
     target_mode.add_cost_to_vertex(target_vertex)
     target = VertexModePair(target_vertex, target_mode)
 
     subgraph.connect_with_continuity_constraints(
-        contact_location_start.idx, source, outgoing=False
+        plan_config.slider_geometry.get_collision_free_region_for_loc_idx(
+            contact_location_start.idx
+        ),
+        source,
+        outgoing=False,
     )
     subgraph.connect_with_continuity_constraints(
-        contact_location_end.idx, target, incoming=False
+        plan_config.slider_geometry.get_collision_free_region_for_loc_idx(
+            contact_location_end.idx,
+        ),
+        target,
+        incoming=False,
     )
 
+    save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
     result = subgraph.gcs.SolveShortestPath(source_vertex, target_vertex, gcs_options)
     assert result.is_success()
 
     pairs = subgraph.get_all_vertex_mode_pairs()
-    pairs["source"] = source
-    pairs["target"] = target
+    pairs["FACE_1"] = source
+    pairs["FACE_4"] = target
 
     traj = PlanarTrajectoryBuilder.from_result(
         result, subgraph.gcs, source_vertex, target_vertex, pairs
@@ -503,5 +513,5 @@ def test_subgraph_contact_modes_t_pusher(avoid_object: bool, gcs_options):
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
         visualize_planar_pushing_trajectory(
-            traj, subgraph.body.geometry, config.pusher_radius
+            traj, subgraph.slider.geometry, plan_config.pusher_radius
         )

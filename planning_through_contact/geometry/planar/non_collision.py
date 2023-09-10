@@ -40,12 +40,9 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 def check_finger_pose_in_contact_location(
     finger_pose: PlanarPose,
     loc: PolytopeContactLocation,
-    body: RigidBody,
+    config: PlanarPlanConfig,
 ) -> bool:
-    config = PlanarPlanConfig()
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, config, body, one_knot_point=True
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, one_knot_point=True)
 
     mode.set_finger_initial_pose(finger_pose)
 
@@ -54,19 +51,18 @@ def check_finger_pose_in_contact_location(
 
 
 def find_first_matching_location(
-    finger_pose: PlanarPose,
-    slider: RigidBody,
+    finger_pose: PlanarPose, config: PlanarPlanConfig
 ) -> PolytopeContactLocation:
     # we always add all non-collision modes, even when we don't add all contact modes
     # (think of maneuvering around the object etc)
     locations = [
         PolytopeContactLocation(ContactLocation.FACE, idx)
-        for idx in range(slider.geometry.num_collision_free_regions)
+        for idx in range(config.slider_geometry.num_collision_free_regions)
     ]
     matching_locs = [
         loc
         for loc in locations
-        if check_finger_pose_in_contact_location(finger_pose, loc, slider)
+        if check_finger_pose_in_contact_location(finger_pose, loc, config)
     ]
     if len(matching_locs) == 0:
         raise ValueError(
@@ -191,7 +187,6 @@ class NonCollisionMode(AbstractContactMode):
         cls,
         contact_location: PolytopeContactLocation,
         config: PlanarPlanConfig,
-        slider: RigidBody,
         name: Optional[str] = None,
         one_knot_point: bool = False,
     ) -> "NonCollisionMode":
@@ -207,8 +202,6 @@ class NonCollisionMode(AbstractContactMode):
             num_knot_points,
             config.time_non_collision,
             contact_location,
-            slider,
-            config.pusher_radius,
             prog,
             config,
         )
@@ -219,15 +212,13 @@ class NonCollisionMode(AbstractContactMode):
         config: PlanarPlanConfig,
         slider_pose: PlanarPose,
         pusher_pose: PlanarPose,
-        body: RigidBody,
         initial_or_final: Literal["initial", "final"],
     ) -> "NonCollisionMode":
-        loc = find_first_matching_location(pusher_pose, body)
+        loc = find_first_matching_location(pusher_pose, config)
         mode_name = "source" if initial_or_final == "initial" else "target"
         mode = cls.create_from_plan_spec(
             loc,
             config,
-            body,
             mode_name,
             one_knot_point=True,
         )
@@ -241,13 +232,16 @@ class NonCollisionMode(AbstractContactMode):
         return mode
 
     def __post_init__(self) -> None:
+        self.slider_geometry = self.config.dynamics_config.slider.geometry
+        self.dynamics_config = self.config.dynamics_config
+
         self.dt = self.time_in_mode / self.num_knot_points
 
-        self.contact_planes = self.object.geometry.get_contact_planes(
+        self.contact_planes = self.slider_geometry.get_contact_planes(
             self.contact_location.idx
         )
         self.collision_free_space_planes = (
-            self.object.geometry.get_planes_for_collision_free_region(
+            self.slider_geometry.get_planes_for_collision_free_region(
                 self.contact_location.idx
             )
         )
@@ -256,7 +250,7 @@ class NonCollisionMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
             self.contact_location,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
         )
         self._define_constraints()
         self._define_cost()
@@ -271,6 +265,11 @@ class NonCollisionMode(AbstractContactMode):
 
         self._add_workspace_constraints()
 
+        lb, ub = self.config.workspace.slider.bounds
+        self.prog.AddBoundingBoxConstraint(lb, ub, self.variables.p_WB)
+        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.cos_th)  # type: ignore
+        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.sin_th)  # type: ignore
+
     def _add_workspace_constraints(self) -> None:
         for k in range(self.num_knot_points):
             p_BF = self.variables.p_BPs[k]
@@ -278,17 +277,11 @@ class NonCollisionMode(AbstractContactMode):
             lb, ub = self.config.workspace.pusher.bounds
             self.prog.AddBoundingBoxConstraint(lb, ub, p_BF)
 
-        lb, ub = self.config.workspace.slider.bounds
-        self.prog.AddBoundingBoxConstraint(lb, ub, self.variables.p_WB)
-
-        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.cos_th)  # type: ignore
-        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.sin_th)  # type: ignore
-
     def _create_collision_free_space_constraints(
         self, pusher_pos: NpVariableArray
     ) -> List[sym.Formula]:
         avoid_contact = [
-            plane.dist_to(pusher_pos) - self.pusher_radius >= 0
+            plane.dist_to(pusher_pos) - self.dynamics_config.pusher_radius >= 0
             for plane in self.contact_planes
         ]
         stay_in_region = [
@@ -337,7 +330,7 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearCost(s)
 
         if self.config.avoid_object:
-            planes = self.object.geometry.get_contact_planes(self.contact_location.idx)
+            planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
             dists_for_each_plane = [
                 [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
                 for plane in planes
@@ -417,7 +410,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -441,7 +434,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,

@@ -28,12 +28,16 @@ from planning_through_contact.visualize.planar import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
+    dynamics_config,
     face_contact_mode,
     face_contact_vars,
+    plan_config,
     rigid_body_box,
     t_pusher,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
+
+DEBUG = False
 
 
 def test_face_contact_variables(
@@ -113,6 +117,7 @@ def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> N
     assert vars.p_WB_ys.shape == reduced_vars.p_WB_ys.shape
 
 
+# TODO(bernhardpg): This test currently fails
 def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     num_knot_points = mode.num_knot_points
@@ -237,7 +242,6 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
-    DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
@@ -268,7 +272,6 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     vars = face_contact_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    DEBUG = False
     if DEBUG:
         visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
         # (num_knot_points, 2): first col cosines, second col sines
@@ -298,7 +301,6 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert not result.is_success()  # should fail when the relaxation is tight!
 
-    DEBUG = False
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
@@ -329,7 +331,6 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     result = Solve(mode.relaxed_prog)  # type: ignore
     # assert not result.is_success()  # should fail when the relaxation is tight!
 
-    DEBUG = True
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
@@ -370,7 +371,6 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
 
     assert result.is_success()
 
-    DEBUG = False
     if DEBUG:
         vars = face_contact_mode.reduced_variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)

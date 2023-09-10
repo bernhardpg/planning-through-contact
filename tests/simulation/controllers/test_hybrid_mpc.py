@@ -41,6 +41,7 @@ from planning_through_contact.visualize.analysis import (
 from tests.geometry.planar.fixtures import face_contact_mode, t_pusher
 from tests.simulation.dynamics.test_slider_pusher_system import (
     box_geometry,
+    config,
     face_idx,
     rigid_body_box,
     slider_pusher_system,
@@ -62,7 +63,7 @@ def hybrid_mpc(
         horizon=10,
         num_sliding_steps=5,
     )
-    mpc = HybridMpc(slider_pusher_system, config)
+    mpc = HybridMpc(slider_pusher_system, config, slider_pusher_system.config)
     return mpc
 
 
@@ -80,6 +81,8 @@ def hybrid_mpc_controller_system(
 
 
 def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
+    check_same_nonzero_elements = lambda A, B: np.all((A == 0) == (B == 0))
+
     linear_system = hybrid_mpc._get_linear_system(
         np.array([0, 0, 0, 0.5]), np.array([1.0, 0, 0])
     )
@@ -91,7 +94,7 @@ def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
             [0.0, 0.0, 0.0, 0.0],
         ]
     )
-    assert np.allclose(linear_system.A(), A_target)
+    assert check_same_nonzero_elements(A_target, linear_system.A())
 
     # Linearized around th = 0 and with only a normal force,
     # theta should only impact y_dot
@@ -106,20 +109,20 @@ def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
             [0.0, 0.0, 1.0],
         ]
     )
-    assert np.allclose(linear_system.B(), B_target)
+    assert check_same_nonzero_elements(B_target, linear_system.B())
 
 
 def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
-    N = hybrid_mpc.cfg.horizon
+    N = hybrid_mpc.config.horizon
     current_state = np.array([0, 0, 0, 0.5])
-    desired_state = [current_state] * N
+    desired_state = [current_state] * (N + 1)
     desired_control = [np.zeros((3,))] * N
     prog, x, u = hybrid_mpc._setup_QP(
         current_state, desired_state, desired_control, mode=HybridModes.STICKING
     )
 
-    dt = hybrid_mpc.cfg.step_size
-    times = np.arange(0, dt * N, dt)
+    dt = hybrid_mpc.config.step_size
+    times = np.arange(0, dt * (N + 1), dt)
 
     result = Solve(prog)
     assert result.is_success()
@@ -132,6 +135,9 @@ def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
     desired = PlanarPushingLog.from_np(
         times, np.vstack(desired_state).T, np.vstack(desired_control).T
     )
+
+    assert control_sol.shape == (3, N)
+    assert state_sol.shape == (4, N + 1)
 
     # No deviation should happen
     for state, state_desired in zip(state_sol.T, desired_state):
@@ -153,7 +159,7 @@ def test_get_control_with_plan(
     The plan should follow the desired trajectory exactly.
     """
 
-    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.cfg)
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
     context = feeder.CreateDefaultContext()
 
     desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
@@ -169,8 +175,8 @@ def test_get_control_with_plan(
     state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
     control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
 
-    N = hybrid_mpc.cfg.horizon
-    dt = hybrid_mpc.cfg.step_size
+    N = hybrid_mpc.config.horizon
+    dt = hybrid_mpc.config.step_size
     times = np.arange(0, dt * N, dt)
 
     actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
@@ -214,7 +220,7 @@ def test_hybrid_mpc_controller(
 
     feeder = builder.AddNamedSystem(
         "feedforward",
-        SliderPusherTrajectoryFeeder(one_contact_mode_vars, mpc_controller.cfg),
+        SliderPusherTrajectoryFeeder(one_contact_mode_vars, mpc_controller.config),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
@@ -279,7 +285,7 @@ def test_hybrid_mpc_controller(
 
     builder.Connect(slider_pusher.get_output_port(), mpc_controller.get_state_port())
     zero_order_hold = builder.AddNamedSystem(
-        "zero_order_hold", ZeroOrderHold(mpc_controller.cfg.step_size, 3)
+        "zero_order_hold", ZeroOrderHold(mpc_controller.config.step_size, 3)
     )
     builder.Connect(mpc_controller.get_control_port(), zero_order_hold.get_input_port())
     builder.Connect(zero_order_hold.get_output_port(), slider_pusher.get_input_port())

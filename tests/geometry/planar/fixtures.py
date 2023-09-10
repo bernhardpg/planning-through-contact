@@ -23,6 +23,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
@@ -38,6 +41,18 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
     mass = 0.3
     box = RigidBody("box", box_geometry, mass)
     return box
+
+
+@pytest.fixture
+def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
+    cfg = SliderPusherSystemConfig(slider=rigid_body_box, pusher_radius=0.0)
+    return cfg
+
+
+@pytest.fixture
+def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
+    cfg = PlanarPlanConfig(dynamics_config=dynamics_config)
+    return cfg
 
 
 @pytest.fixture
@@ -83,37 +98,31 @@ def non_collision_vars() -> NonCollisionVariables:
 
 
 @pytest.fixture
-def non_collision_mode(rigid_body_box: RigidBody) -> NonCollisionMode:
+def non_collision_mode(plan_config: PlanarPlanConfig) -> NonCollisionMode:
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-    config = PlanarPlanConfig(pusher_radius=0.02)
-    mode = NonCollisionMode.create_from_plan_spec(
-        contact_location, config, rigid_body_box
-    )
+    mode = NonCollisionMode.create_from_plan_spec(contact_location, plan_config)
 
     return mode
 
 
 @pytest.fixture
 def face_contact_mode(
-    rigid_body_box: RigidBody, t_pusher: RigidBody, request: FixtureRequest
+    plan_config: PlanarPlanConfig, t_pusher: RigidBody, request: FixtureRequest
 ) -> FaceContactMode:
-    rigid_body = rigid_body_box
-
     if not hasattr(request, "param"):
         request.param = {}  # Make the fixture work without params
 
     if request.param.get("body") == "t_pusher":
-        rigid_body = t_pusher
+        plan_config.dynamics_config.slider = t_pusher
 
     face_idx = request.param.get("face_idx", 3)
-    config = PlanarPlanConfig(pusher_radius=0)
+    config = PlanarPlanConfig(dynamics_config=SliderPusherSystemConfig(pusher_radius=0))
     config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         config,
-        rigid_body,
     )
     return mode
 
@@ -135,21 +144,16 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
 
 @pytest.fixture
 def subgraph(
-    rigid_body_box: RigidBody, request: FixtureRequest
+    plan_config: PlanarPlanConfig, request: FixtureRequest
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
+    plan_config.num_knot_points_non_collision = num_knot_points
 
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=num_knot_points,
-        avoid_object=request.param["avoid_object"],
-        pusher_radius=0,
-    )
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
         gcs,
-        rigid_body_box,
-        config,
+        plan_config,
         "Subgraph_TEST",
     )
 

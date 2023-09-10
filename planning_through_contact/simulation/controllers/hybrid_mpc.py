@@ -24,6 +24,9 @@ from pydrake.systems.primitives import (
     LinearSystem,
 )
 
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.types import NpVariableArray
 
 
@@ -33,7 +36,6 @@ class HybridMpcConfig:
     step_size: float = 0.1
     num_sliding_steps: int = 5
     rate_Hz: int = 200
-    pusher_radius: float = 0.01
 
 
 class HybridModes(Enum):
@@ -44,10 +46,14 @@ class HybridModes(Enum):
 
 class HybridMpc:
     def __init__(
-        self, model: System, config: HybridMpcConfig = HybridMpcConfig()
+        self,
+        model: System,
+        config: HybridMpcConfig,
+        dynamics_config: SliderPusherSystemConfig,
     ) -> None:
         self.model = model
-        self.cfg = config
+        self.config = config
+        self.dynamics_config = dynamics_config
 
         self.num_states = model.num_continuous_states()
         self.num_inputs = model.get_input_port().size()
@@ -111,8 +117,8 @@ class HybridMpc:
         mode: HybridModes,
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
         N = len(u_traj)
-        h = self.cfg.step_size
-        num_sliding_steps = self.cfg.num_sliding_steps
+        h = self.config.step_size
+        num_sliding_steps = self.config.num_sliding_steps
 
         prog = MathematicalProgram()
 
@@ -213,7 +219,7 @@ class HybridMpc:
             breakpoint()
         x_next = state_sol[:, 1]
 
-        x_dot_curr = (x_next - x_curr) / self.cfg.step_size
+        x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
@@ -227,7 +233,7 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         super().__init__()
 
         self.mpc = HybridMpc(model, config)
-        self.cfg = self.mpc.cfg
+        self.config = self.mpc.cfg
 
         self.state_port = self.DeclareVectorInputPort("state", self.mpc.num_states)
 

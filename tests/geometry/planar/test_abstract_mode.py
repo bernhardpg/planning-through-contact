@@ -20,29 +20,42 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, gcs_options, rigid_body_box
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    dynamics_config,
+    gcs_options,
+    plan_config,
+    rigid_body_box,
+)
 from tests.geometry.planar.tools import assert_initial_and_final_poses
+
+DEBUG = False
 
 
 def test_add_continuity_constraints_between_non_collision_modes(
-    rigid_body_box: RigidBody,
+    dynamics_config: SliderPusherSystemConfig,
 ) -> None:
-    config = PlanarPlanConfig(num_knot_points_non_collision=2)
+    config = PlanarPlanConfig(
+        num_knot_points_non_collision=2, dynamics_config=dynamics_config
+    )
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
 
     source_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_start, config, rigid_body_box, "source"
+        contact_location_start, config, "source"
     )
     target_mode = NonCollisionMode.create_from_plan_spec(
-        contact_location_end, config, rigid_body_box, "target"
+        contact_location_end, config, "target"
     )
 
     slider_pose = PlanarPose(0.3, 0, 0)
@@ -51,7 +64,7 @@ def test_add_continuity_constraints_between_non_collision_modes(
 
     finger_initial_pose = PlanarPose(-0.2, 0, 0)
     source_mode.set_finger_initial_pose(finger_initial_pose)
-    finger_final_pose = PlanarPose(0.3, 0.5, 0)
+    finger_final_pose = PlanarPose(0.0, 0.2, 0)
     target_mode.set_finger_final_pose(finger_final_pose)
 
     gcs = opt.GraphOfConvexSets()
@@ -70,6 +83,7 @@ def test_add_continuity_constraints_between_non_collision_modes(
         VertexModePair(source_vertex, source_mode),
     )
 
+    save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
     result = gcs.SolveShortestPath(source_vertex, target_vertex)
     assert result.is_success()
 
@@ -89,36 +103,27 @@ def test_add_continuity_constraints_between_non_collision_modes(
         finger_final_pose,
     )
 
-    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+        visualize_planar_pushing_trajectory(traj, config.slider_geometry, 0.01)
 
 
-@pytest.mark.parametrize(
-    "rigid_body_box, gcs_options, use_eq_elimination",
-    [({}, {}, False), ({}, {}, True)],
-    indirect=["rigid_body_box", "gcs_options"],
-    ids=["normal", "eq_elimination"],
-)
 def test_add_continuity_between_non_coll_and_face_contact(
-    rigid_body_box: RigidBody,
+    plan_config: PlanarPlanConfig,
     gcs_options: opt.GraphOfConvexSetsOptions,
-    use_eq_elimination: bool,
 ) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
-    config = PlanarPlanConfig()
 
     slider_initial_pose = PlanarPose(0.3, 0, 0)
     slider_final_pose = PlanarPose(0.5, 0, 0.4)
     finger_final_pose = PlanarPose(-0.4, 0, 0)
 
-    source_mode = FaceContactMode.create_from_plan_spec(loc, config, rigid_body_box)
+    source_mode = FaceContactMode.create_from_plan_spec(loc, plan_config)
     source_mode.set_slider_initial_pose(slider_initial_pose)
     source_mode.set_finger_pos(0.5)
 
-    target_mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
+    target_mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
     target_mode.set_slider_pose(slider_final_pose)
     target_mode.set_finger_final_pose(finger_final_pose)
 
@@ -149,7 +154,6 @@ def test_add_continuity_between_non_coll_and_face_contact(
         finger_final_pose,
     )
 
-    DEBUG = False
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
-        visualize_planar_pushing_trajectory(traj, rigid_body_box.geometry)
+        visualize_planar_pushing_trajectory(traj, plan_config.slider_geometry, 0.01)

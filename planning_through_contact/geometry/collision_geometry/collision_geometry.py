@@ -89,17 +89,24 @@ class CollisionGeometry(ABC):
         vec = (v1 + v2) / 2
         return vec
 
+    @property
     @abstractmethod
-    def get_planes_for_collision_free_region(
-        self, location: PolytopeContactLocation
-    ) -> List[Hyperplane]:
+    def num_collision_free_regions(self) -> int:
+        pass
+
+    @abstractmethod
+    def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
+        pass
+
+    @abstractmethod
+    def get_planes_for_collision_free_region(self, idx: int) -> List[Hyperplane]:
         """
         Returns the hyperplanes defining the collision-free region, but not the plane
         of the contact face.
         """
 
     @abstractmethod
-    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
+    def get_contact_planes(self, idx: int) -> List[Hyperplane]:
         """
         Return the contact plane(s) that define the current collision-free region
         """

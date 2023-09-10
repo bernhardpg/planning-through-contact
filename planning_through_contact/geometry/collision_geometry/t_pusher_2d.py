@@ -99,9 +99,7 @@ class TPusher2d(CollisionGeometry):
         ]
         return hyperplanes
 
-    def get_collision_free_region_for_loc_idx(
-        self, loc_idx: PolytopeContactLocation
-    ) -> int:
+    def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
         if loc_idx == 0:
             return 0
         elif loc_idx == 1:

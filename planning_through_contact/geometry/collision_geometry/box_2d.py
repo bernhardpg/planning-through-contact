@@ -335,29 +335,31 @@ class Box2d(CollisionGeometry):
         else:
             raise ValueError(f"Can not get length for face {location.idx} for a box")
 
-    def get_contact_planes(self, location: PolytopeContactLocation) -> List[Hyperplane]:
-        return [self.faces[location.idx]]
+    def get_contact_planes(self, idx: int) -> List[Hyperplane]:
+        return [self.faces[idx]]
 
-    def get_planes_for_collision_free_region(
-        self, location: PolytopeContactLocation
-    ) -> List[Hyperplane]:
-        if not location.pos == ContactLocation.FACE:
-            raise ValueError("Can only get collision free region for a face")
+    @property
+    def num_collision_free_regions(self) -> int:
+        return 4
 
+    def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
+        return loc_idx  # for boxes, we have one collision-free region per face
+
+    def get_planes_for_collision_free_region(self, idx: int) -> List[Hyperplane]:
         planes = []
-        if location.idx == 0:
+        if idx == 0:
             planes.append(construct_2d_plane_from_points(self._v0, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v1))
-        elif location.idx == 1:
+        elif idx == 1:
             planes.append(construct_2d_plane_from_points(self._v1, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v2))
-        elif location.idx == 2:
+        elif idx == 2:
             planes.append(construct_2d_plane_from_points(self._v2, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v3))
-        elif location.idx == 3:
+        elif idx == 3:
             planes.append(construct_2d_plane_from_points(self._v3, self._com))
             planes.append(construct_2d_plane_from_points(self._com, self._v0))
         else:
-            raise ValueError(f"Can not get collision free region for {location}")
+            raise ValueError(f"Can not get collision free region for idx {idx}")
 
         return planes

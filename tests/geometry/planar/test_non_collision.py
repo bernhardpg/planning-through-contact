@@ -27,8 +27,10 @@ from planning_through_contact.visualize.planar import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
+    dynamics_config,
     non_collision_mode,
     non_collision_vars,
+    plan_config,
     rigid_body_box,
 )
 from tests.geometry.planar.tools import (
@@ -103,12 +105,17 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     )
     num_planes = 3
     num_workspace_constraints = 1
-    assert num_linear_constraints == num_knot_points * (
-        num_planes + num_workspace_constraints
+    bbox_trig_terms = 2
+    slider_workspace_const = 1
+    assert (
+        num_linear_constraints
+        == num_knot_points * (num_planes + num_workspace_constraints)
+        + bbox_trig_terms
+        + slider_workspace_const
     )
 
     # The next two tests may fail for more complex geometries than boxes. If so, update them!
-    assert len(mode.prog.bounding_box_constraints()) == 4
+    assert len(mode.prog.bounding_box_constraints()) == 7
     assert len(mode.prog.linear_constraints()) == 4
 
     assert len(mode.prog.linear_equality_constraints()) == 0
@@ -184,32 +191,25 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     assert res_4 == True
 
 
-def test_eucl_dist(rigid_body_box: RigidBody) -> None:
+def test_eucl_dist(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 3
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=NUM_KNOT_POINTS,
-        time_non_collision=3,
-        pusher_radius=0.03,
-        minimize_squared_eucl_dist=False,
-    )
+    plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
+    plan_config.minimize_squared_eucl_dist = False
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
+    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
     assert len(mode.prog.linear_costs()) == NUM_KNOT_POINTS - 1
     assert len(mode.prog.quadratic_costs()) == 0
 
 
-def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
+def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 5
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=NUM_KNOT_POINTS,
-        time_non_collision=3,
-        pusher_radius=0.03,
-    )
+    plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
+    plan_config.dynamics_config.pusher_radius = 0.03
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
+    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -240,23 +240,19 @@ def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, pusher_radius=config.pusher_radius
+            traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
         )
 
 
 # TODO(bernhardpg): remove this, we want to remove both the quadratic and linear objectives!
-def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
+def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 5
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=NUM_KNOT_POINTS,
-        time_non_collision=3,
-        pusher_radius=0.02,
-        avoid_object=True,
-        avoidance_cost="quadratic",
-    )
+    plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
+    plan_config.dynamics_config.pusher_radius = 0.03
+    plan_config.avoid_object = True
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
+    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
     assert len(mode.prog.quadratic_costs()) == 2
 
@@ -282,29 +278,26 @@ def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
         finger_final_pose,
     )
 
-    assert_object_is_avoided(rigid_body_box.geometry, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
 
     # Pusher should move away from object
     assert vars.p_BP_xs[2] <= -0.27
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, config.pusher_radius
+            traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
         )
 
 
-def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
+def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 5
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=NUM_KNOT_POINTS,
-        time_non_collision=3,
-        pusher_radius=0.02,
-        avoid_object=True,
-        avoidance_cost="socp",
-    )
+    plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
+    plan_config.dynamics_config.pusher_radius = 0.03
+    plan_config.avoid_object = True
+    plan_config.avoidance_cost = "socp"
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    mode = NonCollisionMode.create_from_plan_spec(loc, config, rigid_body_box)
+    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -328,14 +321,14 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
         finger_final_pose,
     )
 
-    assert_object_is_avoided(rigid_body_box.geometry, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
 
     # Pusher should move away from object
     assert vars.p_BP_xs[2] <= -0.25
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, config.pusher_radius
+            traj, plan_config.slider_geometry, plan_config.pusher_radius
         )
 
 
@@ -364,24 +357,20 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
     ids=[1, 2, 3],
 )
 def test_avoid_object_t_pusher(
+    plan_config: PlanarPlanConfig,
     loc: PolytopeContactLocation,
     initial: PlanarPose,
     target: PlanarPose,
     cost: Literal["quadratic", "socp"],
 ) -> None:
-    NUM_KNOT_POINTS = 5
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=NUM_KNOT_POINTS,
-        time_non_collision=3,
-        pusher_radius=0.015,
-        avoid_object=True,
-        avoidance_cost=cost,
-    )
-    tee = TPusher2d()
+    plan_config.num_knot_points_non_collision = 5
+    plan_config.dynamics_config.pusher_radius = 0.015
+    plan_config.avoid_object = True
+    plan_config.avoidance_cost = cost
+    plan_config.time_non_collision = 3
+    plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
 
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, config, RigidBody("T", tee, mass=0.2)
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -403,9 +392,9 @@ def test_avoid_object_t_pusher(
         target,
     )
 
-    assert_object_is_avoided(tee, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
-            traj, mode.object.geometry, config.pusher_radius
+            traj, plan_config.slider_geometry, plan_config.pusher_radius
         )

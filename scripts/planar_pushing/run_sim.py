@@ -28,6 +28,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     else:
         raise NotImplementedError()
 
+    mpc_config = HybridMpcConfig(rate_Hz=50, horizon=20, step_size=0.05)
     config = PlanarPushingSimConfig(
         body=body,
         contact_model=ContactModel.kHydroelastic,
@@ -40,9 +41,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         delay_before_execution=2.0,
         use_diff_ik=True,
         closed_loop=True,
-        mpc_config=HybridMpcConfig(
-            rate_Hz=50, pusher_radius=traj.pusher_radius, horizon=20, step_size=0.05
-        ),
+        mpc_config=mpc_config,
     )
 
     sim = PlanarPushingSimulation(traj, slider, config)

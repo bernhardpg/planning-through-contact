@@ -13,7 +13,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -154,8 +157,6 @@ class AbstractContactMode(ABC):
     num_knot_points: int
     time_in_mode: float
     contact_location: PolytopeContactLocation
-    object: RigidBody
-    pusher_radius: float
     prog: MathematicalProgram
     config: PlanarPlanConfig
 
@@ -190,8 +191,7 @@ class AbstractContactMode(ABC):
     def create_from_plan_spec(
         cls,
         contact_location: PolytopeContactLocation,
-        cfg: PlanarPlanConfig,
-        object: RigidBody,
+        config: PlanarPlanConfig,
     ) -> "AbstractContactMode":
         pass
 

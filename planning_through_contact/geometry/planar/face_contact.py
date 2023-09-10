@@ -29,7 +29,10 @@ from planning_through_contact.geometry.planar.abstract_mode import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import forward_differences
 
@@ -246,7 +249,6 @@ class FaceContactMode(AbstractContactMode):
         cls,
         contact_location: PolytopeContactLocation,
         config: PlanarPlanConfig,
-        object: RigidBody,
     ) -> "FaceContactMode":
         prog = MathematicalProgram()
         name = str(contact_location)
@@ -255,21 +257,20 @@ class FaceContactMode(AbstractContactMode):
             config.num_knot_points_contact,
             config.time_in_contact,
             contact_location,
-            object,
-            config.pusher_radius,
             prog,
             config,
         )
 
     def __post_init__(self) -> None:
+        self.dynamics_config = self.config.dynamics_config
         self.relaxed_prog = None
         self.variables = FaceContactVariables.from_prog(
             self.prog,
-            self.object.geometry,
+            self.dynamics_config.slider.geometry,
             self.contact_location,
             self.num_knot_points,
             self.time_in_mode,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
         )
         self._define_constraints()
         self._define_costs()
@@ -277,7 +278,7 @@ class FaceContactMode(AbstractContactMode):
     def _define_constraints(self) -> None:
         # TODO: take this from drake simulation
         FRICTION_COEFF = 0.5
-        MAX_FORCE = FRICTION_COEFF * self.object.mass * 9.81
+        MAX_FORCE = FRICTION_COEFF * self.dynamics_config.slider.mass * 9.81
         TABLE_SIZE = 2.0
 
         for lam in self.variables.lams:
@@ -361,7 +362,13 @@ class FaceContactMode(AbstractContactMode):
 
             # quasi-static dynamics in W
             x_dot, dyn = self.quasi_static_dynamics_in_W(
-                v_WB, omega_WB, f_c_B, p_BP, R_WB, FRICTION_COEFF, self.object.mass
+                v_WB,
+                omega_WB,
+                f_c_B,
+                p_BP,
+                R_WB,
+                FRICTION_COEFF,
+                self.dynamics_config.slider.mass,
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
@@ -370,7 +377,13 @@ class FaceContactMode(AbstractContactMode):
             # quasi-static dynamics in B
             if self.config.use_redundant_dynamic_constraints:
                 x_dot, dyn = self.quasi_static_dynamics_in_B(
-                    v_WB, omega_WB, f_c_B, p_BP, R_WB, FRICTION_COEFF, self.object.mass
+                    v_WB,
+                    omega_WB,
+                    f_c_B,
+                    p_BP,
+                    R_WB,
+                    FRICTION_COEFF,
+                    self.dynamics_config.slider.mass,
                 )
                 quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
                 self.quasi_static_dynamics_constraints_in_B = []
@@ -486,7 +499,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             lams,
             normal_forces,
             friction_forces,
@@ -517,7 +530,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             lams,
             normal_forces,
             friction_forces,
@@ -536,14 +549,14 @@ class FaceContactMode(AbstractContactMode):
     ) -> ContinuityVariables:
         if first_or_last == "first":
             return ContinuityVariables(
-                self.variables.p_BPs[0],
+                self.variables.p_BPs[0],  # type: ignore
                 self.variables.p_WBs[0],
                 self.variables.cos_ths[0],
                 self.variables.sin_ths[0],
             )
         else:
             return ContinuityVariables(
-                self.variables.p_BPs[-1],
+                self.variables.p_BPs[-1],  # type: ignore
                 self.variables.p_WBs[-1],
                 self.variables.cos_ths[-1],
                 self.variables.sin_ths[-1],

@@ -49,7 +49,7 @@ class NonCollisionSubGraph:
     sets: List[opt.ConvexSet]
     non_collision_modes: List[NonCollisionMode]
     non_collision_vertices: List[GcsVertex]
-    body: RigidBody
+    slider: RigidBody
     config: PlanarPlanConfig
     source: Optional[VertexModePair] = None
     target: Optional[VertexModePair] = None
@@ -58,7 +58,6 @@ class NonCollisionSubGraph:
     def create_with_gcs(
         cls,
         gcs: opt.GraphOfConvexSets,
-        body: RigidBody,
         config: PlanarPlanConfig,
         subgraph_name: str,
     ) -> "NonCollisionSubGraph":
@@ -70,14 +69,14 @@ class NonCollisionSubGraph:
         Squared euclidean distance is added as the cost on the finger position
         in all of the non-collision modes.
         """
+        slider = config.dynamics_config.slider
 
         non_collision_modes = [
             NonCollisionMode.create_from_plan_spec(
                 PolytopeContactLocation(ContactLocation.FACE, idx),
                 config,
-                body,
             )
-            for idx in range(body.geometry.num_collision_free_regions)
+            for idx in range(slider.geometry.num_collision_free_regions)
         ]
 
         vertex_names = [f"{subgraph_name}_{mode.name}" for mode in non_collision_modes]
@@ -108,7 +107,7 @@ class NonCollisionSubGraph:
             sets,
             non_collision_modes,
             non_collision_vertices,
-            body,
+            slider,
             config,
         )
 
@@ -156,7 +155,7 @@ class NonCollisionSubGraph:
         initial_or_final: Literal["initial", "final"],
     ) -> None:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, pusher_pose, self.body, initial_or_final
+            self.config, slider_pose, pusher_pose, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
 

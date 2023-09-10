@@ -1,8 +1,15 @@
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
+
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+)
+from planning_through_contact.geometry.rigid_body import RigidBody
 
 
 @dataclass
@@ -52,12 +59,47 @@ class PlanarPushingWorkspace:
 
 
 @dataclass
+class SliderPusherSystemConfig:
+    slider: RigidBody = field(
+        default_factory=lambda: RigidBody(
+            name="box", geometry=Box2d(width=0.15, height=0.15), mass=0.1
+        )
+    )
+    pusher_radius: float = 0.015
+    friction_coeff_table_slider: float = 0.5
+    friction_coeff_slider_pusher: float = 0.5
+    grav_acc: float = 9.81
+
+    @cached_property
+    def f_max(self) -> float:
+        return self.friction_coeff_table_slider * self.grav_acc * self.slider.mass
+
+    @cached_property
+    def integration_constant(self) -> float:
+        geometry = self.slider.geometry
+        if isinstance(geometry, Box2d):
+            return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
+        else:
+            raise NotImplementedError(
+                f"Integration constant for {type(geometry)} is not implemented"
+            )
+
+    @cached_property
+    def tau_max(self) -> float:
+        return self.f_max * self.integration_constant
+
+    @cached_property
+    def ellipsoidal_limit_surface(self) -> npt.NDArray[np.float64]:
+        D = np.diag([1 / self.f_max**2, 1 / self.f_max**2, 1 / self.tau_max**2])
+        return D
+
+
+@dataclass
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2
     time_non_collision: float = 0.5
-    pusher_radius: float = 0.01
     avoid_object: bool = False
     allow_teleportation: bool = False
     avoidance_cost: Literal["linear", "quadratic", "socp"] = "quadratic"
@@ -71,3 +113,14 @@ class PlanarPlanConfig:
     workspace: PlanarPushingWorkspace = field(
         default_factory=lambda: PlanarPushingWorkspace()
     )
+    dynamics_config: SliderPusherSystemConfig = field(
+        default_factory=lambda: SliderPusherSystemConfig()
+    )
+
+    @property
+    def slider_geometry(self) -> CollisionGeometry:
+        return self.dynamics_config.slider.geometry
+
+    @property
+    def pusher_radius(self) -> float:
+        return self.dynamics_config.pusher_radius

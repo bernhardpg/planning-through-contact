@@ -10,6 +10,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 
 
 @TemplateSystem.define("SliderPusherSystem_")
@@ -34,15 +38,16 @@ def SliderPusherSystem_(T):
         def _construct(
             self,
             slider_geometry: CollisionGeometry,
-            pusher_radius: float,
             contact_location: PolytopeContactLocation,
+            config: SliderPusherSystemConfig,
             converter=None,
         ) -> None:
             super().__init__(converter)
 
             self.contact_location = contact_location
             self.slider_geometry = slider_geometry
-            self.pusher_radius = pusher_radius
+            self.config = config
+
             self.pv1, self.pv2 = slider_geometry.get_proximate_vertices_from_location(
                 contact_location
             )
@@ -61,26 +66,14 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            G = 9.81
-            FRICTION_COEFF = 0.4
-            # TODO(bernhardpg): Compute f_max and tau_max correctly
-            OBJECT_MASS = 0.1
-            f_max = FRICTION_COEFF * G * OBJECT_MASS
-            const = np.sqrt(0.075**2 + 0.075**2) * 0.6
-            tau_max = f_max * const
-            self.A = np.diag(
-                [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-            )  # Ellipsoidal Limit surface approximation
-
-            # self.A = np.diag([0.46, 0.46, 11.5])  # TODO: change
-            # self.A = np.diag([0.1, 0.1, 1.5])  # TODO: change
+            self.D = self.config.ellipsoidal_limit_surface
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
                 self,
                 other.slider_geometry,
-                other.pusher_radius,
                 other.contact_location,
+                other.config,
                 converter=converter,
             )
 
@@ -117,7 +110,7 @@ def SliderPusherSystem_(T):
             c_f: float,
         ) -> npt.NDArray[np.float64]:
             w = self._get_wrench(lam, c_n, c_f)
-            return self.A.dot(w)
+            return self.D.dot(w)
 
         def _get_R(self, theta: float) -> npt.NDArray[np.float64]:
             R = np.array(
