@@ -26,6 +26,8 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_ge
     SliderPusherGeometry,
 )
 
+DEBUG = True
+
 
 # TODO(bernhardpg): Use this everywhere
 def connect_planar_visualizer(
@@ -45,7 +47,6 @@ def connect_planar_visualizer(
 
 
 def test_visualize_2d() -> None:
-    DEBUG = False
     slider = TPusher2d()
 
     builder = DiagramBuilder()
@@ -54,6 +55,7 @@ def test_visualize_2d() -> None:
         "state", ConstantVectorSource(np.array([0, 0, 0, 0]))
     )
 
+    PUSHER_RADIUS = 0.015
     # Register geometry with SceneGraph
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher_geometry = GeneralSliderPusherGeometry.add_to_builder(
@@ -62,6 +64,7 @@ def test_visualize_2d() -> None:
         slider,
         slider.contact_locations[0],
         scene_graph,
+        PUSHER_RADIUS,
     )
 
     # Connect planar visualizer
@@ -76,7 +79,7 @@ def test_visualize_2d() -> None:
     context = diagram.CreateDefaultContext()
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    # simulator.set_target_realtime_rate(1.0)
+    simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:
@@ -84,7 +87,6 @@ def test_visualize_2d() -> None:
 
 
 def test_visualize_3d() -> None:
-    DEBUG = False
     slider = TPusher2d()
 
     builder = DiagramBuilder()
@@ -92,6 +94,8 @@ def test_visualize_3d() -> None:
     state = builder.AddNamedSystem(
         "state", ConstantVectorSource(np.array([0, 0, 0, 0]))
     )
+
+    PUSHER_RADIUS = 0.015
 
     # Register geometry with SceneGraph
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
@@ -101,6 +105,7 @@ def test_visualize_3d() -> None:
         slider,
         slider.contact_locations[0],
         scene_graph,
+        pusher_radius=PUSHER_RADIUS,
     )
 
     # Connect planar visualizer
@@ -117,7 +122,7 @@ def test_visualize_3d() -> None:
     context = diagram.CreateDefaultContext()
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    # simulator.set_target_realtime_rate(1.0)
+    simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:
