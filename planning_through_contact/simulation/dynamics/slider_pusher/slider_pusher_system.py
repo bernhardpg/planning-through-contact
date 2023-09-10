@@ -84,14 +84,14 @@ def SliderPusherSystem_(T):
                 converter=converter,
             )
 
-        def _get_p_B_c(self, lam: float) -> npt.NDArray[np.float64]:
-            return self.slider_geometry.get_p_B_c_from_lam(
+        def _get_p_BP(self, lam: float) -> npt.NDArray[np.float64]:
+            return self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
-            p_B_c = self._get_p_B_c(lam).flatten()
-            J_c = np.array([[1.0, 0.0, -p_B_c[1]], [0.0, 1.0, p_B_c[0]]])  # type: ignore
+            p_BP = self._get_p_BP(lam).flatten()
+            J_c = np.array([[1.0, 0.0, -p_BP[1]], [0.0, 1.0, p_BP[0]]])  # type: ignore
             return J_c
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
@@ -128,9 +128,9 @@ def SliderPusherSystem_(T):
             R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
             p_W_c = pusher_pose.pos()
             p_WB = slider_pose.pos()
-            p_B_c = R_WB.T.dot(p_W_c - p_WB)
-            lam = self.slider_geometry.get_lam_from_p_B_c(
-                p_B_c, self.contact_location, radius=self.pusher_radius
+            p_BP = R_WB.T.dot(p_W_c - p_WB)
+            lam = self.slider_geometry.get_lam_from_p_BP(
+                p_BP, self.contact_location, radius=self.pusher_radius
             )
 
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
@@ -144,11 +144,11 @@ def SliderPusherSystem_(T):
             R_WB = two_d_rotation_matrix_from_angle(theta)
             slider_planar_pose = PlanarPose(x, y, theta)
             p_WB = slider_planar_pose.pos()
-            p_B_c = self.slider_geometry.get_p_B_c_from_lam(
+            p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
 
-            p_W_c = p_WB + R_WB.dot(p_B_c)
+            p_W_c = p_WB + R_WB.dot(p_BP)
             return PlanarPose(p_W_c[0, 0], p_W_c[1, 0], theta=0)
 
         def get_control_from_contact_force(

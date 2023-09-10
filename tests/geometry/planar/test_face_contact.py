@@ -64,8 +64,8 @@ def test_face_contact_variables(
     for f in face_contact_vars.f_c_Bs:
         assert f.shape == (2, 1)
 
-    assert len(face_contact_vars.p_c_Bs) == num_knot_points
-    for p_c in face_contact_vars.p_c_Bs:
+    assert len(face_contact_vars.p_BPs) == num_knot_points
+    for p_c in face_contact_vars.p_BPs:
         assert p_c.shape == (2, 1)
 
     assert len(face_contact_vars.v_WBs) == num_knot_points - 1
@@ -80,16 +80,16 @@ def test_face_contact_variables(
     for s in face_contact_vars.cos_th_dots:
         assert isinstance(s, Expression)
 
-    assert len(face_contact_vars.v_c_Bs) == num_knot_points - 1
-    for v in face_contact_vars.v_c_Bs:
+    assert len(face_contact_vars.v_BPs) == num_knot_points - 1
+    for v in face_contact_vars.v_BPs:
         assert v.shape == (2, 1)
 
     assert len(face_contact_vars.omega_WBs) == num_knot_points - 1
     for o in face_contact_vars.omega_WBs:
         assert isinstance(o, Expression)
 
-    assert len(face_contact_vars.p_c_Ws) == num_knot_points
-    for p in face_contact_vars.p_c_Ws:
+    assert len(face_contact_vars.p_WPs) == num_knot_points
+    for p in face_contact_vars.p_WPs:
         assert p.shape == (2, 1)
 
     assert len(face_contact_vars.f_c_Ws) == num_knot_points
@@ -175,13 +175,13 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     k = 0
 
     f_c_B = face_contact_vars.f_c_Bs[k]
-    p_c_B = face_contact_vars.p_c_Bs[k]
+    p_BP = face_contact_vars.p_BPs[k]
     R_WB = face_contact_vars.R_WBs[k]
     v_WB = face_contact_vars.v_WBs[k]
     omega_WB = face_contact_vars.omega_WBs[k]
 
     _, dyn = FaceContactMode.quasi_static_dynamics_in_W(
-        v_WB, omega_WB, f_c_B, p_c_B, R_WB, friction_coeff, mass
+        v_WB, omega_WB, f_c_B, p_BP, R_WB, friction_coeff, mass
     )
 
     check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))

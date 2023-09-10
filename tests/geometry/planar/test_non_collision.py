@@ -54,8 +54,8 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
     assert isinstance(non_collision_vars.cos_th, sym.Variable) or isinstance(
         non_collision_vars.p_WB_y, float
     )
-    assert non_collision_vars.p_BF_xs.shape == (num_knot_points,)
-    assert non_collision_vars.p_BF_ys.shape == (num_knot_points,)
+    assert non_collision_vars.p_BP_xs.shape == (num_knot_points,)
+    assert non_collision_vars.p_BP_ys.shape == (num_knot_points,)
 
     assert len(non_collision_vars.R_WBs) == num_knot_points
     for R in non_collision_vars.R_WBs:
@@ -65,8 +65,8 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
     for p in non_collision_vars.p_WBs:
         assert p.shape == (2, 1)
 
-    assert len(non_collision_vars.p_BFs) == num_knot_points
-    for p_BF in non_collision_vars.p_BFs:
+    assert len(non_collision_vars.p_BPs) == num_knot_points
+    for p_BF in non_collision_vars.p_BPs:
         assert p_BF.shape == (2, 1)
 
     assert len(non_collision_vars.v_WBs) == num_knot_points - 1
@@ -77,8 +77,8 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
     for o in non_collision_vars.omega_WBs:
         assert isinstance(o, float)
 
-    assert len(non_collision_vars.p_c_Ws) == num_knot_points
-    for p in non_collision_vars.p_c_Ws:
+    assert len(non_collision_vars.p_WPs) == num_knot_points
+    for p in non_collision_vars.p_WPs:
         assert p.shape == (2, 1)
         assert isinstance(p[0, 0], sym.Expression)
 
@@ -119,7 +119,7 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     assert len(mode.prog.quadratic_costs()) == 1
 
     lin_vel_vars = sym.Variables(mode.prog.quadratic_costs()[0].variables())
-    target_lin_vel_vars = sym.Variables(np.concatenate(mode.variables.p_BFs))
+    target_lin_vel_vars = sym.Variables(np.concatenate(mode.variables.p_BPs))
     assert lin_vel_vars.EqualTo(target_lin_vel_vars)
 
 
@@ -235,7 +235,7 @@ def test_multiple_knot_points(rigid_body_box: RigidBody) -> None:
             finger_initial_pose.pos(), finger_final_pose.pos(), num=NUM_KNOT_POINTS
         )
     ]  # t.shape = (2,)
-    for p, t in zip(traj.p_c_B.T, target_pos):  # p.shape = (2,)
+    for p, t in zip(traj.p_BP.T, target_pos):  # p.shape = (2,)
         assert np.allclose(p, t)
 
     if DEBUG:
@@ -282,10 +282,10 @@ def test_avoid_object_quadratic(rigid_body_box: RigidBody) -> None:
         finger_final_pose,
     )
 
-    assert_object_is_avoided(rigid_body_box.geometry, traj.p_c_B)
+    assert_object_is_avoided(rigid_body_box.geometry, traj.p_BP)
 
     # Pusher should move away from object
-    assert vars.p_BF_xs[2] <= -0.27
+    assert vars.p_BP_xs[2] <= -0.27
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
@@ -328,10 +328,10 @@ def test_avoid_object_socp(rigid_body_box: RigidBody) -> None:
         finger_final_pose,
     )
 
-    assert_object_is_avoided(rigid_body_box.geometry, traj.p_c_B)
+    assert_object_is_avoided(rigid_body_box.geometry, traj.p_BP)
 
     # Pusher should move away from object
-    assert vars.p_BF_xs[2] <= -0.25
+    assert vars.p_BP_xs[2] <= -0.25
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
@@ -403,7 +403,7 @@ def test_avoid_object_t_pusher(
         target,
     )
 
-    assert_object_is_avoided(tee, traj.p_c_B)
+    assert_object_is_avoided(tee, traj.p_BP)
 
     if DEBUG:
         visualize_planar_pushing_trajectory(

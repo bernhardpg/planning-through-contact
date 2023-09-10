@@ -259,7 +259,7 @@ def test_planner_with_teleportation(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_W) <= 1.0)
+    assert np.all(np.abs(traj.p_WP) <= 1.0)
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
@@ -439,7 +439,7 @@ def test_make_plan(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_W) <= 1.5)
+    assert np.all(np.abs(traj.p_WP) <= 1.5)
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))

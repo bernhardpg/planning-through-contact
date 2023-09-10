@@ -187,14 +187,14 @@ class FaceContactVariables(AbstractModeVariables):
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
-    def _get_p_B_c(self, lam: float, pusher_radius: float):
+    def _get_p_BP(self, lam: float, pusher_radius: float):
         point_on_surface = lam * self.pv1 + (1 - lam) * self.pv2
         radius_displacement = -self.normal_vec * pusher_radius
         return point_on_surface + radius_displacement
 
     @property
-    def p_c_Bs(self):
-        return [self._get_p_B_c(lam, self.pusher_radius) for lam in self.lams]
+    def p_BPs(self):
+        return [self._get_p_BP(lam, self.pusher_radius) for lam in self.lams]
 
     @property
     def v_WBs(self):
@@ -209,9 +209,9 @@ class FaceContactVariables(AbstractModeVariables):
         return forward_differences(self.sin_ths, self.dt)
 
     @property
-    def v_c_Bs(self):
+    def v_BPs(self):
         return forward_differences(
-            self.p_c_Bs, self.dt
+            self.p_BPs, self.dt
         )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
 
     @property
@@ -225,10 +225,10 @@ class FaceContactVariables(AbstractModeVariables):
         return oms
 
     @property
-    def p_c_Ws(self):
+    def p_WPs(self):
         return [
-            p_WB + R_WB.dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_c_Bs)
+            p_WB + R_WB.dot(p_BP)
+            for p_WB, R_WB, p_BP in zip(self.p_WBs, self.R_WBs, self.p_BPs)
         ]
 
     @property
@@ -352,16 +352,16 @@ class FaceContactMode(AbstractContactMode):
             # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
             if use_midpoint:
                 f_c_B = self._get_midpoint(self.variables.f_c_Bs, k)
-                p_c_B = self._get_midpoint(self.variables.p_c_Bs, k)
+                p_BP = self._get_midpoint(self.variables.p_BPs, k)
                 R_WB = self._get_midpoint(self.variables.R_WBs, k)
             else:
                 f_c_B = self.variables.f_c_Bs[k]
-                p_c_B = self.variables.p_c_Bs[k]
+                p_BP = self.variables.p_BPs[k]
                 R_WB = self.variables.R_WBs[k]
 
             # quasi-static dynamics in W
             x_dot, dyn = self.quasi_static_dynamics_in_W(
-                v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
+                v_WB, omega_WB, f_c_B, p_BP, R_WB, FRICTION_COEFF, self.object.mass
             )
             quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
             for row in quasi_static_dynamic_constraint:
@@ -370,7 +370,7 @@ class FaceContactMode(AbstractContactMode):
             # quasi-static dynamics in B
             if self.config.use_redundant_dynamic_constraints:
                 x_dot, dyn = self.quasi_static_dynamics_in_B(
-                    v_WB, omega_WB, f_c_B, p_c_B, R_WB, FRICTION_COEFF, self.object.mass
+                    v_WB, omega_WB, f_c_B, p_BP, R_WB, FRICTION_COEFF, self.object.mass
                 )
                 quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
                 self.quasi_static_dynamics_constraints_in_B = []
@@ -379,7 +379,7 @@ class FaceContactMode(AbstractContactMode):
                     self.quasi_static_dynamics_constraints_in_B.append(c)
 
         # Ensure sticking on the contact point
-        for v_c_B in self.variables.v_c_Bs:
+        for v_c_B in self.variables.v_BPs:
             # NOTE: This is not constraining the real velocity, but it does ensure sticking
             self.prog.AddLinearConstraint(eq(v_c_B, 0))
 
@@ -536,14 +536,14 @@ class FaceContactMode(AbstractContactMode):
     ) -> ContinuityVariables:
         if first_or_last == "first":
             return ContinuityVariables(
-                self.variables.p_c_Bs[0],
+                self.variables.p_BPs[0],
                 self.variables.p_WBs[0],
                 self.variables.cos_ths[0],
                 self.variables.sin_ths[0],
             )
         else:
             return ContinuityVariables(
-                self.variables.p_c_Bs[-1],
+                self.variables.p_BPs[-1],
                 self.variables.p_WBs[-1],
                 self.variables.cos_ths[-1],
                 self.variables.sin_ths[-1],
@@ -580,7 +580,7 @@ class FaceContactMode(AbstractContactMode):
         v_WB,
         omega_WB,
         f_c_B,
-        p_c_B,
+        p_BP,
         R_WB,
         FRICTION_COEFF,
         OBJECT_MASS,
@@ -603,7 +603,7 @@ class FaceContactMode(AbstractContactMode):
         R[0:2, 0:2] = R_WB
 
         # Contact torques
-        tau_c_B = cross_2d(p_c_B, f_c_B)
+        tau_c_B = cross_2d(p_BP, f_c_B)
 
         x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
@@ -619,7 +619,7 @@ class FaceContactMode(AbstractContactMode):
         v_WB,
         omega_WB,
         f_c_B,
-        p_c_B,
+        p_BP,
         R_WB,
         FRICTION_COEFF,
         OBJECT_MASS,
@@ -642,7 +642,7 @@ class FaceContactMode(AbstractContactMode):
         R[0:2, 0:2] = R_WB
 
         # Contact torques
-        tau_c_B = cross_2d(p_c_B, f_c_B)
+        tau_c_B = cross_2d(p_BP, f_c_B)
 
         x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
         wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))

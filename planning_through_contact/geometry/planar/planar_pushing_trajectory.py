@@ -204,7 +204,7 @@ class PlanarPushingTrajSegment:
     ) -> "PlanarPushingTrajSegment":
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
-        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_c_Ws), start_time, end_time)  # type: ignore
+        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore

@@ -43,10 +43,10 @@ def visualize_planar_pushing_trajectory(
         TARGET_COLOR,
     )
 
-    contact_point_viz = VisualizationPoint2d(traj.p_c_W.T, FINGER_COLOR)
+    contact_point_viz = VisualizationPoint2d(traj.p_WP.T, FINGER_COLOR)
     contact_point_viz.change_radius(pusher_radius)
 
-    contact_force_viz = VisualizationForce2d(traj.p_c_W.T, CONTACT_COLOR, traj.f_c_W.T)
+    contact_force_viz = VisualizationForce2d(traj.p_WP.T, CONTACT_COLOR, traj.f_c_W.T)
     contact_forces_viz = [contact_force_viz]
 
     if visualize_object_vel:

@@ -30,13 +30,13 @@ class OldPlanarPushingTrajectory:
     dt: float
     R_WB: List[npt.NDArray[np.float64]]  # [(2,2) x traj_length]
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
-    p_c_W: npt.NDArray[np.float64]  # (2, traj_length)
+    p_WP: npt.NDArray[np.float64]  # (2, traj_length)
     f_c_W: npt.NDArray[np.float64]  # (2, traj_length)
-    p_c_B: npt.NDArray[np.float64]  # (2, traj_length)
+    p_BP: npt.NDArray[np.float64]  # (2, traj_length)
 
     def __post_init__(self) -> None:
         all_traj_lenths = np.array(
-            [traj.shape[1] for traj in (self.p_WB, self.p_c_W, self.f_c_W)]
+            [traj.shape[1] for traj in (self.p_WB, self.p_WP, self.f_c_W)]
             + [len(self.R_WB)]
         )
         traj_lengths_equal = np.all(all_traj_lenths == all_traj_lenths[0])
@@ -105,7 +105,7 @@ class PlanarTrajectoryBuilder:
             ).T
             p_c_W = np.vstack(
                 [
-                    self._get_traj_by_interpolation(p.p_c_Ws, dt, p.time_in_mode)
+                    self._get_traj_by_interpolation(p.p_WPs, dt, p.time_in_mode)
                     for p in self.path
                 ]
             ).T
@@ -115,9 +115,9 @@ class PlanarTrajectoryBuilder:
                     for p in self.path
                 ]
             ).T
-            p_c_B = np.vstack(
+            p_BP = np.vstack(
                 [
-                    self._get_traj_by_interpolation(p.p_c_Bs, dt, p.time_in_mode)
+                    self._get_traj_by_interpolation(p.p_BPs, dt, p.time_in_mode)
                     for p in self.path
                 ]
             ).T
@@ -127,14 +127,14 @@ class PlanarTrajectoryBuilder:
                 [],  # merge all of the lists to one
             )
             p_WB = np.hstack(sum([p.p_WBs for p in self.path], []))
-            p_c_W = np.hstack(sum([p.p_c_Ws for p in self.path], []))
+            p_c_W = np.hstack(sum([p.p_WPs for p in self.path], []))
             f_c_W = np.hstack(sum([p.f_c_Ws for p in self.path], []))
-            p_c_B = np.hstack(sum([p.p_c_Bs for p in self.path], []))
+            p_BP = np.hstack(sum([p.p_BPs for p in self.path], []))
 
             # Fixed dt when replaying knot points
             dt = 0.8
 
-        return OldPlanarPushingTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_c_B)
+        return OldPlanarPushingTrajectory(dt, R_WB, p_WB, p_c_W, f_c_W, p_BP)
 
     def _get_traj_by_interpolation(
         self,

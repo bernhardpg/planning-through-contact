@@ -77,8 +77,8 @@ def find_first_matching_location(
 
 @dataclass
 class NonCollisionVariables(AbstractModeVariables):
-    p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
-    p_BF_ys: NpVariableArray | npt.NDArray[np.float64]
+    p_BP_xs: NpVariableArray | npt.NDArray[np.float64]
+    p_BP_ys: NpVariableArray | npt.NDArray[np.float64]
     p_WB_x: sym.Variable | float
     p_WB_y: sym.Variable | float
     cos_th: sym.Variable | float
@@ -126,8 +126,8 @@ class NonCollisionVariables(AbstractModeVariables):
             self.time_in_mode,
             self.dt,
             self.pusher_radius,
-            result.GetSolution(self.p_BF_xs),
-            result.GetSolution(self.p_BF_ys),
+            result.GetSolution(self.p_BP_xs),
+            result.GetSolution(self.p_BP_ys),
             result.GetSolution(self.p_WB_x),  # type: ignore
             result.GetSolution(self.p_WB_y),  # type: ignore
             result.GetSolution(self.cos_th),  # type: ignore
@@ -135,10 +135,10 @@ class NonCollisionVariables(AbstractModeVariables):
         )
 
     @property
-    def p_BFs(self):
+    def p_BPs(self):
         return [
             np.expand_dims(np.array([x, y]), 1)
-            for x, y in zip(self.p_BF_xs, self.p_BF_ys)
+            for x, y in zip(self.p_BP_xs, self.p_BP_ys)
         ]  # (2, 1)
 
     @property
@@ -166,20 +166,16 @@ class NonCollisionVariables(AbstractModeVariables):
         return [0.0] * (self.num_knot_points - 1)
 
     @property
-    def p_c_Ws(self):
+    def p_WPs(self):
         return [
-            p_WB + R_WB.dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_BFs)
+            p_WB + R_WB.dot(p_BP)
+            for p_WB, R_WB, p_BP in zip(self.p_WBs, self.R_WBs, self.p_BPs)
         ]
 
     @property
     def f_c_Ws(self):
         NUM_DIMS = 2
         return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
-
-    @property
-    def p_c_Bs(self):
-        return self.p_BFs
 
 
 @dataclass
@@ -267,7 +263,7 @@ class NonCollisionMode(AbstractContactMode):
 
     def _define_constraints(self) -> None:
         for k in range(self.num_knot_points):
-            p_BF = self.variables.p_BFs[k]
+            p_BF = self.variables.p_BPs[k]
 
             exprs = self._create_collision_free_space_constraints(p_BF)
             for expr in exprs:
@@ -277,7 +273,7 @@ class NonCollisionMode(AbstractContactMode):
 
     def _add_workspace_constraints(self) -> None:
         for k in range(self.num_knot_points):
-            p_BF = self.variables.p_BFs[k]
+            p_BF = self.variables.p_BPs[k]
 
             lb, ub = self.config.workspace.pusher.bounds
             self.prog.AddBoundingBoxConstraint(lb, ub, p_BF)
@@ -306,7 +302,7 @@ class NonCollisionMode(AbstractContactMode):
             position_diffs = [
                 p_next - p_curr
                 for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
                 )
             ]
             if self.num_knot_points == 1:
@@ -324,7 +320,7 @@ class NonCollisionMode(AbstractContactMode):
             position_diffs = [
                 p_next - p_curr
                 for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
                 )
             ]
             slacks = self.prog.NewContinuousVariables(len(position_diffs), "t")
@@ -343,7 +339,7 @@ class NonCollisionMode(AbstractContactMode):
         if self.config.avoid_object:
             planes = self.object.geometry.get_contact_planes(self.contact_location.idx)
             dists_for_each_plane = [
-                [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
+                [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
                 for plane in planes
             ]
             if self.config.avoidance_cost == "linear":
@@ -394,14 +390,14 @@ class NonCollisionMode(AbstractContactMode):
         NOTE: Only sets the position of the finger (a point finger has no rotation).
         """
         self.finger_initial_pose = pose
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pose.pos()))
+        self.prog.AddLinearConstraint(eq(self.variables.p_BPs[0], pose.pos()))
 
     def set_finger_final_pose(self, pose: PlanarPose) -> None:
         """
         NOTE: Only sets the position of the finger (a point finger has no rotation).
         """
         self.finger_final_pose = pose
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pose.pos()))
+        self.prog.AddLinearConstraint(eq(self.variables.p_BPs[-1], pose.pos()))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         return self.prog.FindDecisionVariableIndices(vars)
@@ -410,8 +406,8 @@ class NonCollisionMode(AbstractContactMode):
         self, vertex: GcsVertex, result: MathematicalProgramResult
     ) -> NonCollisionVariables:
         # TODO: This can probably be cleaned up somehow
-        p_BF_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BF_xs, result)  # type: ignore
-        p_BF_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BF_ys, result)  # type: ignore
+        p_BF_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BP_xs, result)  # type: ignore
+        p_BF_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BP_ys, result)  # type: ignore
         p_WB_x = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_x, result)  # type: ignore
         p_WB_y = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
         cos_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.cos_th, result)  # type: ignore
@@ -434,8 +430,8 @@ class NonCollisionMode(AbstractContactMode):
         self, result: MathematicalProgramResult
     ) -> NonCollisionVariables:
         # TODO: This can probably be cleaned up somehow
-        p_BF_xs = result.GetSolution(self.variables.p_BF_xs)
-        p_BF_ys = result.GetSolution(self.variables.p_BF_ys)
+        p_BF_xs = result.GetSolution(self.variables.p_BP_xs)
+        p_BF_ys = result.GetSolution(self.variables.p_BP_ys)
         p_WB_x = result.GetSolution(self.variables.p_WB_x)  # type: ignore
         p_WB_y = result.GetSolution(self.variables.p_WB_y)  # type: ignore
         cos_th = result.GetSolution(self.variables.cos_th)  # type: ignore
@@ -508,14 +504,14 @@ class NonCollisionMode(AbstractContactMode):
     ) -> ContinuityVariables:
         if first_or_last == "first":
             return ContinuityVariables(
-                self.variables.p_BFs[0],
+                self.variables.p_BPs[0],
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
             )
         else:
             return ContinuityVariables(
-                self.variables.p_BFs[-1],
+                self.variables.p_BPs[-1],
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore

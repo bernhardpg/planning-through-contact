@@ -40,14 +40,14 @@ class ContinuityVariables:
     A collection of the variables that continuity is enforced over
     """
 
-    p_BF: NpVariableArray | NpExpressionArray
+    p_BP: NpVariableArray | NpExpressionArray
     p_WB: NpVariableArray
     cos_th: sym.Variable
     sin_th: sym.Variable
 
     def vector(self) -> NpVariableArray | NpExpressionArray:
         return np.concatenate(
-            (self.p_BF.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
+            (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
         )
 
     def get_pure_variables(self) -> NpVariableArray:
@@ -55,7 +55,7 @@ class ContinuityVariables:
         Function that returns a vector with only the symbolic variables (as opposed to having some be symbolic Expressions)
         """
         # some variables can be sym.Expression
-        if isinstance(self.p_BF[0, 0], sym.Expression):
+        if isinstance(self.p_BP[0, 0], sym.Expression):
             vars = sym.Variables()
             for expr_or_var in self.vector():
                 if isinstance(expr_or_var, sym.Expression):
@@ -128,7 +128,7 @@ class AbstractModeVariables(ABC):
 
     @property
     @abstractmethod
-    def p_c_Ws(self):
+    def p_WPs(self):
         pass
 
     @property
@@ -138,7 +138,7 @@ class AbstractModeVariables(ABC):
 
     @property
     @abstractmethod
-    def p_c_Bs(self):
+    def p_BPs(self):
         pass
 
 

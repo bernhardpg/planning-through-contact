@@ -201,7 +201,7 @@ def test_subgraph_planning(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_B) <= 1.0)
+    assert np.all(np.abs(traj.p_BP) <= 1.0)
 
     # Make sure we always take the shortest path
     vertex_names = [
@@ -233,7 +233,7 @@ def test_subgraph_planning(
         # check that all trajectory points (after source and target modes) don't collide
         assert_object_is_avoided(
             subgraph.body.geometry,
-            traj.p_c_B,
+            traj.p_BP,
             min_distance=0.001,
             start_idx=2,
             end_idx=-2,
@@ -331,7 +331,7 @@ def test_subgraph_with_contact_modes(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_B) <= 1.0)
+    assert np.all(np.abs(traj.p_BP) <= 1.0)
 
     if subgraph.config.avoid_object:
         first_segment_start_idx = subgraph.config.num_knot_points_contact
@@ -340,7 +340,7 @@ def test_subgraph_with_contact_modes(
             + subgraph.config.num_knot_points_non_collision
             + 1
         )
-        first_segment = traj.p_c_B[:, first_segment_start_idx:first_segment_end_idx]
+        first_segment = traj.p_BP[:, first_segment_start_idx:first_segment_end_idx]
         assert_object_is_avoided(
             subgraph.body.geometry,
             first_segment,
@@ -352,7 +352,7 @@ def test_subgraph_with_contact_modes(
         second_segment_end_idx = (
             first_segment_end_idx + subgraph.config.num_knot_points_non_collision
         )
-        second_segment = traj.p_c_B[:, first_segment_end_idx:second_segment_end_idx]
+        second_segment = traj.p_BP[:, first_segment_end_idx:second_segment_end_idx]
         assert_object_is_avoided(
             subgraph.body.geometry,
             second_segment,
@@ -419,13 +419,13 @@ def test_subgraph_planning_t_pusher(avoid_object: bool):
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_c_B) <= 1.0)
+    assert np.all(np.abs(traj.p_BP) <= 1.0)
 
     if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         assert_object_is_avoided(
             subgraph.body.geometry,
-            traj.p_c_B,
+            traj.p_BP,
             min_distance=0.001,
             start_idx=2,
             end_idx=-2,
