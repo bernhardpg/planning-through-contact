@@ -23,6 +23,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
     HybridMpc,
     HybridMpcConfig,
@@ -35,24 +38,26 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 class PusherPoseController(LeafSystem):
     def __init__(
         self,
-        object_geometry: CollisionGeometry,
-        mpc_config: HybridMpcConfig = HybridMpcConfig(),
+        dynamics_config: SliderPusherSystemConfig,
+        mpc_config: HybridMpcConfig,
         z_dist_to_table: float = 0.5,
         closed_loop: bool = True,
     ):
         super().__init__()
         self.z_dist = z_dist_to_table
-        self.object_geometry = object_geometry
+        self.object_geometry = dynamics_config.slider.geometry
+        self.dynamics_config = dynamics_config
+        self.mpc_config = mpc_config
 
         self.systems = {
-            loc: SliderPusherSystem(object_geometry, mpc_config.pusher_radius, loc)
-            for loc in object_geometry.contact_locations
+            loc: SliderPusherSystem(loc, dynamics_config)
+            for loc in self.object_geometry.contact_locations
         }
         # one controller per face
         self.mpc_controllers = {
-            loc: HybridMpc(system, mpc_config) for loc, system in self.systems.items()
+            loc: HybridMpc(system, mpc_config, dynamics_config)
+            for loc, system in self.systems.items()
         }
-        self.mpc_config = mpc_config
 
         self.pusher_planar_pose_traj = self.DeclareAbstractInputPort(
             "pusher_planar_pose_traj",
@@ -66,9 +71,9 @@ class PusherPoseController(LeafSystem):
             "contact_force_traj",
             AbstractValue.Make([np.array([])]),
         )
-        self.contact_mode_desired = self.DeclareAbstractInputPort(
-            "contact_mode_desired",
-            AbstractValue.Make(PlanarPushingContactMode(0)),
+        self.contact_mode_traj = self.DeclareAbstractInputPort(
+            "contact_mode_traj",
+            AbstractValue.Make([PlanarPushingContactMode(0)]),
         )
         self.output = self.DeclareAbstractOutputPort(
             "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
@@ -89,9 +94,9 @@ class PusherPoseController(LeafSystem):
     def AddToBuilder(
         cls,
         builder: DiagramBuilder,
-        slider: RigidBody,
+        dynamics_config: SliderPusherSystemConfig,
         mpc_config: HybridMpcConfig,
-        contact_mode_desired: OutputPort,
+        contact_mode_traj: OutputPort,
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
         contact_force_traj: OutputPort,
@@ -103,7 +108,7 @@ class PusherPoseController(LeafSystem):
         pusher_pose_controller = builder.AddNamedSystem(
             "PusherPoseController",
             cls(
-                slider.geometry,
+                dynamics_config,
                 mpc_config,
                 z_dist_to_table=0.02,
                 closed_loop=closed_loop,
@@ -111,8 +116,8 @@ class PusherPoseController(LeafSystem):
         )
 
         builder.Connect(
-            contact_mode_desired,
-            pusher_pose_controller.GetInputPort("contact_mode_desired"),
+            contact_mode_traj,
+            pusher_pose_controller.GetInputPort("contact_mode_traj"),
         )
         builder.Connect(
             pusher_planar_pose_traj,
@@ -167,8 +172,9 @@ class PusherPoseController(LeafSystem):
         slider_pose_traj: List[PlanarPose],
         pusher_pose_traj: List[PlanarPose],
         contact_force_traj: List[npt.NDArray[np.float64]],
-        mode: PlanarPushingContactMode,
+        mode_traj: List[PlanarPushingContactMode],
     ) -> PlanarPose:
+        mode = mode_traj[0]
         controller = self._get_mpc_for_mode(mode)
         system = self._get_system_for_mode(mode)
 
@@ -179,10 +185,25 @@ class PusherPoseController(LeafSystem):
         u_traj = [
             system.get_control_from_contact_force(force, slider_pose)
             for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
-        ]
+        ][:-1]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        x_dot_curr, u_input = controller.compute_control(x_curr, x_traj, u_traj)
+        modes_eq_to_curr = [m == mode for m in mode_traj]
+        if not all(modes_eq_to_curr):
+            N = modes_eq_to_curr.index(False)
+
+            # repeat last element of the trajectory that is still in contact
+            for idx in range(N, len(x_traj)):
+                x_traj[idx] = x_traj[N - 1]
+
+            for idx in range(N, len(u_traj)):
+                u_traj[idx] = u_traj[N - 1]
+        else:
+            N = len(x_traj)
+
+        x_dot_curr, u_input = controller.compute_control(
+            x_curr, x_traj[: N + 1], u_traj[:N]
+        )
 
         h = 1 / self.mpc_config.rate_Hz
         x_at_next_mpc_step = x_curr + h * x_dot_curr
@@ -190,10 +211,14 @@ class PusherPoseController(LeafSystem):
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
-        mode_desired: PlanarPushingContactMode = self.contact_mode_desired.Eval(context)  # type: ignore
+        mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
+        curr_mode_desired = mode_traj[0]
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
 
-        if not self.closed_loop or mode_desired == PlanarPushingContactMode.NO_CONTACT:
+        if (
+            not self.closed_loop
+            or curr_mode_desired == PlanarPushingContactMode.NO_CONTACT
+        ):
             curr_planar_pose = pusher_planar_pose_traj[0]
             pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_desired)
@@ -213,7 +238,7 @@ class PusherPoseController(LeafSystem):
                 slider_planar_pose_traj,
                 pusher_planar_pose_traj,
                 contact_force_traj,
-                mode_desired,
+                mode_traj,
             )
 
             pusher_pose_command = pusher_planar_pose_cmd.to_pose(z_value=self.z_dist)

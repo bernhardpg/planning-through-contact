@@ -43,9 +43,9 @@ def _assert_traj_finger_pos(
         target_pose_finger.pos()
     )
     if start_or_end == "start":
-        assert np.allclose(traj.p_c_W[:, 0:1], p_c_W_target, atol=atol)
+        assert np.allclose(traj.p_WP[:, 0:1], p_c_W_target, atol=atol)
     else:  # end
-        assert np.allclose(traj.p_c_W[:, -1:], p_c_W_target, atol=atol)
+        assert np.allclose(traj.p_WP[:, -1:], p_c_W_target, atol=atol)
 
 
 def assert_initial_and_final_poses(

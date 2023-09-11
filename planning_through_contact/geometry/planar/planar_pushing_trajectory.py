@@ -36,6 +36,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.utilities import from_so2_to_so3
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -149,6 +150,10 @@ class PlanarPushingContactMode(Enum):
     FACE_1 = 2
     FACE_2 = 3
     FACE_3 = 4
+    FACE_4 = 5
+    FACE_5 = 6
+    FACE_6 = 7
+    FACE_7 = 8
 
     @classmethod
     def from_contact_location(
@@ -166,6 +171,14 @@ class PlanarPushingContactMode(Enum):
             idx = 2
         elif self == PlanarPushingContactMode.FACE_3:
             idx = 3
+        elif self == PlanarPushingContactMode.FACE_4:
+            idx = 4
+        elif self == PlanarPushingContactMode.FACE_5:
+            idx = 5
+        elif self == PlanarPushingContactMode.FACE_6:
+            idx = 6
+        elif self == PlanarPushingContactMode.FACE_7:
+            idx = 7
         else:
             raise NotImplementedError()
         return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
@@ -192,7 +205,7 @@ class PlanarPushingTrajSegment:
     ) -> "PlanarPushingTrajSegment":
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
-        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_c_Ws), start_time, end_time)  # type: ignore
+        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
@@ -210,9 +223,11 @@ class PlanarPushingTrajSegment:
 class PlanarPushingTrajectory:
     def __init__(
         self,
+        config: PlanarPlanConfig,
         path_knot_points: List[AbstractModeVariables],
     ) -> None:
-        self.pusher_radius = path_knot_points[0].pusher_radius
+        self.config = config
+        self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
 
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
@@ -289,32 +304,37 @@ class PlanarPushingTrajectory:
     @classmethod
     def from_result(
         cls,
+        config: PlanarPlanConfig,
         result: MathematicalProgramResult,
         gcs: opt.GraphOfConvexSets,
         source_vertex: GcsVertex,
         target_vertex: GcsVertex,
         pairs: Dict[str, VertexModePair],
         round_solution: bool = False,
+        print_path: bool = False,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
         )
+        if print_path:
+            print(f"path: {path.get_path_names()}")
+
         if round_solution:
-            return cls(path.get_rounded_vars())
+            return cls(config, path.get_rounded_vars())
         else:
-            return cls(path.get_vars())
+            return cls(config, path.get_vars())
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
-            # NOTE: We save the path knot points, not this object, as some Drake objects are not serializable
-            pickle.dump(self.path_knot_points, file)
+            # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
+            pickle.dump((self.config, self.path_knot_points), file)
 
     @classmethod
     def load(cls, filename: str) -> "PlanarPushingTrajectory":
         with open(Path(filename), "rb") as file:
-            var_path = pickle.load(file)
+            config, var_path = pickle.load(file)
 
-            return cls(var_path)
+            return cls(config, var_path)
 
     # TODO(bernhardpg): Remove
     def to_old_format(self) -> OldPlanarPushingTrajectory:

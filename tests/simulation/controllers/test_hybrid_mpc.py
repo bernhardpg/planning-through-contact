@@ -14,9 +14,23 @@ from pydrake.systems.planar_scenegraph_visualizer import (
 )
 from pydrake.systems.primitives import VectorLogSink, ZeroOrderHold_
 
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
+)
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_path import (
+    assemble_progs_from_contact_modes,
+)
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
     HybridModelPredictiveControlSystem,
@@ -38,29 +52,44 @@ from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import face_contact_mode, t_pusher
-from tests.simulation.dynamics.test_slider_pusher_system import (
-    box_geometry,
-    face_idx,
-    rigid_body_box,
-    slider_pusher_system,
-)
-from tests.simulation.systems.test_slider_pusher_trajectory_feeder import (
-    contact_mode_example,
-    one_contact_mode_vars,
-)
+
+DEBUG = True
+
+
+@pytest.fixture
+def mpc_config() -> HybridMpcConfig:
+    config = HybridMpcConfig(
+        step_size=0.1,
+        horizon=10,
+        num_sliding_steps=5,
+        rate_Hz=50,
+    )
+    return config
+
+
+@pytest.fixture
+def slider_pusher_system() -> SliderPusherSystem:  # type: ignore
+    mass = 0.1
+    box_geometry = Box2d(width=0.15, height=0.15)
+    box = RigidBody("box", box_geometry, mass)
+
+    config = SliderPusherSystemConfig(slider=box, friction_coeff_slider_pusher=0.1)
+
+    contact_idx = 3
+
+    sys = SliderPusherSystem(
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, contact_idx),
+        config=config,
+    )
+    return sys
 
 
 @pytest.fixture
 def hybrid_mpc(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
+    mpc_config: HybridMpcConfig,
 ) -> HybridMpc:
-    config = HybridMpcConfig(
-        step_size=0.1,
-        horizon=10,
-        num_sliding_steps=5,
-    )
-    mpc = HybridMpc(slider_pusher_system, config)
+    mpc = HybridMpc(slider_pusher_system, mpc_config, slider_pusher_system.config)
     return mpc
 
 
@@ -78,6 +107,8 @@ def hybrid_mpc_controller_system(
 
 
 def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
+    check_same_nonzero_elements = lambda A, B: np.all((A == 0) == (B == 0))
+
     linear_system = hybrid_mpc._get_linear_system(
         np.array([0, 0, 0, 0.5]), np.array([1.0, 0, 0])
     )
@@ -89,7 +120,7 @@ def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
             [0.0, 0.0, 0.0, 0.0],
         ]
     )
-    assert np.allclose(linear_system.A(), A_target)
+    assert check_same_nonzero_elements(A_target, linear_system.A())
 
     # Linearized around th = 0 and with only a normal force,
     # theta should only impact y_dot
@@ -104,19 +135,19 @@ def test_get_linear_system(hybrid_mpc: HybridMpc) -> None:
             [0.0, 0.0, 1.0],
         ]
     )
-    assert np.allclose(linear_system.B(), B_target)
+    assert check_same_nonzero_elements(B_target, linear_system.B())
 
 
 def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
-    N = hybrid_mpc.cfg.horizon
+    N = hybrid_mpc.config.horizon
     current_state = np.array([0, 0, 0, 0.5])
     desired_state = [current_state] * N
-    desired_control = [np.zeros((3,))] * N
+    desired_control = [np.zeros((3,))] * (N - 1)
     prog, x, u = hybrid_mpc._setup_QP(
         current_state, desired_state, desired_control, mode=HybridModes.STICKING
     )
 
-    dt = hybrid_mpc.cfg.step_size
+    dt = hybrid_mpc.config.step_size
     times = np.arange(0, dt * N, dt)
 
     result = Solve(prog)
@@ -131,6 +162,9 @@ def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
         times, np.vstack(desired_state).T, np.vstack(desired_control).T
     )
 
+    assert control_sol.shape == (3, N - 1)
+    assert state_sol.shape == (4, N)
+
     # No deviation should happen
     for state, state_desired in zip(state_sol.T, desired_state):
         assert np.allclose(state, state_desired)
@@ -139,7 +173,6 @@ def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
     for control, control_desired in zip(control_sol.T, desired_control):
         assert np.allclose(control, control_desired)
 
-    DEBUG = False
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
 
@@ -152,11 +185,11 @@ def test_get_control_with_plan(
     The plan should follow the desired trajectory exactly.
     """
 
-    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.cfg)
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
     context = feeder.CreateDefaultContext()
 
     desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
-    desired_control_traj = feeder.get_control_traj_feedforward_port().Eval(context)
+    desired_control_traj = feeder.get_control_traj_feedforward_port().Eval(context)[:-1]  # type: ignore
     initial_state = feeder.get_state(0)
 
     prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state_traj, desired_control_traj, mode=HybridModes.STICKING)  # type: ignore
@@ -168,8 +201,8 @@ def test_get_control_with_plan(
     state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
     control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
 
-    N = hybrid_mpc.cfg.horizon
-    dt = hybrid_mpc.cfg.step_size
+    N = hybrid_mpc.config.horizon
+    dt = hybrid_mpc.config.step_size
     times = np.arange(0, dt * N, dt)
 
     actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
@@ -192,20 +225,95 @@ def test_get_control_with_plan(
             <= np.full(control.shape, control_treshold)
         )
 
-    DEBUG = False
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
 
 
+def test_get_control_with_disturbance(
+    one_contact_mode_vars: List[FaceContactVariables],
+    hybrid_mpc: HybridMpc,
+) -> None:
+    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
+    context = feeder.CreateDefaultContext()
+
+    desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
+    desired_control_traj = feeder.get_control_traj_feedforward_port().Eval(context)[:-1]  # type: ignore
+    initial_state = feeder.get_state(0) + np.array([0.1, 0.1, 0.1, 0])
+
+    prog, x, u = hybrid_mpc._setup_QP(initial_state, desired_state_traj, desired_control_traj, mode=HybridModes.STICKING)  # type: ignore
+
+    result = Solve(prog)
+    assert result.is_success()
+
+    # must evaluate to get rid of expression type
+    state_sol = sym.Evaluate(result.GetSolution(x))  # type: ignore
+    control_sol = sym.Evaluate(result.GetSolution(u))  # type: ignore
+
+    N = hybrid_mpc.config.horizon
+    dt = hybrid_mpc.config.step_size
+    times = np.arange(0, dt * N, dt)
+
+    actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
+    desired = PlanarPushingLog.from_np(
+        times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T  # type: ignore
+    )
+
+    if DEBUG:
+        plot_planar_pushing_trajectory(actual, desired)
+
+    # Make sure we are able to stabilize the system in one plan
+    # Edit: We wont, once we have to choose a contact mode
+    # assert np.isclose(actual.x[-1], desired.x[-1], atol=0.01)
+    # assert np.isclose(actual.y[-1], desired.y[-1], atol=0.01)
+    # assert np.isclose(actual.theta[-1], desired.theta[-1], atol=0.01)
+
+
+@pytest.fixture
+def one_contact_mode(
+    slider_pusher_system: SliderPusherSystem,  # type:ignore
+) -> FaceContactMode:
+    config = PlanarPlanConfig(dynamics_config=slider_pusher_system.config)
+    mode = FaceContactMode.create_from_plan_spec(
+        slider_pusher_system.contact_location, config
+    )
+    return mode
+
+
+@pytest.fixture
+def one_contact_mode_vars(
+    one_contact_mode: FaceContactMode,
+) -> List[FaceContactVariables]:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0.1, 0.4)
+
+    one_contact_mode.set_slider_initial_pose(initial_pose)
+    one_contact_mode.set_slider_final_pose(final_pose)
+
+    one_contact_mode.formulate_convex_relaxation()
+    assert one_contact_mode.relaxed_prog is not None
+    relaxed_result = Solve(one_contact_mode.relaxed_prog)
+    assert relaxed_result.is_success()
+
+    prog = assemble_progs_from_contact_modes([one_contact_mode])
+    initial_guess = relaxed_result.GetSolution(
+        one_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
+    )
+    prog.SetInitialGuess(prog.decision_variables(), initial_guess)
+    result = Solve(prog)
+
+    vars = one_contact_mode.variables.eval_result(result)
+    return [vars]
+
+
 def test_hybrid_mpc_controller(
-    face_contact_mode: FaceContactMode,
+    one_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
 ) -> None:  # type: ignore
     mpc_controller = hybrid_mpc_controller_system
 
-    slider_geometry = face_contact_mode.object.geometry
-    contact_location = face_contact_mode.contact_location
+    slider_geometry = one_contact_mode.config.slider_geometry
+    contact_location = one_contact_mode.contact_location
 
     builder = DiagramBuilder()
 
@@ -213,11 +321,12 @@ def test_hybrid_mpc_controller(
 
     feeder = builder.AddNamedSystem(
         "feedforward",
-        SliderPusherTrajectoryFeeder(one_contact_mode_vars, mpc_controller.cfg),
+        SliderPusherTrajectoryFeeder(one_contact_mode_vars, mpc_controller.config),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
-        "slider_pusher", SliderPusherSystem(slider_geometry, contact_location)
+        "slider_pusher",
+        SliderPusherSystem(contact_location, one_contact_mode.config.dynamics_config),
     )
 
     # state logger
@@ -248,6 +357,7 @@ def test_hybrid_mpc_controller(
         builder,
         slider_pusher.get_output_port(),
         slider_pusher.slider_geometry,
+        slider_pusher.pusher_radius,
         slider_pusher.contact_location,
         scene_graph,
     )
@@ -255,13 +365,13 @@ def test_hybrid_mpc_controller(
         builder,
         feeder.get_state_feedforward_port(),
         slider_geometry,
+        slider_pusher.pusher_radius,
         contact_location,
         scene_graph,
         "desired_slider_pusher_geometry",
         alpha=0.1,
     )
 
-    DEBUG = True
     if DEBUG:
         T_VW = np.array(
             [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
@@ -278,7 +388,7 @@ def test_hybrid_mpc_controller(
 
     builder.Connect(slider_pusher.get_output_port(), mpc_controller.get_state_port())
     zero_order_hold = builder.AddNamedSystem(
-        "zero_order_hold", ZeroOrderHold(mpc_controller.cfg.step_size, 3)
+        "zero_order_hold", ZeroOrderHold(mpc_controller.config.step_size, 3)
     )
     builder.Connect(mpc_controller.get_control_port(), zero_order_hold.get_input_port())
     builder.Connect(zero_order_hold.get_output_port(), slider_pusher.get_input_port())
@@ -295,7 +405,8 @@ def test_hybrid_mpc_controller(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    x_initial = feeder.get_state(0) + np.array([0.05, 0.05, -0.2, 0])
+    disturbance = np.array([-0.02, 0.02, 0.1, 0])
+    x_initial = feeder.get_state(0) + disturbance
     context.SetContinuousState(x_initial)
 
     if DEBUG:
@@ -303,7 +414,7 @@ def test_hybrid_mpc_controller(
 
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.AdvanceTo(face_contact_mode.time_in_mode)
+    simulator.AdvanceTo(one_contact_mode.time_in_mode + 2)
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_pdf("hybrid_mpc_diagram.pdf")  # type: ignore

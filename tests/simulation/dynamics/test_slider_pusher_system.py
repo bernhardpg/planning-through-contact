@@ -17,6 +17,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
 )
@@ -43,31 +46,45 @@ def face_idx() -> int:
 
 
 @pytest.fixture
-def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int) -> SliderPusherSystem:  # type: ignore
+def config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
+    return SliderPusherSystemConfig(slider=rigid_body_box)
+
+
+@pytest.fixture
+def slider_pusher_system(rigid_body_box: RigidBody, face_idx: int, config: SliderPusherSystemConfig) -> SliderPusherSystem:  # type: ignore
     slider_pusher = SliderPusherSystem(
-        rigid_body_box.geometry, PolytopeContactLocation(ContactLocation.FACE, face_idx)
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, face_idx),
+        config=config,
     )
     return slider_pusher
 
 
 def test_get_jacobian(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
+    assert slider_pusher_system.contact_location.idx == 3
+
+    make_J = lambda p_x, p_y: np.array([[1.0, 0.0, -p_y], [0.0, 1.0, p_x]])  # type: ignore
     lam = 0.0
     J_c = slider_pusher_system._get_contact_jacobian(lam)
-    J_c_target = np.array([[1.0, 0.0, 0.15], [0.0, 1.0, 0.15]])
-    assert np.allclose(J_c, J_c_target)
+    p_x = -slider_pusher_system.slider_geometry.width / 2
+    p_y = slider_pusher_system.slider_geometry.height / 2
+    assert np.allclose(J_c, make_J(p_x, p_y))
 
     lam = 1.0
     J_c = slider_pusher_system._get_contact_jacobian(lam)
-    J_c_target = np.array([[1.0, 0.0, -0.15], [0.0, 1.0, 0.15]])
-    assert np.allclose(J_c, J_c_target)
+    p_x = -slider_pusher_system.slider_geometry.width / 2
+    p_y = -slider_pusher_system.slider_geometry.height / 2
+    assert np.allclose(J_c, make_J(p_x, p_y))
 
     lam = 0.5
     J_c = slider_pusher_system._get_contact_jacobian(lam)
-    J_c_target = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.15]])
-    assert np.allclose(J_c, J_c_target)
+    p_x = -slider_pusher_system.slider_geometry.width / 2
+    p_y = 0
+    assert np.allclose(J_c, make_J(p_x, p_y))
 
 
 def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
+    assert slider_pusher_system.contact_location.idx == 3
+
     c_n = 0.0
     c_f = 0.0
     lam = 0.0
@@ -85,8 +102,8 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: 
     c_f = 0.0
     lam = 0.5
     w = slider_pusher_system._get_wrench(lam, c_n, c_f)
-    assert w[0] == -1  # should be a generalized force along the negative x-axis
-    assert w[1] == 0  # should be a generalized force along the negative x-axis
+    assert w[0] == 1  # should be a generalized force along the positive x-axis
+    assert w[1] == 0
     assert w[2] == 0  # shouldn't be any torque
 
     c_n = 1.0
@@ -94,8 +111,8 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: 
     lam = 0.5
     w = slider_pusher_system._get_wrench(lam, c_n, c_f)
     assert w[2] >= 0  # should be a positive torque
-    assert w[0] == -1  # should be a generalized force along the negative x-axis
-    assert w[1] == 0.5  # should be a generalized force along the positive y-axis
+    assert w[0] == 1  # should be a generalized force along the positive x-axis
+    assert w[1] == -0.5  # should be a generalized force along the negative y-axis
 
     c_n = 1.0
     c_f = 0.5
@@ -111,6 +128,8 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: 
 
 
 def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
+    assert slider_pusher_system.contact_location.idx == 3
+
     check_parallel = lambda u, v: np.isclose(
         u.T.dot(v) / (np.linalg.norm(u) * np.linalg.norm(v)), 1
     )
@@ -124,22 +143,26 @@ def test_get_twist(slider_pusher_system: SliderPusherSystem) -> None:  # type: i
 
 
 def test_calc_dynamics(slider_pusher_system: SliderPusherSystem) -> None:  # type: ignore
+    assert slider_pusher_system.contact_location.idx == 3
+
     x = np.array([0, 0, 0.5, 0])
     u = np.array([0, 0, 0])
     x_dot = slider_pusher_system.calc_dynamics(x, u)
     assert np.allclose(x_dot, np.zeros(x_dot.shape))
     assert x_dot.shape == (4, 1)
 
+    # contact force along positive x axis on upper left corner
     x = np.array([0, 0, 0, 0])
     u = np.array([1, 0, 0])
     x_dot = slider_pusher_system.calc_dynamics(x, u)
-    assert x_dot[0] <= 0
+    assert x_dot[0] >= 0
     assert x_dot[2] <= 0
 
+    # contact force along positive x axis on lower left corner
     x = np.array([0, 0, 0, 1])
     u = np.array([1, 0, 0])
     x_dot = slider_pusher_system.calc_dynamics(x, u)
-    assert x_dot[0] <= 0
+    assert x_dot[0] >= 0
     assert x_dot[2] >= 0
 
     x = np.array([0, 0, 0, 0])

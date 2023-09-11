@@ -10,6 +10,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 
 
 @TemplateSystem.define("SliderPusherSystem_")
@@ -33,23 +37,29 @@ def SliderPusherSystem_(T):
 
         def _construct(
             self,
-            slider_geometry: CollisionGeometry,
-            pusher_radius: float,
             contact_location: PolytopeContactLocation,
+            config: SliderPusherSystemConfig,
             converter=None,
         ) -> None:
             super().__init__(converter)
 
             self.contact_location = contact_location
-            self.slider_geometry = slider_geometry
-            self.pusher_radius = pusher_radius
-            self.pv1, self.pv2 = slider_geometry.get_proximate_vertices_from_location(
+            self.slider_geometry = config.slider.geometry
+            self.config = config
+            self.pusher_radius = self.config.pusher_radius
+
+            (
+                self.pv1,
+                self.pv2,
+            ) = self.slider_geometry.get_proximate_vertices_from_location(
                 contact_location
             )
             (
                 self.normal_vec,
                 self.tangent_vec,
-            ) = slider_geometry.get_norm_and_tang_vecs_from_location(contact_location)
+            ) = self.slider_geometry.get_norm_and_tang_vecs_from_location(
+                contact_location
+            )
 
             NUM_CONTACT_POINTS = 1
             NUM_SLIDER_STATES = 3  # x, y, theta
@@ -61,37 +71,29 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            G = 9.81
-            FRICTION_COEFF = 0.5
-            # TODO(bernhardpg): Compute f_max and tau_max correctly
-            OBJECT_MASS = 0.1
-            f_max = FRICTION_COEFF * G * OBJECT_MASS
-            const = np.sqrt(0.075**2 + 0.075**2) * 0.6
-            tau_max = f_max * const
-            self.A = np.diag(
-                [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
-            )  # Ellipsoidal Limit surface approximation
-
-            # self.A = np.diag([0.46, 0.46, 11.5])  # TODO: change
-            # self.A = np.diag([0.1, 0.1, 1.5])  # TODO: change
+            self.D = self.config.ellipsoidal_limit_surface
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
                 self,
-                other.slider_geometry,
-                other.pusher_radius,
                 other.contact_location,
+                other.config,
                 converter=converter,
             )
 
-        def _get_p_B_c(self, lam: float) -> npt.NDArray[np.float64]:
-            return self.slider_geometry.get_p_B_c_from_lam(
+        def _get_p_BP(self, lam: float) -> npt.NDArray[np.float64]:
+            p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
+            return p_BP
+
+        def _get_p_Bc(self, lam: float) -> npt.NDArray[np.float64]:
+            p_Bc = self.slider_geometry.get_p_Bc_from_lam(lam, self.contact_location)
+            return p_Bc
 
         def _get_contact_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
-            p_B_c = self._get_p_B_c(lam).flatten()
-            J_c = np.array([[1.0, 0.0, -p_B_c[1]], [0.0, 1.0, p_B_c[0]]])  # type: ignore
+            p_Bc = self._get_p_Bc(lam).flatten()
+            J_c = np.array([[1.0, 0.0, -p_Bc[1]], [0.0, 1.0, p_Bc[0]]])  # type: ignore
             return J_c
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
@@ -112,7 +114,7 @@ def SliderPusherSystem_(T):
             c_f: float,
         ) -> npt.NDArray[np.float64]:
             w = self._get_wrench(lam, c_n, c_f)
-            return self.A.dot(w)
+            return self.D.dot(w)
 
         def _get_R(self, theta: float) -> npt.NDArray[np.float64]:
             R = np.array(
@@ -128,9 +130,9 @@ def SliderPusherSystem_(T):
             R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
             p_W_c = pusher_pose.pos()
             p_WB = slider_pose.pos()
-            p_B_c = R_WB.T.dot(p_W_c - p_WB)
-            lam = self.slider_geometry.get_lam_from_p_B_c(
-                p_B_c, self.contact_location, radius=self.pusher_radius
+            p_BP = R_WB.T.dot(p_W_c - p_WB)
+            lam = self.slider_geometry.get_lam_from_p_BP(
+                p_BP, self.contact_location, radius=self.pusher_radius
             )
 
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
@@ -144,11 +146,11 @@ def SliderPusherSystem_(T):
             R_WB = two_d_rotation_matrix_from_angle(theta)
             slider_planar_pose = PlanarPose(x, y, theta)
             p_WB = slider_planar_pose.pos()
-            p_B_c = self.slider_geometry.get_p_B_c_from_lam(
+            p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
 
-            p_W_c = p_WB + R_WB.dot(p_B_c)
+            p_W_c = p_WB + R_WB.dot(p_BP)
             return PlanarPose(p_W_c[0, 0], p_W_c[1, 0], theta=0)
 
         def get_control_from_contact_force(

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -24,6 +24,9 @@ from pydrake.systems.primitives import (
     LinearSystem,
 )
 
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.types import NpVariableArray
 
 
@@ -33,7 +36,7 @@ class HybridMpcConfig:
     step_size: float = 0.1
     num_sliding_steps: int = 5
     rate_Hz: int = 200
-    pusher_radius: float = 0.01
+    enforce_hard_end_constraint: bool = False
 
 
 class HybridModes(Enum):
@@ -44,26 +47,23 @@ class HybridModes(Enum):
 
 class HybridMpc:
     def __init__(
-        self, model: System, config: HybridMpcConfig = HybridMpcConfig()
+        self,
+        model: System,
+        config: HybridMpcConfig,
+        dynamics_config: SliderPusherSystemConfig,
     ) -> None:
         self.model = model
-        self.cfg = config
+        self.config = config
+        self.dynamics_config = dynamics_config
 
         self.num_states = model.num_continuous_states()
         self.num_inputs = model.get_input_port().size()
 
-    def _get_linear_system(
-        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
-    ) -> AffineSystem:
-        """
-        Linearizes around 'state' and 'control', and returns an affine system
+        self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
-        x_dot = A x + B u + f_0
-
-        where f_0 = x_dot_0 - A x_0 - B u_u
-        where _0 denotes the nominal state and input
-
-        """
+    def _calculate_symbolic_system(
+        self,
+    ) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
         # TODO(bernhardpg): This causes a segfault. Look into this
         # self.model_context.SetContinuousState(state)
         # self.model.get_input_port().FixValue(self.model_context, input)
@@ -86,17 +86,33 @@ class HybridMpc:
         A_sym = sym.Jacobian(x_dot, state_sym)
         B_sym = sym.Jacobian(x_dot, control_sym)
 
-        env = {
-            x: state[0],
-            y: state[1],
-            theta: state[2],
-            lam: state[3],
-            c_n: control[0],
-            c_f: control[1],
-            lam_dot: control[2],
-        }
-        A = sym.Evaluate(A_sym, env)
-        B = sym.Evaluate(B_sym, env)
+        sym_vars = np.concatenate([state_sym, control_sym])
+
+        return A_sym, B_sym, sym_vars  # type: ignore
+
+    def _create_env(
+        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+    ) -> Dict[sym.Variable, float]:
+        var_vals = np.concatenate([state, control])
+        env = {sym: val for sym, val in zip(self.sym_vars, var_vals)}
+        return env
+
+    def _get_linear_system(
+        self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+    ) -> AffineSystem:
+        """
+        Linearizes around 'state' and 'control', and returns an affine system
+
+        x_dot = A x + B u + f_0
+
+        where f_0 = x_dot_0 - A x_0 - B u_u
+        where _0 denotes the nominal state and input
+
+        """
+
+        env = self._create_env(state, control)
+        A = sym.Evaluate(self.A_sym, env)
+        B = sym.Evaluate(self.B_sym, env)
 
         x_dot_desired = self.model.calc_dynamics(state, control).flatten()  # type: ignore
         f = x_dot_desired - A.dot(state) - B.dot(control)
@@ -110,15 +126,15 @@ class HybridMpc:
         u_traj: List[npt.NDArray[np.float64]],
         mode: HybridModes,
     ) -> Tuple[MathematicalProgram, NpVariableArray, NpVariableArray]:
-        N = self.cfg.horizon
-        h = self.cfg.step_size
-        num_sliding_steps = self.cfg.num_sliding_steps
+        N = len(x_traj)
+        h = self.config.step_size
+        num_sliding_steps = self.config.num_sliding_steps
 
         prog = MathematicalProgram()
 
         # Formulate the problem in the local coordinates around the nominal trajectory
         x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
-        u_bar = prog.NewContinuousVariables(self.num_inputs, N, "u_bar")
+        u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
@@ -129,10 +145,8 @@ class HybridMpc:
             self._get_linear_system(state, control)
             for state, control in zip(x_traj, u_traj)
         ][
-            :-1
-        ]  # only need N-1 linear systems
-
-        assert len(lin_systems) == N - 1
+            : N - 1
+        ]  # we only have N-1 controls
 
         As = [sys.A() for sys in lin_systems]
         Bs = [sys.B() for sys in lin_systems]
@@ -141,29 +155,41 @@ class HybridMpc:
             forward_euler = x_bar[:, i] + h * x_bar_dot
             prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
 
+        # Last error state should be exactly 0
+        if self.config.enforce_hard_end_constraint:
+            prog.AddLinearConstraint(eq(x_bar[:, N - 1], np.zeros(x_traj[-1].shape)))
+
         # x_bar = x - x_traj
         x = x_bar + np.vstack(x_traj).T
+
+        if len(u_traj) == N:  # make sure u_traj is not too long
+            u_traj = u_traj[: N - 1]
         # u_bar = u - u_traj
         u = u_bar + np.vstack(u_traj).T
 
         # Control constraints
-        FRICTION_COEFF = 0.5
+        mu = self.dynamics_config.friction_coeff_slider_pusher
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
             lam_dot = u_i[2]
 
             prog.AddLinearConstraint(c_n >= 0)
+            prog.AddLinearConstraint(lam_dot <= 1.0)
+            prog.AddLinearConstraint(lam_dot >= -1.0)
 
             if mode == HybridModes.STICKING or i > num_sliding_steps:
-                prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-                prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f <= mu * c_n)
+                prog.AddLinearConstraint(c_f >= -mu * c_n)
+                prog.AddLinearEqualityConstraint(lam_dot == 0)
 
             elif mode == HybridModes.SLIDING_LEFT:
-                prog.AddLinearConstraint(c_f == FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f == mu * c_n)
+                prog.AddLinearConstraint(lam_dot <= 0)
 
             else:  # SLIDING_RIGHT
-                prog.AddLinearConstraint(c_f == -FRICTION_COEFF * c_n)
+                prog.AddLinearConstraint(c_f == -mu * c_n)
+                prog.AddLinearConstraint(lam_dot >= 0)
 
         # State constraints
         for state in x.T:
@@ -172,17 +198,17 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0]) * 10
-        R = np.diag([1, 1, 1]) * 0.01
-        Q_N = Q
+        Q = np.diag([1, 1, 1, 0]) * 1000
+        R = np.diag([1, 1, 0.1]) * 0.01
+        Q_N = Q * 10
 
-        terminal_cost = x_bar[:, -1].T.dot(Q_N).dot(x_bar[:, -1])
         state_running_cost = sum(
-            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N)]
+            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
         )
         input_running_cost = sum(
-            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N)]
+            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
         )
+        terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
         prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
         return prog, x, u  # type: ignore
@@ -210,12 +236,15 @@ class HybridMpc:
         result = results[best_idx]
 
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
+        if state_sol.shape[1] == 1:
+            breakpoint()
         x_next = state_sol[:, 1]
 
-        x_dot_curr = (x_next - x_curr) / self.cfg.step_size
+        x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
+        print(f"mode: {best_idx}, lam_dot: {u_next[2]}, c_f: {u_next[1]}")
         return x_dot_curr, u_next
 
 
@@ -225,8 +254,8 @@ class HybridModelPredictiveControlSystem(LeafSystem):
     ) -> None:
         super().__init__()
 
-        self.mpc = HybridMpc(model, config)
-        self.cfg = self.mpc.cfg
+        self.mpc = HybridMpc(model, config, model.config)  # type: ignore
+        self.config = self.mpc.config
 
         self.state_port = self.DeclareVectorInputPort("state", self.mpc.num_states)
 

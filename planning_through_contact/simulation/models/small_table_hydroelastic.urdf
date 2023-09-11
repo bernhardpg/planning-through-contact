@@ -41,8 +41,8 @@
         <!-- Both mu_dynamic and mu_static are used in Continuous system.
           Only mu_dynamic is used in Discrete system.
         -->
-        <drake:mu_dynamic value="1.0"/>
-        <drake:mu_static value="1.0"/>
+        <drake:mu_dynamic value="0.5"/>
+        <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>    
   </link>
@@ -75,8 +75,8 @@
         <!-- Both mu_dynamic and mu_static are used in Continuous system.
           Only mu_dynamic is used in Discrete system.
         -->
-        <drake:mu_dynamic value="1.0"/>
-        <drake:mu_static value="1.0"/>
+        <drake:mu_dynamic value="0.5"/>
+        <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>
   </link>
@@ -109,8 +109,8 @@
         <!-- Both mu_dynamic and mu_static are used in Continuous system.
           Only mu_dynamic is used in Discrete system.
         -->
-        <drake:mu_dynamic value="1.0"/>
-        <drake:mu_static value="1.0"/>
+        <drake:mu_dynamic value="0.5"/>
+        <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>
   </link>
@@ -143,8 +143,8 @@
         <!-- Both mu_dynamic and mu_static are used in Continuous system.
           Only mu_dynamic is used in Discrete system.
         -->
-        <drake:mu_dynamic value="1.0"/>
-        <drake:mu_static value="1.0"/>
+        <drake:mu_dynamic value="0.5"/>
+        <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>
   </link>  

@@ -20,6 +20,7 @@ from pydrake.solvers import (
 )
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.abstract_mode import (
@@ -39,12 +40,9 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 def check_finger_pose_in_contact_location(
     finger_pose: PlanarPose,
     loc: PolytopeContactLocation,
-    body: RigidBody,
+    config: PlanarPlanConfig,
 ) -> bool:
-    config = PlanarPlanConfig()
-    mode = NonCollisionMode.create_from_plan_spec(
-        loc, config, body, one_knot_point=True
-    )
+    mode = NonCollisionMode.create_from_plan_spec(loc, config, one_knot_point=True)
 
     mode.set_finger_initial_pose(finger_pose)
 
@@ -53,16 +51,18 @@ def check_finger_pose_in_contact_location(
 
 
 def find_first_matching_location(
-    finger_pose: PlanarPose,
-    slider: RigidBody,
+    finger_pose: PlanarPose, config: PlanarPlanConfig
 ) -> PolytopeContactLocation:
     # we always add all non-collision modes, even when we don't add all contact modes
     # (think of maneuvering around the object etc)
-    locations = slider.geometry.contact_locations
+    locations = [
+        PolytopeContactLocation(ContactLocation.FACE, idx)
+        for idx in range(config.slider_geometry.num_collision_free_regions)
+    ]
     matching_locs = [
         loc
         for loc in locations
-        if check_finger_pose_in_contact_location(finger_pose, loc, slider)
+        if check_finger_pose_in_contact_location(finger_pose, loc, config)
     ]
     if len(matching_locs) == 0:
         raise ValueError(
@@ -73,8 +73,8 @@ def find_first_matching_location(
 
 @dataclass
 class NonCollisionVariables(AbstractModeVariables):
-    p_BF_xs: NpVariableArray | npt.NDArray[np.float64]
-    p_BF_ys: NpVariableArray | npt.NDArray[np.float64]
+    p_BP_xs: NpVariableArray | npt.NDArray[np.float64]
+    p_BP_ys: NpVariableArray | npt.NDArray[np.float64]
     p_WB_x: sym.Variable | float
     p_WB_y: sym.Variable | float
     cos_th: sym.Variable | float
@@ -122,8 +122,8 @@ class NonCollisionVariables(AbstractModeVariables):
             self.time_in_mode,
             self.dt,
             self.pusher_radius,
-            result.GetSolution(self.p_BF_xs),
-            result.GetSolution(self.p_BF_ys),
+            result.GetSolution(self.p_BP_xs),
+            result.GetSolution(self.p_BP_ys),
             result.GetSolution(self.p_WB_x),  # type: ignore
             result.GetSolution(self.p_WB_y),  # type: ignore
             result.GetSolution(self.cos_th),  # type: ignore
@@ -131,10 +131,10 @@ class NonCollisionVariables(AbstractModeVariables):
         )
 
     @property
-    def p_BFs(self):
+    def p_BPs(self):
         return [
             np.expand_dims(np.array([x, y]), 1)
-            for x, y in zip(self.p_BF_xs, self.p_BF_ys)
+            for x, y in zip(self.p_BP_xs, self.p_BP_ys)
         ]  # (2, 1)
 
     @property
@@ -162,10 +162,10 @@ class NonCollisionVariables(AbstractModeVariables):
         return [0.0] * (self.num_knot_points - 1)
 
     @property
-    def p_c_Ws(self):
+    def p_WPs(self):
         return [
-            p_WB + R_WB.dot(p_c_B)
-            for p_WB, R_WB, p_c_B in zip(self.p_WBs, self.R_WBs, self.p_BFs)
+            p_WB + R_WB.dot(p_BP)
+            for p_WB, R_WB, p_BP in zip(self.p_WBs, self.R_WBs, self.p_BPs)
         ]
 
     @property
@@ -173,16 +173,13 @@ class NonCollisionVariables(AbstractModeVariables):
         NUM_DIMS = 2
         return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
 
-    @property
-    def p_c_Bs(self):
-        return self.p_BFs
-
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     cost_param_avoidance_lin: float = 0.1
-    cost_param_avoidance_quad_dist: float = 0.2
+    cost_param_avoidance_quad_dist: float = 0.3
     cost_param_avoidance_quad_weight: float = 0.4
+    cost_param_avoidance_socp_weight: float = 0.001
     cost_param_eucl: float = 1.0
 
     @classmethod
@@ -190,7 +187,6 @@ class NonCollisionMode(AbstractContactMode):
         cls,
         contact_location: PolytopeContactLocation,
         config: PlanarPlanConfig,
-        slider: RigidBody,
         name: Optional[str] = None,
         one_knot_point: bool = False,
     ) -> "NonCollisionMode":
@@ -206,8 +202,6 @@ class NonCollisionMode(AbstractContactMode):
             num_knot_points,
             config.time_non_collision,
             contact_location,
-            slider,
-            config.pusher_radius,
             prog,
             config,
         )
@@ -218,15 +212,13 @@ class NonCollisionMode(AbstractContactMode):
         config: PlanarPlanConfig,
         slider_pose: PlanarPose,
         pusher_pose: PlanarPose,
-        body: RigidBody,
         initial_or_final: Literal["initial", "final"],
     ) -> "NonCollisionMode":
-        loc = find_first_matching_location(pusher_pose, body)
+        loc = find_first_matching_location(pusher_pose, config)
         mode_name = "source" if initial_or_final == "initial" else "target"
         mode = cls.create_from_plan_spec(
             loc,
             config,
-            body,
             mode_name,
             one_knot_point=True,
         )
@@ -240,12 +232,17 @@ class NonCollisionMode(AbstractContactMode):
         return mode
 
     def __post_init__(self) -> None:
+        self.slider_geometry = self.config.dynamics_config.slider.geometry
+        self.dynamics_config = self.config.dynamics_config
+
         self.dt = self.time_in_mode / self.num_knot_points
 
-        self.contact_plane = self.object.geometry.faces[self.contact_location.idx]
+        self.contact_planes = self.slider_geometry.get_contact_planes(
+            self.contact_location.idx
+        )
         self.collision_free_space_planes = (
-            self.object.geometry.get_planes_for_collision_free_region(
-                self.contact_location
+            self.slider_geometry.get_planes_for_collision_free_region(
+                self.contact_location.idx
             )
         )
         self.variables = NonCollisionVariables.from_prog(
@@ -253,27 +250,44 @@ class NonCollisionMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
             self.contact_location,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
         )
         self._define_constraints()
         self._define_cost()
 
     def _define_constraints(self) -> None:
         for k in range(self.num_knot_points):
-            p_BF = self.variables.p_BFs[k]
+            p_BF = self.variables.p_BPs[k]
 
             exprs = self._create_collision_free_space_constraints(p_BF)
             for expr in exprs:
                 self.prog.AddLinearConstraint(expr)
 
+        self._add_workspace_constraints()
+
+        lb, ub = self.config.workspace.slider.bounds
+        self.prog.AddBoundingBoxConstraint(lb, ub, self.variables.p_WB)
+        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.cos_th)  # type: ignore
+        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.sin_th)  # type: ignore
+
+    def _add_workspace_constraints(self) -> None:
+        for k in range(self.num_knot_points):
+            p_BF = self.variables.p_BPs[k]
+
+            lb, ub = self.config.workspace.pusher.bounds
+            self.prog.AddBoundingBoxConstraint(lb, ub, p_BF)
+
     def _create_collision_free_space_constraints(
         self, pusher_pos: NpVariableArray
     ) -> List[sym.Formula]:
-        avoid_contact = self.contact_plane.dist_to(pusher_pos) - self.pusher_radius >= 0
+        avoid_contact = [
+            plane.dist_to(pusher_pos) - self.dynamics_config.pusher_radius >= 0
+            for plane in self.contact_planes
+        ]
         stay_in_region = [
             plane.dist_to(pusher_pos) >= 0 for plane in self.collision_free_space_planes
         ]
-        exprs = [avoid_contact] + stay_in_region
+        exprs = avoid_contact + stay_in_region
         return exprs
 
     def _define_cost(self) -> None:
@@ -281,7 +295,7 @@ class NonCollisionMode(AbstractContactMode):
             position_diffs = [
                 p_next - p_curr
                 for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
                 )
             ]
             if self.num_knot_points == 1:
@@ -299,7 +313,7 @@ class NonCollisionMode(AbstractContactMode):
             position_diffs = [
                 p_next - p_curr
                 for p_next, p_curr in zip(
-                    self.variables.p_BFs[1:], self.variables.p_BFs[:-1]
+                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
                 )
             ]
             slacks = self.prog.NewContinuousVariables(len(position_diffs), "t")
@@ -316,9 +330,13 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearCost(s)
 
         if self.config.avoid_object:
-            plane = self.object.geometry.faces[self.contact_location.idx]
-            dists = [plane.dist_to(p_BF) for p_BF in self.variables.p_BFs]
+            planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
+            dists_for_each_plane = [
+                [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
+                for plane in planes
+            ]
             if self.config.avoidance_cost == "linear":
+                raise NotImplementedError("Will be removed!")
                 self.prog.AddLinearCost(
                     -self.cost_param_avoidance_lin * np.sum(dists)
                 )  # maximize distances
@@ -327,28 +345,32 @@ class NonCollisionMode(AbstractContactMode):
                 squared_dists = [
                     self.cost_param_avoidance_quad_weight
                     * (d - self.cost_param_avoidance_quad_dist) ** 2
-                    for d in dists
+                    for dist in dists_for_each_plane
+                    for d in dist
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
             else:  # socp
-                dists_except_first_and_last = dists[1:-1]
-                slacks = self.prog.NewContinuousVariables(
-                    len(dists_except_first_and_last), "s"
-                )
-                for d, s in zip(dists_except_first_and_last, slacks):
-                    # Let d := dist >= 0
-                    # we want infinite cost for being close to object:
-                    #   minimize 1 / d
-                    # reformulate as:
-                    #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
-                    #   <=>
-                    #   minimize s s.t. s d >= 1, d >= 0
-                    # which is exactly a rotated Lorentz cone constraint:
-                    # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
+                for dists in dists_for_each_plane:
+                    dists_except_first_and_last = dists[1:-1]
+                    slacks = self.prog.NewContinuousVariables(
+                        len(dists_except_first_and_last), "s"
+                    )
+                    for d, s in zip(dists_except_first_and_last, slacks):
+                        # Let d := dist >= 0
+                        # we want infinite cost for being close to object:
+                        #   minimize 1 / d
+                        # reformulate as:
+                        #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
+                        #   <=>
+                        #   minimize s s.t. s d >= 1, d >= 0
+                        # which is exactly a rotated Lorentz cone constraint:
+                        # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
 
-                    self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-                    self.prog.AddLinearCost(s)
+                        self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
+                        self.prog.AddLinearCost(
+                            self.cost_param_avoidance_socp_weight * s
+                        )
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -361,14 +383,14 @@ class NonCollisionMode(AbstractContactMode):
         NOTE: Only sets the position of the finger (a point finger has no rotation).
         """
         self.finger_initial_pose = pose
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[0], pose.pos()))
+        self.prog.AddLinearConstraint(eq(self.variables.p_BPs[0], pose.pos()))
 
     def set_finger_final_pose(self, pose: PlanarPose) -> None:
         """
         NOTE: Only sets the position of the finger (a point finger has no rotation).
         """
         self.finger_final_pose = pose
-        self.prog.AddLinearConstraint(eq(self.variables.p_BFs[-1], pose.pos()))
+        self.prog.AddLinearConstraint(eq(self.variables.p_BPs[-1], pose.pos()))
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
         return self.prog.FindDecisionVariableIndices(vars)
@@ -377,8 +399,8 @@ class NonCollisionMode(AbstractContactMode):
         self, vertex: GcsVertex, result: MathematicalProgramResult
     ) -> NonCollisionVariables:
         # TODO: This can probably be cleaned up somehow
-        p_BF_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BF_xs, result)  # type: ignore
-        p_BF_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BF_ys, result)  # type: ignore
+        p_BF_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BP_xs, result)  # type: ignore
+        p_BF_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_BP_ys, result)  # type: ignore
         p_WB_x = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_x, result)  # type: ignore
         p_WB_y = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_y, result)  # type: ignore
         cos_th = self._get_var_solution_for_vertex_vars(vertex.x(), self.variables.cos_th, result)  # type: ignore
@@ -388,7 +410,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -401,8 +423,8 @@ class NonCollisionMode(AbstractContactMode):
         self, result: MathematicalProgramResult
     ) -> NonCollisionVariables:
         # TODO: This can probably be cleaned up somehow
-        p_BF_xs = result.GetSolution(self.variables.p_BF_xs)
-        p_BF_ys = result.GetSolution(self.variables.p_BF_ys)
+        p_BF_xs = result.GetSolution(self.variables.p_BP_xs)
+        p_BF_ys = result.GetSolution(self.variables.p_BP_ys)
         p_WB_x = result.GetSolution(self.variables.p_WB_x)  # type: ignore
         p_WB_y = result.GetSolution(self.variables.p_WB_y)  # type: ignore
         cos_th = result.GetSolution(self.variables.cos_th)  # type: ignore
@@ -412,7 +434,7 @@ class NonCollisionMode(AbstractContactMode):
             self.variables.num_knot_points,
             self.variables.time_in_mode,
             self.variables.dt,
-            self.pusher_radius,
+            self.dynamics_config.pusher_radius,
             p_BF_xs,
             p_BF_ys,
             p_WB_x,
@@ -475,14 +497,14 @@ class NonCollisionMode(AbstractContactMode):
     ) -> ContinuityVariables:
         if first_or_last == "first":
             return ContinuityVariables(
-                self.variables.p_BFs[0],
+                self.variables.p_BPs[0],
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
             )
         else:
             return ContinuityVariables(
-                self.variables.p_BFs[-1],
+                self.variables.p_BPs[-1],
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore

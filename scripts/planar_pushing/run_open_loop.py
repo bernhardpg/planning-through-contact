@@ -59,7 +59,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
     station = builder.AddNamedSystem(
         "PlanarPushingDiagram",
-        PlanarPushingDiagram(add_visualizer=True, config=config),
+        PlanarPushingDiagram(add_visualizer=True, sim_config=config),
     )
 
     # No feedforward torque

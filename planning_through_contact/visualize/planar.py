@@ -20,6 +20,7 @@ def visualize_planar_pushing_trajectory(
     object_geometry: CollisionGeometry,
     pusher_radius: float,
     visualize_object_vel: bool = False,
+    visualize_robot_base: bool = False,
 ) -> None:
     CONTACT_COLOR = COLORS["dodgerblue4"]
     BOX_COLOR = COLORS["aquamarine4"]
@@ -42,10 +43,10 @@ def visualize_planar_pushing_trajectory(
         TARGET_COLOR,
     )
 
-    contact_point_viz = VisualizationPoint2d(traj.p_c_W.T, FINGER_COLOR)
+    contact_point_viz = VisualizationPoint2d(traj.p_WP.T, FINGER_COLOR)
     contact_point_viz.change_radius(pusher_radius)
 
-    contact_force_viz = VisualizationForce2d(traj.p_c_W.T, CONTACT_COLOR, traj.f_c_W.T)
+    contact_force_viz = VisualizationForce2d(traj.p_WP.T, CONTACT_COLOR, traj.f_c_W.T)
     contact_forces_viz = [contact_force_viz]
 
     if visualize_object_vel:
@@ -64,5 +65,5 @@ def visualize_planar_pushing_trajectory(
         [box_viz],
         FRAMES_PER_SEC,
         target_viz,
-        draw_origin=True,
+        draw_origin=visualize_robot_base,
     )

@@ -89,29 +89,77 @@ class CollisionGeometry(ABC):
         vec = (v1 + v2) / 2
         return vec
 
+    @property
     @abstractmethod
-    def get_planes_for_collision_free_region(
-        self, location: PolytopeContactLocation
-    ) -> List[Hyperplane]:
+    def num_collision_free_regions(self) -> int:
+        pass
+
+    @abstractmethod
+    def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
+        pass
+
+    @abstractmethod
+    def get_planes_for_collision_free_region(self, idx: int) -> List[Hyperplane]:
         """
         Returns the hyperplanes defining the collision-free region, but not the plane
         of the contact face.
         """
 
     @abstractmethod
-    def get_p_B_c_from_lam(
+    def get_contact_planes(self, idx: int) -> List[Hyperplane]:
+        """
+        Return the contact plane(s) that define the current collision-free region
+        """
+
+    def get_lam_from_p_BP(
+        self,
+        p_BP: npt.NDArray[np.float64],
+        loc: PolytopeContactLocation,
+        radius: float,
+    ) -> npt.NDArray[np.float64]:
+        assert loc.pos == ContactLocation.FACE
+        assert p_BP.shape == (2, 1)
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        radius_offset = -n * radius
+        point_on_surface = p_BP - radius_offset
+
+        # project p_BP onto vector from v1 to v2 to find lam
+        u1 = point_on_surface - pv2
+        u2 = pv1 - pv2
+        lam = u1.T.dot(u2).item() / np.linalg.norm(u2) ** 2
+        return lam
+
+    def get_p_Bc_from_lam(
+        self, lam: float, loc: PolytopeContactLocation
+    ) -> npt.NDArray[np.float64]:
+        """
+        Get the position of the contact point in the body frame.
+        """
+        assert loc.pos == ContactLocation.FACE
+        pv1, pv2 = self.get_proximate_vertices_from_location(loc)
+        p_Bc = lam * pv1 + (1 - lam) * pv2
+        return p_Bc
+
+    def get_p_BP_from_lam(
         self, lam: float, loc: PolytopeContactLocation, radius: float
     ) -> npt.NDArray[np.float64]:
-        pass
+        """
+        Get the position of the pusher in the body frame (note: requires the
+        radius to compute the position!)
+        """
+        p_Bc = self.get_p_Bc_from_lam(lam, loc)
+        n, _ = self.get_norm_and_tang_vecs_from_location(loc)
+        radius_offset = -n * radius
 
-    @abstractmethod
-    def get_lam_from_p_B_c(
-        self, lam: float, loc: PolytopeContactLocation, radius: float
-    ) -> npt.NDArray[np.float64]:
-        pass
+        p_BP = radius_offset + p_Bc
+        return p_BP
 
-    @abstractmethod
     def get_force_comps_from_f_c_B(
         self, f_c_B, loc: PolytopeContactLocation
     ) -> Tuple[float, float]:
-        pass
+        n, t = self.get_norm_and_tang_vecs_from_location(loc)
+        c_n = f_c_B.T.dot(n).item()
+        c_f = f_c_B.T.dot(t).item()
+        return c_n, c_f

@@ -26,7 +26,10 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
     SliderPusherGeometry,
 )
@@ -39,7 +42,14 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import box_geometry, rigid_body_box, t_pusher
+from tests.geometry.planar.fixtures import (
+    box_geometry,
+    dynamics_config,
+    face_contact_mode,
+    plan_config,
+    rigid_body_box,
+    t_pusher,
+)
 from tests.simulation.dynamics.test_slider_pusher_system import face_idx
 
 
@@ -48,10 +58,12 @@ def contact_mode_example(rigid_body_box: RigidBody, face_idx: int) -> FaceContac
     rigid_body = rigid_body_box
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
-    config = PlanarPlanConfig()
-    mode = FaceContactMode.create_from_plan_spec(
-        contact_location, config, rigid_body, use_eq_elimination=False
+    dynamics_config = SliderPusherSystemConfig(
+        slider=rigid_body, friction_coeff_slider_pusher=0.05
     )
+    config = PlanarPlanConfig(dynamics_config=dynamics_config)
+    config.dynamics_config.slider = rigid_body
+    mode = FaceContactMode.create_from_plan_spec(contact_location, config)
     return mode
 
 
@@ -99,7 +111,7 @@ def test_feeder_state_feedforward_visualization(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
 ) -> None:
-    slider_geometry = face_contact_mode.object.geometry
+    slider_geometry = face_contact_mode.config.slider_geometry
     contact_location = face_contact_mode.contact_location
 
     builder = DiagramBuilder()
@@ -160,7 +172,7 @@ def test_visualize_both_desired_and_actual_traj(
     face_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
 ) -> None:
-    slider_geometry = face_contact_mode.object.geometry
+    slider_geometry = face_contact_mode.config.slider_geometry
     contact_location = face_contact_mode.contact_location
 
     builder = DiagramBuilder()
@@ -170,7 +182,8 @@ def test_visualize_both_desired_and_actual_traj(
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
-        "slider_pusher", SliderPusherSystem(slider_geometry, contact_location)
+        "slider_pusher",
+        SliderPusherSystem(contact_location, face_contact_mode.dynamics_config),
     )
 
     # only feedforward a constant force on the block

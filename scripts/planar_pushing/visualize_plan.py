@@ -5,13 +5,24 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
+from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def visualize_plan(debug: bool = False):
-    box_geometry = Box2d(width=0.15, height=0.15)
-    traj = PlanarPushingTrajectory.load("trajectories/box_pushing_4.pkl")
+    plan = "trajectories/t_pusher_pushing_5.pkl"
+    traj = PlanarPushingTrajectory.load(plan)
+
+    if "box" in plan:
+        slider = get_slider_box()
+        body = "box"
+    elif "t_pusher" in plan:
+        slider = get_tee()
+        body = "t_pusher"
+    else:
+        raise NotImplementedError()
+
     visualize_planar_pushing_trajectory(
-        traj.to_old_format(), box_geometry, traj.pusher_radius
+        traj.to_old_format(), slider.geometry, traj.pusher_radius
     )
 
 

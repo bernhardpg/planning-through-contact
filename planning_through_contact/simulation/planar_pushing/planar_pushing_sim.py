@@ -35,15 +35,14 @@ class PlanarPushingSimulation:
     def __init__(
         self,
         traj: PlanarPushingTrajectory,
-        slider: RigidBody,
-        config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
+        sim_config: PlanarPushingSimConfig,
     ):
         self.TABLE_BUFFER_DIST = 0.05
 
         builder = DiagramBuilder()
         self.station = builder.AddNamedSystem(
             "PlanarPushingDiagram",
-            PlanarPushingDiagram(add_visualizer=True, config=config),
+            PlanarPushingDiagram(add_visualizer=True, sim_config=sim_config),
         )
 
         # TODO(bernhardpg): Do we want to compute a feedforward torque?
@@ -58,16 +57,16 @@ class PlanarPushingSimulation:
         self.planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
             PlanarPoseTrajPublisher(
-                traj, config.mpc_config, config.delay_before_execution
+                traj, sim_config.mpc_config, sim_config.delay_before_execution
             ),
         )
 
-        if config.use_diff_ik:
+        if sim_config.use_diff_ik:
             self.pusher_pose_to_joint_pos = PusherPoseToJointPosDiffIk.add_to_builder(
                 builder,
                 self.station.GetInputPort("iiwa_position"),
                 self.station.GetOutputPort("iiwa_state_measured"),
-                time_step=config.time_step,
+                time_step=sim_config.time_step,
                 use_diff_ik_feedback=False,
             )
         else:
@@ -78,49 +77,49 @@ class PlanarPushingSimulation:
                 self.station.GetOutputPort("iiwa_position_measured"),
                 self.station.GetOutputPort("slider_pose"),
                 self.station.GetInputPort("iiwa_position"),
-                config.default_joint_positions,
+                sim_config.default_joint_positions,
             )
 
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
             builder,
-            slider,
-            config.mpc_config,
-            self.planar_pose_pub.GetOutputPort("contact_mode"),
+            sim_config.dynamics_config,
+            sim_config.mpc_config,
+            self.planar_pose_pub.GetOutputPort("contact_mode_traj"),
             self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("contact_force_traj"),
             self.pusher_pose_to_joint_pos.get_pose_input_port(),
-            closed_loop=config.closed_loop,
+            closed_loop=sim_config.closed_loop,
             pusher_planar_pose_measured=self.station.GetOutputPort("pusher_pose"),
             slider_pose_measured=self.station.GetOutputPort("slider_pose"),
         )
 
-        if config.save_plots:
+        if sim_config.save_plots:
             builder.AddNamedSystem("theta_source")
 
         self.diagram = builder.Build()
 
         self.simulator = Simulator(self.diagram)
-        if config.use_realtime:
+        if sim_config.use_realtime:
             self.simulator.set_target_realtime_rate(1.0)
 
         self.context = self.simulator.get_mutable_context()
         self.mbp_context = self.station.mbp.GetMyContextFromRoot(self.context)
 
-        self.config = config
-        self.set_slider_planar_pose(config.slider_start_pose)
+        self.config = sim_config
+        self.set_slider_planar_pose(sim_config.slider_start_pose)
 
         BUFFER = 0.02
         start_joint_positions = solve_ik(
             self.diagram,
             self.station,
-            config.pusher_start_pose.to_pose(BUFFER),
-            config.slider_start_pose.to_pose(self.station.get_slider_min_height()),
-            config.default_joint_positions,
+            sim_config.pusher_start_pose.to_pose(BUFFER),
+            sim_config.slider_start_pose.to_pose(self.station.get_slider_min_height()),
+            sim_config.default_joint_positions,
         )
         self._set_joint_positions(start_joint_positions)
 
-        if not config.use_diff_ik:
+        if not sim_config.use_diff_ik:
             ik.init(self.diagram, self.station)
 
     def export_diagram(self, filename: str):

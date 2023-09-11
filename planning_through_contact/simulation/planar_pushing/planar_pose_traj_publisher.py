@@ -47,9 +47,9 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
 
         self.DeclareAbstractOutputPort(
-            "contact_mode",
-            lambda: AbstractValue.Make(PlanarPushingContactMode(0)),
-            self.DoCalcModeOuput,
+            "contact_mode_traj",
+            lambda: AbstractValue.Make([PlanarPushingContactMode(0)]),
+            self.DoCalcModeTrajOutput,
         )
 
     def _get_rel_t(self, t: float) -> float:
@@ -59,7 +59,7 @@ class PlanarPoseTrajPublisher(LeafSystem):
 
     def _get_traj(self, curr_t: float, func: Callable[[float], T]) -> List[T]:
         h = self.mpc_config.step_size
-        N = self.mpc_config.horizon
+        N = self.mpc_config.horizon + 1
 
         ts = np.arange(curr_t, curr_t + h * N, h)[:N]
         assert len(ts) == N
@@ -104,7 +104,9 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
         output.set_value(force_traj)
 
-    def DoCalcModeOuput(self, context: Context, output):
+    def DoCalcModeTrajOutput(self, context: Context, output):
         curr_t = context.get_time()
-        mode = self.traj.get_mode(self._get_rel_t(curr_t))
-        output.set_value(mode)
+        mode_traj = self._get_traj(
+            self._get_rel_t(curr_t), lambda t: self.traj.get_mode(t)
+        )
+        output.set_value(mode_traj)

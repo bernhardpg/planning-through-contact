@@ -43,11 +43,10 @@ class PlanarPushingPlanner:
 
     def __init__(
         self,
-        slider: RigidBody,
         config: PlanarPlanConfig,
         contact_locations: Optional[List[PolytopeContactLocation]] = None,
     ):
-        self.slider = slider
+        self.slider = config.dynamics_config.slider
         self.config = config
 
         self.source = None
@@ -65,7 +64,7 @@ class PlanarPushingPlanner:
         # object to only pass faces as contact locations
         self.contact_locations = contact_locations
         if self.contact_locations is None:
-            self.contact_locations = slider.geometry.contact_locations
+            self.contact_locations = self.slider.geometry.contact_locations
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -75,7 +74,7 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.config.penalize_mode_transition:
+        if self.config.penalize_mode_transitions:
             for v in self.contact_vertices:
                 v.AddCost(self.cost_param_transition_cost)
 
@@ -93,7 +92,6 @@ class PlanarPushingPlanner:
             FaceContactMode.create_from_plan_spec(
                 loc,
                 self.config,
-                self.slider,
             )
             for loc in self.contact_locations
         ]
@@ -140,7 +138,6 @@ class PlanarPushingPlanner:
     ) -> NonCollisionSubGraph:
         subgraph = NonCollisionSubGraph.create_with_gcs(
             self.gcs,
-            self.slider,
             self.config,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
         )
@@ -153,7 +150,9 @@ class PlanarPushingPlanner:
                 incoming_idx = second_contact_mode_idx
 
             subgraph.connect_with_continuity_constraints(
-                incoming_idx,
+                self.slider.geometry.get_collision_free_region_for_loc_idx(
+                    incoming_idx
+                ),
                 VertexModePair(
                     self.contact_vertices[incoming_idx],
                     self.contact_modes[incoming_idx],
@@ -162,7 +161,9 @@ class PlanarPushingPlanner:
                 outgoing=False,
             )
             subgraph.connect_with_continuity_constraints(
-                outgoing_idx,
+                self.slider.geometry.get_collision_free_region_for_loc_idx(
+                    outgoing_idx
+                ),
                 VertexModePair(
                     self.contact_vertices[outgoing_idx],
                     self.contact_modes[outgoing_idx],
@@ -173,7 +174,7 @@ class PlanarPushingPlanner:
         else:
             for idx in (first_contact_mode_idx, second_contact_mode_idx):
                 subgraph.connect_with_continuity_constraints(
-                    idx,
+                    self.slider.geometry.get_collision_free_region_for_loc_idx(idx),
                     VertexModePair(
                         self.contact_vertices[idx],
                         self.contact_modes[idx],
@@ -211,15 +212,15 @@ class PlanarPushingPlanner:
             name = "EXIT"
             kwargs = {"outgoing": False, "incoming": True}
 
-        subgraph = NonCollisionSubGraph.create_with_gcs(
-            self.gcs, self.slider, self.config, name
-        )
+        subgraph = NonCollisionSubGraph.create_with_gcs(self.gcs, self.config, name)
 
         for idx, (vertex, mode) in enumerate(
             zip(self.contact_vertices, self.contact_modes)
         ):
             subgraph.connect_with_continuity_constraints(
-                idx, VertexModePair(vertex, mode), **kwargs
+                self.slider.geometry.get_collision_free_region_for_loc_idx(idx),
+                VertexModePair(vertex, mode),
+                **kwargs,
             )
         return subgraph
 
@@ -262,7 +263,7 @@ class PlanarPushingPlanner:
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, finger_pose, self.slider, initial_or_final
+            self.config, slider_pose, finger_pose, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)
@@ -342,6 +343,7 @@ class PlanarPushingPlanner:
         print_output: bool = False,
         measure_time: bool = False,
         round_trajectory: bool = False,
+        print_path: bool = False,
     ) -> PlanarPushingTrajectory:
         assert self.source is not None
         assert self.target is not None
@@ -359,12 +361,14 @@ class PlanarPushingPlanner:
             print(f"Total elapsed optimization time: {elapsed_time}")
 
         traj = PlanarPushingTrajectory.from_result(
+            self.config,
             result,
             self.gcs,
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
             round_trajectory,
+            print_path,
         )
 
         return traj
