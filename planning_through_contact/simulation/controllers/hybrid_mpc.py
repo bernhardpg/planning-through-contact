@@ -175,16 +175,21 @@ class HybridMpc:
             lam_dot = u_i[2]
 
             prog.AddLinearConstraint(c_n >= 0)
+            prog.AddLinearConstraint(lam_dot <= 1.0)
+            prog.AddLinearConstraint(lam_dot >= -1.0)
 
             if mode == HybridModes.STICKING or i > num_sliding_steps:
                 prog.AddLinearConstraint(c_f <= mu * c_n)
                 prog.AddLinearConstraint(c_f >= -mu * c_n)
+                prog.AddLinearEqualityConstraint(lam_dot == 0)
 
             elif mode == HybridModes.SLIDING_LEFT:
                 prog.AddLinearConstraint(c_f == mu * c_n)
+                prog.AddLinearConstraint(lam_dot <= 0)
 
             else:  # SLIDING_RIGHT
                 prog.AddLinearConstraint(c_f == -mu * c_n)
+                prog.AddLinearConstraint(lam_dot >= 0)
 
         # State constraints
         for state in x.T:
@@ -193,9 +198,9 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0]) * 100
-        R = np.diag([1, 1, 1]) * 0.1
-        Q_N = Q
+        Q = np.diag([1, 1, 1, 0]) * 1000
+        R = np.diag([1, 1, 0.1]) * 0.01
+        Q_N = Q * 10
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
@@ -230,9 +235,6 @@ class HybridMpc:
         control = controls[best_idx]
         result = results[best_idx]
 
-        print(best_idx)
-        breakpoint()
-
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
         if state_sol.shape[1] == 1:
             breakpoint()
@@ -242,6 +244,7 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
+        print(f"mode: {best_idx}, lam_dot: {u_next[2]}, c_f: {u_next[1]}")
         return x_dot_curr, u_next
 
 
