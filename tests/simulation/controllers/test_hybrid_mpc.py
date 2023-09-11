@@ -62,7 +62,7 @@ def mpc_config() -> HybridMpcConfig:
         step_size=0.1,
         horizon=10,
         num_sliding_steps=5,
-        rate_Hz=50,
+        rate_Hz=20,
     )
     return config
 
@@ -96,13 +96,9 @@ def hybrid_mpc(
 @pytest.fixture
 def hybrid_mpc_controller_system(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
+    mpc_config: HybridMpcConfig,
 ) -> HybridModelPredictiveControlSystem:
-    config = HybridMpcConfig(
-        step_size=0.1,
-        horizon=10,
-        num_sliding_steps=5,
-    )
-    mpc = HybridModelPredictiveControlSystem(slider_pusher_system, config)
+    mpc = HybridModelPredictiveControlSystem(slider_pusher_system, mpc_config)
     return mpc
 
 

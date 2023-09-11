@@ -134,7 +134,7 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         return state
 
     def get_control(self, t: float) -> npt.NDArray[np.float64]:
-        if t > self.end_times[-1]:
+        if t >= self.end_times[-1]:
             t = self.end_times[
                 -1
             ]  # repeat last element when we want trajectory after end time
@@ -161,11 +161,13 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         curr_t: float,
         func: Callable[[float], npt.NDArray[np.float64]],
     ) -> List[npt.NDArray[np.float64]]:
-        ts = np.arange(
-            curr_t, curr_t + self.cfg.step_size * self.cfg.horizon, self.cfg.step_size
-        )[: self.cfg.horizon]
+        end_time = curr_t + self.cfg.step_size * self.cfg.horizon
+        ts = np.arange(curr_t, end_time, self.cfg.step_size)[: self.cfg.horizon]
 
-        assert len(ts) == self.cfg.horizon
+        # Remove any trajectory pieces that are after the trajectory ends
+        if any(ts >= self.end_times[-1] + self.cfg.step_size):
+            idx = np.where(ts >= self.end_times[-1] + self.cfg.step_size)[0][0]
+            ts = ts[:idx]
 
         traj = [func(t) for t in ts]
         return traj
