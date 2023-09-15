@@ -96,6 +96,19 @@ class SliderPusherSystemConfig:
 
 
 @dataclass
+class PlanarSolverParams:
+    gcs_max_rounded_paths: int = 1
+    # NOTE: Currently, there is no way to solve the MISDP, so this must be true
+    gcs_convex_relaxation: bool = True
+    print_flows: bool = False
+    assert_determinants: bool = True
+    nonlinear_traj_rounding: bool = True
+    print_solver_output: bool = False
+    measure_solve_time: bool = False
+    print_path: bool = False
+
+
+@dataclass
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2

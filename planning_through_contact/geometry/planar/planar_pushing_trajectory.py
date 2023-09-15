@@ -230,6 +230,15 @@ class PlanarPushingTrajectory:
         self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
 
+        if config.assert_determinants:
+            for path_points in path_knot_points:
+                assert path_points.R_WBs is not None
+
+                dets = [np.linalg.det(R) for R in path_points.R_WBs]
+                if not np.allclose(dets, 1):
+                    print(dets)
+                    raise ValueError("Determinants not 1.")
+
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
         self.start_times = start_and_end_times[:-1]

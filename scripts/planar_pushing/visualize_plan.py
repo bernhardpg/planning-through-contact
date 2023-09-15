@@ -9,7 +9,7 @@ from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def visualize_plan(debug: bool = False):
-    plan = "trajectories/t_pusher_pushing_5.pkl"
+    plan = "trajectories/t_pusher_pushing_2.pkl"
     traj = PlanarPushingTrajectory.load(plan)
 
     if "box" in plan:

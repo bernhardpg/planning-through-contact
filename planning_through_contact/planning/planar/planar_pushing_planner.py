@@ -2,6 +2,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
+import pydot
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import CommonSolverOption, MathematicalProgramResult, SolverOptions
 
@@ -25,7 +26,10 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    PlanarSolverParams,
+)
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -293,18 +297,17 @@ class PlanarPushingPlanner:
 
         return pair
 
-    def _solve(
-        self, print_output: bool = False, convex_relaxation: bool = True
-    ) -> MathematicalProgramResult:
+    def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
         options = opt.GraphOfConvexSetsOptions()
-        if print_output:
+        if solver_params.print_solver_output:
             options.solver_options = SolverOptions()
+            # options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
             options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-        options.convex_relaxation = convex_relaxation
+        options.convex_relaxation = solver_params.gcs_convex_relaxation
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
-            options.max_rounded_paths = 10
+            options.max_rounded_paths = solver_params.gcs_max_rounded_paths
 
         assert self.source is not None
         assert self.target is not None
@@ -312,6 +315,10 @@ class PlanarPushingPlanner:
         result = self.gcs.SolveShortestPath(
             self.source.vertex, self.target.vertex, options
         )
+
+        if solver_params.print_flows:
+            self._print_edge_flows(result)
+
         return result
 
     def get_vertex_solution_path(
@@ -339,11 +346,7 @@ class PlanarPushingPlanner:
         return path
 
     def plan_trajectory(
-        self,
-        print_output: bool = False,
-        measure_time: bool = False,
-        round_trajectory: bool = False,
-        print_path: bool = False,
+        self, solver_params: PlanarSolverParams
     ) -> PlanarPushingTrajectory:
         assert self.source is not None
         assert self.target is not None
@@ -351,14 +354,17 @@ class PlanarPushingPlanner:
         import time
 
         start = time.time()
-        result = self._solve(print_output)
+        result = self._solve(solver_params)
         end = time.time()
 
         assert result.is_success()
 
-        if measure_time:
+        if solver_params.measure_solve_time:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
+
+        if solver_params.print_flows:
+            self._print_edge_flows(result)
 
         traj = PlanarPushingTrajectory.from_result(
             self.config,
@@ -367,15 +373,36 @@ class PlanarPushingPlanner:
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
-            round_trajectory,
-            print_path,
+            solver_params.nonlinear_traj_rounding,
+            solver_params.print_path,
         )
 
         return traj
 
-    def save_graph_diagram(self, filepath: Path) -> None:
-        graphviz = self.gcs.GetGraphvizString()
-        import pydot
+    def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
+        """
+        Used for debugging.
+        """
+        edge_phis = {
+            (e.u().name(), e.v().name()): result.GetSolution(e.phi())
+            for e in self.gcs.Edges()
+        }
+        sorted_flows = sorted(edge_phis.items(), key=lambda item: item[0])
+        for name, flow in sorted_flows:
+            print(f"{name}: {flow}")
+
+    def create_graph_diagram(
+        self,
+        filepath: Optional[Path] = None,
+        result: Optional[MathematicalProgramResult] = None,
+    ) -> pydot.Dot:
+        """
+        Optionally saves the graph to file if a string is given for the 'filepath' argument.
+        """
+        graphviz = self.gcs.GetGraphvizString(precision=2, result=result)
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        data.write_svg(str(filepath))
+        if filepath is not None:
+            data.write_svg(str(filepath))
+
+        return data
