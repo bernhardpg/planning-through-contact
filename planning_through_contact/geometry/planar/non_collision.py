@@ -240,6 +240,9 @@ class NonCollisionMode(AbstractContactMode):
         self.contact_planes = self.slider_geometry.get_contact_planes(
             self.contact_location.idx
         )
+        # TODO(bernhardpg): This class should not have a contact_location object. it is not accurate,
+        # as it really only has the index of a collision free set, which may or may not correspond
+        # 1-1 to a
         self.collision_free_space_planes = (
             self.slider_geometry.get_planes_for_collision_free_region(
                 self.contact_location.idx
@@ -264,11 +267,6 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLinearConstraint(expr)
 
         self._add_workspace_constraints()
-
-        lb, ub = self.config.workspace.slider.bounds
-        self.prog.AddBoundingBoxConstraint(lb, ub, self.variables.p_WB)
-        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.cos_th)  # type: ignore
-        self.prog.AddBoundingBoxConstraint(-1, 1, self.variables.sin_th)  # type: ignore
 
     def _add_workspace_constraints(self) -> None:
         for k in range(self.num_knot_points):
@@ -468,8 +466,6 @@ class NonCollisionMode(AbstractContactMode):
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
         poly = opt.Spectrahedron(temp_prog)
-
-        # NOTE: They sets will likely be unbounded
 
         return poly
 
