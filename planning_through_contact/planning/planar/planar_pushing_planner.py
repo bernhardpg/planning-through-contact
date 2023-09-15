@@ -363,9 +363,6 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
-        if solver_params.print_flows:
-            self._print_edge_flows(result)
-
         traj = PlanarPushingTrajectory.from_result(
             self.config,
             result,
