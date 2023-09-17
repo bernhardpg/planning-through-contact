@@ -372,6 +372,7 @@ class PlanarPushingPlanner:
             self._get_all_vertex_mode_pairs(),
             solver_params.nonlinear_traj_rounding,
             solver_params.print_path,
+            solver_params.assert_determinants,
         )
 
         return traj

@@ -47,41 +47,62 @@ def create_plan(
     elif body_to_use == "t_pusher":
         body = get_tee()
 
-    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.015, slider=body)
+    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
 
     config = PlanarPlanConfig(
-        time_non_collision=4.0,
-        time_in_contact=4.0,
-        num_knot_points_contact=3,
+        time_non_collision=2.0,
+        time_in_contact=2.0,
+        num_knot_points_contact=4,
         num_knot_points_non_collision=4,
-        avoid_object=False,
+        avoid_object=True,
         avoidance_cost="quadratic",
-        no_cycles=False,
+        no_cycles=True,
         dynamics_config=dynamics_config,
-        allow_teleportation=True,
+        allow_teleportation=False,
     )
 
     planner = PlanarPushingPlanner(config)
 
-    # TODO(bernhardpg): UNKNOWN error occurs for t-pusher
-
-    if traj_number == 1:  # Straight push
-        slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2)
-        slider_target_pose = PlanarPose(x=0.80, y=0.0, theta=np.pi / 2)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    if traj_number == 1:  # gives a kind of weird small touch
+        slider_initial_pose = PlanarPose(x=-0.2, y=0.65, theta=0.0)
+        slider_target_pose = PlanarPose(x=0.2, y=0.65, theta=-0.5)
+        finger_initial_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.0, y=-0.2, theta=0.0)
     elif traj_number == 2:
-        slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2 - 0.2)
-        slider_target_pose = PlanarPose(x=0.70, y=0.0, theta=np.pi / 2 + 0.3)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.2, y=0.65, theta=0.0)
+        slider_target_pose = PlanarPose(x=-0.2, y=0.65, theta=0.5)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
     elif traj_number == 3:
-        slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0)
-        slider_target_pose = PlanarPose(x=0.60, y=0.0, theta=0.3)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.0, y=0.65, theta=0.5)
+        slider_target_pose = PlanarPose(x=-0.3, y=0.55, theta=-0.2)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
+    elif traj_number == 4:
+        slider_initial_pose = PlanarPose(x=0.1, y=0.60, theta=-0.2)
+        slider_target_pose = PlanarPose(x=-0.2, y=0.70, theta=0.5)
+        finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
+
+    # TODO: Will generate new plans for the new workspace soon!
+    # TODO(bernhardpg): UNKNOWN error occurs for t-pusher
+    # if traj_number == 1:  # Straight push
+    #     slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2)
+    #     slider_target_pose = PlanarPose(x=0.80, y=0.0, theta=np.pi / 2)
+    #     finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    #     finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    # elif traj_number == 2:
+    #     slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=np.pi / 2 - 0.2)
+    #     slider_target_pose = PlanarPose(x=0.70, y=0.0, theta=np.pi / 2 + 0.3)
+    #     finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    #     finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    # elif traj_number == 3:
+    #     slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0)
+    #     slider_target_pose = PlanarPose(x=0.60, y=0.0, theta=0.3)
+    #     finger_initial_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
+    #     finger_target_pose = PlanarPose(x=-0.2, y=0.15, theta=0.0)
 
     planner.set_initial_poses(finger_initial_pose, slider_initial_pose)
     planner.set_target_poses(finger_target_pose, slider_target_pose)
@@ -90,7 +111,7 @@ def create_plan(
         planner.create_graph_diagram(Path("graph.svg"))
 
     solver_params = PlanarSolverParams(
-        gcs_max_rounded_paths=0,
+        gcs_max_rounded_paths=10,
         print_flows=True,
         nonlinear_traj_rounding=True,
         assert_determinants=True,
@@ -112,4 +133,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="box", traj_number=2, debug=True)
+    create_plan(body_to_use="box", traj_number=4, debug=True)

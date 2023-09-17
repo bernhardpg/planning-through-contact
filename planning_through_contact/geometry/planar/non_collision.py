@@ -177,7 +177,7 @@ class NonCollisionVariables(AbstractModeVariables):
 @dataclass
 class NonCollisionMode(AbstractContactMode):
     cost_param_avoidance_lin: float = 0.1
-    cost_param_avoidance_quad_dist: float = 0.3
+    cost_param_avoidance_quad_dist: float = 0.2
     cost_param_avoidance_quad_weight: float = 0.4
     cost_param_avoidance_socp_weight: float = 0.001
     cost_param_eucl: float = 1.0
@@ -266,7 +266,10 @@ class NonCollisionMode(AbstractContactMode):
             for expr in exprs:
                 self.prog.AddLinearConstraint(expr)
 
-        self._add_workspace_constraints()
+        # TODO(bernhardpg): As of now we don't worry about the workspace constraints
+        use_workspace_constraints = False
+        if use_workspace_constraints:
+            self._add_workspace_constraints()
 
     def _add_workspace_constraints(self) -> None:
         for k in range(self.num_knot_points):

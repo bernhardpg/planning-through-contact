@@ -225,12 +225,13 @@ class PlanarPushingTrajectory:
         self,
         config: PlanarPlanConfig,
         path_knot_points: List[AbstractModeVariables],
+        assert_determinants: bool = False,
     ) -> None:
         self.config = config
         self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
 
-        if config.assert_determinants:
+        if assert_determinants:
             for path_points in path_knot_points:
                 assert path_points.R_WBs is not None
 
@@ -321,6 +322,7 @@ class PlanarPushingTrajectory:
         pairs: Dict[str, VertexModePair],
         round_solution: bool = False,
         print_path: bool = False,
+        assert_determinants: bool = True,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
@@ -329,9 +331,9 @@ class PlanarPushingTrajectory:
             print(f"path: {path.get_path_names()}")
 
         if round_solution:
-            return cls(config, path.get_rounded_vars())
+            return cls(config, path.get_rounded_vars(), assert_determinants)
         else:
-            return cls(config, path.get_vars())
+            return cls(config, path.get_vars(), assert_determinants)
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
