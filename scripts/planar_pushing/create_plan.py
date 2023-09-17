@@ -121,11 +121,13 @@ def create_plan(
         num_knot_points_non_collision=4,
         avoid_object=True,
         avoidance_cost="quadratic",
-        no_cycles=True,
+        no_cycles=False,
         dynamics_config=dynamics_config,
         allow_teleportation=False,
+        penalize_mode_transitions=True,
     )
-
+    # locs = [body.geometry.contact_locations[i] for i in (0, 3)]
+    # planner = PlanarPushingPlanner(config, locs)
     planner = PlanarPushingPlanner(config)
 
     if traj_number == 1:
@@ -208,4 +210,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=1, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=2, debug=True)
