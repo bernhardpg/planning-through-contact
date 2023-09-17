@@ -33,7 +33,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=False,
         delay_before_execution=2.0,
         use_diff_ik=True,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
     )
@@ -48,4 +48,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/t_pusher_pushing_5.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/t_pusher_pushing_2.pkl", save_recording=True, debug=True)

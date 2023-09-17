@@ -238,6 +238,7 @@ class HybridMpc:
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
         if state_sol.shape[1] == 1:
             breakpoint()
+
         x_next = state_sol[:, 1]
 
         x_dot_curr = (x_next - x_curr) / self.config.step_size
@@ -277,7 +278,10 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
 
-        _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+        if len(u_traj) > 1:
+            _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+        else:
+            control_next = np.array([0, 0, 0])
         output.SetFromVector(control_next)  # type: ignore
 
     def get_control_port(self) -> OutputPort:

@@ -276,9 +276,6 @@ class FaceContactMode(AbstractContactMode):
         self._define_costs()
 
     def _define_constraints(self) -> None:
-        # TODO(bernhardpg): replace with workspace constraints!
-        TABLE_SIZE = 2.0
-
         for lam in self.variables.lams:
             self.prog.AddBoundingBoxConstraint(0, 1, lam)
 
@@ -297,7 +294,8 @@ class FaceContactMode(AbstractContactMode):
             self.prog.AddLinearConstraint(c_f <= mu * c_n)
             self.prog.AddLinearConstraint(c_f >= -mu * c_n)
 
-        # TODO(bernhardpg): Variables should always be bounded. Get back to this
+        # Will automatically be bounded as long as p_WB is constrained to move only
+        # a finite distance, which we will
         self.bound_forces = False
         if self.bound_forces:
             # Bounds on forces
@@ -308,18 +306,15 @@ class FaceContactMode(AbstractContactMode):
                     -self.dynamics_config.f_max, self.dynamics_config.f_max, c_f
                 )
 
-        # TODO(bernhardpg): Variables should always be bounded. Get back to this
-        # These are turned off to speed up solve times, as they do not seem to
-        # impact the solution (empirically)
+        # These position bounds should never be needed, as either the initial position,
+        # target position, or edge constraints with this mode (in the case of GCS)
+        # will constrain them
         self.bound_positions = False
         if self.bound_positions:
             lb, ub = self.config.workspace.slider.bounds
             for p_WB in self.variables.p_WBs:
                 self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
 
-        # TODO(bernhardpg): Variables should always be bounded. Get back to this
-        # These are turned off to speed up solve times, as they do not seem to
-        # impact the solution (empirically)
         self.bound_sin_cos = False
         if self.bound_sin_cos:
             # Bounds on cosines and sines

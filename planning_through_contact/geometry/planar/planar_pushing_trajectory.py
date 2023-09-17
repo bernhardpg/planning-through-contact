@@ -225,10 +225,20 @@ class PlanarPushingTrajectory:
         self,
         config: PlanarPlanConfig,
         path_knot_points: List[AbstractModeVariables],
+        assert_determinants: bool = False,
     ) -> None:
         self.config = config
         self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
+
+        if assert_determinants:
+            for path_points in path_knot_points:
+                assert path_points.R_WBs is not None
+
+                dets = [np.linalg.det(R) for R in path_points.R_WBs]
+                if not np.allclose(dets, 1):
+                    print(dets)
+                    raise ValueError("Determinants not 1.")
 
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
@@ -312,6 +322,7 @@ class PlanarPushingTrajectory:
         pairs: Dict[str, VertexModePair],
         round_solution: bool = False,
         print_path: bool = False,
+        assert_determinants: bool = True,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
@@ -320,9 +331,9 @@ class PlanarPushingTrajectory:
             print(f"path: {path.get_path_names()}")
 
         if round_solution:
-            return cls(config, path.get_rounded_vars())
+            return cls(config, path.get_rounded_vars(), assert_determinants)
         else:
-            return cls(config, path.get_vars())
+            return cls(config, path.get_vars(), assert_determinants)
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
