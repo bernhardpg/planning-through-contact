@@ -56,7 +56,9 @@ def create_plan(
     elif body_to_use == "sugar_box":
         body = get_sugar_box()
 
-    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
+    dynamics_config = SliderPusherSystemConfig(
+        pusher_radius=0.04, slider=body, friction_coeff_slider_pusher=0.1
+    )
 
     config = PlanarPlanConfig(
         time_non_collision=2.0,
@@ -79,12 +81,12 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-    if traj_number == 2:
+    elif traj_number == 2:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-    if traj_number == 3:
+    elif traj_number == 3:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
@@ -154,4 +156,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=3, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=2, debug=True)

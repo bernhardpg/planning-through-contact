@@ -30,10 +30,10 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
-        use_realtime=False,
+        use_realtime=True,
         delay_before_execution=2.0,
         use_diff_ik=True,
-        closed_loop=False,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
     )

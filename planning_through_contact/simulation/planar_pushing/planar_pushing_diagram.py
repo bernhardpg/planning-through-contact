@@ -163,7 +163,10 @@ class PlanarPushingDiagram(Diagram):
 
         if isinstance(sim_config.slider.geometry, Box2d):
             body_name = "box"
-            slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
+            # slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
+            slider_sdf_url = (
+                "package://planning_through_contact/sugar_box_hydroelastic.sdf"
+            )
         elif isinstance(sim_config.slider.geometry, TPusher2d):
             body_name = "t_pusher"
             slider_sdf_url = "package://planning_through_contact/t_pusher.sdf"
