@@ -145,13 +145,19 @@ class PlanarPushingPlanner:
             self.config,
             f"FACE_{first_contact_mode_idx}_to_FACE_{second_contact_mode_idx}",
         )
+
+        # TODO
+        mapping = {0: 1, 1: 3, 2: 2, 3: 0}
+
         if no_cycles:  # only connect lower idx faces to higher idx faces
-            if first_contact_mode_idx <= second_contact_mode_idx:
-                incoming_idx = first_contact_mode_idx
-                outgoing_idx = second_contact_mode_idx
-            else:  # second_contact_mode_idx <= first_contact_mode_idx
-                outgoing_idx = first_contact_mode_idx
-                incoming_idx = second_contact_mode_idx
+            first = mapping[first_contact_mode_idx]
+            second = mapping[second_contact_mode_idx]
+            if first <= second:
+                incoming_idx = first
+                outgoing_idx = second
+            else:  # second <= first
+                outgoing_idx = first
+                incoming_idx = second
 
             subgraph.connect_with_continuity_constraints(
                 self.slider.geometry.get_collision_free_region_for_loc_idx(

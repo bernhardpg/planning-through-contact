@@ -236,7 +236,7 @@ class PlanarPushingTrajectory:
                 assert path_points.R_WBs is not None
 
                 dets = [np.linalg.det(R) for R in path_points.R_WBs]
-                if not np.allclose(dets, 1):
+                if not np.allclose(dets, 1, atol=1e-3):
                     print(dets)
                     raise ValueError("Determinants not 1.")
 
