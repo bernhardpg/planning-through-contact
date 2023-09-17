@@ -9,7 +9,7 @@ from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def visualize_plan(debug: bool = False):
-    plan = "trajectories/sugar_box_pushing_2.pkl"
+    plan = "trajectories/sugar_box_pushing_3.pkl"
     traj = PlanarPushingTrajectory.load(plan)
     slider = traj.config.dynamics_config.slider
 

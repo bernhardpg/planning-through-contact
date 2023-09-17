@@ -112,7 +112,9 @@ def create_plan(
     elif body_to_use == "sugar_box":
         body = get_sugar_box()
 
-    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
+    dynamics_config = SliderPusherSystemConfig(
+        pusher_radius=0.04, slider=body, friction_coeff_slider_pusher=0.1
+    )
 
     config = PlanarPlanConfig(
         time_non_collision=2.0,
@@ -210,4 +212,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=3, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=2, debug=True)
