@@ -128,7 +128,7 @@ def create_plan(
 
     planner = PlanarPushingPlanner(config)
 
-    if traj_number == 1:  # loose
+    if traj_number == 1:
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
@@ -158,21 +158,6 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.65, y=-0.1, theta=np.pi / 2 + 0.3)
         finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
         finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
-    # elif traj_number == 2:
-    #     slider_initial_pose = PlanarPose(x=0.2, y=0.65, theta=0.0)
-    #     slider_target_pose = PlanarPose(x=-0.2, y=0.65, theta=0.5)
-    #     finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
-    #     finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
-    # elif traj_number == 3:
-    #     slider_initial_pose = PlanarPose(x=0.0, y=0.65, theta=0.5)
-    #     slider_target_pose = PlanarPose(x=-0.3, y=0.55, theta=-0.2)
-    #     finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
-    #     finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
-    # elif traj_number == 4:
-    #     slider_initial_pose = PlanarPose(x=0.1, y=0.60, theta=-0.2)
-    #     slider_target_pose = PlanarPose(x=-0.2, y=0.70, theta=0.5)
-    #     finger_initial_pose = PlanarPose(x=-0.0, y=-0.2, theta=0.0)
-    #     finger_target_pose = PlanarPose(x=0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -201,7 +186,7 @@ def create_plan(
         planner.create_graph_diagram(Path("graph.svg"))
 
     solver_params = PlanarSolverParams(
-        gcs_max_rounded_paths=10,
+        gcs_max_rounded_paths=15,
         print_flows=True,
         nonlinear_traj_rounding=True,
         assert_determinants=True,
@@ -223,4 +208,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=4, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=1, debug=True)
