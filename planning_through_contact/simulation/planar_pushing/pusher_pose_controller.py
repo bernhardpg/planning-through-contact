@@ -185,25 +185,23 @@ class PusherPoseController(LeafSystem):
         u_traj = [
             system.get_control_from_contact_force(force, slider_pose)
             for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
-        ][:-1]
+        ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
 
-        modes_eq_to_curr = [m == mode for m in mode_traj]
-        if not all(modes_eq_to_curr):
-            N = modes_eq_to_curr.index(False)
+        # modes_eq_to_curr = [m == mode for m in mode_traj]
+        # if not all(modes_eq_to_curr):
+        #     N = modes_eq_to_curr.index(False)
+        #
+        #     # repeat last element of the trajectory that is still in contact
+        #     for idx in range(N, len(x_traj)):
+        #         x_traj[idx] = x_traj[N - 1]
+        #
+        #     for idx in range(N, len(u_traj)):
+        #         u_traj[idx] = u_traj[N - 1]
+        # else:
+        #     N = len(x_traj)
 
-            # repeat last element of the trajectory that is still in contact
-            for idx in range(N, len(x_traj)):
-                x_traj[idx] = x_traj[N - 1]
-
-            for idx in range(N, len(u_traj)):
-                u_traj[idx] = u_traj[N - 1]
-        else:
-            N = len(x_traj)
-
-        x_dot_curr, u_input = controller.compute_control(
-            x_curr, x_traj[: N + 1], u_traj[:N]
-        )
+        x_dot_curr, u_input = controller.compute_control(x_curr, x_traj, u_traj)
 
         h = 1 / self.mpc_config.rate_Hz
         x_at_next_mpc_step = x_curr + h * x_dot_curr

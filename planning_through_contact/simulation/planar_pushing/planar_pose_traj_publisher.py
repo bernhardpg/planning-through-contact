@@ -59,7 +59,7 @@ class PlanarPoseTrajPublisher(LeafSystem):
 
     def _get_traj(self, curr_t: float, func: Callable[[float], T]) -> List[T]:
         h = self.mpc_config.step_size
-        N = self.mpc_config.horizon + 1
+        N = self.mpc_config.horizon
 
         ts = np.arange(curr_t, curr_t + h * N, h)[:N]
         assert len(ts) == N
