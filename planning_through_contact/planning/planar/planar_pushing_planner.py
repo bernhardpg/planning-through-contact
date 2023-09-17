@@ -43,7 +43,7 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
-    cost_param_transition_cost: float = 0.5
+    cost_param_transition_cost: float = 0.25
 
     def __init__(
         self,

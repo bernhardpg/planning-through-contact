@@ -210,4 +210,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=2, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=3, debug=True)
