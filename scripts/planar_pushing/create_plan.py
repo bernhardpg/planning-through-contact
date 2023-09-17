@@ -65,16 +65,23 @@ def create_plan(
         num_knot_points_non_collision=4,
         avoid_object=True,
         avoidance_cost="quadratic",
-        no_cycles=True,
+        no_cycles=False,
         dynamics_config=dynamics_config,
         allow_teleportation=False,
+        penalize_mode_transitions=True,
     )
-
+    # locs = [body.geometry.contact_locations[i] for i in (0, 3)]
+    # planner = PlanarPushingPlanner(config, locs)
     planner = PlanarPushingPlanner(config)
 
     if traj_number == 1:
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
+        finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    if traj_number == 2:
+        slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
+        slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     # elif traj_number == 2:
@@ -142,4 +149,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=1, debug=True)
+    create_plan(body_to_use="sugar_box", traj_number=2, debug=True)
