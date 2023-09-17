@@ -31,6 +31,13 @@ def get_slider_box() -> RigidBody:
     return slider
 
 
+def get_sugar_box() -> RigidBody:
+    mass = 0.1
+    box_geometry = Box2d(width=0.08670, height=0.17030)
+    slider = RigidBody("sugar_box", box_geometry, mass)
+    return slider
+
+
 def get_tee() -> RigidBody:
     mass = 0.1
     body = RigidBody("t_pusher", TPusher2d(), mass)
@@ -95,13 +102,15 @@ def create_plan_teleport(
 
 def create_plan(
     debug: bool = False,
-    body_to_use: Literal["box", "t_pusher"] = "box",
+    body_to_use: Literal["box", "t_pusher", "sugar_box"] = "box",
     traj_number: int = 1,
 ):
     if body_to_use == "box":
         body = get_slider_box()
     elif body_to_use == "t_pusher":
         body = get_tee()
+    elif body_to_use == "sugar_box":
+        body = get_sugar_box()
 
     dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
 
@@ -214,4 +223,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan_teleport(traj_number=1)
+    create_plan(body_to_use="sugar_box", traj_number=4, debug=True)
