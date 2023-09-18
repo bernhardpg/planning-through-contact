@@ -544,9 +544,11 @@ class NonCollisionMode:
         self.name = name
         self.time_in_mode = end_time
 
+        # We separate between these two to be able to account for radius,
+        # but here we don't care about pusher radius
         faces = object.geometry.get_planes_for_collision_free_region(
             non_collision_face_idx
-        )
+        ) + object.geometry.get_contact_planes(non_collision_face_idx)
 
         prog = MathematicalProgram()
         # Finger location
@@ -860,36 +862,23 @@ def plan_planar_pushing():
         ]
     )
 
-    # TODO: For some reason, this causes a very strange bug!
-    # def generate_sequence(i, j):
-    #     seq = [k for k in range(i, j + 1)]  # 0 and 1 have the same set
-    #     replace_ones = [0 if k == 1 else k for k in seq]
-    #     no_repeats = [replace_ones[0]]
-    #     for i in range(1, len(replace_ones)):
-    #         if replace_ones[i] != replace_ones[i - 1]:
-    #             no_repeats.append(replace_ones[i])
-    #
-    #     return no_repeats
-    # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
+    def create_path(i, j):
+        NUM = 6
+        if i >= NUM or j >= NUM:
+            raise ValueError(f"i and j must be below {NUM}")
+        if i < j:
+            return [n for n in range(i, j + 1)]
+        else:
+            return [n % NUM for n in range(i, j + 1 + NUM)]
+
+    contact_map = object.geometry.get_collision_free_region_for_loc_idx
+
     paths = {
-        (0, 1): [[0], [0, 5, 4, 3, 2, 0]],
-        (0, 2): [[0, 2], [0, 5, 4, 3, 2]],
-        (0, 3): [[0, 2, 3], [0, 5, 4, 3]],
-        (1, 2): [[2], [0]],
-        (1, 3): [[0, 2, 3], [0]],
-        (2, 3): [[2, 3], [0]],
-        (0, 7): [[0], [0]],
-        (0, 6): [[0, 5], [0]],
-        (3, 6): [[3, 4, 5], [0]],
-        (3, 7): [[3, 4, 5], [0]],
-        (7, 6): [[0], [0]],
-        (7, 5): [[0], [0]],
-        (7, 4): [[0, 4], [0]],
-        (6, 5): [[5], [0]],
-        (6, 4): [[5, 4], [0]],
-        (5, 4): [[5, 4], [0]],
-        (5, 3): [[5, 4, 3], [0]],
-        (5, 2): [[5, 4, 3, 2], [0]],
+        (i, j): (
+            create_path(contact_map(i), contact_map(j)),
+            list(reversed(create_path(contact_map(j), contact_map(i)))),
+        )
+        for (i, j) in face_connections
     }
 
     if experiment_number == 0:  # not tight
@@ -1072,6 +1061,10 @@ def plan_planar_pushing():
     ]
 
     vertices_on_path = [all_vertices[id] for id in vertex_ids_on_path]
+
+    vertex_names_on_path = [v.name() for v in vertices_on_path]
+    print(vertex_names_on_path)
+
     modes_on_path = [all_modes[id] for id in vertex_ids_on_path]
 
     mode_vars_on_path = [
@@ -1079,6 +1072,7 @@ def plan_planar_pushing():
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
+    breakpoint()
 
     dets = [np.linalg.det(R) for val in vals for R in val.R_WBs]
     print(dets)
@@ -1150,7 +1144,7 @@ def plan_planar_pushing():
     box_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        object,
+        object.geometry,
         BOX_COLOR,
     )
 
@@ -1158,7 +1152,7 @@ def plan_planar_pushing():
     target_viz = VisualizationPolygon2d.from_trajs(
         com_traj,
         flattened_rotation,
-        object,
+        object.geometry,
         TARGET_COLOR,
     )
 
