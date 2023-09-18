@@ -187,6 +187,8 @@ class PusherPoseController(LeafSystem):
             for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
         ]
         x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
+        if np.abs(x_curr[3]) > 1.0:
+            raise RuntimeError("Lambda is bigger than 1")
 
         # modes_eq_to_curr = [m == mode for m in mode_traj]
         # if not all(modes_eq_to_curr):
