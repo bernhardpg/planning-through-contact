@@ -225,7 +225,7 @@ class TPusher2d(CollisionGeometry):
             )
             return planes
         else:
-            raise NotImplementedError("Currently only face 0 is supported")
+            raise NotImplementedError(f"Face {idx} not supported")
 
     # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
