@@ -24,16 +24,25 @@ from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.non_collision_subgraph import (
+    NonCollisionSubGraph,
+    VertexModePair,
+)
 from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
     EquilateralPolytope2d,
 )
 from planning_through_contact.geometry.utilities import cross_2d
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -535,8 +544,8 @@ class NonCollisionMode:
         self.name = name
         self.time_in_mode = end_time
 
-        faces = object.geometry.get_faces_for_collision_free_set(
-            PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
+        faces = object.geometry.get_planes_for_collision_free_region(
+            non_collision_face_idx
         )
 
         prog = MathematicalProgram()
@@ -732,7 +741,6 @@ class GraphChain:
             ]
             for chain in self.non_collision_chains
         ]
-        mode = self.non_collision_modes[0][0]
 
     def create_edges(
         self,
@@ -808,6 +816,24 @@ class GraphChain:
 
 
 def plan_planar_pushing():
+    MASS = 0.1
+
+    use_polytope = False
+    if use_polytope:
+        DIST_TO_CORNERS = 0.2
+        num_vertices = 6
+        object = EquilateralPolytope2d(
+            actuated=False,
+            name="Slider",
+            mass=MASS,
+            vertex_distance=DIST_TO_CORNERS,
+            num_vertices=num_vertices,
+        )
+        raise NotImplementedError("Polytope missing support for collision free sets")
+    else:
+        mass = 0.1
+        object = RigidBody("t_pusher", TPusher2d(), mass)
+
     # Build the graph
     # NOTE: Somewhat ad-hoc, as we are missing the code to deal with cycles currently
     faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -846,19 +872,19 @@ def plan_planar_pushing():
     #     return no_repeats
     # paths = {(i, j): generate_sequence(i, j) for i, j in face_connections}
     paths = {
-        (0, 1): [[0], [0, 7, 5, 4, 3, 2, 0]],
-        (0, 2): [[0, 2], [0, 7, 5, 4, 3, 2]],
-        (0, 3): [[0, 2, 3], [0, 7, 5, 4, 3]],
+        (0, 1): [[0], [0, 5, 4, 3, 2, 0]],
+        (0, 2): [[0, 2], [0, 5, 4, 3, 2]],
+        (0, 3): [[0, 2, 3], [0, 5, 4, 3]],
         (1, 2): [[2], [0]],
         (1, 3): [[0, 2, 3], [0]],
         (2, 3): [[2, 3], [0]],
-        (0, 7): [[0, 7], [0]],
-        (0, 6): [[0, 7, 5], [0]],
+        (0, 7): [[0], [0]],
+        (0, 6): [[0, 5], [0]],
         (3, 6): [[3, 4, 5], [0]],
-        (3, 7): [[3, 4, 5, 7], [0]],
-        (7, 6): [[7, 6], [0]],
-        (7, 5): [[7, 6], [0]],
-        (7, 4): [[7, 6, 4], [0]],
+        (3, 7): [[3, 4, 5], [0]],
+        (7, 6): [[0], [0]],
+        (7, 5): [[0], [0]],
+        (7, 4): [[0, 4], [0]],
         (6, 5): [[5], [0]],
         (6, 4): [[5, 4], [0]],
         (5, 4): [[5, 4], [0]],
@@ -900,24 +926,6 @@ def plan_planar_pushing():
     time_in_contact = 2
     time_moving = 0.5
 
-    MASS = 0.1
-
-    use_polytope = False
-    if use_polytope:
-        DIST_TO_CORNERS = 0.2
-        num_vertices = 6
-        object = EquilateralPolytope2d(
-            actuated=False,
-            name="Slider",
-            mass=MASS,
-            vertex_distance=DIST_TO_CORNERS,
-            num_vertices=num_vertices,
-        )
-        raise NotImplementedError("Polytope missing support for collision free sets")
-    else:
-        mass = 0.1
-        object = RigidBody("t_pusher", TPusher2d(), mass)
-
     initial_config = _create_obj_config(pos_initial, th_initial)
     target_config = _create_obj_config(pos_target, th_target)
 
@@ -928,33 +936,32 @@ def plan_planar_pushing():
     source_vertex = gcs.AddVertex(source_point, name="source")
     target_vertex = gcs.AddVertex(target_point, name="target")
 
-    contact_modes = {
-        face_name(face_idx): PlanarPushingContactMode(
+    contact_modes = [
+        PlanarPushingContactMode(
             object,
             num_knot_points=num_knot_points,
             contact_face_idx=face_idx,
             end_time=time_in_contact,
         )
         for face_idx in faces_to_consider
-    }
-    spectrahedrons = {
-        key: mode.get_spectrahedron() for key, mode in contact_modes.items()
-    }
-    contact_vertices = {
-        key: gcs.AddVertex(s, name=str(key)) for key, s in spectrahedrons.items()
-    }
+    ]
+    spectrahedrons = [mode.get_spectrahedron() for mode in contact_modes]
+    contact_vertices = [
+        gcs.AddVertex(s, name=str(m.name))
+        for s, m in zip(spectrahedrons, contact_modes)
+    ]
 
     # Add costs
-    for mode, vertex in zip(contact_modes.values(), contact_vertices.values()):
+    for mode, vertex in zip(contact_modes, contact_vertices):
         prog = mode.relaxed_prog
         for cost in prog.linear_costs():
             vars = vertex.x()[prog.FindDecisionVariableIndices(cost.variables())]
             a = cost.evaluator().a()
             vertex.AddCost(a.T.dot(vars))
 
-    for v in source_connections:
-        vertex = contact_vertices[face_name(v)]
-        mode = contact_modes[face_name(v)]
+    for idx in source_connections:
+        vertex = contact_vertices[idx]
+        mode = contact_modes[idx]
 
         add_source_or_target_edge(
             vertex,
@@ -965,9 +972,9 @@ def plan_planar_pushing():
             source_or_target="source",
         )
 
-    for v in target_connections:
-        vertex = contact_vertices[face_name(v)]
-        mode = contact_modes[face_name(v)]
+    for idx in target_connections:
+        vertex = contact_vertices[idx]
+        mode = contact_modes[idx]
 
         add_source_or_target_edge(
             vertex,
@@ -990,10 +997,10 @@ def plan_planar_pushing():
         )
 
     for chain in chains:
-        incoming_vertex = contact_vertices[face_name(chain.start_contact_idx)]
-        outgoing_vertex = contact_vertices[face_name(chain.end_contact_idx)]
-        incoming_mode = contact_modes[face_name(chain.start_contact_idx)]
-        outgoing_mode = contact_modes[face_name(chain.end_contact_idx)]
+        incoming_vertex = contact_vertices[chain.start_contact_idx]
+        outgoing_vertex = contact_vertices[chain.end_contact_idx]
+        incoming_mode = contact_modes[chain.start_contact_idx]
+        outgoing_mode = contact_modes[chain.end_contact_idx]
         chain.create_edges(
             incoming_vertex, outgoing_vertex, incoming_mode, outgoing_mode, gcs
         )
@@ -1002,10 +1009,13 @@ def plan_planar_pushing():
     # Collect all modes and vertices in one big lookup table for trajectory retrieval
     # NOTE: There is really no reason to keep the contact_vertices and contact_modes as dicts, but
     # this will not be fixed now.
-    all_vertices = {v.id(): v for v in contact_vertices.values()}
-    all_modes = {
-        v.id(): m for v, m in zip(contact_vertices.values(), contact_modes.values())
-    }
+
+    graphviz = gcs.GetGraphvizString()
+    data = pydot.graph_from_dot_data(graphviz)[0]
+    data.write_svg("graph.svg")
+
+    all_vertices = {v.id(): v for v in contact_vertices}
+    all_modes = {v.id(): m for v, m in zip(contact_vertices, contact_modes)}
 
     for chain in chains:
         mode_chain = chain.get_all_non_collision_modes()
@@ -1016,10 +1026,6 @@ def plan_planar_pushing():
                 v_id = vertex.id()
                 all_modes[v_id] = mode  # type: ignore
                 all_vertices[v_id] = vertex
-
-    graphviz = gcs.GetGraphvizString()
-    data = pydot.graph_from_dot_data(graphviz)[0]
-    data.write_svg("graph.svg")
 
     # Make sure we have all the vertices (except for source and target)
     assert len(all_vertices.items()) == len(gcs.Vertices()) - 2
