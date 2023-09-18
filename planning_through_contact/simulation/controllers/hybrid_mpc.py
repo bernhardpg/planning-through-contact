@@ -210,6 +210,8 @@ class HybridMpc:
             result.get_optimal_cost() if result.is_success() else np.inf
             for result in results
         ]  # we do not allow infeasible results
+        if np.all(np.isinf(costs)):
+            raise RuntimeError("No feasible solution to MPC!")
         best_idx = np.argmin(costs)
 
         state = states[best_idx]

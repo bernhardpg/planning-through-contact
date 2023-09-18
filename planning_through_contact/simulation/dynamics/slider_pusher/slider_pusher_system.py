@@ -134,6 +134,8 @@ def SliderPusherSystem_(T):
             lam = self.slider_geometry.get_lam_from_p_BP(
                 p_BP, self.contact_location, radius=self.pusher_radius
             )
+            # Lambda cannot be bigger than 1
+            lam = np.clip(lam, -1, 1)
 
             state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
             return state
