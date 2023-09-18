@@ -49,5 +49,5 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 if __name__ == "__main__":
     run_sim(
-        plan="trajectories/sugar_box_pushing_3.pkl", save_recording=True, debug=True
+        plan="trajectories/sugar_box_pushing_4.pkl", save_recording=True, debug=True
     )
