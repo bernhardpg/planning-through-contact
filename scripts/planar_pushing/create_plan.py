@@ -227,4 +227,4 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan(body_to_use="sugar_box", traj_number=4, debug=True)
+    create_plan_teleport(traj_number=1)
