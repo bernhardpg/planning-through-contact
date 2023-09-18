@@ -293,22 +293,19 @@ class NonCollisionMode(AbstractContactMode):
 
     def _define_cost(self) -> None:
         if self.config.minimize_squared_eucl_dist:
-            position_diffs = [
-                p_next - p_curr
-                for p_next, p_curr in zip(
-                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
-                )
-            ]
-            if self.num_knot_points == 1:
-                # Can't vstack only one array
-                position_diffs = np.array(position_diffs)
-            else:
+            if self.num_knot_points > 1:
+                position_diffs = [
+                    p_next - p_curr
+                    for p_next, p_curr in zip(
+                        self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
+                    )
+                ]
                 position_diffs = np.vstack(position_diffs)
-            # position_diffs is now one long vector with diffs in each entry
-            squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-            self.prog.AddQuadraticCost(
-                self.cost_param_eucl * squared_eucl_dist, is_convex=True
-            )
+                # position_diffs is now one long vector with diffs in each entry
+                squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+                self.prog.AddQuadraticCost(
+                    self.cost_param_eucl * squared_eucl_dist, is_convex=True
+                )
 
         else:  # Minimize total Euclidean distance
             position_diffs = [

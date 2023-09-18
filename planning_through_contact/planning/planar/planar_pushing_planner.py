@@ -148,7 +148,7 @@ class PlanarPushingPlanner:
 
         # TODO
         # mapping = {0: 1, 1: 3, 2: 2, 3: 0}
-        mapping = {0: 0, 1: 1, 2: 2, 3: 3}
+        mapping = {i: i for i in (0, 1, 2, 3, 4, 5, 6, 7)}
 
         if no_cycles:  # only connect lower idx faces to higher idx faces
             first = mapping[first_contact_mode_idx]
