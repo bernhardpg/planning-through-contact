@@ -1004,8 +1004,12 @@ def plan_planar_pushing():
         chain.add_costs()
 
     # Collect all modes and vertices in one big lookup table for trajectory retrieval
-    all_modes = contact_modes.copy()
-    all_vertices = contact_vertices.copy()
+    # NOTE: There is really no reason to keep the contact_vertices and contact_modes as dicts, but
+    # this will not be fixed now.
+    all_vertices = {v.id(): v for v in contact_vertices.values()}
+    all_modes = {
+        v.id(): m for v, m in zip(contact_vertices.values(), contact_modes.values())
+    }
 
     for chain in chains:
         mode_chain = chain.get_all_non_collision_modes()
@@ -1013,12 +1017,16 @@ def plan_planar_pushing():
 
         for modes, vertices in zip(mode_chain, vertex_chain):
             for mode, vertex in zip(modes, vertices):
-                all_modes[mode.name] = mode  # type: ignore
-                all_vertices[mode.name] = vertex
+                v_id = vertex.id()
+                all_modes[v_id] = mode  # type: ignore
+                all_vertices[v_id] = vertex
 
     graphviz = gcs.GetGraphvizString()
     data = pydot.graph_from_dot_data(graphviz)[0]
     data.write_svg("graph.svg")
+
+    # Make sure we have all the vertices (except for source and target)
+    assert len(all_vertices.items()) == len(gcs.Vertices()) - 2
 
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
@@ -1041,8 +1049,6 @@ def plan_planar_pushing():
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
     elapsed_time = time.time() - start
 
-    breakpoint()
-
     assert result.is_success()
     print("Success!")
 
@@ -1053,18 +1059,21 @@ def plan_planar_pushing():
     ]
 
     full_path = _find_path_to_target(active_edges, target_vertex, source_vertex)
-    vertex_names_on_path = [
-        v.name() for v in full_path if v.name() not in ["source", "target"]
+    vertex_ids_on_path = [
+        v.id() for v in full_path if v.name() not in ["source", "target"]
     ]
 
-    vertices_on_path = [all_vertices[name] for name in vertex_names_on_path]
-    modes_on_path = [all_modes[name] for name in vertex_names_on_path]
+    vertices_on_path = [all_vertices[id] for id in vertex_ids_on_path]
+    modes_on_path = [all_modes[id] for id in vertex_ids_on_path]
 
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
+
+    dets = [np.linalg.det(R) for val in vals for R in val.R_WBs]
+    assert np.allclose(dets, 1, atol=1e-3)  # type: ignore
 
     DT = 0.5
     interpolate = False
@@ -1081,8 +1090,6 @@ def plan_planar_pushing():
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
-
-    breakpoint()
 
     traj_length = len(R_traj)
 
@@ -1148,6 +1155,7 @@ def plan_planar_pushing():
 
     com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
     contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
+    contact_point_viz.change_radius(0.01)
     contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
     viz = Visualizer2d()
