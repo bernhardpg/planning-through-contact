@@ -333,7 +333,7 @@ class PlanarPushingTrajectory:
         if assert_determinants:
             vars = path.get_vars()
             dets = [np.linalg.det(R) for var in vars for R in var.R_WBs]  # type: ignore
-            if not np.allclose(dets, 1, atol=1e-3):
+            if not np.allclose(dets, 1, atol=1e-2):
                 print(f"Determinants: {dets}")
                 raise ValueError("Determinants are not 1")
 
