@@ -132,7 +132,7 @@ def create_plan(
     # planner = PlanarPushingPlanner(config, locs)
     planner = PlanarPushingPlanner(config)
 
-    if traj_number == 1:
+    if traj_number == 1:  # loose
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
         finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
@@ -150,6 +150,16 @@ def create_plan(
     elif traj_number == 4:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=np.pi / 2 - 0.2)
         slider_target_pose = PlanarPose(x=0.75, y=-0.2, theta=np.pi / 2 + 0.4)
+        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 5:  # loose
+        slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.70, y=-0.05, theta=np.pi / 2 + 0.4)
+        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 6:  # t pusher
+        slider_initial_pose = PlanarPose(x=0.60, y=0.0, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.65, y=-0.1, theta=np.pi / 2 + 0.3)
         finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
         finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     # elif traj_number == 2:
