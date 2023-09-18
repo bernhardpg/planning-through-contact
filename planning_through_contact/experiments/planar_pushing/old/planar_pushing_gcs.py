@@ -23,16 +23,16 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
-from planning_through_contact.geometry.two_d.contact.types import ContactLocation
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
     EquilateralPolytope2d,
 )
-from planning_through_contact.geometry.two_d.rigid_body_2d import (
-    PolytopeContactLocation,
-    RigidBody2d,
-)
-from planning_through_contact.geometry.two_d.t_pusher import TPusher
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import (
     NpExpressionArray,
@@ -234,7 +234,7 @@ class ModeVars(NamedTuple):
 class PlanarPushingContactMode:
     def __init__(
         self,
-        object: RigidBody2d,
+        object: RigidBody,
         contact_face_idx: int,
         num_knot_points: int = 4,
         end_time: float = 3,
@@ -274,7 +274,7 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        self.pv1, self.pv2 = self.object.get_proximate_vertices_from_location(
+        self.pv1, self.pv2 = self.object.geometry.get_proximate_vertices_from_location(
             contact_face
         )
         p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
@@ -285,7 +285,7 @@ class PlanarPushingContactMode:
         (
             self.normal_vec,
             self.tangent_vec,
-        ) = self.object.get_norm_and_tang_vecs_from_location(contact_face)
+        ) = self.object.geometry.get_norm_and_tang_vecs_from_location(contact_face)
         f_c_Bs = [
             c_n * self.normal_vec + c_f * self.tangent_vec
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
@@ -525,7 +525,7 @@ class PlanarPushingContactMode:
 class NonCollisionMode:
     def __init__(
         self,
-        object: TPusher,  # TODO: replace with RigidBody2D
+        object: RigidBody,
         name: str,
         non_collision_face_idx: int,
         num_knot_points: int = 3,
@@ -535,7 +535,7 @@ class NonCollisionMode:
         self.name = name
         self.time_in_mode = end_time
 
-        faces = object.get_faces_for_collision_free_set(
+        faces = object.geometry.get_faces_for_collision_free_set(
             PolytopeContactLocation(ContactLocation.FACE, non_collision_face_idx)
         )
 
@@ -717,7 +717,7 @@ class GraphChain:
         return cls(incoming, outgoing, non_collision_idx_on_chain)
 
     def create_contact_modes(
-        self, object: TPusher, num_knot_points: int, time_in_each_mode: float
+        self, object: RigidBody, num_knot_points: int, time_in_each_mode: float
     ) -> None:
         self.non_collision_modes = [
             [
@@ -900,12 +900,12 @@ def plan_planar_pushing():
     time_in_contact = 2
     time_moving = 0.5
 
-    MASS = 1.0
-    DIST_TO_CORNERS = 0.2
-    num_vertices = 6
+    MASS = 0.1
 
     use_polytope = False
     if use_polytope:
+        DIST_TO_CORNERS = 0.2
+        num_vertices = 6
         object = EquilateralPolytope2d(
             actuated=False,
             name="Slider",
@@ -915,11 +915,8 @@ def plan_planar_pushing():
         )
         raise NotImplementedError("Polytope missing support for collision free sets")
     else:
-        object = TPusher(
-            actuated=False,
-            name="Slider",
-            mass=MASS,
-        )
+        mass = 0.1
+        object = RigidBody("t_pusher", TPusher2d(), mass)
 
     initial_config = _create_obj_config(pos_initial, th_initial)
     target_config = _create_obj_config(pos_target, th_target)
