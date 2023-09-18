@@ -866,32 +866,31 @@ def plan_planar_pushing():
         (5, 2): [[5, 4, 3, 2], [0]],
     }
 
-    experiment_number = 1
-    if experiment_number == 0:
+    if experiment_number == 0:  # not tight
         th_initial = 0
         th_target = 0.5
         pos_initial = np.array([[0.0, 0.5]])
         pos_target = np.array([[0.2, 0.2]])
 
-    elif experiment_number == 1:
+    elif experiment_number == 1:  # tight
         th_initial = 0
         th_target = 0.5
         pos_initial = np.array([[0.2, 0.1]])
         pos_target = np.array([[-0.2, 0.2]])
 
-    elif experiment_number == 2:
+    elif experiment_number == 2:  # tight
         th_initial = 0.0
         th_target = -0.6
         pos_initial = np.array([[0.4, 0.4]])
         pos_target = np.array([[0.1, 0.3]])
 
-    elif experiment_number == 3:
+    elif experiment_number == 3:  # tight
         th_initial = 0
         th_target = -0.68
         pos_initial = np.array([[0.0, 0.5]])
         pos_target = np.array([[0.2, 0.2]])
 
-    elif experiment_number == 4:
+    elif experiment_number == 4:  # tight
         th_initial = 0
         th_target = 0.4
         pos_initial = np.array([[0.2, 0.2]])
@@ -1054,6 +1053,12 @@ def plan_planar_pushing():
 
     flow_variables = [e.phi() for e in gcs.Edges()]
     flow_results = [result.GetSolution(p) for p in flow_variables]
+
+    flow_values_per_edge = {
+        (e.u().name(), e.v().name(), e.u().id(), e.v().id()): flow
+        for e, flow in zip(gcs.Edges(), flow_results)
+    }
+
     active_edges = [
         edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= 0.55
     ]
@@ -1073,6 +1078,7 @@ def plan_planar_pushing():
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     dets = [np.linalg.det(R) for val in vals for R in val.R_WBs]
+    print(dets)
     assert np.allclose(dets, 1, atol=1e-3)  # type: ignore
 
     DT = 0.5
