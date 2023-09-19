@@ -1,6 +1,7 @@
 import argparse
 import time
 from dataclasses import dataclass
+from itertools import combinations, permutations
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
@@ -23,6 +24,7 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     ContactLocation,
@@ -240,11 +242,20 @@ class ModeVars(NamedTuple):
         )
 
 
+@dataclass
+class DynamicsConfig:
+    tau_max: float
+    f_max: float
+    friction_coeff_table_slider: float
+    friction_coeff_slider_pusher: float
+
+
 class PlanarPushingContactMode:
     def __init__(
         self,
-        object: RigidBody,
+        slider: RigidBody,
         contact_face_idx: int,
+        dynamics_config: DynamicsConfig,
         num_knot_points: int = 4,
         end_time: float = 3,
         th_initial: Optional[float] = None,
@@ -255,17 +266,15 @@ class PlanarPushingContactMode:
         self.name = face_name(contact_face_idx)
 
         self.num_knot_points = num_knot_points
-        self.object = object
+        self.slider = slider
         self.time_in_mode = end_time
 
-        FRICTION_COEFF = 0.5
-        G = 9.81
-
-        f_max = FRICTION_COEFF * G * object.mass
-        tau_max = f_max * 0.2  # TODO change this!
-
         A = np.diag(
-            [1 / f_max**2, 1 / f_max**2, 1 / tau_max**2]
+            [
+                1 / dynamics_config.f_max**2,
+                1 / dynamics_config.f_max**2,
+                1 / dynamics_config.tau_max**2,
+            ]
         )  # Ellipsoidal Limit surface approximation
 
         dt = end_time / num_knot_points
@@ -283,7 +292,7 @@ class PlanarPushingContactMode:
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        self.pv1, self.pv2 = self.object.geometry.get_proximate_vertices_from_location(
+        self.pv1, self.pv2 = self.slider.geometry.get_proximate_vertices_from_location(
             contact_face
         )
         p_c_Bs = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
@@ -294,7 +303,7 @@ class PlanarPushingContactMode:
         (
             self.normal_vec,
             self.tangent_vec,
-        ) = self.object.geometry.get_norm_and_tang_vecs_from_location(contact_face)
+        ) = self.slider.geometry.get_norm_and_tang_vecs_from_location(contact_face)
         f_c_Bs = [
             c_n * self.normal_vec + c_f * self.tangent_vec
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
@@ -333,9 +342,10 @@ class PlanarPushingContactMode:
         # # Friction cone constraints
         for c_n in self.normal_forces:
             prog.AddLinearConstraint(c_n >= 0)
+        mu = dynamics_config.friction_coeff_slider_pusher
         for c_n, c_f in zip(self.normal_forces, self.friction_forces):
-            prog.AddLinearConstraint(c_f <= FRICTION_COEFF * c_n)
-            prog.AddLinearConstraint(c_f >= -FRICTION_COEFF * c_n)
+            prog.AddLinearConstraint(c_f <= mu * c_n)
+            prog.AddLinearConstraint(c_f >= -mu * c_n)
 
         # Quasi-static dynamics
         for k in range(num_knot_points - 1):
@@ -534,7 +544,7 @@ class PlanarPushingContactMode:
 class NonCollisionMode:
     def __init__(
         self,
-        object: RigidBody,
+        slider: RigidBody,
         name: str,
         non_collision_face_idx: int,
         num_knot_points: int = 3,
@@ -546,9 +556,9 @@ class NonCollisionMode:
 
         # We separate between these two to be able to account for radius,
         # but here we don't care about pusher radius
-        faces = object.geometry.get_planes_for_collision_free_region(
+        faces = slider.geometry.get_planes_for_collision_free_region(
             non_collision_face_idx
-        ) + object.geometry.get_contact_planes(non_collision_face_idx)
+        ) + slider.geometry.get_contact_planes(non_collision_face_idx)
 
         prog = MathematicalProgram()
         # Finger location
@@ -583,7 +593,9 @@ class NonCollisionMode:
         )
 
     def get_polyhedron(self) -> opt.HPolyhedron:
-        poly = PolyhedronFormulator(self.constraints).formulate_polyhedron(self.vars)
+        poly = PolyhedronFormulator(self.constraints).formulate_polyhedron(
+            self.vars, make_bounded=False
+        )
         return poly
 
     def get_vars_from_gcs_vertex(
@@ -620,7 +632,7 @@ def _create_obj_config(
     pos: npt.NDArray[np.float64], th: float
 ) -> npt.NDArray[np.float64]:
     """
-    Concatenates unactauted object config for source and target vertex
+    Concatenates unactauted slider config for source and target vertex
     """
     obj_pose = np.concatenate([pos.flatten(), [np.cos(th), np.sin(th)]])
     return obj_pose
@@ -728,12 +740,12 @@ class GraphChain:
         return cls(incoming, outgoing, non_collision_idx_on_chain)
 
     def create_contact_modes(
-        self, object: RigidBody, num_knot_points: int, time_in_each_mode: float
+        self, slider: RigidBody, num_knot_points: int, time_in_each_mode: float
     ) -> None:
         self.non_collision_modes = [
             [
                 NonCollisionMode(
-                    object,
+                    slider,
                     f"from_{self.start_contact_idx}_to_{self.end_contact_idx}_at_{idx}",
                     idx,
                     num_knot_points,
@@ -760,6 +772,8 @@ class GraphChain:
             for mode_chain in self.non_collision_modes
         ]
 
+        ADD_CYCLES = False
+
         for chain, modes, vertices in zip(
             self.non_collision_chains,
             self.non_collision_modes,
@@ -774,6 +788,15 @@ class GraphChain:
                 gcs,
             )
 
+            if ADD_CYCLES:
+                add_edge_with_continuity_constraint(
+                    vertices[0],
+                    start_contact_vertex,
+                    modes[0],
+                    start_contact_mode,
+                    gcs,
+                )
+
             # Connect last position mode to last contact mode
             add_edge_with_continuity_constraint(
                 vertices[-1],
@@ -783,6 +806,15 @@ class GraphChain:
                 gcs,
             )
 
+            if ADD_CYCLES:
+                add_edge_with_continuity_constraint(
+                    end_contact_vertex,
+                    vertices[-1],
+                    end_contact_mode,
+                    modes[-1],
+                    gcs,
+                )
+
             for i in range(len(chain) - 1):
                 curr_vertex = vertices[i]
                 curr_mode = modes[i]
@@ -790,6 +822,9 @@ class GraphChain:
                 next_mode = modes[i + 1]
                 add_edge_with_continuity_constraint(
                     curr_vertex, next_vertex, curr_mode, next_mode, gcs
+                )
+                add_edge_with_continuity_constraint(
+                    next_vertex, curr_vertex, next_mode, curr_mode, gcs
                 )
 
     def add_costs(self) -> None:
@@ -817,53 +852,33 @@ class GraphChain:
         return self.non_collision_modes
 
 
-def plan_planar_pushing():
-    MASS = 0.1
+@dataclass
+class StartEndSpecs:
+    th_initial: float
+    th_target: float
+    pos_initial: npt.NDArray[np.float64]
+    pos_target: npt.NDArray[np.float64]
 
-    use_polytope = False
-    if use_polytope:
-        DIST_TO_CORNERS = 0.2
-        num_vertices = 6
-        object = EquilateralPolytope2d(
-            actuated=False,
-            name="Slider",
-            mass=MASS,
-            vertex_distance=DIST_TO_CORNERS,
-            num_vertices=num_vertices,
-        )
-        raise NotImplementedError("Polytope missing support for collision free sets")
-    else:
-        mass = 0.1
-        object = RigidBody("t_pusher", TPusher2d(), mass)
+
+def plan_planar_pushing(
+    start_end_specs: StartEndSpecs,
+    slider: RigidBody,
+    dynamics_config: DynamicsConfig,
+    max_rounded_paths: int,
+    print_output: bool = False,
+    visualize: bool = False,
+):
+    faces_to_consider = list(range(slider.geometry.num_collision_free_regions))
 
     # Build the graph
-    # NOTE: Somewhat ad-hoc, as we are missing the code to deal with cycles currently
-    faces_to_consider = [0, 1, 2, 3, 4, 5, 6, 7]
     source_connections = faces_to_consider
     target_connections = faces_to_consider
 
-    face_connections = [
-        (i, j) for i in faces_to_consider for j in faces_to_consider[:-4] if i < j
-    ]
-    face_connections.extend(
-        [
-            (0, 7),
-            (0, 6),
-            (3, 6),
-            (3, 7),
-            (7, 6),
-            (7, 5),
-            (7, 4),
-            (6, 5),
-            (6, 4),
-            (5, 4),
-            (5, 3),
-            (5, 2),
-        ]
-    )
+    face_connections = list(combinations(faces_to_consider, 2))
+
+    NUM = len(faces_to_consider)
 
     def create_path(i, j):
-        NUM = 6
         if i >= NUM or j >= NUM:
             raise ValueError(f"i and j must be below {NUM}")
         if i < j:
@@ -871,7 +886,7 @@ def plan_planar_pushing():
         else:
             return [n % NUM for n in range(i, j + 1 + NUM)]
 
-    contact_map = object.geometry.get_collision_free_region_for_loc_idx
+    contact_map = slider.geometry.get_collision_free_region_for_loc_idx
 
     paths = {
         (i, j): (
@@ -881,42 +896,16 @@ def plan_planar_pushing():
         for (i, j) in face_connections
     }
 
-    if experiment_number == 0:  # not tight
-        th_initial = 0
-        th_target = 0.5
-        pos_initial = np.array([[0.0, 0.5]])
-        pos_target = np.array([[0.2, 0.2]])
-
-    elif experiment_number == 1:  # tight
-        th_initial = 0
-        th_target = 0.5
-        pos_initial = np.array([[0.2, 0.1]])
-        pos_target = np.array([[-0.2, 0.2]])
-
-    elif experiment_number == 2:  # tight
-        th_initial = 0.0
-        th_target = -0.6
-        pos_initial = np.array([[0.4, 0.4]])
-        pos_target = np.array([[0.1, 0.3]])
-
-    elif experiment_number == 3:  # tight
-        th_initial = 0
-        th_target = -0.68
-        pos_initial = np.array([[0.0, 0.5]])
-        pos_target = np.array([[0.2, 0.2]])
-
-    elif experiment_number == 4:  # tight
-        th_initial = 0
-        th_target = 0.4
-        pos_initial = np.array([[0.2, 0.2]])
-        pos_target = np.array([[-0.18, 0.5]])
-
     num_knot_points = 4
     time_in_contact = 2
     time_moving = 0.5
 
-    initial_config = _create_obj_config(pos_initial, th_initial)
-    target_config = _create_obj_config(pos_target, th_target)
+    initial_config = _create_obj_config(
+        start_end_specs.pos_initial, start_end_specs.th_initial
+    )
+    target_config = _create_obj_config(
+        start_end_specs.pos_target, start_end_specs.th_target
+    )
 
     source_point = opt.Point(initial_config)
     target_point = opt.Point(target_config)
@@ -927,9 +916,10 @@ def plan_planar_pushing():
 
     contact_modes = [
         PlanarPushingContactMode(
-            object,
+            slider,
+            face_idx,
+            dynamics_config,
             num_knot_points=num_knot_points,
-            contact_face_idx=face_idx,
             end_time=time_in_contact,
         )
         for face_idx in faces_to_consider
@@ -982,7 +972,7 @@ def plan_planar_pushing():
     ]
     for chain in chains:
         chain.create_contact_modes(
-            object, num_knot_points_for_non_collision, time_moving
+            slider, num_knot_points_for_non_collision, time_moving
         )
 
     for chain in chains:
@@ -1022,7 +1012,8 @@ def plan_planar_pushing():
     options = opt.GraphOfConvexSetsOptions()
     options.convex_relaxation = True
     options.solver_options = SolverOptions()
-    options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)
+    if print_output:
+        options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)
     # options.solver_options.SetOption(
     #     MosekSolver.id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
     # )
@@ -1033,7 +1024,7 @@ def plan_planar_pushing():
     # options.solver_options.SetOption(GurobiSolver.id(), "TimeLimit", 3600.0)
     if options.convex_relaxation is True:
         options.preprocessing = True  # TODO Do I need to deal with this?
-        options.max_rounded_paths = 1
+        options.max_rounded_paths = max_rounded_paths
     import time
 
     start = time.time()
@@ -1072,7 +1063,6 @@ def plan_planar_pushing():
         for mode, vertex in zip(modes_on_path, vertices_on_path)
     ]
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
-    breakpoint()
 
     dets = [np.linalg.det(R) for val in vals for R in val.R_WBs]
     print(dets)
@@ -1133,43 +1123,44 @@ def plan_planar_pushing():
         create_quasistatic_pushing_analysis(quasi_static_violation, num_knot_points)
         plt.show()
 
-    CONTACT_COLOR = COLORS["dodgerblue4"]
-    GRAVITY_COLOR = COLORS["blueviolet"]
-    BOX_COLOR = COLORS["aquamarine4"]
-    TABLE_COLOR = COLORS["bisque3"]
-    FINGER_COLOR = COLORS["firebrick3"]
-    TARGET_COLOR = COLORS["firebrick1"]
+    if visualize:
+        CONTACT_COLOR = COLORS["dodgerblue4"]
+        GRAVITY_COLOR = COLORS["blueviolet"]
+        BOX_COLOR = COLORS["aquamarine4"]
+        TABLE_COLOR = COLORS["bisque3"]
+        FINGER_COLOR = COLORS["firebrick3"]
+        TARGET_COLOR = COLORS["firebrick1"]
 
-    flattened_rotation = np.vstack([R.flatten() for R in R_traj])
-    box_viz = VisualizationPolygon2d.from_trajs(
-        com_traj,
-        flattened_rotation,
-        object.geometry,
-        BOX_COLOR,
-    )
+        flattened_rotation = np.vstack([R.flatten() for R in R_traj])
+        box_viz = VisualizationPolygon2d.from_trajs(
+            com_traj,
+            flattened_rotation,
+            slider.geometry,
+            BOX_COLOR,
+        )
 
-    # NOTE: I don't really need the entire trajectory here, but leave for now
-    target_viz = VisualizationPolygon2d.from_trajs(
-        com_traj,
-        flattened_rotation,
-        object.geometry,
-        TARGET_COLOR,
-    )
+        # NOTE: I don't really need the entire trajectory here, but leave for now
+        target_viz = VisualizationPolygon2d.from_trajs(
+            com_traj,
+            flattened_rotation,
+            slider.geometry,
+            TARGET_COLOR,
+        )
 
-    com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
-    contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
-    contact_point_viz.change_radius(0.01)
-    contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
+        com_points_viz = VisualizationPoint2d(com_traj, GRAVITY_COLOR)  # type: ignore
+        contact_point_viz = VisualizationPoint2d(contact_pos_traj, FINGER_COLOR)  # type: ignore
+        contact_point_viz.change_radius(0.01)
+        contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
-    viz = Visualizer2d()
-    FRAMES_PER_SEC = 1 / DT
-    viz.visualize(
-        [contact_point_viz],
-        [contact_force_viz],
-        [box_viz],
-        FRAMES_PER_SEC,
-        target_viz,
-    )
+        viz = Visualizer2d()
+        FRAMES_PER_SEC = 1 / DT
+        viz.visualize(
+            [contact_point_viz],
+            [contact_force_viz],
+            [box_viz],
+            FRAMES_PER_SEC,
+            target_viz,
+        )
 
 
 if __name__ == "__main__":
@@ -1183,4 +1174,55 @@ if __name__ == "__main__":
     args = parser.parse_args()
     experiment_number = args.exp
 
-    plan_planar_pushing()
+    mass = 0.1
+    slider = RigidBody("t_pusher", TPusher2d(), mass)
+    # slider = RigidBody("box", Box2d(width=0.3, height=0.3), mass)
+
+    f_max = 0.5 * 9.81 * slider.mass
+    dynamics_config = DynamicsConfig(
+        friction_coeff_table_slider=0.5,
+        friction_coeff_slider_pusher=0.5,
+        f_max=f_max,
+        tau_max=f_max * 0.2,
+    )
+
+    if experiment_number == 0:  # not tight
+        th_initial = 0
+        th_target = 0.5
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[0.2, 0.2]])
+
+    elif experiment_number == 1:  # tight
+        th_initial = 0
+        th_target = 0.5
+        pos_initial = np.array([[0.2, 0.1]])
+        pos_target = np.array([[-0.2, 0.2]])
+
+    elif experiment_number == 2:  # tight
+        th_initial = 0.0
+        th_target = -0.6
+        pos_initial = np.array([[0.4, 0.4]])
+        pos_target = np.array([[0.1, 0.3]])
+
+    elif experiment_number == 3:  # tight
+        th_initial = 0
+        th_target = -0.68
+        pos_initial = np.array([[0.0, 0.5]])
+        pos_target = np.array([[0.2, 0.2]])
+
+    elif experiment_number == 4:  # tight
+        th_initial = 0
+        th_target = 0.4
+        pos_initial = np.array([[0.2, 0.2]])
+        pos_target = np.array([[-0.18, 0.5]])
+
+    start_end_specs = StartEndSpecs(th_initial, th_target, pos_initial, pos_target)
+
+    plan_planar_pushing(
+        start_end_specs,
+        slider,
+        dynamics_config,
+        max_rounded_paths=1,
+        print_output=True,
+        visualize=True,
+    )
