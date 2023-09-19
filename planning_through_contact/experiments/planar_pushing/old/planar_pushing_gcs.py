@@ -730,14 +730,19 @@ class GraphChain:
     start_contact_idx: int
     end_contact_idx: int
     non_collision_chains: List[List[int]]
+    no_cycles: bool = True
 
     @classmethod
     def from_contact_connection(
-        cls, incoming: int, outgoing: int, paths: Dict[Tuple[int, int], List[List[int]]]
+        cls,
+        incoming: int,
+        outgoing: int,
+        paths: Dict[Tuple[int, int], List[List[int]]],
+        no_cycles: bool,
     ) -> "GraphChain":
         non_collision_idx_on_chain = paths[(incoming, outgoing)]  # type: ignore
 
-        return cls(incoming, outgoing, non_collision_idx_on_chain)
+        return cls(incoming, outgoing, non_collision_idx_on_chain, no_cycles)
 
     def create_contact_modes(
         self, slider: RigidBody, num_knot_points: int, time_in_each_mode: float
@@ -772,8 +777,6 @@ class GraphChain:
             for mode_chain in self.non_collision_modes
         ]
 
-        ADD_CYCLES = False
-
         for chain, modes, vertices in zip(
             self.non_collision_chains,
             self.non_collision_modes,
@@ -788,7 +791,7 @@ class GraphChain:
                 gcs,
             )
 
-            if ADD_CYCLES:
+            if not self.no_cycles:
                 add_edge_with_continuity_constraint(
                     vertices[0],
                     start_contact_vertex,
@@ -806,7 +809,7 @@ class GraphChain:
                 gcs,
             )
 
-            if ADD_CYCLES:
+            if not self.no_cycles:
                 add_edge_with_continuity_constraint(
                     end_contact_vertex,
                     vertices[-1],
@@ -867,7 +870,8 @@ def plan_planar_pushing(
     max_rounded_paths: int,
     print_output: bool = False,
     visualize: bool = False,
-):
+    no_cycles: bool = True,
+) -> opt.GraphOfConvexSets:
     faces_to_consider = list(range(slider.geometry.num_collision_free_regions))
 
     # Build the graph
@@ -967,7 +971,7 @@ def plan_planar_pushing(
     num_knot_points_for_non_collision = 2
 
     chains = [
-        GraphChain.from_contact_connection(incoming_idx, outgoing_idx, paths)
+        GraphChain.from_contact_connection(incoming_idx, outgoing_idx, paths, no_cycles)
         for incoming_idx, outgoing_idx in face_connections
     ]
     for chain in chains:
@@ -1054,7 +1058,12 @@ def plan_planar_pushing(
     vertices_on_path = [all_vertices[id] for id in vertex_ids_on_path]
 
     vertex_names_on_path = [v.name() for v in vertices_on_path]
-    print(vertex_names_on_path)
+
+    def print_path(names):
+        print("Path:")
+        print(", ".join(names))
+
+    print_path(vertex_names_on_path)
 
     modes_on_path = [all_modes[id] for id in vertex_ids_on_path]
 
@@ -1065,7 +1074,17 @@ def plan_planar_pushing(
     vals = [mode.eval_result(result) for mode in mode_vars_on_path]
 
     dets = [np.linalg.det(R) for val in vals for R in val.R_WBs]
-    print(dets)
+
+    def print_floats(float_list):
+        # Define the number of decimals you want to display
+        decimals = 2
+
+        # Format each float and join them into a single line
+        formatted_line = ", ".join([f"{x:.{decimals}f}" for x in float_list])
+        print(formatted_line)
+
+    print("Determinants:")
+    print_floats(dets)
     assert np.allclose(dets, 1, atol=1e-3)  # type: ignore
 
     DT = 0.5
@@ -1162,6 +1181,8 @@ def plan_planar_pushing(
             target_viz,
         )
 
+    return gcs
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1225,4 +1246,5 @@ if __name__ == "__main__":
         max_rounded_paths=1,
         print_output=True,
         visualize=True,
+        no_cycles=True,
     )
