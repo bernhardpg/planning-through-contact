@@ -131,8 +131,9 @@ class PlanarPushingPlanner:
                 for mode_i, mode_j in connections
             ]
 
-            self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
-            self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+            if self.config.use_entry_and_exit_subgraphs:
+                self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
+                self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
 
     def _build_subgraph_between_contact_modes(
         self,
@@ -198,16 +199,23 @@ class PlanarPushingPlanner:
             v.name(): VertexModePair(vertex=v, mode=m)
             for v, m in zip(self.contact_vertices, self.contact_modes)
         }
-        if self.config.allow_teleportation:
+        # Add all vertices from subgraphs
+        if not self.config.allow_teleportation:
+            for subgraph in self.subgraphs:
+                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
+
+        # Add source and target vertices (and possibly the ones associated
+        # with the entry and exit subgraphs)
+        if (
+            self.config.allow_teleportation
+            or not self.config.use_entry_and_exit_subgraphs
+        ):
             assert self.source is not None
             assert self.target is not None
 
             all_pairs[self.source.mode.name] = self.source
             all_pairs[self.target.mode.name] = self.target
         else:
-            for subgraph in self.subgraphs:
-                all_pairs.update(subgraph.get_all_vertex_mode_pairs())
-
             for subgraph in (self.source_subgraph, self.target_subgraph):
                 all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
@@ -243,7 +251,10 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
-        if self.config.allow_teleportation:
+        if (
+            self.config.allow_teleportation
+            or not self.config.use_entry_and_exit_subgraphs
+        ):
             self.source = self._add_single_source_or_target(
                 finger_pose, slider_pose, "initial"
             )
@@ -259,7 +270,10 @@ class PlanarPushingPlanner:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
 
-        if self.config.allow_teleportation:
+        if (
+            self.config.allow_teleportation
+            or not self.config.use_entry_and_exit_subgraphs
+        ):
             self.target = self._add_single_source_or_target(
                 finger_pose, slider_pose, "final"
             )
