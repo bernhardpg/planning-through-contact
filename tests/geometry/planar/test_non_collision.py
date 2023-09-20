@@ -21,7 +21,10 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
 )
@@ -173,21 +176,25 @@ def test_infeasible_non_collision_mode(non_collision_mode: NonCollisionMode) -> 
 def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
     loc = PolytopeContactLocation(ContactLocation.FACE, 2)
 
+    config = PlanarPlanConfig(
+        dynamics_config=SliderPusherSystemConfig(slider=rigid_body_box)
+    )
+
     finger_pose_1 = PlanarPose(0, 0, 0)
-    res_1 = check_finger_pose_in_contact_location(finger_pose_1, loc, rigid_body_box)
+    res_1 = check_finger_pose_in_contact_location(finger_pose_1, loc, config)
     assert res_1 == False  # penetrates the box
 
     finger_pose_2 = PlanarPose(0, -0.3, 0)
-    res_2 = check_finger_pose_in_contact_location(finger_pose_2, loc, rigid_body_box)
+    res_2 = check_finger_pose_in_contact_location(finger_pose_2, loc, config)
     assert res_2 == True
 
     finger_pose_3 = PlanarPose(0.1, -0.3, 0)
-    res_3 = check_finger_pose_in_contact_location(finger_pose_3, loc, rigid_body_box)
+    res_3 = check_finger_pose_in_contact_location(finger_pose_3, loc, config)
     assert res_3 == True
 
     loc_2 = PolytopeContactLocation(ContactLocation.FACE, 3)
     finger_pose_4 = PlanarPose(-0.2, 0, 0)
-    res_4 = check_finger_pose_in_contact_location(finger_pose_4, loc_2, rigid_body_box)
+    res_4 = check_finger_pose_in_contact_location(finger_pose_4, loc_2, config)
     assert res_4 == True
 
 

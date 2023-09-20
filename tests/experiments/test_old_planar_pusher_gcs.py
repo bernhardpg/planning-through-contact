@@ -2,9 +2,12 @@ import numpy as np
 from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 
 from planning_through_contact.experiments.planar_pushing.old.planar_pushing_gcs import (
+    DynamicsConfig,
     PlanarPushingContactMode,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
     EquilateralPolytope2d,
 )
@@ -25,11 +28,7 @@ def test_temp_test_old_mode() -> None:
     (it seems it is)
     (also this is not really a unit test)
     """
-    object = TPusher(
-        actuated=False,
-        name="Slider",
-        mass=1,
-    )
+    object = RigidBody("tee", TPusher2d(), mass=1)
     VIS_REALTIME_RATE = 0.25
 
     num_knot_points = 4
@@ -40,9 +39,19 @@ def test_temp_test_old_mode() -> None:
 
     VIS_REALTIME_RATE = 1.0
     time_in_contact = 2
+
+    f_max = 0.5 * 9.81 * object.mass
+    dynamics_config = DynamicsConfig(
+        friction_coeff_table_slider=0.5,
+        friction_coeff_slider_pusher=0.5,
+        f_max=f_max,
+        tau_max=f_max * 0.2,
+    )
+
     mode = PlanarPushingContactMode(
         object,
         contact_face_idx,
+        dynamics_config,
         num_knot_points,
         time_in_contact,
         initial_pose.theta,

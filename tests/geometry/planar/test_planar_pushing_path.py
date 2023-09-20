@@ -10,6 +10,9 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarSolverParams,
+)
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
@@ -86,7 +89,8 @@ def test_rounding_one_mode(face_contact_mode: FaceContactMode) -> None:
     indirect=["planner"],
 )
 def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
-    result = planner._solve(print_output=False)
+    solver_params = PlanarSolverParams(print_solver_output=DEBUG)
+    result = planner._solve(solver_params)
     assert result.is_success()
     path = planner.get_solution_path(result)
 
@@ -164,7 +168,8 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
     ],
 )
 def test_path_rounding(planner: PlanarPushingPlanner) -> None:
-    result = planner._solve(print_output=DEBUG)
+    solver_params = PlanarSolverParams(print_solver_output=DEBUG)
+    result = planner._solve(solver_params)
     assert result.is_success()
 
     path = planner.get_solution_path(result)

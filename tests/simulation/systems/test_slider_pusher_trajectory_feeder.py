@@ -119,11 +119,14 @@ def test_feeder_state_feedforward_visualization(
     feeder = builder.AddNamedSystem(
         "feedforward", SliderPusherTrajectoryFeeder(one_contact_mode_vars)
     )
+    pusher_radius = face_contact_mode.config.pusher_radius
+
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
         builder,
         feeder.get_state_feedforward_port(),
         slider_geometry,
+        pusher_radius,
         contact_location,
         scene_graph,
     )
@@ -196,6 +199,7 @@ def test_visualize_both_desired_and_actual_traj(
         builder,
         slider_pusher.get_output_port(),
         slider_geometry,
+        face_contact_mode.config.pusher_radius,
         contact_location,
         scene_graph,
     )
@@ -203,6 +207,7 @@ def test_visualize_both_desired_and_actual_traj(
         builder,
         feeder.GetOutputPort("state"),
         slider_geometry,
+        face_contact_mode.config.pusher_radius,
         contact_location,
         scene_graph,
         "desired_slider_pusher_geometry",
