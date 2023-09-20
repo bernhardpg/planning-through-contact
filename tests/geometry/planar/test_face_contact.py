@@ -21,7 +21,10 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory,
@@ -174,9 +177,6 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
 
 def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
-    mass = 0.1
-    friction_coeff = 0.5
-
     k = 0
 
     f_c_B = face_contact_vars.f_c_Bs[k]
@@ -185,8 +185,10 @@ def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
     v_WB = face_contact_vars.v_WBs[k]
     omega_WB = face_contact_vars.omega_WBs[k]
 
+    config = SliderPusherSystemConfig()
+
     _, dyn = FaceContactMode.quasi_static_dynamics_in_W(
-        v_WB, omega_WB, f_c_B, p_BP, R_WB, friction_coeff, mass
+        v_WB, omega_WB, f_c_B, p_BP, R_WB, config.ellipsoidal_limit_surface
     )
 
     check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))

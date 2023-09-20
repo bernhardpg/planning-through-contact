@@ -330,10 +330,17 @@ class PlanarPushingTrajectory:
         if print_path:
             print(f"path: {path.get_path_names()}")
 
+        if assert_determinants:
+            vars = path.get_vars()
+            dets = [np.linalg.det(R) for var in vars for R in var.R_WBs]  # type: ignore
+            if not np.allclose(dets, 1, atol=1e-2):
+                print(f"Determinants: {dets}")
+                raise ValueError("Determinants are not 1")
+
         if round_solution:
-            return cls(config, path.get_rounded_vars(), assert_determinants)
+            return cls(config, path.get_rounded_vars())
         else:
-            return cls(config, path.get_vars(), assert_determinants)
+            return cls(config, path.get_vars())
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:

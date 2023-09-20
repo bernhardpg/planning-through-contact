@@ -123,6 +123,7 @@ class PlanarPlanConfig:
         False  # TODO(bernhardpg): This sometimes makes rounding not work
     )
     penalize_mode_transitions: bool = False
+    use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False
     workspace: PlanarPushingWorkspace = field(
         default_factory=lambda: PlanarPushingWorkspace()

@@ -91,16 +91,38 @@ class NonCollisionSubGraph:
         # Add bi-directional edges
         edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         for i, j in edge_idxs:
-            gcs_add_edge_with_continuity(
-                gcs,
-                VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
-                VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
-            )
-            gcs_add_edge_with_continuity(
-                gcs,
-                VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
-                VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
-            )
+            if config.no_cycles:  # only connect lower idx faces to higher idx faces
+                if i <= j:
+                    gcs_add_edge_with_continuity(
+                        gcs,
+                        VertexModePair(
+                            non_collision_vertices[i], non_collision_modes[i]
+                        ),
+                        VertexModePair(
+                            non_collision_vertices[j], non_collision_modes[j]
+                        ),
+                    )
+                else:
+                    gcs_add_edge_with_continuity(
+                        gcs,
+                        VertexModePair(
+                            non_collision_vertices[j], non_collision_modes[j]
+                        ),
+                        VertexModePair(
+                            non_collision_vertices[i], non_collision_modes[i]
+                        ),
+                    )
+            else:
+                gcs_add_edge_with_continuity(
+                    gcs,
+                    VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
+                    VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
+                )
+                gcs_add_edge_with_continuity(
+                    gcs,
+                    VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
+                    VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
+                )
 
         return cls(
             gcs,

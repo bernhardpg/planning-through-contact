@@ -197,6 +197,7 @@ def test_slider_pusher_simulation(
         builder,
         slider_pusher.get_output_port(),
         slider_pusher.slider_geometry,
+        slider_pusher.slider_geometry,
         slider_pusher.contact_location,
         scene_graph,
     )

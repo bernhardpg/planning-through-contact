@@ -225,7 +225,7 @@ class TPusher2d(CollisionGeometry):
             )
             return planes
         else:
-            raise NotImplementedError("Currently only face 0 is supported")
+            raise NotImplementedError(f"Face {idx} not supported")
 
     # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
@@ -344,3 +344,36 @@ class TPusher2d(CollisionGeometry):
         )
 
         return [box_1, box_2], [transform_1, transform_2]
+
+    # TODO(bernhardpg): Remove, uses the old definitions for the collision free sets
+    def get_faces_for_collision_free_set(
+        self, location: PolytopeContactLocation
+    ) -> List[Hyperplane]:
+        """
+        Gets the faces that defines the collision free sets outside of each face.
+        This function is hand designed for the object geometry!
+        """
+        if not location.pos == ContactLocation.FACE:
+            raise NotImplementedError(
+                "Can only find faces for collisionfree regions for faces."
+            )
+        else:
+            face_idx = location.idx
+            if face_idx == 0:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 1:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 2:
+                return [self.faces[2]]
+            elif face_idx == 3:
+                return [self.faces[3]]
+            elif face_idx == 4:
+                return [self.faces[4]]
+            elif face_idx == 5:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 6:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 7:
+                return [self.faces[7]]
+            else:
+                raise NotImplementedError("Currently only face 0 is supported")
