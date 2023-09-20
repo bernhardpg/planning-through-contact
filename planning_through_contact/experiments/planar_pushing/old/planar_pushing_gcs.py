@@ -262,6 +262,8 @@ class PlanarPushingContactMode:
         th_target: Optional[float] = None,
         pos_initial: Optional[npt.NDArray[np.float64]] = None,
         pos_target: Optional[npt.NDArray[np.float64]] = None,
+        use_dynamic_constraints: bool = True,
+        use_angular_dynamic_constraints: bool = True,
     ):
         self.name = face_name(contact_face_idx)
 
@@ -371,14 +373,25 @@ class PlanarPushingContactMode:
             wrench_W = R.dot(wrench_B)
 
             # quasi-static dynamics in world frame
-            quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench_W))
-            for row in quasi_static_dynamic_constraint:
-                prog.AddConstraint(row)
+            if use_dynamic_constraints:
+                quasi_static_dynamic_constraint = eq(x_dot, A.dot(wrench_W))
+                linear_vel_constraints = quasi_static_dynamic_constraint[:2]
+                for c in linear_vel_constraints:
+                    prog.AddConstraint(c)
 
-            # quasi-static dynamics in body frame
-            quasi_static_dynamic_constraint = eq(R.T.dot(x_dot), A.dot(wrench_B))
-            for row in quasi_static_dynamic_constraint:
-                prog.AddConstraint(row)
+                angular_vel_constraints = quasi_static_dynamic_constraint[2]
+                if use_angular_dynamic_constraints:
+                    prog.AddConstraint(angular_vel_constraints)
+
+                # quasi-static dynamics in body frame
+                quasi_static_dynamic_constraint = eq(R.T.dot(x_dot), A.dot(wrench_B))
+                linear_vel_constraints = quasi_static_dynamic_constraint[:2]
+                for c in linear_vel_constraints:
+                    prog.AddConstraint(c)
+
+                angular_vel_constraints = quasi_static_dynamic_constraint[2]
+                if use_angular_dynamic_constraints:
+                    prog.AddConstraint(angular_vel_constraints)
 
         # Ensure sticking on the contact point
         for v_c_B in v_c_Bs:
@@ -871,6 +884,8 @@ def plan_planar_pushing(
     print_output: bool = False,
     visualize: bool = False,
     no_cycles: bool = True,
+    use_angular_dynamics: bool = True,
+    use_dynamics: bool = True,
 ) -> opt.GraphOfConvexSets:
     faces_to_consider = list(range(slider.geometry.num_collision_free_regions))
 
@@ -925,6 +940,8 @@ def plan_planar_pushing(
             dynamics_config,
             num_knot_points=num_knot_points,
             end_time=time_in_contact,
+            use_dynamic_constraints=use_dynamics,
+            use_angular_dynamic_constraints=use_angular_dynamics,
         )
         for face_idx in faces_to_consider
     ]
