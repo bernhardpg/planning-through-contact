@@ -339,9 +339,8 @@ class TPusher2d(CollisionGeometry):
             RotationMatrix.Identity(), np.array([0, 0, z_value])  # type: ignore
         )
         box_2 = self.box_2
-        transform_2 = RigidTransform(
-            RotationMatrix.Identity(), np.array([0, -0.1, z_value])  # type: ignore
-        )
+        box_2_center = np.array([0, -self.box_1.height / 2 - self.box_2.height / 2, 0])
+        transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)
 
         return [box_1, box_2], [transform_1, transform_2]
 
