@@ -3,7 +3,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
@@ -21,7 +21,7 @@ def visualize_plan(debug: bool = False):
     else:
         raise NotImplementedError()
 
-    visualize_planar_pushing_trajectory(
+    visualize_planar_pushing_trajectory_legacy(
         traj.to_old_format(), slider.geometry, traj.pusher_radius
     )
 

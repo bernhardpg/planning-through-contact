@@ -21,7 +21,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -271,7 +271,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, planner.slider.geometry, planner.config.pusher_radius
         )
 
@@ -439,6 +439,6 @@ def test_make_plan(
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, planner.slider.geometry, planner.config.pusher_radius
         )

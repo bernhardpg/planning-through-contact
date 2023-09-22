@@ -27,7 +27,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -106,7 +106,7 @@ def test_add_continuity_constraints_between_non_collision_modes(
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, config.slider_geometry, 0.01)
+        visualize_planar_pushing_trajectory_legacy(traj, config.slider_geometry, 0.01)
 
 
 def test_add_continuity_between_non_coll_and_face_contact(
@@ -156,4 +156,6 @@ def test_add_continuity_between_non_coll_and_face_contact(
 
     if DEBUG:
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
-        visualize_planar_pushing_trajectory(traj, plan_config.slider_geometry, 0.01)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, plan_config.slider_geometry, 0.01
+        )

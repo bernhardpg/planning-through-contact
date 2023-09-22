@@ -15,7 +15,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 )
 
 
-def visualize_planar_pushing_trajectory(
+def visualize_planar_pushing_trajectory_legacy(
     traj: OldPlanarPushingTrajectory,
     object_geometry: CollisionGeometry,
     pusher_radius: float,

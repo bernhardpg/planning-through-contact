@@ -28,7 +28,7 @@ from planning_through_contact.planning.planar.planar_plan_config import PlanarPl
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -244,7 +244,7 @@ def test_subgraph_planning(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.slider.geometry, 0.01)
+        visualize_planar_pushing_trajectory_legacy(traj, subgraph.slider.geometry, 0.01)
 
 
 @pytest.mark.parametrize(
@@ -369,7 +369,7 @@ def test_subgraph_with_contact_modes(
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, subgraph.slider.geometry, pusher_radius=0.01
         )
 
@@ -436,7 +436,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory(traj, subgraph.slider.geometry, 0.01)
+        visualize_planar_pushing_trajectory_legacy(traj, subgraph.slider.geometry, 0.01)
 
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
@@ -512,6 +512,6 @@ def test_subgraph_contact_modes_t_pusher(
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, subgraph.slider.geometry, plan_config.pusher_radius
         )

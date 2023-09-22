@@ -26,7 +26,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
 )
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -153,7 +153,7 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     )
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj,
             non_collision_mode.object.geometry,
             pusher_radius=non_collision_mode.pusher_radius,
@@ -246,7 +246,7 @@ def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
         assert np.allclose(p, t)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
         )
 
@@ -291,7 +291,7 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
     assert vars.p_BP_xs[2] <= -0.27
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
         )
 
@@ -334,7 +334,7 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
     assert vars.p_BP_xs[2] <= -0.25
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, plan_config.slider_geometry, plan_config.pusher_radius
         )
 
@@ -402,6 +402,6 @@ def test_avoid_object_t_pusher(
     assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, plan_config.slider_geometry, plan_config.pusher_radius
         )
