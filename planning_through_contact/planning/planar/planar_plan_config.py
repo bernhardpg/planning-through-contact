@@ -106,6 +106,7 @@ class PlanarSolverParams:
     print_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
+    get_rounded_and_original_traj: bool = False
 
 
 @dataclass

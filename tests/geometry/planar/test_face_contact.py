@@ -27,7 +27,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -245,7 +245,9 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, face_contact_mode.object.geometry
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
@@ -275,7 +277,9 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, face_contact_mode.object.geometry
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
@@ -306,7 +310,9 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, face_contact_mode.object.geometry
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
@@ -336,7 +342,9 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, face_contact_mode.object.geometry
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
@@ -376,7 +384,9 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
     if DEBUG:
         vars = face_contact_mode.reduced_variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-        visualize_planar_pushing_trajectory(traj, face_contact_mode.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, face_contact_mode.object.geometry
+        )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)

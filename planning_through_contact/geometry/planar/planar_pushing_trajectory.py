@@ -2,7 +2,7 @@ import pickle
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -195,7 +195,7 @@ class PlanarPushingTrajSegment:
     end_time: float
     p_WB: LinTrajSegment
     R_WB: So3TrajSegment
-    p_c_W: LinTrajSegment
+    p_WP: LinTrajSegment
     f_c_W: LinTrajSegment
     mode: PlanarPushingContactMode
 
@@ -205,7 +205,7 @@ class PlanarPushingTrajSegment:
     ) -> "PlanarPushingTrajSegment":
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
-        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
+        p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
@@ -217,7 +217,7 @@ class PlanarPushingTrajSegment:
                 knot_points.contact_location
             )
 
-        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W, mode)
+        return cls(start_time, end_time, p_WB, R_WB, p_WP, f_c_W, mode)
 
 
 class PlanarPushingTrajectory:
@@ -249,9 +249,16 @@ class PlanarPushingTrajectory:
             for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
         ]
 
+    def _get_curr_segment_idx(self, t: float) -> int:
+        if t == self.end_time:
+            # return the last element if we are at the end time
+            return len(self.path_knot_points) - 1
+
+        idx_of_curr_segment = np.where(t < self.end_times)[0][0]
+        return idx_of_curr_segment
+
     def _get_traj_segment_for_time(self, t: float) -> PlanarPushingTrajSegment:
-        idx_of_curr_segment = np.where(t <= self.end_times)[0][0]
-        return self.traj_segments[idx_of_curr_segment]
+        return self.traj_segments[self._get_curr_segment_idx(t)]
 
     def _t_or_end_time(self, t: float) -> float:
         if t > self.end_times[-1]:
@@ -263,10 +270,43 @@ class PlanarPushingTrajectory:
         else:
             return t
 
+    def get_knot_point_value(
+        self,
+        t: float,
+        traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W"],
+    ) -> npt.NDArray[np.float64] | float:
+        t = self._t_or_end_time(t)
+        knot_point_idx = self._get_curr_segment_idx(t)
+        knot_points = self.path_knot_points[knot_point_idx]
+
+        time_elapsed = self.start_times[knot_point_idx]
+        t_rel = t - time_elapsed
+
+        idx = int(np.floor(t_rel / knot_points.dt))
+
+        # For t == self.end_time we return the last knot point again
+        # (This is just a non-important simulation detail)
+        if t == self.end_time:
+            idx = idx - 1
+
+        if traj_to_get == "p_WB":
+            val = knot_points.p_WBs[idx]  # type: ignore
+        elif traj_to_get == "R_WB":
+            val = np.eye(3)  # We expect R_WB to be 3x3
+            val[:2, :2] = knot_points.R_WBs[idx]  # type: ignore
+        elif traj_to_get == "p_WP":
+            val = knot_points.p_WPs[idx]  # type: ignore
+        elif traj_to_get == "f_c_W":
+            val = knot_points.f_c_Ws[idx]  # type: ignore
+        else:
+            raise NotImplementedError("Not implemented")
+
+        return val
+
     def get_value(
         self,
         t: float,
-        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta", "theta_dot"],
+        traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         traj = self._get_traj_segment_for_time(t)
@@ -274,8 +314,8 @@ class PlanarPushingTrajectory:
             val = traj.p_WB.eval(t)
         elif traj_to_get == "R_WB":
             val = traj.R_WB.eval(t)
-        elif traj_to_get == "p_c_W":
-            val = traj.p_c_W.eval(t)
+        elif traj_to_get == "p_WP":
+            val = traj.p_WP.eval(t)
         elif traj_to_get == "f_c_W":
             val = traj.f_c_W.eval(t)
         elif traj_to_get == "theta":
@@ -302,13 +342,13 @@ class PlanarPushingTrajectory:
         return planar_pose
 
     def get_pusher_planar_pose(self, t) -> PlanarPose:
-        p_c_W = self.get_value(t, "p_c_W")
+        p_WP = self.get_value(t, "p_WP")
         theta = 0
 
         # avoid typing errors
-        assert isinstance(p_c_W, type(np.array([])))
+        assert isinstance(p_WP, type(np.array([])))
 
-        planar_pose = PlanarPose(p_c_W[0, 0], p_c_W[1, 0], theta)
+        planar_pose = PlanarPose(p_WP[0, 0], p_WP[1, 0], theta)
         return planar_pose
 
     @classmethod
@@ -381,3 +421,46 @@ class PlanarPushingTrajectory:
     def initial_pusher_planar_pose(self) -> PlanarPose:
         start_time = self.traj_segments[0].start_time
         return self.get_pusher_planar_pose(start_time)
+
+    def get_pos_limits(self, buffer: float) -> Tuple[float, float, float, float]:
+        # We use a fixed timestep to quickly check all values of pos.
+        # If the original resolution is finer than this, some values
+        # might be missed
+        FIXED_STEP = 0.01
+
+        def get_lims(value_name: str) -> Tuple[float, float, float, float]:
+            ts = np.arange(self.start_time, self.end_time, FIXED_STEP)
+            vecs: List[npt.NDArray[np.float64]] = [self.get_knot_point_value(t, value_name) for t in ts]  # type: ignore
+            vec_xs = [vec[0, 0] for vec in vecs]
+            vec_ys = [vec[1, 0] for vec in vecs]
+
+            vec_x_max = max(vec_xs)
+            vec_x_min = min(vec_xs)
+            vec_y_max = max(vec_ys)
+            vec_y_min = min(vec_ys)
+
+            return vec_x_min, vec_x_max, vec_y_min, vec_y_max
+
+        def add_buffer_to_lims(lims, buffer) -> Tuple[float, float, float, float]:
+            return (
+                lims[0] - buffer,
+                lims[1] + buffer,
+                lims[2] - buffer,
+                lims[3] + buffer,
+            )
+
+        def get_lims_from_two_lims(lim_a, lim_b) -> Tuple[float, float, float, float]:
+            return (
+                min(lim_a[0], lim_b[0]),
+                max(lim_a[1], lim_b[1]),
+                min(lim_a[2], lim_b[2]),
+                max(lim_a[3], lim_b[3]),
+            )
+
+        p_WB_lims = get_lims("p_WB")
+        object_radius = self.config.slider_geometry.max_dist_from_com
+        obj_lims = add_buffer_to_lims(p_WB_lims, object_radius)
+        p_WP_lims = get_lims("p_WP")
+
+        lims = get_lims_from_two_lims(obj_lims, p_WP_lims)
+        return add_buffer_to_lims(lims, buffer)

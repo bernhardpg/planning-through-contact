@@ -18,7 +18,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -61,7 +61,7 @@ def test_rounding_one_mode(face_contact_mode: FaceContactMode) -> None:
     assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory(
+        visualize_planar_pushing_trajectory_legacy(
             traj, face_contact_mode.config.slider_geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
@@ -183,4 +183,6 @@ def test_path_rounding(planner: PlanarPushingPlanner) -> None:
 
     if DEBUG:
         # visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
-        visualize_planar_pushing_trajectory(traj_rounded, planner.slider.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj_rounded, planner.slider.geometry
+        )

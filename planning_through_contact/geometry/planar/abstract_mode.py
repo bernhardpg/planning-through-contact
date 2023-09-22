@@ -144,6 +144,9 @@ class AbstractModeVariables(ABC):
     def p_BPs(self):
         pass
 
+    def __len__(self) -> int:
+        return len(self.R_WBs)
+
 
 @dataclass
 class AbstractContactMode(ABC):

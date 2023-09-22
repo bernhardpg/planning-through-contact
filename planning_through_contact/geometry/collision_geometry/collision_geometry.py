@@ -163,3 +163,8 @@ class CollisionGeometry(ABC):
         c_n = f_c_B.T.dot(n).item()
         c_f = f_c_B.T.dot(t).item()
         return c_n, c_f
+
+    @property
+    def max_dist_from_com(self) -> float:
+        dists = [np.linalg.norm(v) for v in self.vertices]
+        return np.max(dists)  # type: ignore

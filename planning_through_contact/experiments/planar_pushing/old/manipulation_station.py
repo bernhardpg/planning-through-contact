@@ -7,7 +7,7 @@ from simulation.planar_pushing.planar_pushing_iiwa import (
     PlanarPose,
     PlanarPushingSimulation,
 )
-from visualize.planar import visualize_planar_pushing_trajectory
+from visualize.planar import visualize_planar_pushing_trajectory_legacy
 
 
 def planar_pushing_station():
@@ -30,7 +30,7 @@ def planar_pushing_station():
         interpolate=False, print_path=True, measure_time=True, print_output=False
     )
 
-    visualize_planar_pushing_trajectory(traj, box.geometry)
+    visualize_planar_pushing_trajectory_legacy(traj, box.geometry)
     breakpoint()
 
     # sim.set_box_planar_pose(box_initial_pose)

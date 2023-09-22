@@ -40,7 +40,7 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
     SliderPusherTrajectoryFeeder,
 )
 from planning_through_contact.visualize.planar import (
-    visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
@@ -95,7 +95,9 @@ def one_contact_mode_vars(
     DEBUG = False
     if DEBUG:
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-        visualize_planar_pushing_trajectory(traj, contact_mode_example.object.geometry)
+        visualize_planar_pushing_trajectory_legacy(
+            traj, contact_mode_example.object.geometry
+        )
     return [vars]
 
 
