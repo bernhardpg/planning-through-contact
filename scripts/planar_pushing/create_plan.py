@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 from typing import Literal
 
@@ -37,73 +38,26 @@ def get_tee() -> RigidBody:
     return body
 
 
-def create_plan_teleport(
-    traj_number: int = 1,
-):
-    body = get_tee()
-
-    dynamics_config = SliderPusherSystemConfig(
-        pusher_radius=0.035, slider=body, friction_coeff_slider_pusher=0.1
-    )
-
-    config = PlanarPlanConfig(
-        time_non_collision=2.0,
-        time_in_contact=2.0,
-        num_knot_points_contact=4,
-        num_knot_points_non_collision=2,
-        avoid_object=False,
-        no_cycles=False,
-        dynamics_config=dynamics_config,
-        allow_teleportation=False,
-        penalize_mode_transitions=False,
-    )
-    planner = PlanarPushingPlanner(config)
-
-    if traj_number == 1:
-        th_initial = 0
-        th_target = 0.5
-        pos_initial = np.array([[0.0, 0.5]])
-        pos_target = np.array([[0.2, 0.2]])
-
-    slider_initial_pose = PlanarPose(pos_initial[0, 0], pos_initial[0, 1], th_initial)
-    slider_target_pose = PlanarPose(pos_target[0, 0], pos_target[0, 1], th_target)
-    finger_initial_pose = PlanarPose(-0.2, 0, 0)
-    finger_target_pose = finger_initial_pose
-
-    planner.set_initial_poses(finger_initial_pose, slider_initial_pose)
-    planner.set_target_poses(finger_target_pose, slider_target_pose)
-
-    planner.create_graph_diagram(Path("graph.svg"))
-
-    solver_params = PlanarSolverParams(
-        gcs_max_rounded_paths=1,
-        print_flows=True,
-        nonlinear_traj_rounding=False,
-        assert_determinants=True,
-        print_solver_output=True,
-        print_path=True,
-    )
-    traj = planner.plan_trajectory(solver_params)
-
-    visualize_planar_pushing_trajectory(
-        traj.to_old_format(),
-        body.geometry,
-        config.pusher_radius,
-        visualize_robot_base=True,
-    )
+def get_sugar_box() -> RigidBody:
+    mass = 0.1
+    box_geometry = Box2d(width=0.106, height=0.185)
+    slider = RigidBody("sugar_box", box_geometry, mass)
+    return slider
 
 
 def create_plan(
     debug: bool = False,
-    body_to_use: Literal["box", "t_pusher"] = "box",
+    body_to_use: Literal["box", "t_pusher", "sugar_box"] = "sugar_box",
     traj_number: int = 1,
 ):
     if body_to_use == "box":
         body = get_slider_box()
     elif body_to_use == "t_pusher":
         body = get_tee()
+    elif body_to_use == "sugar_box":
+        body = get_sugar_box()
 
-    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.04, slider=body)
+    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.035, slider=body)
 
     config = PlanarPlanConfig(
         time_non_collision=2.0,
@@ -112,7 +66,7 @@ def create_plan(
         num_knot_points_non_collision=4,
         avoid_object=True,
         avoidance_cost="quadratic",
-        no_cycles=True,
+        no_cycles=False,
         dynamics_config=dynamics_config,
         allow_teleportation=False,
     )
@@ -194,7 +148,7 @@ def create_plan(
     solver_params = PlanarSolverParams(
         gcs_max_rounded_paths=10,
         print_flows=True,
-        nonlinear_traj_rounding=True,
+        nonlinear_traj_rounding=False,
         assert_determinants=True,
         print_solver_output=True,
         print_path=True,
@@ -202,7 +156,6 @@ def create_plan(
     traj = planner.plan_trajectory(solver_params)
     traj_name = f"trajectories/{body_to_use}_pushing_{traj_number}.pkl"
     traj.save(traj_name)
-    breakpoint()
 
     if debug:
         visualize_planar_pushing_trajectory(
@@ -214,4 +167,13 @@ def create_plan(
 
 
 if __name__ == "__main__":
-    create_plan_teleport(traj_number=1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--traj",
+        help="Which trajectory to plan",
+        type=int,
+        default=1,
+    )
+    args = parser.parse_args()
+    traj_number = args.traj
+    create_plan(debug=True, body_to_use="box", traj_number=traj_number)
