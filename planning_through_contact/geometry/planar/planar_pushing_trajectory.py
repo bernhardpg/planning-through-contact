@@ -250,7 +250,11 @@ class PlanarPushingTrajectory:
         ]
 
     def _get_curr_segment_idx(self, t: float) -> int:
-        idx_of_curr_segment = np.where(t <= self.end_times)[0][0]
+        if t == self.end_time:
+            # return the last element if we are at the end time
+            return len(self.path_knot_points) - 1
+
+        idx_of_curr_segment = np.where(t < self.end_times)[0][0]
         return idx_of_curr_segment
 
     def _get_traj_segment_for_time(self, t: float) -> PlanarPushingTrajSegment:
@@ -266,30 +270,38 @@ class PlanarPushingTrajectory:
         else:
             return t
 
-    # TODO: Do this when I have implemented drake visualizer
-    # def get_knot_point_value(
-    #     self,
-    #     t: float,
-    #     traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot"],
-    # ) -> npt.NDArray[np.float64] | float:
-    #     t = self._t_or_end_time(t)
-    #     idx = self._get_curr_segment_idx(t)
-    #     knot_points = self.path_knot_points[idx]
-    #
-    #     if traj_to_get == "p_WB":
-    #         return self.knot_points[]
-    #     elif traj_to_get == "R_WB":
-    #         val = traj.R_WB.eval(t)
-    #     elif traj_to_get == "p_WP":
-    #         val = traj.p_WP.eval(t)
-    #     elif traj_to_get == "f_c_W":
-    #         val = traj.f_c_W.eval(t)
-    #     elif traj_to_get == "theta":
-    #         val = traj.R_WB.eval_theta(t)
-    #     elif traj_to_get == "theta_dot":
-    #         val = traj.R_WB.eval_theta_dot(t)
-    #
-    #     return val
+    def get_knot_point_value(
+        self,
+        t: float,
+        traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W"],
+    ) -> npt.NDArray[np.float64] | float:
+        t = self._t_or_end_time(t)
+        knot_point_idx = self._get_curr_segment_idx(t)
+        knot_points = self.path_knot_points[knot_point_idx]
+
+        time_elapsed = self.start_times[knot_point_idx]
+        t_rel = t - time_elapsed
+
+        idx = int(np.floor(t_rel / knot_points.dt))
+
+        # For t == self.end_time we return the last knot point again
+        # (This is just a non-important simulation detail)
+        if t == self.end_time:
+            idx = idx - 1
+
+        if traj_to_get == "p_WB":
+            val = knot_points.p_WBs[idx]  # type: ignore
+        elif traj_to_get == "R_WB":
+            val = np.eye(3)  # We expect R_WB to be 3x3
+            val[:2, :2] = knot_points.R_WBs[idx]  # type: ignore
+        elif traj_to_get == "p_WP":
+            val = knot_points.p_WPs[idx]  # type: ignore
+        elif traj_to_get == "f_c_W":
+            val = knot_points.f_c_Ws[idx]  # type: ignore
+        else:
+            raise NotImplementedError("Not implemented")
+
+        return val
 
     def get_value(
         self,

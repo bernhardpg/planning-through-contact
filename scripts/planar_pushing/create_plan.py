@@ -64,7 +64,7 @@ def create_plan(
         num_knot_points_non_collision=4,
         avoid_object=True,
         avoidance_cost="quadratic",
-        no_cycles=False,
+        no_cycles=True,
         dynamics_config=dynamics_config,
         allow_teleportation=False,
     )
@@ -114,7 +114,7 @@ def create_plan(
         gcs_max_rounded_paths=10,
         print_flows=True,
         nonlinear_traj_rounding=False,
-        assert_determinants=True,
+        assert_determinants=False,
         print_solver_output=True,
         print_path=True,
     )
@@ -125,7 +125,9 @@ def create_plan(
         traj.save(traj_name)
 
     if visualize:
-        ani = visualize_planar_pushing_trajectory(traj, save=True, filename="test")
+        ani = visualize_planar_pushing_trajectory(
+            traj, save=True, filename="test", visualize_knot_points=True
+        )
         return ani
         # visualize_planar_pushing_trajectory_legacy(
         #     traj.to_old_format(),

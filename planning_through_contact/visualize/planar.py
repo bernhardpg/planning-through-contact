@@ -44,10 +44,13 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         self,
         traj: PlanarPushingTrajectory,
         scene_graph: SceneGraph,
+        visualize_knot_points: bool = False,
     ) -> None:
         super().__init__()
 
         self.traj = traj
+        self.visualize_knot_points = visualize_knot_points
+
         slider_geometry = self.traj.config.slider_geometry
         pusher_radius = self.traj.config.pusher_radius
 
@@ -149,6 +152,7 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         builder: DiagramBuilder,
         traj: PlanarPushingTrajectory,
         scene_graph: SceneGraph,
+        visualize_knot_points: bool = False,
         name: str = "traj_geometry ",
     ) -> "PlanarPushingTrajectory":
         traj_geometry = builder.AddNamedSystem(
@@ -156,6 +160,7 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
             cls(
                 traj,
                 scene_graph,
+                visualize_knot_points,
             ),
         )
         builder.Connect(
@@ -167,10 +172,16 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
     def calc_output(self, context: Context, output: FramePoseVector) -> None:
         t = context.get_time()
 
-        R_WB = self.traj.get_value(t, "R_WB")
-        p_WB = self.traj.get_value(t, "p_WB")
-        p_WP = self.traj.get_value(t, "p_WP")
-        # TODO force
+        if self.visualize_knot_points:
+            # TODO force
+            R_WB = self.traj.get_knot_point_value(t, "R_WB")
+            p_WB = self.traj.get_knot_point_value(t, "p_WB")
+            p_WP = self.traj.get_knot_point_value(t, "p_WP")
+        else:
+            # TODO force
+            R_WB = self.traj.get_value(t, "R_WB")
+            p_WB = self.traj.get_value(t, "p_WB")
+            p_WP = self.traj.get_value(t, "p_WP")
 
         p_x = p_WB[0, 0]  # type: ignore
         p_y = p_WB[1, 0]  # type: ignore
@@ -191,6 +202,7 @@ def visualize_planar_pushing_trajectory(
     show: bool = False,
     save: bool = False,
     filename: Optional[str] = None,
+    visualize_knot_points: bool = False,
 ):
     if save:
         assert filename is not None
@@ -203,6 +215,7 @@ def visualize_planar_pushing_trajectory(
         builder,
         traj,
         scene_graph,
+        visualize_knot_points,
     )
 
     # max_x_y = max(
