@@ -195,7 +195,7 @@ class PlanarPushingTrajSegment:
     end_time: float
     p_WB: LinTrajSegment
     R_WB: So3TrajSegment
-    p_c_W: LinTrajSegment
+    p_WP: LinTrajSegment
     f_c_W: LinTrajSegment
     mode: PlanarPushingContactMode
 
@@ -205,7 +205,7 @@ class PlanarPushingTrajSegment:
     ) -> "PlanarPushingTrajSegment":
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
-        p_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
+        p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
@@ -217,7 +217,7 @@ class PlanarPushingTrajSegment:
                 knot_points.contact_location
             )
 
-        return cls(start_time, end_time, p_WB, R_WB, p_c_W, f_c_W, mode)
+        return cls(start_time, end_time, p_WB, R_WB, p_WP, f_c_W, mode)
 
 
 class PlanarPushingTrajectory:
@@ -249,9 +249,12 @@ class PlanarPushingTrajectory:
             for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
         ]
 
-    def _get_traj_segment_for_time(self, t: float) -> PlanarPushingTrajSegment:
+    def _get_curr_segment_idx(self, t: float) -> int:
         idx_of_curr_segment = np.where(t <= self.end_times)[0][0]
-        return self.traj_segments[idx_of_curr_segment]
+        return idx_of_curr_segment
+
+    def _get_traj_segment_for_time(self, t: float) -> PlanarPushingTrajSegment:
+        return self.traj_segments[self._get_curr_segment_idx(t)]
 
     def _t_or_end_time(self, t: float) -> float:
         if t > self.end_times[-1]:
@@ -263,10 +266,35 @@ class PlanarPushingTrajectory:
         else:
             return t
 
+    # TODO: Do this when I have implemented drake visualizer
+    # def get_knot_point_value(
+    #     self,
+    #     t: float,
+    #     traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot"],
+    # ) -> npt.NDArray[np.float64] | float:
+    #     t = self._t_or_end_time(t)
+    #     idx = self._get_curr_segment_idx(t)
+    #     knot_points = self.path_knot_points[idx]
+    #
+    #     if traj_to_get == "p_WB":
+    #         return self.knot_points[]
+    #     elif traj_to_get == "R_WB":
+    #         val = traj.R_WB.eval(t)
+    #     elif traj_to_get == "p_WP":
+    #         val = traj.p_WP.eval(t)
+    #     elif traj_to_get == "f_c_W":
+    #         val = traj.f_c_W.eval(t)
+    #     elif traj_to_get == "theta":
+    #         val = traj.R_WB.eval_theta(t)
+    #     elif traj_to_get == "theta_dot":
+    #         val = traj.R_WB.eval_theta_dot(t)
+    #
+    #     return val
+
     def get_value(
         self,
         t: float,
-        traj_to_get: Literal["p_WB", "R_WB", "p_c_W", "f_c_W", "theta", "theta_dot"],
+        traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         traj = self._get_traj_segment_for_time(t)
@@ -274,8 +302,8 @@ class PlanarPushingTrajectory:
             val = traj.p_WB.eval(t)
         elif traj_to_get == "R_WB":
             val = traj.R_WB.eval(t)
-        elif traj_to_get == "p_c_W":
-            val = traj.p_c_W.eval(t)
+        elif traj_to_get == "p_WP":
+            val = traj.p_WP.eval(t)
         elif traj_to_get == "f_c_W":
             val = traj.f_c_W.eval(t)
         elif traj_to_get == "theta":
@@ -302,13 +330,13 @@ class PlanarPushingTrajectory:
         return planar_pose
 
     def get_pusher_planar_pose(self, t) -> PlanarPose:
-        p_c_W = self.get_value(t, "p_c_W")
+        p_WP = self.get_value(t, "p_WP")
         theta = 0
 
         # avoid typing errors
-        assert isinstance(p_c_W, type(np.array([])))
+        assert isinstance(p_WP, type(np.array([])))
 
-        planar_pose = PlanarPose(p_c_W[0, 0], p_c_W[1, 0], theta)
+        planar_pose = PlanarPose(p_WP[0, 0], p_WP[1, 0], theta)
         return planar_pose
 
     @classmethod
