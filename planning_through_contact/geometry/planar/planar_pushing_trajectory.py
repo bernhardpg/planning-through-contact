@@ -2,7 +2,7 @@ import pickle
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -421,3 +421,46 @@ class PlanarPushingTrajectory:
     def initial_pusher_planar_pose(self) -> PlanarPose:
         start_time = self.traj_segments[0].start_time
         return self.get_pusher_planar_pose(start_time)
+
+    def get_pos_limits(self, buffer: float) -> Tuple[float, float, float, float]:
+        # We use a fixed timestep to quickly check all values of pos.
+        # If the original resolution is finer than this, some values
+        # might be missed
+        FIXED_STEP = 0.01
+
+        def get_lims(value_name: str) -> Tuple[float, float, float, float]:
+            ts = np.arange(self.start_time, self.end_time, FIXED_STEP)
+            vecs: List[npt.NDArray[np.float64]] = [self.get_knot_point_value(t, value_name) for t in ts]  # type: ignore
+            vec_xs = [vec[0, 0] for vec in vecs]
+            vec_ys = [vec[1, 0] for vec in vecs]
+
+            vec_x_max = max(vec_xs)
+            vec_x_min = min(vec_xs)
+            vec_y_max = max(vec_ys)
+            vec_y_min = min(vec_ys)
+
+            return vec_x_min, vec_x_max, vec_y_min, vec_y_max
+
+        def add_buffer_to_lims(lims, buffer) -> Tuple[float, float, float, float]:
+            return (
+                lims[0] - buffer,
+                lims[1] + buffer,
+                lims[2] - buffer,
+                lims[3] + buffer,
+            )
+
+        def get_lims_from_two_lims(lim_a, lim_b) -> Tuple[float, float, float, float]:
+            return (
+                min(lim_a[0], lim_b[0]),
+                max(lim_a[1], lim_b[1]),
+                min(lim_a[2], lim_b[2]),
+                max(lim_a[3], lim_b[3]),
+            )
+
+        p_WB_lims = get_lims("p_WB")
+        object_radius = self.config.slider_geometry.max_dist_from_com
+        obj_lims = add_buffer_to_lims(p_WB_lims, object_radius)
+        p_WP_lims = get_lims("p_WP")
+
+        lims = get_lims_from_two_lims(obj_lims, p_WP_lims)
+        return add_buffer_to_lims(lims, buffer)

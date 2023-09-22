@@ -218,16 +218,7 @@ def visualize_planar_pushing_trajectory(
         visualize_knot_points,
     )
 
-    # max_x_y = max(
-    #     max(np.abs(traj.contact_pos_traj.flatten())),
-    #     max(np.abs(traj.com_traj.flatten())),
-    # )
-    # max_geometry_dist = max(
-    #     [max(np.abs(v.flatten())) for v in slider_geometry.vertices]
-    # )
-    # max_x_y_and_geometry = max_x_y + max_geometry_dist
-    # LIM = max_x_y_and_geometry * 1.1
-    LIM = 0.7
+    x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
 
     def connect_planar_visualizer(
         builder: DiagramBuilder, scene_graph: SceneGraph
@@ -239,8 +230,8 @@ def visualize_planar_pushing_trajectory(
             builder,
             scene_graph,
             T_VW=T_VW,
-            xlim=[-LIM, LIM],
-            ylim=[-LIM, LIM],
+            xlim=np.array([x_min, x_max]),
+            ylim=np.array([y_min, y_max]),
             show=show,
         )
         return visualizer
