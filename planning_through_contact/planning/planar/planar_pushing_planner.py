@@ -449,7 +449,9 @@ class PlanarPushingPlanner:
         """
         Optionally saves the graph to file if a string is given for the 'filepath' argument.
         """
-        graphviz = self.gcs.GetGraphvizString(precision=2, result=result)
+        graphviz = self.gcs.GetGraphvizString(
+            precision=2, result=result, show_slacks=False
+        )
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filepath is not None:
