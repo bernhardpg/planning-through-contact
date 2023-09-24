@@ -412,6 +412,10 @@ class PlanarPushingPlanner:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
 
+        if solver_params.print_cost:
+            cost = result.get_optimal_cost()
+            print(f"Cost: {cost}")
+
         if solver_params.get_rounded_and_original_traj:
             original_traj = PlanarPushingTrajectory.from_result(
                 self.config,
