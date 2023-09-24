@@ -33,6 +33,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     OldPlanarPushingTrajectory,
 )
+from planning_through_contact.planning.planar.planar_pushing_planner import (
+    PlanarPushingStartAndGoal,
+)
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -463,10 +466,7 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
 def visualize_planar_pushing_start_and_goal(
     slider_geometry: CollisionGeometry,
     pusher_radius: float,
-    slider_initial_pose: PlanarPose,
-    slider_target_pose: PlanarPose,
-    pusher_initial_pose: PlanarPose,
-    pusher_target_pose: PlanarPose,
+    plan: PlanarPushingStartAndGoal,
     show: bool = False,
     save: bool = False,
     filename: Optional[str] = None,
@@ -480,10 +480,10 @@ def visualize_planar_pushing_start_and_goal(
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     geometry = PlanarPushingStartGoalGeometry.add_to_builder(
         builder,
-        slider_initial_pose,
-        slider_target_pose,
-        pusher_initial_pose,
-        pusher_target_pose,
+        plan.slider_initial_pose,
+        plan.slider_target_pose,
+        plan.pusher_initial_pose,
+        plan.pusher_target_pose,
         slider_geometry,
         pusher_radius,
         scene_graph,

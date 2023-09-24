@@ -5,6 +5,8 @@ import numpy.typing as npt
 from pydrake.common.eigen_geometry import Quaternion
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
+
 
 @dataclass
 class PlanarPose:
@@ -108,6 +110,12 @@ class PlanarPose:
         return PlanarPose(
             x=self.x + other.x, y=self.y + other.y, theta=self.theta + other.theta
         )
+
+    def rotate(self, theta: float) -> "PlanarPose":
+        R = two_d_rotation_matrix_from_angle(theta)
+        new_pos = R.dot(self.pos())
+        new_th = theta + self.theta
+        return PlanarPose(new_pos[0, 0], new_pos[1, 0], new_th)
 
 
 class PlanarVelocity(PlanarPose):

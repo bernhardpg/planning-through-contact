@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
@@ -26,6 +27,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarSolverParams,
@@ -34,6 +36,26 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
+
+
+@dataclass
+class PlanarPushingStartAndGoal:
+    slider_initial_pose: PlanarPose
+    slider_target_pose: PlanarPose
+    pusher_initial_pose: PlanarPose
+    pusher_target_pose: PlanarPose
+
+    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
+        new_slider_init = self.slider_initial_pose.rotate(theta)
+        new_slider_target = self.slider_target_pose.rotate(theta)
+
+        # NOTE: Pusher poses are already relative to slider frame, not world frame
+        return PlanarPushingStartAndGoal(
+            new_slider_init,
+            new_slider_target,
+            self.pusher_initial_pose,
+            self.pusher_target_pose,
+        )
 
 
 class PlanarPushingPlanner:
