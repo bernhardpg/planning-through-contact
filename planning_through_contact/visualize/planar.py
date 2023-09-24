@@ -1,10 +1,12 @@
 from typing import Optional
 
 import numpy as np
+import numpy.typing as npt
 from pydrake.common.value import Value
 from pydrake.geometry import Box as DrakeBox
 from pydrake.geometry import Cylinder as DrakeCylinder
 from pydrake.geometry import (
+    FrameId,
     FramePoseVector,
     GeometryFrame,
     GeometryInstance,
@@ -45,10 +47,12 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         traj: PlanarPushingTrajectory,
         scene_graph: SceneGraph,
         visualize_knot_points: bool = False,
+        visualize_goal: bool = True,
     ) -> None:
         super().__init__()
 
         self.traj = traj
+        self.visualize_goal = visualize_goal
         self.visualize_knot_points = visualize_knot_points
 
         slider_geometry = self.traj.config.slider_geometry
@@ -61,71 +65,39 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         )
 
         self.source_id = scene_graph.RegisterSource()
+
         self.slider_frame_id = scene_graph.RegisterFrame(
             self.source_id, GeometryFrame("slider")
         )
-        BOX_COLOR = COLORS["aquamarine4"]
-        DEFAULT_HEIGHT = 0.3
-        if isinstance(slider_geometry, Box2d):
-            box_geometry_id = scene_graph.RegisterGeometry(
-                self.source_id,
-                self.slider_frame_id,
-                GeometryInstance(
-                    RigidTransform.Identity(),
-                    DrakeBox(
-                        slider_geometry.width, slider_geometry.height, DEFAULT_HEIGHT
-                    ),
-                    "slider",
-                ),
-            )
-            scene_graph.AssignRole(
-                self.source_id,
-                box_geometry_id,
-                MakePhongIllustrationProperties(BOX_COLOR.diffuse()),
-            )
-        elif isinstance(slider_geometry, TPusher2d):
-            boxes, transforms = slider_geometry.get_as_boxes(DEFAULT_HEIGHT / 2)
-            box_geometry_ids = [
-                scene_graph.RegisterGeometry(
-                    self.source_id,
-                    self.slider_frame_id,
-                    GeometryInstance(
-                        transform,
-                        DrakeBox(box.width, box.height, DEFAULT_HEIGHT),
-                        f"box_{idx}",
-                    ),
-                )
-                for idx, (box, transform) in enumerate(zip(boxes, transforms))
-            ]
-            for box_geometry_id in box_geometry_ids:
-                scene_graph.AssignRole(
-                    self.source_id,
-                    box_geometry_id,
-                    MakePhongIllustrationProperties(BOX_COLOR.diffuse()),
-                )
+        self._add_slider_geometries(slider_geometry, scene_graph, self.slider_frame_id)
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
             self.source_id,
             GeometryFrame("pusher"),
         )
-        CYLINDER_HEIGHT = 0.3
-        self.pusher_geometry_id = scene_graph.RegisterGeometry(
-            self.source_id,
-            self.pusher_frame_id,
-            GeometryInstance(
-                RigidTransform(
-                    RotationMatrix.Identity(), np.array([0, 0, CYLINDER_HEIGHT / 2])  # type: ignore
-                ),
-                DrakeCylinder(pusher_radius, CYLINDER_HEIGHT),
-                "pusher",
-            ),
-        )
-        FINGER_COLOR = COLORS["firebrick3"]
-        scene_graph.AssignRole(
-            self.source_id,
-            self.pusher_geometry_id,
-            MakePhongIllustrationProperties(FINGER_COLOR.diffuse()),
-        )
+        self._add_pusher_geometry(pusher_radius, scene_graph, self.pusher_frame_id)
+
+        GOAL_TRANSPARENCY = 0.3
+        if self.visualize_goal:
+            self.slider_goal_frame_id = scene_graph.RegisterFrame(
+                self.source_id, GeometryFrame("slider_goal")
+            )
+            self._add_slider_geometries(
+                slider_geometry,
+                scene_graph,
+                self.slider_goal_frame_id,
+                alpha=GOAL_TRANSPARENCY,
+            )
+            self.pusher_goal_frame_id = scene_graph.RegisterFrame(
+                self.source_id,
+                GeometryFrame("pusher_goal"),
+            )
+            self._add_pusher_geometry(
+                pusher_radius,
+                scene_graph,
+                self.pusher_goal_frame_id,
+                alpha=GOAL_TRANSPARENCY,
+            )
 
         # TODO: Shows table
         # TABLE_COLOR = COLORS["bisque3"]
@@ -145,6 +117,80 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         #     table_geometry_id,
         #     MakePhongIllustrationProperties(TABLE_COLOR.diffuse()),
         # )
+
+    def _add_slider_geometries(
+        self,
+        slider_geometry: CollisionGeometry,
+        scene_graph: SceneGraph,
+        slider_frame_id: FrameId,
+        alpha: float = 1.0,
+    ) -> None:
+        BOX_COLOR = COLORS["aquamarine4"]
+        DEFAULT_HEIGHT = 0.3
+
+        if isinstance(slider_geometry, Box2d):
+            box_geometry_id = scene_graph.RegisterGeometry(
+                self.source_id,
+                slider_frame_id,
+                GeometryInstance(
+                    RigidTransform.Identity(),
+                    DrakeBox(
+                        slider_geometry.width, slider_geometry.height, DEFAULT_HEIGHT
+                    ),
+                    "slider",
+                ),
+            )
+            scene_graph.AssignRole(
+                self.source_id,
+                box_geometry_id,
+                MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+            )
+        elif isinstance(slider_geometry, TPusher2d):
+            boxes, transforms = slider_geometry.get_as_boxes(DEFAULT_HEIGHT / 2)
+            box_geometry_ids = [
+                scene_graph.RegisterGeometry(
+                    self.source_id,
+                    slider_frame_id,
+                    GeometryInstance(
+                        transform,
+                        DrakeBox(box.width, box.height, DEFAULT_HEIGHT),
+                        f"box_{idx}",
+                    ),
+                )
+                for idx, (box, transform) in enumerate(zip(boxes, transforms))
+            ]
+            for box_geometry_id in box_geometry_ids:
+                scene_graph.AssignRole(
+                    self.source_id,
+                    box_geometry_id,
+                    MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+                )
+
+    def _add_pusher_geometry(
+        self,
+        pusher_radius: float,
+        scene_graph: SceneGraph,
+        pusher_frame_id: FrameId,
+        alpha: float = 1.0,
+    ) -> None:
+        CYLINDER_HEIGHT = 0.3
+        pusher_geometry_id = scene_graph.RegisterGeometry(
+            self.source_id,
+            pusher_frame_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, 0, CYLINDER_HEIGHT / 2])  # type: ignore
+                ),
+                DrakeCylinder(pusher_radius, CYLINDER_HEIGHT),
+                "pusher",
+            ),
+        )
+        FINGER_COLOR = COLORS["firebrick3"]
+        scene_graph.AssignRole(
+            self.source_id,
+            pusher_geometry_id,
+            MakePhongIllustrationProperties(FINGER_COLOR.diffuse(alpha)),
+        )
 
     @classmethod
     def add_to_builder(
@@ -169,6 +215,28 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         )
         return traj_geometry
 
+    def _set_outputs(
+        self,
+        slider_frame_id: FrameId,
+        pusher_frame_id: FrameId,
+        output: FramePoseVector,
+        p_WB: npt.NDArray[np.float64],
+        p_WP: npt.NDArray[np.float64],
+        R_WB: npt.NDArray[np.float64],
+    ):
+        p_x = p_WB[0, 0]  # type: ignore
+        p_y = p_WB[1, 0]  # type: ignore
+
+        slider_pose = RigidTransform(
+            RotationMatrix(R_WB), np.array([p_x, p_y, 0.0])  # type: ignore
+        )
+        output.get_mutable_value().set_value(id=slider_frame_id, value=slider_pose)  # type: ignore
+
+        pusher_pose = RigidTransform(
+            RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0]))  # type: ignore
+        )
+        output.get_mutable_value().set_value(id=pusher_frame_id, value=pusher_pose)  # type: ignore
+
     def calc_output(self, context: Context, output: FramePoseVector) -> None:
         t = context.get_time()
 
@@ -183,18 +251,27 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
             p_WB = self.traj.get_value(t, "p_WB")
             p_WP = self.traj.get_value(t, "p_WP")
 
-        p_x = p_WB[0, 0]  # type: ignore
-        p_y = p_WB[1, 0]  # type: ignore
-
-        slider_pose = RigidTransform(
-            RotationMatrix(R_WB), np.array([p_x, p_y, 0.0])  # type: ignore
+        self._set_outputs(
+            self.slider_frame_id,
+            self.pusher_frame_id,
+            output,
+            p_WB,  # type: ignore
+            p_WP,  # type: ignore
+            R_WB,  # type: ignore
         )
-        output.get_mutable_value().set_value(id=self.slider_frame_id, value=slider_pose)  # type: ignore
 
-        pusher_pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0]))  # type: ignore
-        )
-        output.get_mutable_value().set_value(id=self.pusher_frame_id, value=pusher_pose)  # type: ignore
+        if self.visualize_goal:
+            target_slider_planar_pose = self.traj.target_slider_planar_pose
+            target_pusher_planar_pose = self.traj.target_pusher_planar_pose
+
+            self._set_outputs(
+                self.slider_goal_frame_id,
+                self.pusher_goal_frame_id,
+                output,
+                target_slider_planar_pose.pos(),
+                target_pusher_planar_pose.pos(),
+                target_slider_planar_pose.rot_matrix(),
+            )
 
 
 def visualize_planar_pushing_trajectory(

@@ -93,6 +93,11 @@ class PlanarPose:
         )
         return R
 
+    def rot_matrix(self) -> npt.NDArray[np.float64]:
+        R = np.eye(3)
+        R[:2, :2] = self.two_d_rot_matrix()
+        return R
+
     def cos(self) -> float:
         return np.cos(self.theta)
 

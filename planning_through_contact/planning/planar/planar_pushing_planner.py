@@ -244,6 +244,11 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
+        if self.source is not None:
+            print("Source vertex is already set, removing old vertex and adding new")
+            self.gcs.RemoveVertex(self.source.vertex)
+            self.source = None
+
         if (
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
@@ -262,6 +267,11 @@ class PlanarPushingPlanner:
     ) -> None:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
+
+        if self.target is not None:
+            print("Target vertex is already set, removing old vertex and adding new")
+            self.gcs.RemoveVertex(self.target.vertex)
+            self.target = None
 
         if (
             self.config.allow_teleportation
