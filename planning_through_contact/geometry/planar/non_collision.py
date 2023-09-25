@@ -177,12 +177,6 @@ class NonCollisionVariables(AbstractModeVariables):
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
-    cost_param_avoidance_lin: float = 0.1
-    cost_param_avoidance_quad_dist: float = 0.2
-    cost_param_avoidance_quad_weight: float = 0.4
-    cost_param_avoidance_socp_weight: float = 0.001
-    cost_param_eucl: float = 1.0
-
     @classmethod
     def create_from_plan_spec(
         cls,
@@ -305,7 +299,8 @@ class NonCollisionMode(AbstractContactMode):
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
                 self.prog.AddQuadraticCost(
-                    self.cost_param_eucl * squared_eucl_dist, is_convex=True
+                    self.config.cost_terms.cost_param_eucl * squared_eucl_dist,
+                    is_convex=True,
                 )
 
         else:  # Minimize total Euclidean distance
@@ -337,13 +332,13 @@ class NonCollisionMode(AbstractContactMode):
             if self.config.avoidance_cost == "linear":
                 raise NotImplementedError("Will be removed!")
                 self.prog.AddLinearCost(
-                    -self.cost_param_avoidance_lin * np.sum(dists)
+                    -self.config.cost_terms.cost_param_avoidance_lin * np.sum(dists)
                 )  # maximize distances
 
             elif self.config.avoidance_cost == "quadratic":
                 squared_dists = [
-                    self.cost_param_avoidance_quad_weight
-                    * (d - self.cost_param_avoidance_quad_dist) ** 2
+                    self.config.cost_terms.cost_param_avoidance_quad_weight
+                    * (d - self.config.cost_terms.cost_param_avoidance_quad_dist) ** 2
                     for dist in dists_for_each_plane
                     for d in dist
                 ]
@@ -369,7 +364,7 @@ class NonCollisionMode(AbstractContactMode):
             #
             #             self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
             #             self.prog.AddLinearCost(
-            #                 self.cost_param_avoidance_socp_weight * s
+            #                 self.config.cost_terms.cost_param_avoidance_socp_weight * s
             #             )
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
@@ -568,11 +563,14 @@ class NonCollisionMode(AbstractContactMode):
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = plane.a.T * self.cost_param_avoidance_socp_weight
+                        A[0, :] = (
+                            plane.a.T
+                            * self.config.cost_terms.cost_param_avoidance_socp_weight
+                        )
                         # b = [b; 1]
                         b = np.ones((NUM_VARS, 1))
                         b[0] = plane.b
-                        b = b * self.cost_param_avoidance_socp_weight
+                        b = b * self.config.cost_terms.cost_param_avoidance_socp_weight
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)

@@ -241,9 +241,6 @@ class FaceContactVariables(AbstractModeVariables):
 
 @dataclass
 class FaceContactMode(AbstractContactMode):
-    cost_param_lin_vels: float = 1.0
-    cost_param_ang_vels: float = 1.0
-
     @classmethod
     def create_from_plan_spec(
         cls,
@@ -388,7 +385,9 @@ class FaceContactMode(AbstractContactMode):
     def _define_costs(self) -> None:
         # Minimize kinetic energy through squared velocities
         sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in self.variables.v_WBs]).item()  # type: ignore
-        self.prog.AddQuadraticCost(self.cost_param_lin_vels * sq_linear_vels)
+        self.prog.AddQuadraticCost(
+            self.config.cost_terms.cost_param_lin_vels * sq_linear_vels
+        )
 
         sq_angular_vels = np.sum(
             [
@@ -398,7 +397,7 @@ class FaceContactMode(AbstractContactMode):
                 )
             ]
         )
-        self.prog.AddQuadraticCost(self.cost_param_ang_vels * sq_angular_vels)  # type: ignore
+        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
     def set_finger_pos(self, lam_target: float) -> None:
         """
