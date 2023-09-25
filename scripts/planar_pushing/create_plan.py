@@ -64,7 +64,7 @@ def create_plan(
         num_knot_points_contact=4,
         num_knot_points_non_collision=4,
         avoid_object=True,
-        avoidance_cost="quadratic",
+        avoidance_cost="socp",
         no_cycles=True,
         dynamics_config=dynamics_config,
         allow_teleportation=False,

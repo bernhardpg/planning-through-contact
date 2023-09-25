@@ -14,6 +14,7 @@ from pydrake.solvers import (
     LorentzConeConstraint,
     MathematicalProgram,
     MathematicalProgramResult,
+    PerspectiveQuadraticCost,
     QuadraticCost,
     RotatedLorentzConeConstraint,
     Solve,
@@ -348,27 +349,28 @@ class NonCollisionMode(AbstractContactMode):
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
-            else:  # socp
-                for dists in dists_for_each_plane:
-                    dists_except_first_and_last = dists[1:-1]
-                    slacks = self.prog.NewContinuousVariables(
-                        len(dists_except_first_and_last), "s"
-                    )
-                    for d, s in zip(dists_except_first_and_last, slacks):
-                        # Let d := dist >= 0
-                        # we want infinite cost for being close to object:
-                        #   minimize 1 / d
-                        # reformulate as:
-                        #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
-                        #   <=>
-                        #   minimize s s.t. s d >= 1, d >= 0
-                        # which is exactly a rotated Lorentz cone constraint:
-                        # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
-
-                        self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-                        self.prog.AddLinearCost(
-                            self.cost_param_avoidance_socp_weight * s
-                        )
+            # TODO(bernhardpg): Clean up
+            # else:  # socp
+            #     for dists in dists_for_each_plane:
+            #         dists_except_first_and_last = dists[1:-1]
+            #         slacks = self.prog.NewContinuousVariables(
+            #             len(dists_except_first_and_last), "s"
+            #         )
+            #         for d, s in zip(dists_except_first_and_last, slacks):
+            #             # Let d := dist >= 0
+            #             # we want infinite cost for being close to object:
+            #             #   minimize 1 / d
+            #             # reformulate as:
+            #             #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
+            #             #   <=>
+            #             #   minimize s s.t. s d >= 1, d >= 0
+            #             # which is exactly a rotated Lorentz cone constraint:
+            #             # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
+            #
+            #             self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
+            #             self.prog.AddLinearCost(
+            #                 self.cost_param_avoidance_socp_weight * s
+            #             )
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -524,9 +526,13 @@ class NonCollisionMode(AbstractContactMode):
         if self.config.avoidance_cost == "linear":
             assert len(self.prog.linear_costs()) == 1
             object_avoidance_cost = self.prog.linear_costs()[0]
-        else:  # quadratic
+        elif self.config.avoidance_cost == "quadratic":
             assert len(self.prog.quadratic_costs()) == 2
             object_avoidance_cost = self.prog.quadratic_costs()[1]
+        else:
+            raise NotImplementedError(
+                f"Cannot get object avoidance cost terms for cost type {self.config.avoidance_cost}."
+            )
 
         var_idxs = self.get_variable_indices_in_gcs_vertex(
             object_avoidance_cost.variables()
@@ -541,10 +547,38 @@ class NonCollisionMode(AbstractContactMode):
         vertex.AddCost(binding)
 
         if self.config.avoid_object:
-            var_idxs, evaluator = self._get_object_avoidance_cost_term()
-            vars = vertex.x()[var_idxs]
-            cost_type = (
-                LinearCost if self.config.avoidance_cost == "linear" else QuadraticCost
-            )
-            binding = Binding[cost_type](evaluator, vars)
-            vertex.AddCost(binding)
+            if self.config.avoidance_cost in ["quadratic", "linear"]:
+                var_idxs, evaluator = self._get_object_avoidance_cost_term()
+                vars = vertex.x()[var_idxs]
+                cost_type = (
+                    LinearCost
+                    if self.config.avoidance_cost == "linear"
+                    else QuadraticCost
+                )
+                binding = Binding[cost_type](evaluator, vars)
+                vertex.AddCost(binding)
+            else:
+                # TODO(bernhardpg): Clean up this part
+                planes = self.slider_geometry.get_contact_planes(
+                    self.contact_location.idx
+                )
+                for plane in planes:
+                    for p_BP in self.variables.p_BPs:
+                        # A = [a^T; 0]
+                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
+                        NUM_DIMS = 2
+                        A = np.zeros((NUM_VARS, NUM_DIMS))
+                        A[0, :] = plane.a.T * self.cost_param_avoidance_socp_weight
+                        # b = [b; 1]
+                        b = np.ones((NUM_VARS, 1))
+                        b[0] = plane.b
+                        b = b * self.cost_param_avoidance_socp_weight
+
+                        # z = [a^T x + b; 1]
+                        cost = PerspectiveQuadraticCost(A, b)
+                        vars_in_vertex = vertex.x()[
+                            self.prog.FindDecisionVariableIndices(p_BP)
+                        ]
+                        vertex.AddCost(
+                            Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
+                        )
