@@ -5,7 +5,12 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import CommonSolverOption, MathematicalProgramResult, SolverOptions
+from pydrake.solvers import (
+    CommonSolverOption,
+    MathematicalProgramResult,
+    MosekSolver,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -354,6 +359,8 @@ class PlanarPushingPlanner:
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = solver_params.gcs_max_rounded_paths
+
+        options.solver = MosekSolver()
 
         assert self.source is not None
         assert self.target is not None
