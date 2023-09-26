@@ -136,13 +136,13 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     # assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # NOTE(bernhardpg): With the current setup, we will have one bounding box constraint for the
-    # lams, c_ns, and c_fs
-    num_bbox = 3 * num_knot_points
+    # lams, c_ns
+    num_bbox = 2 * num_knot_points
     assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
-    # v_c_B == 0
-    num_lin_eq = num_knot_points - 1
+    # v_c_B == 0, c_n_next == c_n_prev, same for c_f (this will be removed)
+    num_lin_eq = 3 * (num_knot_points - 1)
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
