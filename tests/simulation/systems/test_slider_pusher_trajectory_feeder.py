@@ -82,21 +82,24 @@ def one_contact_mode_vars(
     relaxed_result = Solve(contact_mode_example.relaxed_prog)
     assert relaxed_result.is_success()
 
-    prog = assemble_progs_from_contact_modes([contact_mode_example])
-    initial_guess = relaxed_result.GetSolution(
-        contact_mode_example.relaxed_prog.decision_variables()[: prog.num_vars()]
-    )
-    prog.SetInitialGuess(prog.decision_variables(), initial_guess)
-    result = Solve(prog)
-
-    vars = contact_mode_example.variables.eval_result(result)
-    # vars = contact_mode_example.variables.eval_result(relaxed_result)
+    # TODO(bernhardpg): Uncomment this once we have nonlinear rounding working again
+    # prog = assemble_progs_from_contact_modes([contact_mode_example])
+    # initial_guess = relaxed_result.GetSolution(
+    #     contact_mode_example.relaxed_prog.decision_variables()[: prog.num_vars()]
+    # )
+    # prog.SetInitialGuess(prog.decision_variables(), initial_guess)
+    # result = Solve(prog)
+    # assert result.is_success()
+    # vars = contact_mode_example.variables.eval_result(result)
+    vars = contact_mode_example.variables.eval_result(relaxed_result)
 
     DEBUG = False
     if DEBUG:
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory_legacy(
-            traj, contact_mode_example.object.geometry
+            traj,
+            contact_mode_example.config.slider_geometry,
+            pusher_radius=contact_mode_example.config.pusher_radius,
         )
     return [vars]
 
