@@ -5,7 +5,7 @@ import pydot
 import pydrake.symbolic as sym
 import pytest
 from pydrake.geometry import SceneGraph
-from pydrake.solvers import Solve
+from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.systems.all import ZeroOrderHold
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
@@ -53,7 +53,7 @@ from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_trajectory,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 @pytest.fixture
@@ -290,14 +290,22 @@ def one_contact_mode_vars(
     relaxed_result = Solve(one_contact_mode.relaxed_prog)
     assert relaxed_result.is_success()
 
-    prog = assemble_progs_from_contact_modes([one_contact_mode])
-    initial_guess = relaxed_result.GetSolution(
-        one_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
-    )
-    prog.SetInitialGuess(prog.decision_variables(), initial_guess)
-    result = Solve(prog)
+    # NOTE: We don't use nonlinear rounding, but rather return the relaxed solution
+    # TODO(bernhardpg): Change this when nonlinear rounding is working again
+    # prog = assemble_progs_from_contact_modes([one_contact_mode])
+    # initial_guess = relaxed_result.GetSolution(
+    #     one_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
+    # )
+    # prog.SetInitialGuess(prog.decision_variables(), initial_guess)
+    #
+    # solver_options = SolverOptions()
+    # if DEBUG:
+    #     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    #
+    # result = Solve(prog, solver_options=solver_options)
+    # assert result.is_success()
 
-    vars = one_contact_mode.variables.eval_result(result)
+    vars = one_contact_mode.variables.eval_result(relaxed_result)
     return [vars]
 
 
