@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
+from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.convex_relaxation.sdp import (
@@ -136,13 +136,13 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     # assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # NOTE(bernhardpg): With the current setup, we will have one bounding box constraint for the
-    # lams, c_ns, and c_fs
-    num_bbox = 3 * num_knot_points
+    # lams, c_ns
+    num_bbox = 2 * num_knot_points
     assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
-    # v_c_B == 0
-    num_lin_eq = num_knot_points - 1
+    # v_c_B == 0, c_n_next == c_n_prev, same for c_f (this will be removed)
+    num_lin_eq = 3 * (num_knot_points - 1)
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
@@ -236,7 +236,8 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_final_pose(final_pose)
 
     face_contact_mode.formulate_convex_relaxation()
-    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    solver = MosekSolver()
+    result = solver.Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)
@@ -270,7 +271,7 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     mode.set_slider_final_pose(final_pose)
 
     mode.formulate_convex_relaxation()
-    result = Solve(mode.relaxed_prog)  # type: ignore
+    result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     assert result.is_success()  # should fail when the relaxation is tight!
 
     vars = face_contact_mode.variables.eval_result(result)
@@ -304,7 +305,7 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     face_contact_mode.set_slider_final_pose(final_pose)
 
     face_contact_mode.formulate_convex_relaxation()
-    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    result = MosekSolver().Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert not result.is_success()  # should fail when the relaxation is tight!
 
     if DEBUG:
@@ -336,7 +337,7 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     mode.set_slider_final_pose(final_pose)
 
     mode.formulate_convex_relaxation()
-    result = Solve(mode.relaxed_prog)  # type: ignore
+    result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     # assert not result.is_success()  # should fail when the relaxation is tight!
 
     if DEBUG:
@@ -372,7 +373,7 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
     face_contact_mode.formulate_convex_relaxation()
 
     # now = time.time()
-    result = Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    result = MosekSolver().Solve(face_contact_mode.relaxed_prog)  # type: ignore
     # solve_time = time.time() - now
 
     # SOLVE_TIME_TRESHOLD = 0.08

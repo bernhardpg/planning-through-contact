@@ -1,10 +1,16 @@
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import CommonSolverOption, MathematicalProgramResult, SolverOptions
+from pydrake.solvers import (
+    CommonSolverOption,
+    MathematicalProgramResult,
+    MosekSolver,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -26,6 +32,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarSolverParams,
@@ -34,6 +41,26 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
+
+
+@dataclass
+class PlanarPushingStartAndGoal:
+    slider_initial_pose: PlanarPose
+    slider_target_pose: PlanarPose
+    pusher_initial_pose: PlanarPose
+    pusher_target_pose: PlanarPose
+
+    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
+        new_slider_init = self.slider_initial_pose.rotate(theta)
+        new_slider_target = self.slider_target_pose.rotate(theta)
+
+        # NOTE: Pusher poses are already relative to slider frame, not world frame
+        return PlanarPushingStartAndGoal(
+            new_slider_init,
+            new_slider_target,
+            self.pusher_initial_pose,
+            self.pusher_target_pose,
+        )
 
 
 class PlanarPushingPlanner:
@@ -244,6 +271,11 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
+        if self.source is not None:
+            print("Source vertex is already set, removing old vertex and adding new")
+            self.gcs.RemoveVertex(self.source.vertex)
+            self.source = None
+
         if (
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
@@ -262,6 +294,11 @@ class PlanarPushingPlanner:
     ) -> None:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
+
+        if self.target is not None:
+            print("Target vertex is already set, removing old vertex and adding new")
+            self.gcs.RemoveVertex(self.target.vertex)
+            self.target = None
 
         if (
             self.config.allow_teleportation
@@ -323,6 +360,8 @@ class PlanarPushingPlanner:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = solver_params.gcs_max_rounded_paths
 
+        options.solver = MosekSolver()
+
         assert self.source is not None
         assert self.target is not None
 
@@ -379,6 +418,10 @@ class PlanarPushingPlanner:
         if solver_params.measure_solve_time:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
+
+        if solver_params.print_cost:
+            cost = result.get_optimal_cost()
+            print(f"Cost: {cost}")
 
         if solver_params.get_rounded_and_original_traj:
             original_traj = PlanarPushingTrajectory.from_result(
@@ -439,7 +482,9 @@ class PlanarPushingPlanner:
         """
         Optionally saves the graph to file if a string is given for the 'filepath' argument.
         """
-        graphviz = self.gcs.GetGraphvizString(precision=2, result=result)
+        graphviz = self.gcs.GetGraphvizString(
+            precision=2, result=result, show_slacks=False
+        )
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filepath is not None:

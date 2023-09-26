@@ -285,7 +285,7 @@ class FaceContactMode(AbstractContactMode):
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddBoundingBoxConstraint(0, self.dynamics_config.f_max, c_n)
+            self.prog.AddLinearConstraint(c_n >= 0)
 
         mu = self.dynamics_config.friction_coeff_slider_pusher
         for c_n, c_f in zip(

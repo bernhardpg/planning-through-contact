@@ -17,6 +17,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
 from planning_through_contact.visualize.planar import (
+    visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
 
@@ -74,38 +75,50 @@ def create_plan(
     if traj_number == 1:  # loose
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
-        finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 2:  # works
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
-        finger_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 3:  # crazy movement
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
     elif traj_number == 4:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=np.pi / 2 - 0.2)
         slider_target_pose = PlanarPose(x=0.75, y=-0.2, theta=np.pi / 2 + 0.4)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     elif traj_number == 5:  # loose
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=np.pi / 2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.05, theta=np.pi / 2 + 0.4)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     elif traj_number == 6:  # t pusher
         slider_initial_pose = PlanarPose(x=0.60, y=0.0, theta=np.pi / 2)
         slider_target_pose = PlanarPose(x=0.65, y=-0.1, theta=np.pi / 2 + 0.3)
-        finger_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
-        finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
-    planner.set_initial_poses(finger_initial_pose, slider_initial_pose)
-    planner.set_target_poses(finger_target_pose, slider_target_pose)
+    planner.set_initial_poses(pusher_initial_pose, slider_initial_pose)
+    planner.set_target_poses(pusher_target_pose, slider_target_pose)
+
+    if False:
+        visualize_planar_pushing_start_and_goal(
+            config.slider_geometry,
+            config.pusher_radius,
+            slider_initial_pose,
+            slider_target_pose,
+            pusher_initial_pose,
+            pusher_target_pose,
+            save=True,
+            filename="start_goal_test",
+        )
 
     if debug:
         planner.create_graph_diagram(Path("graph.svg"))

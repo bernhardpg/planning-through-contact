@@ -422,6 +422,10 @@ class PlanarPushingTrajectory:
         start_time = self.traj_segments[0].start_time
         return self.get_pusher_planar_pose(start_time)
 
+    @property
+    def target_pusher_planar_pose(self) -> PlanarPose:
+        return self.get_pusher_planar_pose(self.end_time)
+
     def get_pos_limits(self, buffer: float) -> Tuple[float, float, float, float]:
         # We use a fixed timestep to quickly check all values of pos.
         # If the original resolution is finer than this, some values

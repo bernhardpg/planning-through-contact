@@ -3,7 +3,9 @@ name: Python package
 on: [push]
 
 jobs:
-  build:
+  test:
+    env:
+      MOSEKLM_LICENSE_FILE: 'mosek.lic'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -11,14 +13,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Setup Mosek license
+        run: |
+          echo "${{ secrets.MOSEK_LICENSE_FILE }}" > ${MOSEKLM_LICENSE_FILE}
+
+      - name: Check mosek license file
+        run: cat $MOSEKLM_LICENSE_FILE
+
       - name: Install Poetry
         run: pipx install poetry
+        
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
+        
       - name: Install dependencies
         run: poetry install
+        
       - name: Test with Pytest
         run: poetry run pytest

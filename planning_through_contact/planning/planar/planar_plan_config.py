@@ -106,6 +106,7 @@ class PlanarSolverParams:
     print_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
+    print_cost: bool = False
     get_rounded_and_original_traj: bool = False
 
 
@@ -121,7 +122,7 @@ class PlanarPlanConfig:
     minimize_squared_eucl_dist: bool = True
     use_eq_elimination: bool = False
     use_redundant_dynamic_constraints: bool = (
-        False  # TODO(bernhardpg): This sometimes makes rounding not work
+        True  # TODO(bernhardpg): This sometimes makes nonlinear rounding not work
     )
     penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True

@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
-from pydrake.solvers import LinearCost, QuadraticCost
+from pydrake.solvers import LinearCost, MosekSolver, QuadraticCost
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -177,8 +177,12 @@ def test_subgraph_planning(
     assert subgraph.source is not None
     assert subgraph.target is not None
 
+    options = opt.GraphOfConvexSetsOptions()
+    options.solver = MosekSolver()
     result = subgraph.gcs.SolveShortestPath(
-        subgraph.source.vertex, subgraph.target.vertex
+        subgraph.source.vertex,
+        subgraph.target.vertex,
+        options,
     )
     assert result.is_success()
 
@@ -398,8 +402,10 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     assert subgraph.source is not None
     assert subgraph.target is not None
 
+    options = opt.GraphOfConvexSetsOptions()
+    options.solver = MosekSolver()
     result = subgraph.gcs.SolveShortestPath(
-        subgraph.source.vertex, subgraph.target.vertex
+        subgraph.source.vertex, subgraph.target.vertex, options
     )
     assert result.is_success()
 
@@ -495,6 +501,7 @@ def test_subgraph_contact_modes_t_pusher(
     )
 
     save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
+
     result = subgraph.gcs.SolveShortestPath(source_vertex, target_vertex, gcs_options)
     assert result.is_success()
 

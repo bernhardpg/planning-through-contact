@@ -26,7 +26,7 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_ge
     SliderPusherGeometry,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 # TODO(bernhardpg): Use this everywhere
@@ -79,7 +79,6 @@ def test_visualize_2d() -> None:
     context = diagram.CreateDefaultContext()
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:
@@ -122,7 +121,6 @@ def test_visualize_3d() -> None:
     context = diagram.CreateDefaultContext()
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.set_target_realtime_rate(1.0)
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:

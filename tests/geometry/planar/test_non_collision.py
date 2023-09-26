@@ -107,19 +107,14 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
         mode.prog.bounding_box_constraints()
     )
     num_planes = 3
-    num_workspace_constraints = 1
-    bbox_trig_terms = 2
-    slider_workspace_const = 1
-    assert (
-        num_linear_constraints
-        == num_knot_points * (num_planes + num_workspace_constraints)
-        + bbox_trig_terms
-        + slider_workspace_const
-    )
+    expected_num_lin_consts = num_knot_points * num_planes
+    assert num_linear_constraints == expected_num_lin_consts
 
-    # The next two tests may fail for more complex geometries than boxes. If so, update them!
-    assert len(mode.prog.bounding_box_constraints()) == 7
-    assert len(mode.prog.linear_constraints()) == 4
+    # 2 dimensions, 3 planes, i.e. 6 ineq/bbox constraints (depending on geometry)
+    assert (
+        len(mode.prog.bounding_box_constraints()) + len(mode.prog.linear_constraints())
+        == 6
+    )
 
     assert len(mode.prog.linear_equality_constraints()) == 0
 

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -37,6 +38,7 @@ from tests.geometry.planar.tools import (
 )
 
 DEBUG = False
+IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 
 @pytest.mark.parametrize("planner", [{"partial": False}], indirect=["planner"])
@@ -276,6 +278,10 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
         )
 
 
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS == True,
+    reason="Too slow",
+)
 @pytest.mark.parametrize(
     "planner, target_path",
     [

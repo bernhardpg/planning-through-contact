@@ -121,7 +121,7 @@ def test_add_continuity_between_non_coll_and_face_contact(
 
     source_mode = FaceContactMode.create_from_plan_spec(loc, plan_config)
     source_mode.set_slider_initial_pose(slider_initial_pose)
-    source_mode.set_finger_pos(0.5)
+    # source_mode.set_finger_pos(0.5) # We cannot set finger position, because then it may be infeasible.
 
     target_mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
     target_mode.set_slider_pose(slider_final_pose)

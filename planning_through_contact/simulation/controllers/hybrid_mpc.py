@@ -245,7 +245,6 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
-        print(f"mode: {best_idx}, lam_dot: {u_next[2]}, c_f: {u_next[1]}")
         return x_dot_curr, u_next
 
 
