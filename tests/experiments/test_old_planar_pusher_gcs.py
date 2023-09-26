@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
+from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
 
 from planning_through_contact.experiments.planar_pushing.old.planar_pushing_gcs import (
     DynamicsConfig,
@@ -66,7 +66,7 @@ def test_temp_test_old_mode() -> None:
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = Solve(mode.relaxed_prog, solver_options=solver_options)  # type: ignore
+    result = MosekSolver().Solve(mode.relaxed_prog, solver_options=solver_options)  # type: ignore
     assert result.is_success()  # should fail when the relaxation is tight!
 
     vals = [mode.eval_result(result)]

@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pytest
-from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
+from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -67,7 +67,7 @@ def test_rounding_one_mode() -> None:
 
     assert face_contact_mode.relaxed_prog is not None
 
-    relaxed_result = Solve(face_contact_mode.relaxed_prog)
+    relaxed_result = MosekSolver().Solve(face_contact_mode.relaxed_prog)
     assert relaxed_result.is_success()
 
     prog = assemble_progs_from_contact_modes([face_contact_mode])
