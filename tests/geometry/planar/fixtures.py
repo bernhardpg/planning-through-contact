@@ -2,7 +2,12 @@ import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
 from _pytest.fixtures import FixtureRequest
-from pydrake.solvers import CommonSolverOption, MathematicalProgram, SolverOptions
+from pydrake.solvers import (
+    CommonSolverOption,
+    MathematicalProgram,
+    MosekSolver,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -136,6 +141,7 @@ def gcs_options() -> opt.GraphOfConvexSetsOptions:
     options.convex_relaxation = True
     options.preprocessing = True
     options.max_rounded_paths = 1
+    options.solver = MosekSolver()
 
     DEBUG = False
     if DEBUG:
