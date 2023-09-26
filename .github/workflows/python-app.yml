@@ -3,7 +3,9 @@ name: Python package
 on: [push]
 
 jobs:
-  build:
+  test:
+    env:
+      MOSEKLM_LICENSE_FILE: 'mosek.lic'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -14,10 +16,11 @@ jobs:
       
       - name: Setup Mosek license
         run: |
-          echo "${{ secrets.MOSEK_LICENSE_FILE }}" > mosek_license.txt
-          export MOSEKLM_LICENSE_FILE=$(pwd)/mosek_license.txt
-        shell: bash
-      
+          echo "${{ secrets.MOSEK_LICENSE_FILE }}" > ${MOSEKLM_LICENSE_FILE}
+
+      - name: Check mosek license file
+        run: cat $MOSEKLM_LICENSE_FILE
+
       - name: Install Poetry
         run: pipx install poetry
         
