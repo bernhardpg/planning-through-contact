@@ -131,7 +131,12 @@ class PlanarPlanConfig:
     time_non_collision: float = 0.5
     avoid_object: bool = False
     allow_teleportation: bool = False
-    avoidance_cost: Literal["linear", "quadratic", "socp"] = "quadratic"
+    avoidance_cost: Literal[
+        "linear",
+        "quadratic",
+        "socp",
+        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
+    ] = "quadratic"
     minimize_squared_eucl_dist: bool = True
     use_eq_elimination: bool = False
     use_redundant_dynamic_constraints: bool = (

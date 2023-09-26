@@ -344,28 +344,27 @@ class NonCollisionMode(AbstractContactMode):
                 ]
                 self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
-            # TODO(bernhardpg): Clean up
-            # else:  # socp
-            #     for dists in dists_for_each_plane:
-            #         dists_except_first_and_last = dists[1:-1]
-            #         slacks = self.prog.NewContinuousVariables(
-            #             len(dists_except_first_and_last), "s"
-            #         )
-            #         for d, s in zip(dists_except_first_and_last, slacks):
-            #             # Let d := dist >= 0
-            #             # we want infinite cost for being close to object:
-            #             #   minimize 1 / d
-            #             # reformulate as:
-            #             #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
-            #             #   <=>
-            #             #   minimize s s.t. s d >= 1, d >= 0
-            #             # which is exactly a rotated Lorentz cone constraint:
-            #             # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
-            #
-            #             self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-            #             self.prog.AddLinearCost(
-            #                 self.config.cost_terms.cost_param_avoidance_socp_weight * s
-            #             )
+            elif self.config.avoidance_cost == "socp_single_mode":
+                for dists in dists_for_each_plane:
+                    dists_except_first_and_last = dists[1:-1]
+                    slacks = self.prog.NewContinuousVariables(
+                        len(dists_except_first_and_last), "s"
+                    )
+                    for d, s in zip(dists_except_first_and_last, slacks):
+                        # Let d := dist >= 0
+                        # we want infinite cost for being close to object:
+                        #   minimize 1 / d
+                        # reformulate as:
+                        #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
+                        #   <=>
+                        #   minimize s s.t. s d >= 1, d >= 0
+                        # which is exactly a rotated Lorentz cone constraint:
+                        # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
+
+                        self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
+                        self.prog.AddLinearCost(
+                            self.config.cost_terms.cost_param_avoidance_socp_weight * s
+                        )
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
