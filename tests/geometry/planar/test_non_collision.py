@@ -296,7 +296,7 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
     plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
     plan_config.dynamics_config.pusher_radius = 0.03
     plan_config.avoid_object = True
-    plan_config.avoidance_cost = "socp"
+    plan_config.avoidance_cost = "socp_single_mode"
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
@@ -353,7 +353,7 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
             PolytopeContactLocation(ContactLocation.FACE, 2),
             PlanarPose(0.05, -0.06, 0),
             PlanarPose(0.1, -0.06, 0),
-            "socp",
+            "socp_single_mode",
         ),
     ],
     ids=[1, 2, 3],
@@ -363,7 +363,7 @@ def test_avoid_object_t_pusher(
     loc: PolytopeContactLocation,
     initial: PlanarPose,
     target: PlanarPose,
-    cost: Literal["quadratic", "socp"],
+    cost: Literal["quadratic", "socp_single_mode"],
 ) -> None:
     plan_config.num_knot_points_non_collision = 5
     plan_config.dynamics_config.pusher_radius = 0.015

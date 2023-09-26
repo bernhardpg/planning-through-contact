@@ -111,6 +111,19 @@ class PlanarSolverParams:
 
 
 @dataclass
+class PlanarCostFunctionTerms:
+    # Non-collision
+    cost_param_avoidance_lin: float = 0.1
+    cost_param_avoidance_quad_dist: float = 0.2
+    cost_param_avoidance_quad_weight: float = 0.4
+    cost_param_avoidance_socp_weight: float = 0.001
+    cost_param_eucl: float = 1.0
+    # Face contact
+    cost_param_lin_vels: float = 1.0
+    cost_param_ang_vels: float = 1.0
+
+
+@dataclass
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
@@ -118,7 +131,12 @@ class PlanarPlanConfig:
     time_non_collision: float = 0.5
     avoid_object: bool = False
     allow_teleportation: bool = False
-    avoidance_cost: Literal["linear", "quadratic", "socp"] = "quadratic"
+    avoidance_cost: Literal[
+        "linear",
+        "quadratic",
+        "socp",
+        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
+    ] = "quadratic"
     minimize_squared_eucl_dist: bool = True
     use_eq_elimination: bool = False
     use_redundant_dynamic_constraints: bool = (
@@ -132,6 +150,9 @@ class PlanarPlanConfig:
     )
     dynamics_config: SliderPusherSystemConfig = field(
         default_factory=lambda: SliderPusherSystemConfig()
+    )
+    cost_terms: PlanarCostFunctionTerms = field(
+        default_factory=lambda: PlanarCostFunctionTerms()
     )
 
     @property
