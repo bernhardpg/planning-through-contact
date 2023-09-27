@@ -7,24 +7,37 @@ import numpy.typing as npt
 from pydrake.solvers import Solve
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from convex_relaxation.sdp import create_sdp_relaxation
-from geometry.bezier import BezierCurve
-from geometry.two_d.box_2d import Box2d
-from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
-from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactLocation, ContactMode
-from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
-from geometry.two_d.rigid_body_2d import PolytopeContactLocation
-from geometry.utilities import cross_2d
-from planning.contact_mode_motion_planner import ContactModeMotionPlanner
-from tools.types import NpExpressionArray, NpVariableArray
-from visualize.analysis import (
+from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.geometry.bezier import BezierCurve
+from planning_through_contact.geometry.two_d.box_2d import Box2d
+from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
+    ContactPairDefinition,
+)
+from planning_through_contact.geometry.two_d.contact.contact_scene_2d import (
+    ContactScene2d,
+)
+from planning_through_contact.geometry.two_d.contact.types import (
+    ContactLocation,
+    ContactMode,
+)
+from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
+    EquilateralPolytope2d,
+)
+from planning_through_contact.geometry.two_d.rigid_body_2d import (
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.utilities import cross_2d
+from planning_through_contact.planning.contact_mode_motion_planner import (
+    ContactModeMotionPlanner,
+)
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.visualize.analysis import (
     create_forces_eq_and_opposite_analysis,
     create_static_equilibrium_analysis,
     plot_cos_sine_trajs,
 )
-from visualize.colors import COLORS
-from visualize.visualizer_2d import (
+from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.visualizer_2d import (
     VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
