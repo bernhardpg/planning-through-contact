@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Optional
 
+import numpy as np
+import numpy.typing as npt
 from pydrake.geometry import Box as DrakeBox
 from pydrake.geometry import Shape as DrakeShape
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
@@ -36,3 +39,11 @@ class RigidBody:
         geometry = Box2d.from_drake(shape)
         spatial_inertia = rigid_body.default_spatial_inertia()
         return cls(name, geometry, spatial_inertia.get_mass(), False)
+
+    @cached_property
+    def grav_acc(self) -> float:
+        return 9.81
+
+    @cached_property
+    def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
+        return np.array([0, -self.mass * self.grav_acc]).reshape((-1, 1))
