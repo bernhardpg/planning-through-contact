@@ -249,8 +249,8 @@ def _plot_from_sdp_relaxation(
                 for k in range(num_frames)
             ]
         )
-        create_forces_eq_and_opposite_analysis(force_discrepancy, num_ctrl_points)
-        plt.show()
+        # create_forces_eq_and_opposite_analysis(force_discrepancy, num_ctrl_points)
+        # plt.show()
 
         forces_acting_on_object = contact_forces_in_world_frame[
             1:
@@ -287,10 +287,10 @@ def _plot_from_sdp_relaxation(
             ]
         )
 
-        create_static_equilibrium_analysis(
-            sum_of_forces, sum_of_torques, num_ctrl_points  # type: ignore
-        )
-        plt.show()
+        # create_static_equilibrium_analysis(
+        #     sum_of_forces, sum_of_torques, num_ctrl_points  # type: ignore
+        # )
+        # plt.show()
 
         ########
 
@@ -464,6 +464,7 @@ def plan_polytope_flipup(
         [table_polytope, polytope_finger],
         table,
     )
+    breakpoint()
 
     if sliding:
         contact_modes = {
