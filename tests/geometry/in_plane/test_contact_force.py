@@ -17,6 +17,7 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.types import NpExpressionArray
+from tests.utils import assert_np_expression_array_eq
 
 
 @pytest.fixture
@@ -25,13 +26,6 @@ def box_fric_coeff_lam():
     box = RigidBody("box", Box2d(0.15, 0.15), mass=0.1)
     lam = sym.Variable("lam")
     return box, mu, lam
-
-
-def assert_np_expression_array_eq(
-    np1: NpExpressionArray, np2: NpExpressionArray
-) -> None:
-    for e1, e2 in zip(np1.flatten(), np2.flatten()):
-        assert e1.EqualTo(e2)
 
 
 def test_contact_force_face_rolling(box_fric_coeff_lam):
