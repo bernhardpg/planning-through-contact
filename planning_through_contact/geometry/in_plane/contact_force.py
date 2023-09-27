@@ -24,13 +24,21 @@ class ContactForceDefinition(NamedTuple):
     fixed_to_friction_cone_boundary: Optional[Literal["LEFT", "RIGHT"]] = None
     displacement: float = 0
 
+    """
+    A tuple that contains all the relevant information for creating a contact force and
+    its derived quantities.
+    
+    displacement: useful when there are multiple contact points with a fixed displacement
+                  (i.e.) for a face on face contact
+    """
+
 
 class ContactForce(NamedTuple):
     name: str
     location: ContactLocation
     friction_coeff: float
     force: NpExpressionArray
-    pos: NpExpressionArray
+    pos: npt.NDArray[np.float64] | NpExpressionArray
     variables: NpVariableArray
     normal_vec: Optional[npt.NDArray[np.float64]]
 
@@ -55,19 +63,23 @@ class ContactForce(NamedTuple):
     def from_definition(
         cls,
         force_def: ContactForceDefinition,
-        contact_point_position: NpExpressionArray,
+        p_Bc: npt.NDArray[np.float64] | NpExpressionArray,
     ) -> "ContactForce":
         contact_force, symbolic_vars = cls._create_contact_force(force_def)
+
         if force_def.location.pos == ContactLocation.FACE:
             # NOTE: For face contacts, we will have multiple contact points.
             # Currently, this is modelled as having one decision variable for the position
             # of both contact points, and then displacing each contact pose by a suitable amount
             # (based on geometry of the objects) from this location.
+
             # TODO: In the future, to allow for face contacts which are not fully overlapping,
             # we will have one variable for each contact point.
-            force_position = cls._create_force_position(
-                force_def, contact_point_position
-            )
+
+            assert isinstance(
+                p_Bc.dtype, object
+            )  # Make sure we have a NpExpressionArray
+            force_position = cls._create_force_position(force_def, p_Bc)  # type: ignore
             (
                 normal_vec,
                 _,
@@ -75,7 +87,7 @@ class ContactForce(NamedTuple):
                 force_def.location
             )
         else:
-            force_position = contact_point_position
+            force_position = p_Bc
             normal_vec = None
 
         return cls(
