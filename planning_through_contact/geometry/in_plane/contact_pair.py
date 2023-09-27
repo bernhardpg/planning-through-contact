@@ -422,11 +422,11 @@ class PointOnFaceContact(AbstractContactPair):
         return np.array([[self._cos_th, -self._sin_th], [self._sin_th, self._cos_th]])
 
     @property
-    def p_AB_A(self) -> NpExpressionArray:
+    def p_AB_A(self) -> NpVariableArray:
         return np.array([self._p_AB_A_x, self._p_AB_A_y]).reshape((-1, 1))
 
     @property
-    def p_BA_B(self) -> NpExpressionArray:
+    def p_BA_B(self) -> NpVariableArray:
         return np.array([self._p_BA_B_x, self._p_BA_B_y]).reshape((-1, 1))
 
     @property
@@ -545,6 +545,8 @@ class PointOnFaceContact(AbstractContactPair):
         return Hyperplane(a, b)
 
     def create_non_penetration_cut(self) -> sym.Formula:
+        raise NotImplementedError("Note: This is not yet tested!")
+
         vertex_contact = self._get_contact_point_of_type(ContactLocation.VERTEX)
         contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
         if not contact_point.dtype == np.float64:

@@ -57,10 +57,10 @@ class ContactPoint:
     ) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
         if self.contact_location.pos == ContactLocation.FACE:
             self.lam = sym.Variable(f"{self.name}_lam")
-            vertices = self.collision_geometry.get_proximate_vertices_from_location(
+            u, v = self.collision_geometry.get_proximate_vertices_from_location(
                 self.contact_location
             )
-            return self.lam * vertices[0] + (1 - self.lam) * vertices[1]
+            return self.lam * u + (1 - self.lam) * v
         else:
             # Get first element as we know this will only be one vertex
             corner_vertex = (
