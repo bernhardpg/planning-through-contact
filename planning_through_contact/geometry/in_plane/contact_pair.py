@@ -265,7 +265,7 @@ class FaceOnFaceContact(AbstractContactPair):
         # We only need to carry around one contact point for face-on-face
         # contact (the forces as always exactly equal and opposite)
         self.contact_point_A = ContactPoint(
-            self.body_A.geometry,
+            self.body_A,
             self.body_A_contact_location,
             [left_force, right_force],
             self.friction_coeff,
@@ -389,14 +389,14 @@ class PointOnFaceContact(AbstractContactPair):
         )
 
         self.contact_point_A = ContactPoint(
-            self.body_A.geometry,
+            self.body_A,
             self.body_A_contact_location,
             [force_def_A],
             self.friction_coeff,
             name=f"{self.name}_{self.body_A.name}",
         )
         self.contact_point_B = ContactPoint(
-            self.body_B.geometry,
+            self.body_B,
             self.body_B_contact_location,
             [force_def_B],
             self.friction_coeff,

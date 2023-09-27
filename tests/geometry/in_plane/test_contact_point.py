@@ -27,13 +27,7 @@ def test_contact_point_face_rolling(mu_box):
     loc = PolytopeContactLocation(ContactLocation.FACE, 0)
     force_def = ContactForceDefinition(f"test_force", mu, loc, box.geometry)
 
-    cp = ContactPoint(
-        force_def.body_geometry,
-        force_def.location,
-        [force_def],
-        force_def.friction_coeff,
-        name=f"test_contact_point",
-    )
+    cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
 
     assert cp.contact_position.shape == (2, 1)
     for e in cp.contact_position.flatten():
@@ -61,13 +55,7 @@ def test_contact_point_face_sticking(mu_box):
         f"test_force", mu, loc, box.geometry, fixed_to_friction_cone_boundary="RIGHT"
     )
 
-    cp = ContactPoint(
-        force_def.body_geometry,
-        force_def.location,
-        [force_def],
-        force_def.friction_coeff,
-        name=f"test_contact_point",
-    )
+    cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
 
     assert cp.contact_position.shape == (2, 1)
     for e in cp.contact_position.flatten():
@@ -97,13 +85,7 @@ def test_contact_point_two_forces(mu_box):
     f2_def = ContactForceDefinition(
         f"test_force_2", mu, loc, box.geometry, displacement=-0.02
     )
-    cp = ContactPoint(
-        f1_def.body_geometry,
-        f1_def.location,
-        [f1_def, f2_def],
-        f1_def.friction_coeff,
-        name=f"test_contact_point",
-    )
+    cp = ContactPoint(box, loc, [f1_def, f2_def], mu, name=f"test_contact_point")
 
     assert len(cp.contact_forces) == 2
 
@@ -122,13 +104,7 @@ def test_contact_point_vertex_rolling(mu_box):
     loc = PolytopeContactLocation(ContactLocation.VERTEX, 0)
     force_def = ContactForceDefinition(f"test_force", mu, loc, box.geometry)
 
-    cp = ContactPoint(
-        force_def.body_geometry,
-        force_def.location,
-        [force_def],
-        force_def.friction_coeff,
-        name=f"test_contact_point",
-    )
+    cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
 
     assert cp.contact_position.shape == (2, 1)
     for e in cp.contact_position.flatten():

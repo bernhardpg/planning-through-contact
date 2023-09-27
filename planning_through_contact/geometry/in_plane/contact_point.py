@@ -14,6 +14,7 @@ from planning_through_contact.geometry.in_plane.contact_force import (
     ContactForce,
     ContactForceDefinition,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -24,7 +25,7 @@ from planning_through_contact.tools.types import (
 class ContactPoint:
     def __init__(
         self,
-        collision_geometry: CollisionGeometry,
+        body: RigidBody,
         contact_location: PolytopeContactLocation,
         contact_force_defs: List[ContactForceDefinition],
         friction_coeff: float = 0.5,
@@ -37,7 +38,8 @@ class ContactPoint:
         If it is a contact point on a face, it can have two contact forces associated with it at a constant displacement from the contact point.
         """
         self.name = name
-        self.collision_geometry = collision_geometry
+        self.body = body
+        self.collision_geometry = body.geometry
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
