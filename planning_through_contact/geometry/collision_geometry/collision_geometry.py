@@ -14,6 +14,12 @@ class ContactLocation(Enum):
     VERTEX = 2
 
 
+class ContactMode(Enum):
+    ROLLING = 1
+    SLIDING_LEFT = 2
+    SLIDING_RIGHT = 3
+
+
 # TODO: move this?
 class PolytopeContactLocation(NamedTuple):
     pos: ContactLocation
