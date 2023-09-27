@@ -41,8 +41,8 @@ class ContactPoint:
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
-        self._contact_position = self._set_contact_position()
-        self.contact_forces = [ContactForce.from_definition(d, self._contact_position) for d in contact_force_defs]  # type: ignore
+        self.contact_position = self._set_contact_position()
+        self.contact_forces = [ContactForce.from_definition(d, self.contact_position) for d in contact_force_defs]  # type: ignore
 
     def get_contact_positions(
         self,
