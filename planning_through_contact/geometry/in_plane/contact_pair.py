@@ -77,21 +77,21 @@ class ContactPairDefinition:
     body_B_contact_location: PolytopeContactLocation
     friction_coeff: float = 0.5
 
-    def create_instance(
+    def create_pair(
         self, contact_mode: ContactMode, instance_postfix: Optional[str] = None
     ) -> "AbstractContactPair":
         """
-        Creates an instance of the contact pair with the specified contact mode.
-        The instance will create a new set of variables and constraints, intended to be used as
+        Creates the contact pair with the specified contact mode, from the contact pair definition.
+        The pair will contain a new set of variables and constraints, intended to be used as
         a ctrl point in an optimization program.
         """
 
-        full_instance_name = (
+        name = (
             self.name if instance_postfix is None else f"{self.name}_{instance_postfix}"
         )
         if self.body_A_contact_location.pos == self.body_B_contact_location.pos:
             return FaceOnFaceContact(
-                full_instance_name,
+                name,
                 self.body_A,
                 self.body_A_contact_location,
                 self.body_B,
@@ -102,7 +102,7 @@ class ContactPairDefinition:
 
         else:
             return PointOnFaceContact(
-                full_instance_name,
+                name,
                 self.body_A,
                 self.body_A_contact_location,
                 self.body_B,
@@ -227,6 +227,7 @@ class FaceOnFaceContact(AbstractContactPair):
             self.contact_mode, self.body_A_contact_location
         )
 
+        # TODO(bernhardpg): Use length of face, not a hardcoded value
         # Plan:
         # Find the length of both faces
         # Pick the smallest face, and constrain it to lie within the largest face
@@ -261,6 +262,8 @@ class FaceOnFaceContact(AbstractContactPair):
             displacement=self.shortest_face_length / 2,
         )
 
+        # We only need to carry around one contact point for face-on-face
+        # contact (the forces as always exactly equal and opposite)
         self.contact_point_A = ContactPoint(
             self.body_A.geometry,
             self.body_A_contact_location,
@@ -278,20 +281,30 @@ class FaceOnFaceContact(AbstractContactPair):
             self.body_B_contact_location
         )
         theta = get_angle_between_planes(plane_A, plane_B)
+        if not np.isclose(theta % np.pi, 0):
+            raise NotImplementedError(
+                "Caution: this functionality has not been properly tested and may be incorrect"
+            )
+
         return two_d_rotation_matrix_from_angle(theta)
+
+    @property
+    def p_AB_A(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
+        p_Ac = self.contact_point_A.contact_position
+        p_Bc = self.body_B.geometry.get_shortest_vec_from_com_to_loc(
+            self.body_B_contact_location
+        )
+        p_cB = -p_Bc
+        p_AB = p_Ac + self.R_AB.dot(p_cB)
+
+        raise NotImplementedError(
+            "Caution: this functionality has not been properly tested and may be incorrect"
+        )
+        return p_AB
 
     @property
     def p_BA_B(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
         return -self.R_AB.dot(self.p_AB_A)
-
-    @property
-    def p_AB_A(self) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
-        floating_pos = self.contact_point_A._contact_position
-        pos_to_com_B = self.body_B.geometry.get_shortest_vec_from_com_to_face(
-            self.body_B_contact_location
-        )
-        relative_position = floating_pos + self.R_AB.dot(pos_to_com_B)
-        return relative_position
 
     @property
     def contact_points(self) -> List[ContactPoint]:
@@ -304,6 +317,7 @@ class FaceOnFaceContact(AbstractContactPair):
     def variables(self) -> NpVariableArray:
         return self.contact_point_A.variables
 
+    # TODO(bernhardpg): Rename
     def create_convex_hull_bounds(self) -> NpFormulaArray:
         lam = self.get_nonfixed_contact_point_variable()
         # Make sure we stay inside the largest face
@@ -325,7 +339,7 @@ class FaceOnFaceContact(AbstractContactPair):
 
     @property
     def contact_forces(self) -> List[NpExpressionArray]:
-        return [self.contact_point_A.contact_force]
+        return self.contact_point_A.get_contact_forces()
 
     def create_squared_contact_forces(self) -> sym.Expression:
         squared_forces = [f.T.dot(f) for f in self.contact_forces]
@@ -343,7 +357,7 @@ class FaceOnFaceContact(AbstractContactPair):
         else:
             raise ValueError("Body not a part of contact pair")
 
-        squared_forces = np.sum([f.T.dot(f) for f in forces], axis=0)
+        squared_forces = np.sum([f.T.dot(f) for f in forces], axis=0).item()
 
         return squared_forces
 
@@ -444,8 +458,8 @@ class PointOnFaceContact(AbstractContactPair):
         )
 
     def create_equal_contact_point_constraints(self) -> ContactFrameConstraints:
-        p_Ac_A = self.contact_point_A._contact_position
-        p_Bc_B = self.contact_point_B._contact_position
+        p_Ac_A = self.contact_point_A.contact_position
+        p_Bc_B = self.contact_point_B.contact_position
 
         p_Bc_A = self.R_AB.dot(p_Bc_B)
         eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
@@ -532,7 +546,7 @@ class PointOnFaceContact(AbstractContactPair):
 
     def create_non_penetration_cut(self) -> sym.Formula:
         vertex_contact = self._get_contact_point_of_type(ContactLocation.VERTEX)
-        contact_point: npt.NDArray[np.float64] = vertex_contact._contact_position  # type: ignore
+        contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
         if not contact_point.dtype == np.float64:
             raise ValueError("dtype of contact point must be np.float64")
 
