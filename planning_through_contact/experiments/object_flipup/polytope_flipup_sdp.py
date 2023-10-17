@@ -464,7 +464,6 @@ def plan_polytope_flipup(
         [table_polytope, polytope_finger],
         table,
     )
-    breakpoint()
 
     if sliding:
         contact_modes = {

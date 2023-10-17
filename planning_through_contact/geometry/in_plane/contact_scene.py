@@ -48,16 +48,16 @@ class ContactSceneConstraints(NamedTuple):
 
 
 @dataclass
-class ContactScene:
+class ContactSceneDefinition:
     rigid_bodies: List[RigidBody]
     contact_pairs: List[ContactPairDefinition]
     body_anchored_to_W: RigidBody
 
-    def create_instance(
+    def create_scene(
         self,
         contact_pair_modes: Dict[str, ContactMode],
         instance_postfix: Optional[str] = None,
-    ) -> "ContactSceneInstance":
+    ) -> "ContactScene":
         """
         Instantiates an instance of each contact pair with new sets of variables and constraints.
         """
@@ -65,7 +65,7 @@ class ContactScene:
             pair.create_pair(contact_pair_modes[pair.name], instance_postfix)
             for pair in self.contact_pairs
         ]
-        return ContactSceneInstance(
+        return ContactScene(
             self.rigid_bodies, contact_pair_instances, self.body_anchored_to_W
         )
 
@@ -76,7 +76,7 @@ class ContactScene:
         return bodies
 
 
-class ContactSceneInstance:
+class ContactScene:
     def __init__(
         self,
         rigid_bodies: List[RigidBody],
@@ -268,10 +268,14 @@ class ContactSceneInstance:
 class ContactSceneCtrlPoint:
     def __init__(
         self,
-        contact_scene: ContactScene,
+        scene_def: ContactSceneDefinition,
         contact_modes: Dict[str, ContactMode],
     ):
-        self.contact_scene_instance = contact_scene.create_instance(contact_modes, None)
+        """
+        Instantiates a scene instance from a scene definition.
+        """
+
+        self.contact_scene_instance = scene_def.create_scene(contact_modes, None)
 
     def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
         """
