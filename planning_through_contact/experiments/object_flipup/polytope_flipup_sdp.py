@@ -4,27 +4,40 @@ from typing import List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from pydrake.solvers import Solve
+from pydrake.solvers import MakeSemidefiniteRelaxation, Solve
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from convex_relaxation.sdp import create_sdp_relaxation
-from geometry.bezier import BezierCurve
-from geometry.two_d.box_2d import Box2d
-from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
-from geometry.two_d.contact.contact_scene_2d import ContactScene2d
-from geometry.two_d.contact.types import ContactLocation, ContactMode
-from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
-from geometry.two_d.rigid_body_2d import PolytopeContactLocation
-from geometry.utilities import cross_2d
-from planning.contact_mode_motion_planner import ContactModeMotionPlanner
-from tools.types import NpExpressionArray, NpVariableArray
-from visualize.analysis import (
+from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.geometry.bezier import BezierCurve
+from planning_through_contact.geometry.two_d.box_2d import Box2d
+from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
+    ContactPairDefinition,
+)
+from planning_through_contact.geometry.two_d.contact.contact_scene_2d import (
+    ContactScene2d,
+)
+from planning_through_contact.geometry.two_d.contact.types import (
+    ContactLocation,
+    ContactMode,
+)
+from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
+    EquilateralPolytope2d,
+)
+from planning_through_contact.geometry.two_d.rigid_body_2d import (
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.utilities import cross_2d
+from planning_through_contact.planning.contact_mode_motion_planner import (
+    ContactModeMotionPlanner,
+)
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.visualize.analysis import (
     create_forces_eq_and_opposite_analysis,
     create_static_equilibrium_analysis,
     plot_cos_sine_trajs,
 )
-from visualize.colors import COLORS
-from visualize.visualizer_2d import (
+from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.visualizer_2d import (
     VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
@@ -229,55 +242,55 @@ def _plot_from_sdp_relaxation(
         # Create relaxation error analysis
         #######
 
-        eq_and_opposite_forces = contact_forces_in_world_frame[0:2]
-        force_discrepancy = np.array(
-            [
-                sum([force[k] for force in eq_and_opposite_forces])
-                for k in range(num_frames)
-            ]
-        )
-        create_forces_eq_and_opposite_analysis(force_discrepancy, num_ctrl_points)
-        plt.show()
+        # eq_and_opposite_forces = contact_forces_in_world_frame[0:2]
+        # force_discrepancy = np.array(
+        #     [
+        #         sum([force[k] for force in eq_and_opposite_forces])
+        #         for k in range(num_frames)
+        #     ]
+        # )
+        # create_forces_eq_and_opposite_analysis(force_discrepancy, num_ctrl_points)
+        # plt.show()
 
-        forces_acting_on_object = contact_forces_in_world_frame[
-            1:
-        ]  # TODO: Generalize this. This is just specific to this setup!
-        GRAV_VEC = np.array([0, -9.81])
-        sum_of_forces = np.vstack(
-            [
-                sum([force[k] for force in forces_acting_on_object]) + GRAV_VEC
-                for k in range(num_frames)
-            ]
-        )
-
-        contact_points_in_object_frame = contact_positions_in_world_frame[
-            1:
-        ]  # TODO: Generalize this. This is just specific to this setup!
-
-        def _cross_2d(v1, v2):
-            return (
-                v1[0] * v2[1] - v1[1] * v2[0]
-            )  # copied because the other one assumes the result is a np array, here it is just a scalar. Clean up!
-
-        object_com = bodies_com_in_world_frame[1]
-        sum_of_torques = np.vstack(
-            [
-                sum(
-                    [
-                        _cross_2d(pos[k] - object_com[k], force[k])
-                        for pos, force in zip(
-                            contact_points_in_object_frame, forces_acting_on_object
-                        )
-                    ]
-                )
-                for k in range(num_frames)
-            ]
-        )
-
-        create_static_equilibrium_analysis(
-            sum_of_forces, sum_of_torques, num_ctrl_points  # type: ignore
-        )
-        plt.show()
+        # forces_acting_on_object = contact_forces_in_world_frame[
+        #     1:
+        # ]  # TODO: Generalize this. This is just specific to this setup!
+        # GRAV_VEC = np.array([0, -9.81])
+        # sum_of_forces = np.vstack(
+        #     [
+        #         sum([force[k] for force in forces_acting_on_object]) + GRAV_VEC
+        #         for k in range(num_frames)
+        #     ]
+        # )
+        #
+        # contact_points_in_object_frame = contact_positions_in_world_frame[
+        #     1:
+        # ]  # TODO: Generalize this. This is just specific to this setup!
+        #
+        # def _cross_2d(v1, v2):
+        #     return (
+        #         v1[0] * v2[1] - v1[1] * v2[0]
+        #     )  # copied because the other one assumes the result is a np array, here it is just a scalar. Clean up!
+        #
+        # object_com = bodies_com_in_world_frame[1]
+        # sum_of_torques = np.vstack(
+        #     [
+        #         sum(
+        #             [
+        #                 _cross_2d(pos[k] - object_com[k], force[k])
+        #                 for pos, force in zip(
+        #                     contact_points_in_object_frame, forces_acting_on_object
+        #                 )
+        #             ]
+        #         )
+        #         for k in range(num_frames)
+        #     ]
+        # )
+        #
+        # create_static_equilibrium_analysis(
+        #     sum_of_forces, sum_of_torques, num_ctrl_points  # type: ignore
+        # )
+        # plt.show()
 
         ########
 
@@ -378,7 +391,7 @@ def _plot_from_sdp_relaxation(
             TARGET_COLOR,
         )
 
-        viz = Visualizer2d()
+        viz = Visualizer2d(FORCE_SCALE=0.025, POINT_RADIUS=0.01)
         viz.visualize(
             viz_contact_positions + viz_com_points,
             viz_contact_forces + viz_gravitional_forces,
@@ -491,7 +504,10 @@ def plan_polytope_flipup(
 
     start = time.time()
     print("Starting to create SDP relaxation...")
-    relaxed_prog, X, basis = create_sdp_relaxation(planner.prog)
+    relaxed_prog = MakeSemidefiniteRelaxation(planner.prog)
+    print(
+        f"Num decision vars in relaxed program: {len(relaxed_prog.decision_variables())}"
+    )
     end = time.time()
     print(f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds")
 
@@ -503,9 +519,11 @@ def plan_polytope_flipup(
     assert result.is_success()
     print("Success!")
 
-    X_sol = result.GetSolution(X)
-    x_sol = X_sol[1:, 0]
-    breakpoint()
+    # TODO this variable handling is terrible and just like this to get alex a big sdp quickly
+    decision_vars = np.array(
+        sorted(planner.prog.decision_variables(), key=lambda x: x.get_id())
+    )
+    x_sol = result.GetSolution(decision_vars)
 
     _plot_from_sdp_relaxation(
         x_sol,

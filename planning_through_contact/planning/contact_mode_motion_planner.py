@@ -88,7 +88,11 @@ class ContactModeMotionPlanner:
                             variable_bounds,
                         )
                     else:
-                        self.prog.AddConstraint(c.torque_balance)
+                        self.prog.AddConstraint(c.torque_balance.item())
+
+            def _add_constraints(prog, constraints):
+                for c in constraints.flatten():
+                    prog.AddConstraint(c)
 
             if self.use_equal_contact_point_constraint:
                 for c in ctrl_point.equal_contact_point_constraints:
@@ -99,8 +103,8 @@ class ContactModeMotionPlanner:
                             c, self.prog, variable_bounds
                         )
                     else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                        _add_constraints(self.prog, c.in_frame_A)
+                        _add_constraints(self.prog, c.in_frame_B)
 
             if self.use_equal_relative_position_constraint:
                 for c in ctrl_point.equal_rel_position_constraints:
@@ -111,8 +115,8 @@ class ContactModeMotionPlanner:
                             c, self.prog, variable_bounds
                         )
                     else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                        _add_constraints(self.prog, c.in_frame_A)
+                        _add_constraints(self.prog, c.in_frame_B)
 
             if self.use_equal_and_opposite_forces_constraint:
                 for c in ctrl_point.equal_and_opposite_forces_constraints:
@@ -122,8 +126,8 @@ class ContactModeMotionPlanner:
                             c, self.prog, variable_bounds
                         )
                     else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                        _add_constraints(self.prog, c.in_frame_A)
+                        _add_constraints(self.prog, c.in_frame_B)
 
             if self.use_so2_constraint:
                 # TODO remove

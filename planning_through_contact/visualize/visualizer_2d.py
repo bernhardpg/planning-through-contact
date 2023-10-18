@@ -177,13 +177,18 @@ class VisualizationCone2d(VisualizationPolygon2d):
         return cls(position_curve, COLORS[color], vertices_curves)
 
 
+@dataclass
 class Visualizer2d:
-    WINDOW_WIDTH = 1200
-    WINDOW_HEIGHT = 900
-    PLOT_CENTER = np.array([WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2]).reshape((-1, 1))
-    PLOT_SCALE = 500
-    FORCE_SCALE = 2.0
-    POINT_RADIUS = 1.0
+    WINDOW_WIDTH: int = 1200
+    WINDOW_HEIGHT: int = 900
+    PLOT_SCALE: int = 500
+    FORCE_SCALE: float = 2.0
+    POINT_RADIUS: float = 1.0
+
+    def __post_init__(self) -> None:
+        self.PLOT_CENTER: npt.NDArray[np.float64] = np.array(
+            [self.WINDOW_WIDTH / 2, self.WINDOW_HEIGHT / 2]
+        ).reshape((-1, 1))
 
     def visualize(
         self,
