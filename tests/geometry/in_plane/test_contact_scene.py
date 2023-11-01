@@ -1,5 +1,3 @@
-from typing import Dict
-
 import pytest
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -49,17 +47,12 @@ def contact_scene_def() -> ContactSceneDefinition:
     return scene_def
 
 
-@pytest.fixture
-def contact_modes() -> Dict[str, ContactMode]:
-    return {
-        "contact_1": ContactMode.ROLLING,
-        "contact_2": ContactMode.ROLLING,
+def test_contact_scene(contact_scene_def: ContactSceneDefinition) -> None:
+    contact_modes = {
+        contact_scene_def.contact_pairs[0]: ContactMode.ROLLING,
+        contact_scene_def.contact_pairs[1]: ContactMode.ROLLING,
     }
 
-
-def test_contact_scene(
-    contact_scene_def: ContactSceneDefinition, contact_modes: Dict[str, ContactMode]
-) -> None:
     scene = contact_scene_def.create_scene(contact_modes)
 
     assert scene.rigid_bodies[1].name == "box"
@@ -119,10 +112,13 @@ def test_contact_scene(
     assert_num_vars_in_formula_array(torque_balance, 7)
 
 
-def test_contact_scene_ctrl_point(
-    contact_scene_def: ContactSceneDefinition, contact_modes: Dict[str, ContactMode]
-) -> None:
-    ctrl_point = ContactSceneCtrlPoint(contact_scene_def, contact_modes)
+def test_contact_scene_ctrl_point(contact_scene_def: ContactSceneDefinition) -> None:
+    contact_modes = {
+        contact_scene_def.contact_pairs[0]: ContactMode.ROLLING,
+        contact_scene_def.contact_pairs[1]: ContactMode.ROLLING,
+    }
+
+    ctrl_point = ContactSceneCtrlPoint(contact_scene_def, contact_modes, idx=0)
 
     # face contact: c_n, c_f * 2, lam = 5 vars
     # point contact: cos, sin, f_x, f_y, c_n, c_f, lam, pos in both frames = 11

@@ -55,17 +55,20 @@ class ContactSceneDefinition:
 
     def create_scene(
         self,
-        contact_pair_modes: Dict[str, ContactMode],
-        contact_pos_vars: Dict[str, sym.Variable],
-        instance_postfix: Optional[str] = None,
+        contact_pair_modes: Dict[ContactPairDefinition, ContactMode],
+        contact_pos_vars: Optional[Dict[ContactPairDefinition, sym.Variable]] = None,
+        instance_postfix: Optional[str | int] = None,
     ) -> "ContactScene":
         """
         Instantiates an instance of each contact pair with new sets of variables and constraints.
         """
+        if contact_pos_vars is None:
+            contact_pos_vars = {}
+
         contact_pair_instances = [
             pair.create_pair(
-                contact_pair_modes[pair.name],
-                contact_pos_vars.get(pair.name, None),
+                contact_pair_modes[pair],
+                contact_pos_vars.get(pair, None),
                 instance_postfix,
             )
             for pair in self.contact_pairs
@@ -277,16 +280,16 @@ class ContactSceneCtrlPoint:
     def __init__(
         self,
         scene_def: ContactSceneDefinition,
-        contact_pos_vars: Dict[str, sym.Variable],
-        contact_modes: Dict[str, ContactMode],
-        idx: int,
+        contact_modes: Dict[ContactPairDefinition, ContactMode],
+        contact_pos_vars: Optional[Dict[ContactPairDefinition, sym.Variable]] = None,
+        idx: Optional[int] = None,
     ):
         """
         Instantiates a scene instance from a scene definition.
         """
 
         self.contact_scene_instance = scene_def.create_scene(
-            contact_modes, contact_pos_vars, str(idx)
+            contact_modes, contact_pos_vars, idx
         )
 
     def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:

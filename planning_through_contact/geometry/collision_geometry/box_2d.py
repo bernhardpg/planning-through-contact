@@ -17,7 +17,7 @@ from planning_through_contact.geometry.hyperplane import (
 from planning_through_contact.geometry.utilities import normalize_vec
 
 
-@dataclass
+@dataclass(frozen=True)
 class Box2d(CollisionGeometry):
     """
     Implements a two-dimensional box collision geometry.

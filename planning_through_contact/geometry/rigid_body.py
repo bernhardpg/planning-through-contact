@@ -15,7 +15,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class RigidBody:
     name: str
     geometry: CollisionGeometry

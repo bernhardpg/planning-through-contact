@@ -49,8 +49,8 @@ def test_contact_scene_program_construction_rolling(
 ):
     num_ctrl_points = 4
     contact_modes = {
-        "box_robot": ContactMode.ROLLING,
-        "box_table": ContactMode.ROLLING,
+        contact_scene_def.contact_pairs[0]: ContactMode.ROLLING,
+        contact_scene_def.contact_pairs[1]: ContactMode.ROLLING,
     }
 
     scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
@@ -100,14 +100,17 @@ def test_contact_scene_program_construction_sliding(
 ):
     num_ctrl_points = 4
     contact_modes = {
-        "box_robot": ContactMode.SLIDING_LEFT,
-        "box_table": ContactMode.SLIDING_LEFT,
+        contact_scene_def.contact_pairs[0]: ContactMode.SLIDING_LEFT,
+        contact_scene_def.contact_pairs[1]: ContactMode.SLIDING_LEFT,
     }
 
     scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
+
     prog = scene_prob.prog
 
-    pos = scene_prob._get_contact_pos_for_pair("box_table")
+    pos = scene_prob._get_nonfixed_contact_pos_for_pair(
+        contact_scene_def.contact_pairs[1]
+    )
     assert len(pos) == num_ctrl_points
     assert pos[0].shape == (2, 1)
 

@@ -70,7 +70,7 @@ class LineContactConstraints(NamedTuple):
     convex_hull_bounds: NpFormulaArray
 
 
-@dataclass
+@dataclass(frozen=True)
 class ContactPairDefinition:
     name: str
     body_A: RigidBody
@@ -83,7 +83,7 @@ class ContactPairDefinition:
         self,
         contact_mode: ContactMode,
         contact_pos_var: Optional[sym.Variable] = None,
-        instance_postfix: Optional[str] = None,
+        instance_postfix: Optional[str | int] = None,
     ) -> "AbstractContactPair":
         """
         Creates the contact pair with the specified contact mode, from the contact pair definition.
@@ -97,6 +97,7 @@ class ContactPairDefinition:
         if self.body_A_contact_location.pos == self.body_B_contact_location.pos:
             return FaceOnFaceContact(
                 name,
+                self,
                 self.body_A,
                 self.body_A_contact_location,
                 self.body_B,
@@ -109,6 +110,7 @@ class ContactPairDefinition:
         else:
             return PointOnFaceContact(
                 name,
+                self,
                 self.body_A,
                 self.body_A_contact_location,
                 self.body_B,
@@ -122,6 +124,7 @@ class ContactPairDefinition:
 @dataclass
 class AbstractContactPair(ABC):
     name: str
+    definition: ContactPairDefinition
     body_A: RigidBody
     body_A_contact_location: PolytopeContactLocation
     body_B: RigidBody

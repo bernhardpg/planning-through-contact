@@ -20,7 +20,7 @@ from planning_through_contact.geometry.hyperplane import (
 from planning_through_contact.geometry.utilities import normalize_vec
 
 
-@dataclass
+@dataclass(frozen=True)
 class TPusher2d(CollisionGeometry):
     """
     Constructed such that box 1 stacks on top, and box 2 lies on the bottom:

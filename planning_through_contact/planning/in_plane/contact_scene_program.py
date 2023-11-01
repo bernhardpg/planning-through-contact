@@ -32,7 +32,7 @@ class ContactSceneProgram:
         self,
         contact_scene_def: ContactSceneDefinition,
         num_ctrl_points: int,
-        contact_modes: Dict[str, ContactMode],
+        contact_modes: Dict[ContactPairDefinition, ContactMode],
     ):
         # Convenience variables for running experiments
         self.use_friction_cone_constraint = True
@@ -61,7 +61,7 @@ class ContactSceneProgram:
 
         self.ctrl_points = [
             ContactSceneCtrlPoint(
-                self.contact_scene_def, self.contact_pos_vars, self.contact_modes, idx
+                self.contact_scene_def, self.contact_modes, self.contact_pos_vars, idx
             )
             for idx in range(self.num_ctrl_points)
         ]
@@ -236,12 +236,14 @@ class ContactSceneProgram:
         vels = [(pos[idx + 1] - pos[idx]) / dt for idx in range(len(pos) - 1)]
         return vels  # type: ignore
 
-    def _get_contact_pos_for_pair(self, pair_name) -> List[NpExpressionArray]:
+    def _get_nonfixed_contact_pos_for_pair(
+        self, pair: ContactPairDefinition
+    ) -> List[NpExpressionArray]:
         pair_at_ctrl_points = [
             next(
                 pair_instance
                 for pair_instance in ctrl_point.contact_scene_instance.contact_pairs
-                if pair_instance.name == pair_name
+                if pair_instance.definition == pair
             )
             for ctrl_point in self.ctrl_points
         ]
@@ -252,9 +254,9 @@ class ContactSceneProgram:
         return contact_pos_at_ctrl_points  # type: ignore
 
     def _constrain_contact_velocity(
-        self, pair_name: str, direction: Literal["POSITIVE", "NEGATIVE"]
+        self, pair: ContactPairDefinition, direction: Literal["POSITIVE", "NEGATIVE"]
     ) -> None:
-        contact_pos_per_ctrl_point = self._get_contact_pos_for_pair(pair_name)
+        contact_pos_per_ctrl_point = self._get_nonfixed_contact_pos_for_pair(pair)
         unscaled_contact_vels = self._get_vel_from_pos_by_fe(
             contact_pos_per_ctrl_point, dt=None
         )

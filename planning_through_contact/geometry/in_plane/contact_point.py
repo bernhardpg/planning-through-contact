@@ -5,7 +5,6 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
