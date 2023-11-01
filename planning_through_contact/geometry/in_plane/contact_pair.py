@@ -245,7 +245,7 @@ class FaceOnFaceContact(AbstractContactPair):
         self.BOX_WIDTH = 0.2  # FIX: This should be fixed!
 
         left_force = ContactForceDefinition(
-            f"{self.name}_{self.body_A.name}",
+            f"{self.name}_{self.body_A.name}_left",
             self.friction_coeff,
             self.body_A_contact_location,
             self.body_A.geometry,
@@ -254,7 +254,7 @@ class FaceOnFaceContact(AbstractContactPair):
         )
 
         right_force = ContactForceDefinition(
-            f"{self.name}_{self.body_A.name}",
+            f"{self.name}_{self.body_A.name}_right",
             self.friction_coeff,
             self.body_A_contact_location,
             self.body_A.geometry,
