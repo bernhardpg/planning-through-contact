@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -30,12 +30,16 @@ class ContactPoint:
         contact_force_defs: List[ContactForceDefinition],
         friction_coeff: float = 0.5,
         name: str = "unnamed",
+        contact_position_var: Optional[sym.Variable] = None,
     ) -> None:
         """
         Definition of a contact point.
 
         A contact point can have one or more forces associated with it. If it is a vertex contact point, it will have one force associated with it.
         If it is a contact point on a face, it can have two contact forces associated with it at a constant displacement from the contact point.
+
+        @param contact_position_var: If a variable is passed to this, this variable will be used to define the contact position. This is useful when
+            the contact position is equal across multiple control points.
         """
         self.name = name
         self.body = body
@@ -43,7 +47,7 @@ class ContactPoint:
         self.friction_coeff = friction_coeff
         self.contact_location = contact_location
 
-        self.contact_position = self._set_contact_position()
+        self.contact_position = self._set_contact_position(contact_position_var)
         self.contact_forces = [ContactForce.from_definition(d, self.contact_position) for d in contact_force_defs]  # type: ignore
 
     def get_contact_positions(
@@ -55,10 +59,14 @@ class ContactPoint:
         return [f.force for f in self.contact_forces]
 
     def _set_contact_position(
-        self,
+        self, contact_position_var: Optional[sym.Variable] = None
     ) -> Union[npt.NDArray[np.float64], NpExpressionArray]:
         if self.contact_location.pos == ContactLocation.FACE:
-            self.lam = sym.Variable(f"{self.name}_lam")
+            if contact_position_var is not None:
+                self.lam = contact_position_var
+            else:
+                self.lam = sym.Variable(f"{self.name}_lam")
+
             u, v = self.collision_geometry.get_proximate_vertices_from_location(
                 self.contact_location
             )

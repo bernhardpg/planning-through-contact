@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge, le
 from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.symbolic import Variable
 
 from planning_through_contact.convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
@@ -44,14 +45,23 @@ class ContactSceneProgram:
         self.minimize_velocities = True
 
         self.contact_modes = contact_modes
-        self.contact_scene = contact_scene_def
+        self.contact_scene_def = contact_scene_def
         self.num_ctrl_points = num_ctrl_points
         self._setup_ctrl_points()
         self._setup_prog()
 
     def _setup_ctrl_points(self) -> None:
+        # Create contact position variables to be shared between knot points for rolling contacts
+        self.contact_pos_vars = {
+            name: Variable(f"{name}_lam")
+            for name, mode in self.contact_modes.items()
+            if mode == ContactMode.ROLLING
+        }
+
         self.ctrl_points = [
-            ContactSceneCtrlPoint(self.contact_scene, self.contact_modes)
+            ContactSceneCtrlPoint(
+                self.contact_scene_def, self.contact_pos_vars, self.contact_modes
+            )
             for _ in range(self.num_ctrl_points)
         ]
 
@@ -123,7 +133,7 @@ class ContactSceneProgram:
 
         for pair, mode in self.contact_modes.items():
             if mode == ContactMode.ROLLING:
-                self._fix_contact_positions(pair)
+                pass  # we are already using one shared contact position variable for all rolling contacts
             elif mode == ContactMode.SLIDING_LEFT:
                 self._constrain_contact_velocity(pair, "NEGATIVE")
             elif mode == ContactMode.SLIDING_RIGHT:
@@ -131,10 +141,10 @@ class ContactSceneProgram:
 
         # TODO: this section should be cleaned up
         if self.minimize_velocities:
-            if len(self.contact_scene.unactuated_bodies) > 1:
+            if len(self.contact_scene_def.unactuated_bodies) > 1:
                 raise NotImplementedError("Only support for one unactuated body.")
 
-            unactuated_body = self.contact_scene.unactuated_bodies[0]
+            unactuated_body = self.contact_scene_def.unactuated_bodies[0]
             for i in range(1, self.num_ctrl_points):
                 r_curr = (
                     self.ctrl_points[i]
@@ -208,7 +218,9 @@ class ContactSceneProgram:
 
     def _get_contact_pos_for_pair(self, pair_name) -> List[NpExpressionArray]:
         pair = next(
-            pair for pair in self.contact_scene.contact_pairs if pair.name == pair_name
+            pair
+            for pair in self.contact_scene_def.contact_pairs
+            if pair.name == pair_name
         )
         pair_at_ctrl_points = [
             next(
@@ -222,16 +234,6 @@ class ContactSceneProgram:
             pair.get_nonfixed_contact_position() for pair in pair_at_ctrl_points
         ]  # [(num_dims, 1) x num_ctrl_points]
         return contact_pos_at_ctrl_points
-
-    def _fix_contact_positions(self, pair_name: str) -> None:
-        # TODO(bernhardpg): This should only be one variable, not one for each knot point
-        contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
-        for idx in range(self.num_ctrl_points - 1):
-            constraint = eq(
-                contact_pos_at_ctrl_points[idx], contact_pos_at_ctrl_points[idx + 1]
-            ).flatten()
-            for c in constraint:
-                self.prog.AddLinearConstraint(c)
 
     def _constrain_contact_velocity(
         self, pair_name: str, direction: Literal["POSITIVE", "NEGATIVE"]

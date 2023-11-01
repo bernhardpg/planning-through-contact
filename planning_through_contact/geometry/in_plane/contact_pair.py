@@ -80,7 +80,10 @@ class ContactPairDefinition:
     friction_coeff: float = 0.5
 
     def create_pair(
-        self, contact_mode: ContactMode, instance_postfix: Optional[str] = None
+        self,
+        contact_mode: ContactMode,
+        contact_pos_var: Optional[sym.Variable] = None,
+        instance_postfix: Optional[str] = None,
     ) -> "AbstractContactPair":
         """
         Creates the contact pair with the specified contact mode, from the contact pair definition.
@@ -100,6 +103,7 @@ class ContactPairDefinition:
                 self.body_B_contact_location,
                 contact_mode,
                 self.friction_coeff,
+                contact_pos_var,
             )
 
         else:
@@ -111,6 +115,7 @@ class ContactPairDefinition:
                 self.body_B_contact_location,
                 contact_mode,
                 self.friction_coeff,
+                contact_pos_var,
             )
 
 
@@ -123,6 +128,7 @@ class AbstractContactPair(ABC):
     body_B_contact_location: PolytopeContactLocation
     contact_mode: ContactMode
     friction_coeff: float
+    contact_pos_var: Optional[sym.Variable] = None
 
     @property
     @abstractmethod
@@ -272,6 +278,7 @@ class FaceOnFaceContact(AbstractContactPair):
             [left_force, right_force],
             self.friction_coeff,
             name=f"{self.name}_{self.body_A.name}",
+            contact_position_var=self.contact_pos_var,
         )
 
     @property
