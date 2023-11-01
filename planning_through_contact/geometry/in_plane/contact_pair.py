@@ -40,6 +40,8 @@ class EvaluatedContactFrameConstraints(NamedTuple):
 class ContactFrameConstraints(NamedTuple):
     in_frame_A: Union[NpFormulaArray, NpExpressionArray]
     in_frame_B: Union[NpFormulaArray, NpExpressionArray]
+    type_A: Literal["linear", "quadratic"]
+    type_B: Literal["linear", "quadratic"]
 
     def evaluate(
         self, result: MathematicalProgramResult
@@ -457,23 +459,42 @@ class PointOnFaceContact(AbstractContactPair):
             ]
         )
 
+    def _determine_constraint_type(
+        self, contact_point: ContactPoint
+    ) -> Literal["linear", "quadratic"]:
+        return (
+            "linear"
+            if contact_point.contact_location.pos == ContactLocation.VERTEX
+            else "quadratic"
+        )
+
     def create_equal_contact_point_constraints(self) -> ContactFrameConstraints:
+        # One of these will be constant (one must lie on a corner)
         p_Ac_A = self.contact_point_A.contact_position
         p_Bc_B = self.contact_point_B.contact_position
 
         p_Bc_A = self.R_AB.dot(p_Bc_B)
         eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A).flatten()
+        constraint_type_A = self._determine_constraint_type(self.contact_point_B)
 
         p_Ac_B = self.R_AB.T.dot(p_Ac_A)
         eq_contact_point_in_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B).flatten()
+        constraint_type_B = self._determine_constraint_type(self.contact_point_A)
 
-        return ContactFrameConstraints(eq_contact_point_in_A, eq_contact_point_in_B)
+        return ContactFrameConstraints(
+            eq_contact_point_in_A,
+            eq_contact_point_in_B,
+            constraint_type_A,
+            constraint_type_B,
+        )
 
     def create_equal_rel_position_constraints(self) -> ContactFrameConstraints:
         rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B)).flatten()
         rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A)).flatten()
 
-        return ContactFrameConstraints(rel_pos_equal_in_A, rel_pos_equal_in_B)
+        return ContactFrameConstraints(
+            rel_pos_equal_in_A, rel_pos_equal_in_B, "quadratic", "quadratic"
+        )
 
     def create_equal_and_opposite_forces_constraint(self) -> ContactFrameConstraints:
         f_c_A = self.contact_point_A.contact_force
@@ -482,7 +503,9 @@ class PointOnFaceContact(AbstractContactPair):
         equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B)).flatten()
         equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A)).flatten()
 
-        return ContactFrameConstraints(equal_and_opposite_in_A, equal_and_opposite_in_B)
+        return ContactFrameConstraints(
+            equal_and_opposite_in_A, equal_and_opposite_in_B, "quadratic", "quadratic"
+        )
 
     def create_so2_constraint(self) -> sym.Formula:
         # cos_th^2 + sin_th^2 == 1

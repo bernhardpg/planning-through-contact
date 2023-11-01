@@ -21,6 +21,7 @@ from planning_through_contact.geometry.in_plane.contact_scene import (
 )
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 
 
 class ContactSceneProgram:

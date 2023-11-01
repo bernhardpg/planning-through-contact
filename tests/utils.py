@@ -1,6 +1,6 @@
-from pydrake.symbolic import Variable
+from pydrake.symbolic import Formula, Polynomial, Variable
 
-from planning_through_contact.tools.types import NpExpressionArray
+from planning_through_contact.tools.types import NpExpressionArray, NpFormulaArray
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 
 
@@ -29,3 +29,14 @@ def assert_num_vars_in_formula_array(f_np, num_vars):
     for f in f_np.flatten():
         expr = convert_formula_to_lhs_expression(f)
         assert len(expr.GetVariables()) == num_vars
+
+
+def assert_formula_degree(f: Formula, deg: int) -> None:
+    expr = convert_formula_to_lhs_expression(f)
+    poly = Polynomial(expr)
+    assert poly.TotalDegree() == deg
+
+
+def assert_formula_array_degree(f_np: NpFormulaArray, deg: int) -> None:
+    for f in f_np.flatten():
+        assert_formula_degree(f, deg)

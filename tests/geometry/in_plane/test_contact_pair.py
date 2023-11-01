@@ -18,7 +18,11 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
 from planning_through_contact.geometry.in_plane.contact_point import ContactPoint
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
-from tests.utils import assert_num_vars_in_formula_array
+from tests.utils import (
+    assert_formula_array_degree,
+    assert_formula_degree,
+    assert_num_vars_in_formula_array,
+)
 
 
 def test_contact_pair_face_on_face():
@@ -135,6 +139,12 @@ def test_contact_pair_point_on_face():
     assert eq_point_cs.in_frame_A.shape == (2,)
     assert eq_point_cs.in_frame_B.shape == (2,)
 
+    assert_formula_array_degree(eq_point_cs.in_frame_A, 1)
+    assert eq_point_cs.type_A == "linear"
+
+    assert_formula_array_degree(eq_point_cs.in_frame_B, 2)
+    assert eq_point_cs.type_B == "quadratic"
+
     # lam, cos, sin and either p_AB x or y
     assert_num_vars_in_formula_array(eq_point_cs.in_frame_A, 4)
     # lam, cos, sin and either p_BA x or y
@@ -144,6 +154,12 @@ def test_contact_pair_point_on_face():
     assert isinstance(eq_rel_pos_cs, ContactFrameConstraints)
     assert eq_rel_pos_cs.in_frame_A.shape == (2,)
     assert eq_rel_pos_cs.in_frame_B.shape == (2,)
+
+    assert_formula_array_degree(eq_rel_pos_cs.in_frame_A, 2)
+    assert eq_rel_pos_cs.type_A == "quadratic"
+
+    assert_formula_array_degree(eq_rel_pos_cs.in_frame_B, 2)
+    assert eq_rel_pos_cs.type_B == "quadratic"
 
     # each row will contain 5 variables:
     # p_AB x or y, cos, sin, p_BA x and y
@@ -155,6 +171,12 @@ def test_contact_pair_point_on_face():
     assert isinstance(eq_force_cs, ContactFrameConstraints)
     assert eq_force_cs.in_frame_A.shape == (2,)
     assert eq_force_cs.in_frame_B.shape == (2,)
+
+    assert_formula_array_degree(eq_force_cs.in_frame_A, 2)
+    assert eq_force_cs.type_A == "quadratic"
+
+    assert_formula_array_degree(eq_force_cs.in_frame_B, 2)
+    assert eq_force_cs.type_B == "quadratic"
 
     # each row will contain 5 variables:
     # c_n or c_f, cos, sin, f_x and f_y
