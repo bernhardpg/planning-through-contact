@@ -1,14 +1,20 @@
+from typing import List
+
 import numpy as np
+import numpy.typing as npt
 from pydrake.solvers import MathematicalProgramResult
 
+from planning_through_contact.geometry.in_plane.contact_scene import FrictionConeDetails
 from planning_through_contact.planning.in_plane.contact_scene_program import (
     ContactSceneProgram,
 )
 from planning_through_contact.planning.in_plane.in_plane_trajectory import (
     InPlaneTrajectory,
 )
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
@@ -61,7 +67,41 @@ def visualize_in_plane_manipulation_plan(
         for body in problem.contact_scene_def.unactuated_bodies
     ]
 
-    # TODO: A bit hacky visualization of gravity
+    def _get_fc_positions(
+        cone_ctrl_points: List[FrictionConeDetails],
+    ) -> List[npt.NDArray[np.float64]]:
+        return [fc.p_WFc_W for fc in cone_ctrl_points]  # type: ignore
+
+    def _get_fc_rotations(
+        cone_ctrl_points: List[FrictionConeDetails],
+    ) -> List[npt.NDArray[np.float64]]:
+        return [fc.R_WFc for fc in cone_ctrl_points]  # type: ignore
+
+    viz_friction_cones = [
+        VisualizationCone2d.from_ctrl_points(
+            np.hstack(_get_fc_positions(fc)),
+            _get_fc_rotations(fc),
+            fc[0].normal_vec_local,
+            np.arctan(fc[0].friction_coeff),
+        )
+        for fc in traj.friction_cones.values()
+    ]
+
+    # viz_friction_cones_mirrored = [
+    #     VisualizationCone2d.from_ctrl_points(
+    #         evaluate_np_expressions_array(pos, motion_plan.result),
+    #         [
+    #             motion_plan.result.GetSolution(R_ctrl_point)
+    #             for R_ctrl_point in orientation
+    #         ],
+    #         -normal_vec,
+    #         friction_cone_angle,
+    #     )
+    #     for normal_vec, pos, orientation in zip(
+    #         fc_normals, fc_positions, fc_orientations
+    #     )
+    # ]
+
     viz = Visualizer2d(PLOT_SCALE=1000, FORCE_SCALE=0.25, POINT_RADIUS=0.005)
 
     frames_per_sec = 1
@@ -69,7 +109,7 @@ def visualize_in_plane_manipulation_plan(
     viz.visualize(
         [] + viz_com_points,
         viz_contact_forces + viz_gravity_forces,
-        viz_polygons,
+        viz_polygons + viz_friction_cones,
         frames_per_sec,
         None,
     )

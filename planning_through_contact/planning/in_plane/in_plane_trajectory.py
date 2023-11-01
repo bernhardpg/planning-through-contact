@@ -8,6 +8,7 @@ from pydrake.solvers import MathematicalProgramResult
 from planning_through_contact.geometry.in_plane.contact_force import ContactForce
 from planning_through_contact.geometry.in_plane.contact_scene import (
     ContactSceneCtrlPoint,
+    FrictionConeDetails,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.in_plane.contact_scene_program import (
@@ -74,6 +75,27 @@ def _get_contact_point_for_idx(
     return contact_point
 
 
+# def _get_friction_cone_for_idx(
+#     idx: int,
+#     ctrl_points: List[ContactSceneCtrlPoint],
+#     result: MathematicalProgramResult,
+# ) -> List[FrictionConeDetails]:
+#     friction_cone_symbolic = [
+#         ctrl_point.get_friction_cones_details_for_face_contact_points()[idx]
+#         for ctrl_point in ctrl_points
+#     ]
+#     friction_cones = [
+#         FrictionConeDetails(
+#             fc[0],
+#             evaluate_np_expressions_array(fc[1], result),  # type: ignore
+#             evaluate_np_expressions_array(fc[2], result),  # type: ignore
+#             fc[3],
+#         )
+#         for fc in friction_cone_symbolic
+#     ]
+#     return friction_cones
+
+
 @dataclass
 class InPlaneTrajectory:
     bodies: List[RigidBody]
@@ -82,6 +104,7 @@ class InPlaneTrajectory:
     contact_forces: Dict[str, List[npt.NDArray[np.float64]]]
     contact_positions: Dict[str, List[npt.NDArray[np.float64]]]
     gravity_forces: Dict[RigidBody, List[npt.NDArray[np.float64]]]
+    # friction_cones: Dict[str, List[FrictionConeDetails]]
 
     @classmethod
     def create_from_result(
@@ -119,6 +142,11 @@ class InPlaneTrajectory:
             for body in problem.contact_scene_def.unactuated_bodies
         }
 
+        # friction_cones = {
+        #     f"force_{idx}": _get_friction_cone_for_idx(idx, problem.ctrl_points, result)
+        #     for idx in range(num_contact_forces)
+        # }
+
         return cls(
             bodies,
             body_positions,
@@ -126,6 +154,7 @@ class InPlaneTrajectory:
             contact_forces,
             contact_positions,
             gravity_forces,
+            # friction_cones,
         )
 
     # NOTE: Only used for legacy plotter

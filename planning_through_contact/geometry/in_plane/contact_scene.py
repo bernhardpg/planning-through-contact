@@ -31,6 +31,7 @@ class FrictionConeDetails(NamedTuple):
     normal_vec_local: npt.NDArray[np.float64]
     R_WFc: NpExpressionArray
     p_WFc_W: NpExpressionArray
+    friction_coeff: float
 
 
 class StaticEquilibriumConstraints(NamedTuple):
@@ -340,33 +341,38 @@ class ContactSceneCtrlPoint:
                 pos_W.extend(p_Wc1_Ws)
         return pos_W
 
-    def _get_friction_cone_details(
-        self, point: ContactPoint, force: ContactForce
-    ) -> List[FrictionConeDetails]:
-        normal_vec = force.normal_vec
-        if normal_vec is None:
-            raise ValueError("Could not get normal vector for force")
-        R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
-        p_WFc_Ws = self._get_contact_positions_for_contact_point_in_world_frame(point)
-        friction_cone_details = [
-            FrictionConeDetails(normal_vec, R_WFc, p_WFc_W) for p_WFc_W in p_WFc_Ws
-        ]
-        return friction_cone_details
+    # NOTE: Friction cone functionality (used only for visualization) is commented out as
+    # it does not work. There is some logic error with which rotation and position is used.
+    # Kept around in case I want to fix it.
 
-    def get_friction_cones_details_for_face_contact_points(
-        self,
-    ) -> List[FrictionConeDetails]:
-        contact_points_on_faces = [
-            pair.get_nonfixed_contact_point()
-            for pair in self.contact_scene_instance.contact_pairs
-        ]
-        return [
-            details
-            for point in contact_points_on_faces
-            for force in point.contact_forces
-            for details in self._get_friction_cone_details(point, force)
-            if force.normal_vec is not None
-        ]
+    # def _get_friction_cone_details(
+    #     self, point: ContactPoint, force: ContactForce
+    # ) -> List[FrictionConeDetails]:
+    #     normal_vec = force.normal_vec
+    #     if normal_vec is None:
+    #         raise ValueError("Could not get normal vector for force")
+    #     R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
+    #     p_WFc_Ws = self._get_contact_positions_for_contact_point_in_world_frame(point)
+    #     friction_cone_details = [
+    #         FrictionConeDetails(normal_vec, R_WFc, p_WFc_W, force.friction_coeff)
+    #         for p_WFc_W in p_WFc_Ws
+    #     ]
+    #     return friction_cone_details
+    #
+    # def get_friction_cones_details_for_face_contact_points(
+    #     self,
+    # ) -> List[FrictionConeDetails]:
+    #     contact_points_on_faces = [
+    #         pair.get_nonfixed_contact_point()
+    #         for pair in self.contact_scene_instance.contact_pairs
+    #     ]
+    #     return [
+    #         details
+    #         for point in contact_points_on_faces
+    #         for force in point.contact_forces
+    #         for details in self._get_friction_cone_details(point, force)
+    #         if force.normal_vec is not None
+    #     ]
 
     @property
     def static_equilibrium_constraints(self) -> List[StaticEquilibriumConstraints]:
