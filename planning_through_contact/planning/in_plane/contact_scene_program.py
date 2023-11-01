@@ -22,7 +22,7 @@ from planning_through_contact.geometry.utilities import two_d_rotation_matrix_fr
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 
-class ContactModeMotionPlanner:
+class ContactSceneProgram:
     def __init__(
         self,
         contact_scene: ContactScene2d,
