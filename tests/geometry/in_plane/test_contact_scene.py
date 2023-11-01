@@ -1,3 +1,7 @@
+from typing import Dict
+
+import pytest
+
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -9,6 +13,7 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
 )
 from planning_through_contact.geometry.in_plane.contact_scene import (
     ContactScene,
+    ContactSceneCtrlPoint,
     ContactSceneDefinition,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
@@ -21,7 +26,8 @@ from tests.utils import (
 )
 
 
-def test_contact_scene():
+@pytest.fixture
+def contact_scene_def() -> ContactSceneDefinition:
     box = RigidBody("box", Box2d(0.15, 0.15), mass=0.1)
     loc_box_robot = PolytopeContactLocation(ContactLocation.FACE, 3)
     robot = RigidBody("robot", Box2d(0.05, 0.03), mass=0.03, is_actuated=True)
@@ -43,11 +49,24 @@ def test_contact_scene():
         [point_contact, face_contact],
         table,
     )
-    contact_modes = {
+    return scene_def
+
+
+@pytest.fixture
+def contact_modes() -> Dict[str, ContactMode]:
+    return {
         "contact_1": ContactMode.ROLLING,
         "contact_2": ContactMode.ROLLING,
     }
-    scene = scene_def.create_scene(contact_modes)
+
+
+def test_contact_scene(
+    contact_scene_def: ContactSceneDefinition, contact_modes: Dict[str, ContactMode]
+) -> None:
+    scene = contact_scene_def.create_scene(contact_modes)
+
+    assert scene.rigid_bodies[1].name == "box"
+    box = scene.rigid_bodies[1]
 
     assert len(scene.rigid_bodies) == 3
 
@@ -103,5 +122,13 @@ def test_contact_scene():
     assert_num_vars_in_formula_array(torque_balance, 7)
 
 
-# TODO(bernhardpg): Write unit tests for the ContactSceneCrtrlPoint
-# TODO(bernhardpg): Write unit tests for ContaactModeMotionPlanner (needs a new name)
+def test_contact_scene_ctrl_point(
+    contact_scene_def: ContactSceneDefinition, contact_modes: Dict[str, ContactMode]
+) -> None:
+    ctrl_point = ContactSceneCtrlPoint(contact_scene_def, contact_modes)
+
+    # face contact: c_n, c_f * 2, lam = 5 vars
+    # point contact: cos, sin, f_x, f_y, c_n, c_f, lam, pos in both frames = 11
+    assert len(ctrl_point.variables) == 16
+
+    # NOTE(bernhardpg): There is not much to test here so far. Perhaps we should add more tests when we start using the rest of the functions in this class.
