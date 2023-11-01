@@ -183,17 +183,16 @@ class ContactSceneProgram:
         ctrl_point_idx: int,
         theta: float,
     ) -> None:
-        # NOTE: This finds the matching pair based on name. This may not be the safest way to do this
-
         scene_instance = self.ctrl_points[ctrl_point_idx].contact_scene_instance
         pair = next(
-            p for p in scene_instance.contact_pairs if p.name == pair_to_constrain.name
+            p for p in scene_instance.contact_pairs if p.definition == pair_to_constrain
         )
         R_target = two_d_rotation_matrix_from_angle(theta)
-        constraint = eq(pair.R_AB, R_target)
+        constraint = eq(
+            pair.R_AB[:, 0], R_target[:, 0]
+        ).flatten()  # remove extra column
 
-        for c in constraint.flatten():
-            self.prog.AddLinearConstraint(c)
+        self.prog.AddLinearConstraint(constraint)
 
     def constrain_contact_position_at_ctrl_point(
         self,
@@ -204,18 +203,15 @@ class ContactSceneProgram:
         """
         Constraints position by fixing position along contact face. lam_target should take values in the range [0,1]
         """
-        raise NotImplementedError("Not yet unit tested!")
-
         if lam_target > 1.0 or lam_target < 0.0:
             raise ValueError("lam_target must be in the range [0, 1]")
 
-        # NOTE: This finds the matching pair based on name. This may not be the safest way to do this
         scene_instance = self.ctrl_points[ctrl_point_idx].contact_scene_instance
         pair = next(
-            p for p in scene_instance.contact_pairs if p.name == pair_to_constrain.name
+            p for p in scene_instance.contact_pairs if p.definition == pair_to_constrain
         )
-        constraint = pair.get_nonfixed_contact_point_variable() == lam_target
-        self.prog.AddLinearConstraint(constraint)
+        expr = pair.get_nonfixed_contact_point_variable() - lam_target
+        self.prog.AddLinearEqualityConstraint(expr == 0)
 
     T = TypeVar("T", bound=Any)
 

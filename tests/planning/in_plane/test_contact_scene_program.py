@@ -29,16 +29,12 @@ def contact_scene_def() -> ContactSceneDefinition:
     loc_table = PolytopeContactLocation(ContactLocation.FACE, 0)
     loc_box_table = PolytopeContactLocation(ContactLocation.VERTEX, 2)
 
-    face_contact = ContactPairDefinition(
-        "box_robot", box, loc_box_robot, robot, loc_robot
-    )
-    point_contact = ContactPairDefinition(
-        "box_table", box, loc_box_table, table, loc_table
-    )
+    box_table = ContactPairDefinition("box_table", box, loc_box_table, table, loc_table)
+    box_robot = ContactPairDefinition("box_robot", box, loc_box_robot, robot, loc_robot)
 
     scene_def = ContactSceneDefinition(
         [table, box, robot],
-        [point_contact, face_contact],
+        [box_table, box_robot],
         table,
     )
     return scene_def
@@ -46,7 +42,7 @@ def contact_scene_def() -> ContactSceneDefinition:
 
 def test_contact_scene_program_construction_rolling(
     contact_scene_def: ContactSceneDefinition,
-):
+) -> None:
     num_ctrl_points = 4
     contact_modes = {
         contact_scene_def.contact_pairs[0]: ContactMode.ROLLING,
@@ -97,7 +93,7 @@ def test_contact_scene_program_construction_rolling(
 
 def test_contact_scene_program_construction_sliding(
     contact_scene_def: ContactSceneDefinition,
-):
+) -> None:
     num_ctrl_points = 4
     contact_modes = {
         contact_scene_def.contact_pairs[0]: ContactMode.SLIDING_LEFT,
@@ -138,3 +134,54 @@ def test_contact_scene_program_construction_sliding(
     # 1 * force balance for each control point
     # 1 * 2 (dims) for equal contact points
     assert len(prog.linear_equality_constraints()) == 3 * num_ctrl_points
+
+
+def test_contact_scene_initial_and_target(
+    contact_scene_def: ContactSceneDefinition,
+) -> None:
+    box_table = contact_scene_def.contact_pairs[0]
+    box_robot = contact_scene_def.contact_pairs[1]
+
+    num_ctrl_points = 4
+    contact_modes = {
+        box_table: ContactMode.ROLLING,
+        box_robot: ContactMode.ROLLING,
+    }
+
+    scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
+
+    original_num_lin_eqs = len(scene_prob.prog.linear_equality_constraints())
+    scene_prob.constrain_contact_position_at_ctrl_point(box_table, 0, 0.5)
+
+    assert (
+        len(scene_prob.prog.linear_equality_constraints()) == original_num_lin_eqs + 1
+    )
+
+    scene_prob.constrain_orientation_at_ctrl_point(box_table, 0, 0)
+    scene_prob.constrain_orientation_at_ctrl_point(box_table, num_ctrl_points - 1, 0.2)
+
+    assert (
+        len(scene_prob.prog.linear_equality_constraints()) == original_num_lin_eqs + 3
+    )
+
+
+def test_contact_scene_program_planning(
+    contact_scene_def: ContactSceneDefinition,
+) -> None:
+    box_table = contact_scene_def.contact_pairs[0]
+    box_robot = contact_scene_def.contact_pairs[1]
+
+    num_ctrl_points = 4
+    contact_modes = {
+        box_table: ContactMode.ROLLING,
+        box_robot: ContactMode.ROLLING,
+    }
+
+    scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
+
+    scene_prob.constrain_contact_position_at_ctrl_point(box_table, 0, 0.5)
+
+    scene_prob.constrain_orientation_at_ctrl_point(box_table, 0, 0)
+    scene_prob.constrain_orientation_at_ctrl_point(box_table, num_ctrl_points - 1, 0.2)
+
+    breakpoint()
