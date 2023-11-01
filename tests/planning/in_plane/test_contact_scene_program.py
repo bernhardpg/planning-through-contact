@@ -1,4 +1,12 @@
+import os
+
 import pytest
+from pydrake.solvers import (
+    CommonSolverOption,
+    MakeSemidefiniteRelaxation,
+    Solve,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -16,6 +24,9 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.in_plane.contact_scene_program import (
     ContactSceneProgram,
 )
+
+IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
+DEBUG = True
 
 
 @pytest.fixture
@@ -165,7 +176,11 @@ def test_contact_scene_initial_and_target(
     )
 
 
-def test_contact_scene_program_planning(
+@pytest.mark.skipif(
+    IN_GITHUB_ACTIONS == True,
+    reason="Too slow",
+)
+def test_contact_scene_program_planning_w_semidefinite_relaxation(
     contact_scene_def: ContactSceneDefinition,
 ) -> None:
     box_table = contact_scene_def.contact_pairs[0]
@@ -184,4 +199,12 @@ def test_contact_scene_program_planning(
     scene_prob.constrain_orientation_at_ctrl_point(box_table, 0, 0)
     scene_prob.constrain_orientation_at_ctrl_point(box_table, num_ctrl_points - 1, 0.2)
 
-    breakpoint()
+    relaxed_prog = MakeSemidefiniteRelaxation(scene_prob.prog)
+
+    solver_options = SolverOptions()
+
+    if DEBUG:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    result = Solve(relaxed_prog, solver_options=solver_options)
+    assert result.is_success()

@@ -149,11 +149,11 @@ class ContactSceneProgram:
             unactuated_body = self.contact_scene_def.unactuated_bodies[0]
             r_dot_sq = self._get_sq_rot_param_dots(unactuated_body)
             for c in r_dot_sq:
-                self.prog.AddQuadraticCost(c)
+                self.prog.AddQuadraticCost(c)  # type: ignore
 
             pos_dot_sq = self._get_sq_body_vels(unactuated_body)
             for c in pos_dot_sq:
-                self.prog.AddQuadraticCost(c)
+                self.prog.AddQuadraticCost(c)  # type: ignore
 
     def _get_sq_rot_param_dots(self, body: RigidBody) -> List[NpExpressionArray]:
         rot_params = [
@@ -264,20 +264,6 @@ class ContactSceneProgram:
                 constraint = le(vel, 0).flatten()
 
             self.prog.AddLinearConstraint(constraint)
-
-    def solve(self) -> None:
-        self.result = Solve(self.prog)
-        print(f"Solution result: {self.result.get_solution_result()}")
-        assert self.result.is_success()
-
-        print(f"Cost: {self.result.get_optimal_cost()}")
-
-    def get_ctrl_points_for_all_decision_variables(self) -> NpVariableArray:
-        # Make sure this matches the mon basis. Clean up!
-        all_vars = np.array(
-            sorted(self.prog.decision_variables(), key=lambda x: x.get_id())
-        )
-        return all_vars.reshape((-1, self.num_ctrl_points), order="F")
 
     # TODO: Remove all of these functions from here and down:
     ##########
