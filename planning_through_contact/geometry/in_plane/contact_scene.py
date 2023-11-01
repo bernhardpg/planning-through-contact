@@ -384,23 +384,25 @@ class ContactSceneCtrlPoint:
     def friction_cone_constraints(self) -> NpFormulaArray:
         return np.concatenate(
             [c.friction_cone for c in self.constraints.pair_constraints]
-        )
+        ).flatten()
 
     @property
     def so_2_constraints(self) -> NpFormulaArray:
-        return np.array([c.so_2 for c in self.point_on_line_contact_constraints])
+        return np.array(
+            [c.so_2 for c in self.point_on_line_contact_constraints]
+        ).flatten()
 
     @property
     def rotation_bounds(self) -> NpFormulaArray:
         return np.array(
             [c.rotation_bounds for c in self.point_on_line_contact_constraints]
-        )
+        ).flatten()
 
     @property
     def convex_hull_bounds(self) -> NpFormulaArray:
         return np.array(
             [c.convex_hull_bounds for c in self.constraints.pair_constraints]
-        )
+        ).flatten()
 
     @property
     def relaxed_so_2_constraints(self) -> NpFormulaArray:
@@ -410,6 +412,12 @@ class ContactSceneCtrlPoint:
 
     @property
     def non_penetration_cuts(self) -> NpFormulaArray:
+        for c in self.point_on_line_contact_constraints:
+            if c.non_penetration_cut is None:
+                raise NotImplementedError(
+                    "Cannot get non-penetration cut: value is None"
+                )
+
         return np.array(
             [c.non_penetration_cut for c in self.point_on_line_contact_constraints]
         )

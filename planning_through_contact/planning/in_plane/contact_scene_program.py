@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -9,15 +9,16 @@ from planning_through_contact.convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
 )
-from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactMode,
+)
+from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactPairDefinition,
 )
-from planning_through_contact.geometry.two_d.contact.contact_scene_2d import (
-    ContactScene2d,
+from planning_through_contact.geometry.in_plane.contact_scene import (
     ContactSceneCtrlPoint,
-    FrictionConeDetails,
+    ContactSceneDefinition,
 )
-from planning_through_contact.geometry.two_d.contact.types import ContactMode
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
@@ -25,11 +26,9 @@ from planning_through_contact.tools.types import NpExpressionArray, NpVariableAr
 class ContactSceneProgram:
     def __init__(
         self,
-        contact_scene: ContactScene2d,
+        contact_scene_def: ContactSceneDefinition,
         num_ctrl_points: int,
         contact_modes: Dict[str, ContactMode],
-        variable_bounds: Optional[Dict[str, Tuple[float, float]]] = None,
-        use_mccormick_relaxation: bool = False,
     ):
         # Convenience variables for running experiments
         self.use_friction_cone_constraint = True
@@ -40,27 +39,21 @@ class ContactSceneProgram:
         self.use_equal_relative_position_constraint = True  # Not in use as it does not make the solution any tighter without variable bounds
         self.use_equal_and_opposite_forces_constraint = True
         self.use_so2_constraint = True
-        self.use_non_penetration_cut = True
-        self.minimize_squared_forces = False
         self.minimize_velocities = True
-        self.only_minimize_forces_on_unactuated_bodies = False
-        self.use_mccormick_relaxation = use_mccormick_relaxation
 
         self.contact_modes = contact_modes
-        self.contact_scene = contact_scene
+        self.contact_scene = contact_scene_def
         self.num_ctrl_points = num_ctrl_points
         self._setup_ctrl_points()
-        self._setup_prog(variable_bounds)
+        self._setup_prog()
 
     def _setup_ctrl_points(self) -> None:
         self.ctrl_points = [
-            ContactSceneCtrlPoint(self.contact_scene, self.contact_modes, idx)
-            for idx in range(self.num_ctrl_points)
+            ContactSceneCtrlPoint(self.contact_scene, self.contact_modes)
+            for _ in range(self.num_ctrl_points)
         ]
 
-    def _setup_prog(
-        self, variable_bounds: Optional[Dict[str, Tuple[float, float]]] = None
-    ) -> None:
+    def _setup_prog(self) -> None:
         self.prog = MathematicalProgram()
 
         for ctrl_point in self.ctrl_points:
@@ -70,8 +63,7 @@ class ContactSceneProgram:
                 self.prog.AddLinearConstraint(c)
 
             if self.use_friction_cone_constraint:
-                for c in ctrl_point.friction_cone_constraints:
-                    self.prog.AddLinearConstraint(c)
+                self.prog.AddLinearConstraint(ctrl_point.friction_cone_constraints)
 
             if self.use_force_balance_constraint:
                 for c in ctrl_point.static_equilibrium_constraints:
@@ -79,72 +71,29 @@ class ContactSceneProgram:
 
             if self.use_torque_balance_constraint:
                 for c in ctrl_point.static_equilibrium_constraints:
-                    # TODO remove
-                    if self.use_mccormick_relaxation:
-                        assert variable_bounds is not None
-                        add_bilinear_constraints_to_prog(
-                            c.torque_balance,
-                            self.prog,
-                            variable_bounds,
-                        )
-                    else:
-                        self.prog.AddConstraint(c.torque_balance)
+                    self.prog.AddConstraint(c.torque_balance)
 
             if self.use_equal_contact_point_constraint:
                 for c in ctrl_point.equal_contact_point_constraints:
-                    # TODO remove
-                    if self.use_mccormick_relaxation:
-                        assert variable_bounds is not None
-                        add_bilinear_frame_constraints_to_prog(
-                            c, self.prog, variable_bounds
-                        )
-                    else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                    self.prog.AddConstraint(c.in_frame_A)
+                    self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_equal_relative_position_constraint:
                 for c in ctrl_point.equal_rel_position_constraints:
-                    # TODO remove
-                    if self.use_mccormick_relaxation:
-                        assert variable_bounds is not None
-                        add_bilinear_frame_constraints_to_prog(
-                            c, self.prog, variable_bounds
-                        )
-                    else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                    self.prog.AddConstraint(c.in_frame_A)
+                    self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_equal_and_opposite_forces_constraint:
                 for c in ctrl_point.equal_and_opposite_forces_constraints:
-                    # TODO remove
-                    if self.use_mccormick_relaxation:
-                        add_bilinear_frame_constraints_to_prog(
-                            c, self.prog, variable_bounds
-                        )
-                    else:
-                        self.prog.AddConstraint(c.in_frame_A)
-                        self.prog.AddConstraint(c.in_frame_B)
+                    self.prog.AddConstraint(c.in_frame_A)
+                    self.prog.AddConstraint(c.in_frame_B)
 
             if self.use_so2_constraint:
-                # TODO remove
-                if self.use_mccormick_relaxation:
-                    for c in ctrl_point.relaxed_so_2_constraints:
-                        lhs, rhs = c.Unapply()[1]
-                        self.prog.AddLorentzConeConstraint(rhs, lhs)  # type: ignore
-                else:
-                    for c in ctrl_point.so_2_constraints:
-                        self.prog.AddConstraint(c)
-                    for c in ctrl_point.rotation_bounds:
-                        self.prog.AddConstraint(c)
+                for c in ctrl_point.so_2_constraints:
+                    self.prog.AddConstraint(c)
 
-            if self.use_non_penetration_cut:
-                self.prog.AddLinearConstraint(ctrl_point.non_penetration_cuts)
-
-            if self.minimize_squared_forces:
-                cost = ctrl_point.get_squared_forces(
-                    self.only_minimize_forces_on_unactuated_bodies
-                )
-                self.prog.AddQuadraticCost(cost)
+                for c in ctrl_point.rotation_bounds:
+                    self.prog.AddConstraint(c)
 
         for pair, mode in self.contact_modes.items():
             if mode == ContactMode.ROLLING:

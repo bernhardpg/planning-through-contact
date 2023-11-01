@@ -12,14 +12,11 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactPairDefinition,
 )
 from planning_through_contact.geometry.in_plane.contact_scene import (
-    ContactScene,
     ContactSceneCtrlPoint,
     ContactSceneDefinition,
+    StaticEquilibriumConstraints,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.contact_mode_motion_planner import (
-    ContactModeMotionPlanner,
-)
 from tests.utils import (
     assert_num_vars_in_expression_array,
     assert_num_vars_in_formula_array,
@@ -130,5 +127,36 @@ def test_contact_scene_ctrl_point(
     # face contact: c_n, c_f * 2, lam = 5 vars
     # point contact: cos, sin, f_x, f_y, c_n, c_f, lam, pos in both frames = 11
     assert len(ctrl_point.variables) == 16
+
+    # Two for table contact
+    # TODO(bernhardpg): We can eliminate this one!
+    # Two for face contact (only one contact point for two forces)
+    assert ctrl_point.convex_hull_bounds.shape == (4,)
+
+    # 3 contact forces: 3 for each contact force (left side, right side, nonnegative normal)
+    assert ctrl_point.friction_cone_constraints.shape == (9,)
+
+    assert ctrl_point.friction_cone_constraints.shape == (9,)
+
+    # only one unactuated body
+    assert len(ctrl_point.static_equilibrium_constraints) == 1
+
+    eq_consts = ctrl_point.static_equilibrium_constraints[0]
+    assert isinstance(eq_consts, StaticEquilibriumConstraints)
+
+    # only one two-sided contact point ()
+    assert len(ctrl_point.equal_contact_point_constraints) == 1
+
+    # only one two-sided contact point (table/box)
+    assert len(ctrl_point.equal_rel_position_constraints) == 1
+
+    # only one two-sided contact point (table/box)
+    assert len(ctrl_point.equal_and_opposite_forces_constraints) == 1
+
+    # two sides for both cos and sine, only one rotational contact point
+    assert ctrl_point.rotation_bounds.shape == (4,)
+
+    # only one rotational contact point
+    assert ctrl_point.so_2_constraints.shape == (1,)
 
     # NOTE(bernhardpg): There is not much to test here so far. Perhaps we should add more tests when we start using the rest of the functions in this class.
