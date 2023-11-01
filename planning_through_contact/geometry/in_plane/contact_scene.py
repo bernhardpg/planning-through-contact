@@ -15,7 +15,7 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
     ContactPairDefinition,
     LineContactConstraints,
-    PairContactConstraints,
+    PointContactConstraints,
 )
 from planning_through_contact.geometry.in_plane.contact_point import ContactPoint
 from planning_through_contact.geometry.rigid_body import RigidBody
@@ -43,7 +43,7 @@ class StaticEquilibriumConstraints(NamedTuple):
 
 
 class ContactSceneConstraints(NamedTuple):
-    pair_constraints: List[Union[LineContactConstraints, PairContactConstraints]]
+    pair_constraints: List[Union[LineContactConstraints, PointContactConstraints]]
     static_equilibrium_constraints: List[StaticEquilibriumConstraints]
 
 
@@ -198,7 +198,7 @@ class ContactScene:
     @property
     def pair_constraints(
         self,
-    ) -> List[Union[LineContactConstraints, PairContactConstraints]]:
+    ) -> List[Union[LineContactConstraints, PointContactConstraints]]:
         return [pair.create_constraints() for pair in self.contact_pairs]
 
     def create_static_equilibrium_constraints_for_body(
@@ -443,9 +443,9 @@ class ContactSceneCtrlPoint:
         return self.contact_scene_instance.create_contact_scene_constraints()
 
     @property
-    def point_on_line_contact_constraints(self) -> List[PairContactConstraints]:
+    def point_on_line_contact_constraints(self) -> List[PointContactConstraints]:
         return [
             constraints
             for constraints in self.constraints.pair_constraints
-            if isinstance(constraints, PairContactConstraints)
+            if isinstance(constraints, PointContactConstraints)
         ]

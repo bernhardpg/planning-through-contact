@@ -51,7 +51,7 @@ class ContactFrameConstraints(NamedTuple):
         )
 
 
-class PairContactConstraints(NamedTuple):
+class PointContactConstraints(NamedTuple):
     friction_cone: NpFormulaArray
     so_2: sym.Formula
     relaxed_so_2: sym.Formula
@@ -164,7 +164,7 @@ class AbstractContactPair(ABC):
     @abstractmethod
     def create_constraints(
         self,
-    ) -> Union[PairContactConstraints, LineContactConstraints]:
+    ) -> Union[PointContactConstraints, LineContactConstraints]:
         pass
 
     @property
@@ -577,8 +577,8 @@ class PointOnFaceContact(AbstractContactPair):
 
         return nonpenetration_cut
 
-    def create_constraints(self) -> PairContactConstraints:
-        return PairContactConstraints(
+    def create_constraints(self) -> PointContactConstraints:
+        return PointContactConstraints(
             self.create_friction_cone_constraints(),
             self.create_so2_constraint(),
             self.create_relaxed_so2_constraint(),
