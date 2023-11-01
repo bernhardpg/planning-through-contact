@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 
+from pydrake.geometry import SceneGraph
 from pydrake.systems.framework import LeafSystem
 
 from planning_through_contact.geometry.rigid_body import RigidBody

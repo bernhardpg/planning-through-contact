@@ -30,6 +30,9 @@ from planning_through_contact.planning.in_plane.contact_scene_program import (
 )
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.in_plane_visualizer import (
+    visualize_in_plane_manipulation_plan,
+)
 from planning_through_contact.visualize.visualizer_2d import (
     VisualizationForce2d,
     VisualizationPolygon2d,
@@ -214,7 +217,9 @@ def test_contact_scene_program_planning_w_semidefinite_relaxation(
     scene_prob.constrain_contact_position_at_ctrl_point(box_table, 0, 0.5)
 
     scene_prob.constrain_orientation_at_ctrl_point(box_table, 0, 0)
-    scene_prob.constrain_orientation_at_ctrl_point(box_table, num_ctrl_points - 1, 0.2)
+    scene_prob.constrain_orientation_at_ctrl_point(
+        box_table, num_ctrl_points - 1, np.pi / 2
+    )
 
     relaxed_prog = MakeSemidefiniteRelaxation(scene_prob.prog)
 
@@ -225,3 +230,6 @@ def test_contact_scene_program_planning_w_semidefinite_relaxation(
 
     result = Solve(relaxed_prog, solver_options=solver_options)
     assert result.is_success()
+
+    if DEBUG:
+        visualize_in_plane_manipulation_plan(result, scene_prob)

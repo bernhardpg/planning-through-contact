@@ -265,8 +265,8 @@ class ContactSceneProgram:
 
             self.prog.AddLinearConstraint(constraint)
 
-    # TODO: Remove all of these functions from here and down:
     ##########
+    # NOTE: None of the functions below are unit tested
 
     @staticmethod
     def _collect_ctrl_points(
@@ -315,7 +315,7 @@ class ContactSceneProgram:
         self,
     ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
         body_positions_for_each_ctrl_point = [
-            cp.get_body_positions_in_world_frame() for cp in self.ctrl_points
+            cp.get_body_positions_in_world() for cp in self.ctrl_points
         ]
         return self._collect_ctrl_points(body_positions_for_each_ctrl_point)
 
@@ -348,7 +348,7 @@ class ContactSceneProgram:
         self,
     ) -> List[List[Union[NpExpressionArray, NpVariableArray]]]:
         body_orientations_for_each_ctrl_point = [
-            cp.get_body_orientations() for cp in self.ctrl_points
+            cp.get_body_orientations_in_world() for cp in self.ctrl_points
         ]
         return self._sort_by_elements(body_orientations_for_each_ctrl_point)
 

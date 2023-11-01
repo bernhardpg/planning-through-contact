@@ -286,6 +286,9 @@ class FaceOnFaceContact(AbstractContactPair):
 
     @property
     def R_AB(self) -> npt.NDArray[np.float64]:
+        """
+        Rotation matrix between body A and body B for a face contact
+        """
         plane_A = self.body_A.geometry.get_hyperplane_from_location(
             self.body_A_contact_location
         )
@@ -294,7 +297,7 @@ class FaceOnFaceContact(AbstractContactPair):
         )
         theta = get_angle_between_planes(plane_A, plane_B)
         if not np.isclose(theta % np.pi, 0):
-            raise NotImplementedError(
+            print(
                 "Caution: this functionality has not been properly tested and may be incorrect"
             )
 
@@ -305,11 +308,11 @@ class FaceOnFaceContact(AbstractContactPair):
         p_Ac = self.contact_point_A.contact_position
         p_Bc = self.body_B.geometry.get_shortest_vec_from_com_to_loc(
             self.body_B_contact_location
-        )
+        )  # there is no contact point B, only one contact point
         p_cB = -p_Bc
         p_AB = p_Ac + self.R_AB.dot(p_cB)
 
-        raise NotImplementedError(
+        print(
             "Caution: this functionality has not been properly tested and may be incorrect"
         )
         return p_AB
