@@ -160,9 +160,9 @@ class AbstractContactPair(ABC):
 
     def get_nonfixed_contact_position(
         self,
-    ) -> List[Union[NpExpressionArray, npt.NDArray[np.float64]]]:
+    ) -> Union[NpExpressionArray, npt.NDArray[np.float64]]:
         point = self.get_nonfixed_contact_point()
-        return point.get_contact_positions()
+        return point.contact_position
 
     @property
     @abstractmethod

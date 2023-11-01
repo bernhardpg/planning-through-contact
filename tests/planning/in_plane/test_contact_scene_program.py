@@ -82,18 +82,27 @@ def test_contact_scene_program_construction_sliding(
 ):
     num_ctrl_points = 4
     contact_modes = {
-        "box_robot": ContactMode.ROLLING,
+        "box_robot": ContactMode.SLIDING_LEFT,
         "box_table": ContactMode.SLIDING_LEFT,
     }
 
     scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
     prog = scene_prob.prog
 
-    # Friction cone for each control point
-    assert len(prog.linear_constraints()) == 1 * num_ctrl_points
+    pos = scene_prob._get_contact_pos_for_pair("box_table")
+    assert len(pos) == num_ctrl_points
+    assert pos[0].shape == (2, 1)
 
+    vels = scene_prob._get_vel_from_pos_by_fe(pos)
+    assert len(vels) == num_ctrl_points - 1
+    assert vels[0].shape == (2, 1)
+
+    # velocity constraint for each sliding pair for each control point - 1
+    assert len(prog.linear_constraints()) == 2 * (num_ctrl_points - 1)
+
+    # Friction cone (only normal force) for each control point
     # one for lams, one for trig terms, for each control point
-    assert len(prog.bounding_box_constraints()) == 2 * num_ctrl_points
+    assert len(prog.bounding_box_constraints()) == 3 * num_ctrl_points
 
     # Should not be any generic constraints
     assert len(prog.generic_constraints()) == 0
@@ -107,4 +116,4 @@ def test_contact_scene_program_construction_sliding(
 
     # 1 * force balance for each control point
     # 1 * 2 (dims) for equal contact points
-    assert len(prog.linear_equality_constraints()) == 12 * num_ctrl_points
+    assert len(prog.linear_equality_constraints()) == 3 * num_ctrl_points

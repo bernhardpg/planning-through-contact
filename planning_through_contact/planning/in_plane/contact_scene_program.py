@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -218,45 +218,55 @@ class ContactSceneProgram:
         constraint = pair.get_nonfixed_contact_point_variable() == lam_target
         self.prog.AddLinearConstraint(constraint)
 
+    T = TypeVar("T", bound=Any)
+
+    def _get_vel_from_pos_by_fe(
+        self, pos: List[npt.NDArray[T]], dt: Optional[float] = None
+    ) -> List[npt.NDArray[T]]:
+        """
+        Returns a forward euler approximation to the velocity
+
+        x_dot[i] = (x[i+1] - x[i]) / dt
+
+        @param pos: List of positions for each point in time
+        @param dt: If dt is none, the velocities will be unscaled.
+        """
+        if dt is None:
+            dt = 1.0  # no scaling
+
+        vels = [(pos[idx + 1] - pos[idx]) / dt for idx in range(len(pos) - 1)]
+        return vels  # type: ignore
+
     def _get_contact_pos_for_pair(self, pair_name) -> List[NpExpressionArray]:
-        pair = next(
-            pair
-            for pair in self.contact_scene_def.contact_pairs
-            if pair.name == pair_name
-        )
         pair_at_ctrl_points = [
             next(
                 pair_instance
                 for pair_instance in ctrl_point.contact_scene_instance.contact_pairs
-                if pair_instance.name == pair.name
+                if pair_instance.name == pair_name
             )
             for ctrl_point in self.ctrl_points
         ]
         contact_pos_at_ctrl_points = [
             pair.get_nonfixed_contact_position() for pair in pair_at_ctrl_points
         ]  # [(num_dims, 1) x num_ctrl_points]
-        return contact_pos_at_ctrl_points
+
+        return contact_pos_at_ctrl_points  # type: ignore
 
     def _constrain_contact_velocity(
         self, pair_name: str, direction: Literal["POSITIVE", "NEGATIVE"]
     ) -> None:
-        raise NotImplementedError("Not yet unit tested!")
+        contact_pos_per_ctrl_point = self._get_contact_pos_for_pair(pair_name)
+        unscaled_contact_vels = self._get_vel_from_pos_by_fe(
+            contact_pos_per_ctrl_point, dt=None
+        )
 
-        contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
-        for idx in range(self.num_ctrl_points - 1):
-            contact_velocity = (
-                contact_pos_at_ctrl_points[idx + 1][0]
-                - contact_pos_at_ctrl_points[idx][0]
-            )  # type: ignore
+        for vel in unscaled_contact_vels:
             if direction == "POSITIVE":
-                constraint = ge(contact_velocity, 0)
-            elif direction == "NEGATIVE":
-                constraint = le(contact_velocity, 0)
-            else:
-                raise ValueError("Direction must be either positive or negative")
+                constraint = ge(vel, 0).flatten()
+            else:  # "NEGATIVE"
+                constraint = le(vel, 0).flatten()
 
-            for c in constraint.flatten():
-                self.prog.AddLinearConstraint(c)
+            self.prog.AddLinearConstraint(constraint)
 
     def solve(self) -> None:
         self.result = Solve(self.prog)

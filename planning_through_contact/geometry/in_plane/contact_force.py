@@ -49,7 +49,7 @@ class ContactForce(NamedTuple):
             )
         normal_force = self.variables[0]
         normal_force_positive = normal_force >= 0
-        # FIX: This is a quick fix for the case where the friction cone is fixed. Should be cleaned up!
+        # TODO(bernhardpg): This is a quick fix for the case where the friction cone is fixed. Should be cleaned up!
         if len(self.variables) == 1:
             return np.array([normal_force_positive]).reshape([-1, 1])
         else:
