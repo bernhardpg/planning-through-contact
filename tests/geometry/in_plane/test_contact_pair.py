@@ -114,6 +114,7 @@ def test_contact_pair_point_on_face():
     for c in pair.p_BA_B.flatten():
         assert isinstance(c, sym.Variable)
 
+    # One point in each body frame
     assert len(pair.contact_points) == 2
 
     assert pair.orientation_variables.shape == (2,)
