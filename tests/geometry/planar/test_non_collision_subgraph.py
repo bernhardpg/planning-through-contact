@@ -27,7 +27,7 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
-from planning_through_contact.visualize.planar import (
+from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (

@@ -39,7 +39,7 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
 from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder import (
     SliderPusherTrajectoryFeeder,
 )
-from planning_through_contact.visualize.planar import (
+from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (

@@ -25,7 +25,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
-from planning_through_contact.visualize.planar import (
+from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
