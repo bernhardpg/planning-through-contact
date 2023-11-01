@@ -13,6 +13,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactMode,
 )
 from planning_through_contact.geometry.in_plane.contact_pair import (
+    ContactFrameConstraints,
     ContactPairDefinition,
 )
 from planning_through_contact.geometry.in_plane.contact_scene import (
@@ -54,47 +55,71 @@ class ContactSceneProgram:
             for _ in range(self.num_ctrl_points)
         ]
 
+    def _add_frame_constraints_to_prog(self, c: ContactFrameConstraints) -> None:
+        """
+        Properly adds the constraints to MathematicalProgram such that they are processed
+        as either quadratic or linear equalities (and not 'generic')
+        """
+        if c.type_A == "linear":
+            for lin_c in c.in_frame_A:
+                self.prog.AddLinearEqualityConstraint(lin_c)
+        else:  # quadratic
+            for quad_c in c.in_frame_A:
+                self.prog.AddQuadraticConstraint(
+                    convert_formula_to_lhs_expression(quad_c), 0, 0
+                )
+        if c.type_B == "linear":
+            for lin_c in c.in_frame_B:
+                self.prog.AddLinearEqualityConstraint(lin_c)
+        else:  # quadratic
+            for quad_c in c.in_frame_B:
+                self.prog.AddQuadraticConstraint(
+                    convert_formula_to_lhs_expression(quad_c), 0, 0
+                )
+
     def _setup_prog(self) -> None:
         self.prog = MathematicalProgram()
 
         for ctrl_point in self.ctrl_points:
             self.prog.AddDecisionVariables(ctrl_point.variables)
 
-            for c in ctrl_point.convex_hull_bounds:
-                self.prog.AddLinearConstraint(c)
+            self.prog.AddLinearConstraint(ctrl_point.convex_hull_bounds)
 
             if self.use_friction_cone_constraint:
                 self.prog.AddLinearConstraint(ctrl_point.friction_cone_constraints)
 
-            if self.use_force_balance_constraint:
-                for c in ctrl_point.static_equilibrium_constraints:
-                    self.prog.AddLinearConstraint(c.force_balance)
+            if self.use_so2_constraint:
+                for quadratic_const in ctrl_point.so_2_constraints:
+                    expr = convert_formula_to_lhs_expression(quadratic_const)
+                    self.prog.AddQuadraticConstraint(expr, 0, 0)
 
-            if self.use_torque_balance_constraint:
-                for c in ctrl_point.static_equilibrium_constraints:
-                    self.prog.AddConstraint(c.torque_balance)
+                # Bounding box constraints
+                self.prog.AddLinearConstraint(ctrl_point.rotation_bounds)
+
+            for (
+                force_balance,
+                torque_balance,
+                _,
+            ) in ctrl_point.static_equilibrium_constraints:
+                torque_balance = torque_balance.item()
+                if self.use_torque_balance_constraint:
+                    expr = convert_formula_to_lhs_expression(torque_balance)
+                    self.prog.AddQuadraticConstraint(expr, 0, 0)
+
+                if self.use_force_balance_constraint:
+                    self.prog.AddLinearConstraint(force_balance)
 
             if self.use_equal_contact_point_constraint:
                 for c in ctrl_point.equal_contact_point_constraints:
-                    self.prog.AddConstraint(c.in_frame_A)
-                    self.prog.AddConstraint(c.in_frame_B)
+                    self._add_frame_constraints_to_prog(c)
 
             if self.use_equal_relative_position_constraint:
                 for c in ctrl_point.equal_rel_position_constraints:
-                    self.prog.AddConstraint(c.in_frame_A)
-                    self.prog.AddConstraint(c.in_frame_B)
+                    self._add_frame_constraints_to_prog(c)
 
             if self.use_equal_and_opposite_forces_constraint:
                 for c in ctrl_point.equal_and_opposite_forces_constraints:
-                    self.prog.AddConstraint(c.in_frame_A)
-                    self.prog.AddConstraint(c.in_frame_B)
-
-            if self.use_so2_constraint:
-                for c in ctrl_point.so_2_constraints:
-                    self.prog.AddConstraint(c)
-
-                for c in ctrl_point.rotation_bounds:
-                    self.prog.AddConstraint(c)
+                    self._add_frame_constraints_to_prog(c)
 
         for pair, mode in self.contact_modes.items():
             if mode == ContactMode.ROLLING:
@@ -199,12 +224,13 @@ class ContactSceneProgram:
         return contact_pos_at_ctrl_points
 
     def _fix_contact_positions(self, pair_name: str) -> None:
+        # TODO(bernhardpg): This should only be one variable, not one for each knot point
         contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
         for idx in range(self.num_ctrl_points - 1):
             constraint = eq(
                 contact_pos_at_ctrl_points[idx], contact_pos_at_ctrl_points[idx + 1]
-            )
-            for c in constraint.flatten():
+            ).flatten()
+            for c in constraint:
                 self.prog.AddLinearConstraint(c)
 
     def _constrain_contact_velocity(
