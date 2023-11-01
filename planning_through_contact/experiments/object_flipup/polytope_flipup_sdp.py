@@ -124,7 +124,7 @@ def eval_expression_vector_with_traj_values(
     return expr_traj
 
 
-def _plot_from_sdp_relaxation(
+def plot_from_sdp_relaxation(
     x_sol,
     planner,
     contact_scene,
@@ -520,7 +520,7 @@ def plan_polytope_flipup(
     x_sol = X_sol[1:, 0]
     breakpoint()
 
-    _plot_from_sdp_relaxation(
+    plot_from_sdp_relaxation(
         x_sol,
         planner,
         contact_scene,

@@ -54,8 +54,8 @@ class ContactSceneProgram:
     def _setup_ctrl_points(self) -> None:
         # Create contact position variables to be shared between knot points for rolling contacts
         self.contact_pos_vars = {
-            name: Variable(f"{name}_lam")
-            for name, mode in self.contact_modes.items()
+            pair: Variable(f"{pair.name}_lam")
+            for pair, mode in self.contact_modes.items()
             if mode == ContactMode.ROLLING
         }
 

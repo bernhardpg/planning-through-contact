@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+import numpy.typing as npt
 import pytest
 from pydrake.solvers import (
     CommonSolverOption,
@@ -7,7 +9,9 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
+from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -24,6 +28,13 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.in_plane.contact_scene_program import (
     ContactSceneProgram,
 )
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationForce2d,
+    VisualizationPolygon2d,
+    Visualizer2d,
+)
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 DEBUG = True
@@ -32,9 +43,9 @@ DEBUG = True
 @pytest.fixture
 def contact_scene_def() -> ContactSceneDefinition:
     box = RigidBody("box", Box2d(0.15, 0.15), mass=0.1)
-    loc_box_robot = PolytopeContactLocation(ContactLocation.FACE, 3)
     robot = RigidBody("robot", Box2d(0.05, 0.03), mass=0.03, is_actuated=True)
     loc_robot = PolytopeContactLocation(ContactLocation.FACE, 2)
+    loc_box_robot = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     table = RigidBody("table", Box2d(0.5, 0.03), mass=0.03, is_actuated=True)
     loc_table = PolytopeContactLocation(ContactLocation.FACE, 0)
@@ -62,6 +73,12 @@ def test_contact_scene_program_construction_rolling(
 
     scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
     prog = scene_prob.prog
+
+    # point contact: cos_th, sin_th, f_x, f_y, c_n, c_f, rel positions (4 vals)
+    # line contact: c_n, c_f * 2
+    # x num_ctrl_points
+    # + lam for each pair
+    assert len(prog.decision_variables()) == (10 + 4) * num_ctrl_points + 2
 
     # Friction cone for each control point
     assert len(prog.linear_constraints()) == 1 * num_ctrl_points

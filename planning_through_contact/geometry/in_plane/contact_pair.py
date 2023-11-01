@@ -406,6 +406,7 @@ class PointOnFaceContact(AbstractContactPair):
             [force_def_A],
             self.friction_coeff,
             name=f"{self.name}_{self.body_A.name}",
+            contact_position_var=self.contact_pos_var,
         )
         self.contact_point_B = ContactPoint(
             self.body_B,
@@ -413,6 +414,7 @@ class PointOnFaceContact(AbstractContactPair):
             [force_def_B],
             self.friction_coeff,
             name=f"{self.name}_{self.body_B.name}",
+            contact_position_var=self.contact_pos_var,
         )
 
         # NOTE: These variables cannot be defined as part of the property, because then they will be instantiated multiple times.
