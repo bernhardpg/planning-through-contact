@@ -76,6 +76,24 @@ def test_contact_scene_program_construction_rolling(
     # 1 * 2 (dims) for equal contact points
     assert len(prog.linear_equality_constraints()) == 3 * num_ctrl_points
 
+    assert len(prog.linear_costs()) == 0
+    assert len(prog.generic_costs()) == 0
+
+    unactuated_body = scene_prob.contact_scene_def.unactuated_bodies[0]
+    assert (
+        len(scene_prob._get_sq_rot_param_dots(unactuated_body)) == num_ctrl_points - 1
+    )
+    assert len(scene_prob._get_sq_body_vels(unactuated_body)) == num_ctrl_points - 1
+
+    # two cost term per velocity, one for ang and one for trans vel
+    assert len(prog.quadratic_costs()) == 2 * (num_ctrl_points - 1)
+
+    for cost in prog.quadratic_costs():
+        # cos, sin for both knot points involved in computing vel
+        # or
+        # p_x, p_y for both knot points involved in computing vel
+        assert len(cost.variables()) == 2 * 2
+
 
 def test_contact_scene_program_construction_sliding(
     contact_scene_def: ContactSceneDefinition,

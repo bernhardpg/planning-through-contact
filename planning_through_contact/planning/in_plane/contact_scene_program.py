@@ -21,6 +21,7 @@ from planning_through_contact.geometry.in_plane.contact_scene import (
     ContactSceneCtrlPoint,
     ContactSceneDefinition,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
@@ -60,9 +61,9 @@ class ContactSceneProgram:
 
         self.ctrl_points = [
             ContactSceneCtrlPoint(
-                self.contact_scene_def, self.contact_pos_vars, self.contact_modes
+                self.contact_scene_def, self.contact_pos_vars, self.contact_modes, idx
             )
-            for _ in range(self.num_ctrl_points)
+            for idx in range(self.num_ctrl_points)
         ]
 
     def _add_frame_constraints_to_prog(self, c: ContactFrameConstraints) -> None:
@@ -139,44 +140,42 @@ class ContactSceneProgram:
             elif mode == ContactMode.SLIDING_RIGHT:
                 self._constrain_contact_velocity(pair, "POSITIVE")
 
-        # TODO: this section should be cleaned up
         if self.minimize_velocities:
             if len(self.contact_scene_def.unactuated_bodies) > 1:
-                raise NotImplementedError("Only support for one unactuated body.")
+                raise NotImplementedError(
+                    "Currently only support for one unactuated body."
+                )
 
             unactuated_body = self.contact_scene_def.unactuated_bodies[0]
-            for i in range(1, self.num_ctrl_points):
-                r_curr = (
-                    self.ctrl_points[i]
-                    .contact_scene_instance._get_rotation_to_W(unactuated_body)
-                    .flatten()
-                )
-                r_prev = (
-                    self.ctrl_points[i - 1]
-                    .contact_scene_instance._get_rotation_to_W(unactuated_body)
-                    .flatten()
-                )
-                # This uses the derivative property of the bezier curve,
-                # but neglects the scaling by d (the scalar degree)
-                r_dot = r_curr - r_prev
-                r_dot_cost = r_dot.T.dot(r_dot)
+            r_dot_sq = self._get_sq_rot_param_dots(unactuated_body)
+            for c in r_dot_sq:
+                self.prog.AddQuadraticCost(c)
 
-                p_curr = (
-                    self.ctrl_points[i]
-                    .contact_scene_instance._get_translation_to_W(unactuated_body)
-                    .flatten()
-                )
-                p_prev = (
-                    self.ctrl_points[i - 1]
-                    .contact_scene_instance._get_translation_to_W(unactuated_body)
-                    .flatten()
-                )
-                # This uses the derivative property of the bezier curve,
-                # but neglects the scaling by d (the scalar degree)
-                p_dot = p_curr - p_prev
-                p_dot_cost = p_dot.T.dot(p_dot)
+            pos_dot_sq = self._get_sq_body_vels(unactuated_body)
+            for c in pos_dot_sq:
+                self.prog.AddQuadraticCost(c)
 
-                self.prog.AddQuadraticCost(p_dot_cost + r_dot_cost)
+    def _get_sq_rot_param_dots(self, body: RigidBody) -> List[NpExpressionArray]:
+        rot_params = [
+            ctrl_point.contact_scene_instance._get_rotation_to_W(body).flatten()[
+                0:2
+            ]  # only keep one copy of sin and cos
+            for ctrl_point in self.ctrl_points
+        ]
+        rot_params_dot = self._get_vel_from_pos_by_fe(rot_params, dt=None)
+        r_dot_sq = [r_dot.T.dot(r_dot) for r_dot in rot_params_dot]
+
+        return r_dot_sq
+
+    def _get_sq_body_vels(self, body: RigidBody) -> List[NpExpressionArray]:
+        pos = [
+            ctrl_point.contact_scene_instance._get_translation_to_W(body).flatten()
+            for ctrl_point in self.ctrl_points
+        ]
+        vels = self._get_vel_from_pos_by_fe(pos, dt=None)
+        vel_sq = [vel.T.dot(vel) for vel in vels]
+
+        return vel_sq
 
     def constrain_orientation_at_ctrl_point(
         self,

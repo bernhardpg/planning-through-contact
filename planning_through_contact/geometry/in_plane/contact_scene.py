@@ -279,13 +279,14 @@ class ContactSceneCtrlPoint:
         scene_def: ContactSceneDefinition,
         contact_pos_vars: Dict[str, sym.Variable],
         contact_modes: Dict[str, ContactMode],
+        idx: int,
     ):
         """
         Instantiates a scene instance from a scene definition.
         """
 
         self.contact_scene_instance = scene_def.create_scene(
-            contact_modes, contact_pos_vars, None
+            contact_modes, contact_pos_vars, str(idx)
         )
 
     def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
