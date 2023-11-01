@@ -292,26 +292,6 @@ class ContactSceneCtrlPoint:
             contact_modes, contact_pos_vars, idx
         )
 
-    def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
-        """
-        Returns the gravitational forces for all the unactuated objects in the scene.
-        """
-        gravitational_forces = [
-            body.gravity_force_in_W
-            for body in self.contact_scene_instance.unactuated_bodies
-        ]
-        return gravitational_forces
-
-    def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
-        forces_W = []
-        for pair in self.contact_scene_instance.contact_pairs:
-            for point in pair.contact_points:
-                R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
-                forces = point.get_contact_forces()
-                f_cB_Ws = [R_WB.dot(f) for f in forces]
-                forces_W.extend(f_cB_Ws)
-        return forces_W
-
     def get_body_rot_in_world(self, body: RigidBody) -> NpExpressionArray:
         _convert_to_expr = np.vectorize(
             lambda x: sym.Expression(x) if not isinstance(x, sym.Expression) else x
@@ -336,9 +316,32 @@ class ContactSceneCtrlPoint:
         ]
         return Rs
 
-    def get_contact_positions_for_contact_point_in_world_frame(
+    def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
+        """
+        Returns the gravitational forces for all the unactuated objects in the scene.
+        """
+        gravitational_forces = [
+            body.gravity_force_in_W
+            for body in self.contact_scene_instance.unactuated_bodies
+        ]
+        return gravitational_forces
+
+    def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
+        forces_W = []
+        for pair in self.contact_scene_instance.contact_pairs:
+            for point in pair.contact_points:
+                R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
+                forces = point.get_contact_forces()
+                f_cB_Ws = [R_WB.dot(f) for f in forces]
+                forces_W.extend(f_cB_Ws)
+        return forces_W
+
+    def _get_contact_positions_for_contact_point_in_world_frame(
         self, point: ContactPoint
     ) -> List[NpExpressionArray]:
+        """
+        Get one contact position per contact force
+        """
         R_WB = self.contact_scene_instance._get_rotation_to_W(point.body)
         contact_positions = point.get_contact_positions()
         p_Bc1_Ws = [R_WB.dot(pos) for pos in contact_positions]
@@ -350,7 +353,7 @@ class ContactSceneCtrlPoint:
         pos_W = []
         for pair in self.contact_scene_instance.contact_pairs:
             for point in pair.contact_points:
-                p_Wc1_Ws = self.get_contact_positions_for_contact_point_in_world_frame(
+                p_Wc1_Ws = self._get_contact_positions_for_contact_point_in_world_frame(
                     point
                 )
                 pos_W.extend(p_Wc1_Ws)
@@ -363,7 +366,7 @@ class ContactSceneCtrlPoint:
         if normal_vec is None:
             raise ValueError("Could not get normal vector for force")
         R_WFc = self.contact_scene_instance._get_rotation_to_W(point.body)
-        p_WFc_Ws = self.get_contact_positions_for_contact_point_in_world_frame(point)
+        p_WFc_Ws = self._get_contact_positions_for_contact_point_in_world_frame(point)
         friction_cone_details = [
             FrictionConeDetails(normal_vec, R_WFc, p_WFc_W) for p_WFc_W in p_WFc_Ws
         ]

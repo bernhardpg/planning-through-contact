@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -18,9 +19,9 @@ from planning_through_contact.tools.types import (
 
 class ContactForceDefinition(NamedTuple):
     name: str
+    body: RigidBody
     friction_coeff: float
     location: PolytopeContactLocation
-    body_geometry: CollisionGeometry
     fixed_to_friction_cone_boundary: Optional[Literal["LEFT", "RIGHT"]] = None
     displacement: float = 0
 
@@ -35,6 +36,7 @@ class ContactForceDefinition(NamedTuple):
 
 class ContactForce(NamedTuple):
     name: str
+    body: RigidBody
     location: ContactLocation
     friction_coeff: float
     force: NpExpressionArray
@@ -83,7 +85,7 @@ class ContactForce(NamedTuple):
             (
                 normal_vec,
                 _,
-            ) = force_def.body_geometry.get_norm_and_tang_vecs_from_location(
+            ) = force_def.body.geometry.get_norm_and_tang_vecs_from_location(
                 force_def.location
             )
         else:
@@ -92,6 +94,7 @@ class ContactForce(NamedTuple):
 
         return cls(
             force_def.name,
+            force_def.body,
             force_def.location.pos,
             force_def.friction_coeff,
             contact_force,
@@ -104,7 +107,7 @@ class ContactForce(NamedTuple):
     def _create_force_position(
         force_def: ContactForceDefinition, contact_point_position: NpExpressionArray
     ) -> NpExpressionArray:
-        vertices = force_def.body_geometry.get_proximate_vertices_from_location(
+        vertices = force_def.body.geometry.get_proximate_vertices_from_location(
             force_def.location
         )
         temp = vertices[1] - vertices[0]
@@ -123,7 +126,7 @@ class ContactForce(NamedTuple):
             (
                 normal_vec,
                 tangent_vec,
-            ) = force_def.body_geometry.get_norm_and_tang_vecs_from_location(
+            ) = force_def.body.geometry.get_norm_and_tang_vecs_from_location(
                 force_def.location
             )
 

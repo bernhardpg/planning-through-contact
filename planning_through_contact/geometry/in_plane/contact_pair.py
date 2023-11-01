@@ -257,18 +257,18 @@ class FaceOnFaceContact(AbstractContactPair):
 
         left_force = ContactForceDefinition(
             f"{self.name}_{self.body_A.name}_left",
+            self.body_A,
             self.friction_coeff,
             self.body_A_contact_location,
-            self.body_A.geometry,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
             displacement=-self.shortest_face_length / 2,
         )
 
         right_force = ContactForceDefinition(
             f"{self.name}_{self.body_A.name}_right",
+            self.body_A,
             self.friction_coeff,
             self.body_A_contact_location,
-            self.body_A.geometry,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
             displacement=self.shortest_face_length / 2,
         )
@@ -389,17 +389,17 @@ class PointOnFaceContact(AbstractContactPair):
 
         force_def_A = ContactForceDefinition(
             f"{self.name}_{self.body_A.name}",
+            self.body_A,
             self.friction_coeff,
             self.body_A_contact_location,
-            self.body_A.geometry,
             fixed_to_friction_cone_boundary=fix_friction_cone_A,
         )
 
         force_def_B = ContactForceDefinition(
             f"{self.name}_{self.body_B.name}",
+            self.body_B,
             self.friction_coeff,
             self.body_B_contact_location,
-            self.body_B.geometry,
             fixed_to_friction_cone_boundary=fix_friction_cone_B,
         )
 

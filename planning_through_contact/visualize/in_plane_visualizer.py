@@ -9,6 +9,7 @@ from planning_through_contact.planning.in_plane.in_plane_trajectory import (
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
     Visualizer2d,
@@ -44,13 +45,20 @@ def visualize_in_plane_manipulation_plan(
         for body, color in zip(bodies, body_colors)
     ]
 
+    viz_contact_forces = [
+        VisualizationForce2d(np.hstack(pos).T, CONTACT_COLOR, np.hstack(force).T)
+        for pos, force in zip(
+            traj.contact_positions.values(), traj.contact_forces.values()
+        )
+    ]
+
     viz = Visualizer2d(PLOT_SCALE=1000, FORCE_SCALE=0.25, POINT_RADIUS=0.005)
 
     frames_per_sec = 1
 
     viz.visualize(
         [] + viz_com_points,
-        [],
+        viz_contact_forces,
         viz_polygons,
         frames_per_sec,
         None,
