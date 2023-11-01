@@ -246,6 +246,9 @@ class ContactScene:
     def get_squared_forces_for_bodies(
         self, only_unactuated_bodies: bool = False
     ) -> sym.Expression:
+        # NOTE: The code is not unit tested, as it is not currently used. Kept around in case it will become useful.
+        raise NotImplementedError("Note: This is not yet tested!")
+
         bodies_to_use = (
             self.unactuated_bodies if only_unactuated_bodies else self.rigid_bodies
         )

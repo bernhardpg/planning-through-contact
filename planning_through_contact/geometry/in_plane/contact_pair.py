@@ -545,9 +545,8 @@ class PointOnFaceContact(AbstractContactPair):
         return Hyperplane(a, b)
 
     def create_non_penetration_cut(self) -> sym.Formula:
-        raise NotImplementedError("Note: This is not yet tested!")
-
         # NOTE: The code is not unit tested, as it is not currently used. Kept around in case it will become useful.
+        raise NotImplementedError("Note: This is not yet tested!")
 
         vertex_contact = self._get_contact_point_of_type(ContactLocation.VERTEX)
         contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
