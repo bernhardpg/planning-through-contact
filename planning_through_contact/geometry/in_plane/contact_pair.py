@@ -462,16 +462,16 @@ class PointOnFaceContact(AbstractContactPair):
         p_Bc_B = self.contact_point_B.contact_position
 
         p_Bc_A = self.R_AB.dot(p_Bc_B)
-        eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A)
+        eq_contact_point_in_A = eq(p_Ac_A, self.p_AB_A + p_Bc_A).flatten()
 
         p_Ac_B = self.R_AB.T.dot(p_Ac_A)
-        eq_contact_point_in_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B)
+        eq_contact_point_in_B = eq(p_Bc_B, self.p_BA_B + p_Ac_B).flatten()
 
         return ContactFrameConstraints(eq_contact_point_in_A, eq_contact_point_in_B)
 
     def create_equal_rel_position_constraints(self) -> ContactFrameConstraints:
-        rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B))
-        rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A))
+        rel_pos_equal_in_A = eq(self.p_AB_A, -self.R_AB.dot(self.p_BA_B)).flatten()
+        rel_pos_equal_in_B = eq(self.p_BA_B, -self.R_AB.T.dot(self.p_AB_A)).flatten()
 
         return ContactFrameConstraints(rel_pos_equal_in_A, rel_pos_equal_in_B)
 
@@ -479,8 +479,8 @@ class PointOnFaceContact(AbstractContactPair):
         f_c_A = self.contact_point_A.contact_force
         f_c_B = self.contact_point_B.contact_force
 
-        equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B))
-        equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A))
+        equal_and_opposite_in_A = eq(f_c_A, -self.R_AB.dot(f_c_B)).flatten()
+        equal_and_opposite_in_B = eq(f_c_B, -self.R_AB.T.dot(f_c_A)).flatten()
 
         return ContactFrameConstraints(equal_and_opposite_in_A, equal_and_opposite_in_B)
 

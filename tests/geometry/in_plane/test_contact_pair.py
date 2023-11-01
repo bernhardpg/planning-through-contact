@@ -132,8 +132,8 @@ def test_contact_pair_point_on_face():
 
     eq_point_cs = pair.create_equal_contact_point_constraints()
     assert isinstance(eq_point_cs, ContactFrameConstraints)
-    assert eq_point_cs.in_frame_A.shape == (2, 1)
-    assert eq_point_cs.in_frame_B.shape == (2, 1)
+    assert eq_point_cs.in_frame_A.shape == (2,)
+    assert eq_point_cs.in_frame_B.shape == (2,)
 
     # lam, cos, sin and either p_AB x or y
     assert_num_vars_in_formula_array(eq_point_cs.in_frame_A, 4)
@@ -142,8 +142,8 @@ def test_contact_pair_point_on_face():
 
     eq_rel_pos_cs = pair.create_equal_rel_position_constraints()
     assert isinstance(eq_rel_pos_cs, ContactFrameConstraints)
-    assert eq_rel_pos_cs.in_frame_A.shape == (2, 1)
-    assert eq_rel_pos_cs.in_frame_B.shape == (2, 1)
+    assert eq_rel_pos_cs.in_frame_A.shape == (2,)
+    assert eq_rel_pos_cs.in_frame_B.shape == (2,)
 
     # each row will contain 5 variables:
     # p_AB x or y, cos, sin, p_BA x and y
@@ -153,8 +153,8 @@ def test_contact_pair_point_on_face():
 
     eq_force_cs = pair.create_equal_and_opposite_forces_constraint()
     assert isinstance(eq_force_cs, ContactFrameConstraints)
-    assert eq_force_cs.in_frame_A.shape == (2, 1)
-    assert eq_force_cs.in_frame_B.shape == (2, 1)
+    assert eq_force_cs.in_frame_A.shape == (2,)
+    assert eq_force_cs.in_frame_B.shape == (2,)
 
     # each row will contain 5 variables:
     # c_n or c_f, cos, sin, f_x and f_y
