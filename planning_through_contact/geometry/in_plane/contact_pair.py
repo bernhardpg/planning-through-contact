@@ -55,12 +55,12 @@ class PointContactConstraints(NamedTuple):
     friction_cone: NpFormulaArray
     so_2: sym.Formula
     relaxed_so_2: sym.Formula
-    non_penetration_cut: sym.Formula
     equal_contact_points: ContactFrameConstraints
     equal_and_opposite_forces: ContactFrameConstraints
     equal_relative_positions: ContactFrameConstraints
     rotation_bounds: NpFormulaArray
     convex_hull_bounds: NpFormulaArray
+    non_penetration_cut: Optional[sym.Formula]
 
 
 class LineContactConstraints(NamedTuple):
@@ -547,6 +547,8 @@ class PointOnFaceContact(AbstractContactPair):
     def create_non_penetration_cut(self) -> sym.Formula:
         raise NotImplementedError("Note: This is not yet tested!")
 
+        # NOTE: The code is not unit tested, as it is not currently used. Kept around in case it will become useful.
+
         vertex_contact = self._get_contact_point_of_type(ContactLocation.VERTEX)
         contact_point: npt.NDArray[np.float64] = vertex_contact.contact_position  # type: ignore
         if not contact_point.dtype == np.float64:
@@ -582,12 +584,12 @@ class PointOnFaceContact(AbstractContactPair):
             self.create_friction_cone_constraints(),
             self.create_so2_constraint(),
             self.create_relaxed_so2_constraint(),
-            self.create_non_penetration_cut(),
             self.create_equal_contact_point_constraints(),
             self.create_equal_and_opposite_forces_constraint(),
             self.create_equal_rel_position_constraints(),
             self.create_rotation_bounds(),
             self.create_convex_hull_bounds(),
+            None,  # We are so far not using non-penetration cuts
         )
 
     @property

@@ -12,6 +12,7 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactPairDefinition,
     FaceOnFaceContact,
     LineContactConstraints,
+    PointContactConstraints,
     PointOnFaceContact,
 )
 from planning_through_contact.geometry.in_plane.contact_point import ContactPoint
@@ -183,3 +184,6 @@ def test_contact_pair_point_on_face():
     vertex_point = pair._get_contact_point_of_type(ContactLocation.VERTEX)
     for n in vertex_point.contact_position.flatten():
         assert isinstance(n, float)
+
+    cs = pair.create_constraints()
+    assert isinstance(cs, PointContactConstraints)
