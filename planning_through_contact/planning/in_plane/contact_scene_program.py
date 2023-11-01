@@ -205,6 +205,8 @@ class ContactSceneProgram:
         """
         Constraints position by fixing position along contact face. lam_target should take values in the range [0,1]
         """
+        raise NotImplementedError("Not yet unit tested!")
+
         if lam_target > 1.0 or lam_target < 0.0:
             raise ValueError("lam_target must be in the range [0, 1]")
 
@@ -238,6 +240,8 @@ class ContactSceneProgram:
     def _constrain_contact_velocity(
         self, pair_name: str, direction: Literal["POSITIVE", "NEGATIVE"]
     ) -> None:
+        raise NotImplementedError("Not yet unit tested!")
+
         contact_pos_at_ctrl_points = self._get_contact_pos_for_pair(pair_name)
         for idx in range(self.num_ctrl_points - 1):
             contact_velocity = (

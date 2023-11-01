@@ -1,0 +1,110 @@
+import pytest
+
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    ContactLocation,
+    ContactMode,
+    PolytopeContactLocation,
+)
+from planning_through_contact.geometry.in_plane.contact_pair import (
+    ContactPairDefinition,
+)
+from planning_through_contact.geometry.in_plane.contact_scene import (
+    ContactSceneDefinition,
+)
+from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.planning.in_plane.contact_scene_program import (
+    ContactSceneProgram,
+)
+
+
+@pytest.fixture
+def contact_scene_def() -> ContactSceneDefinition:
+    box = RigidBody("box", Box2d(0.15, 0.15), mass=0.1)
+    loc_box_robot = PolytopeContactLocation(ContactLocation.FACE, 3)
+    robot = RigidBody("robot", Box2d(0.05, 0.03), mass=0.03, is_actuated=True)
+    loc_robot = PolytopeContactLocation(ContactLocation.FACE, 2)
+
+    table = RigidBody("table", Box2d(0.5, 0.03), mass=0.03, is_actuated=True)
+    loc_table = PolytopeContactLocation(ContactLocation.FACE, 0)
+    loc_box_table = PolytopeContactLocation(ContactLocation.VERTEX, 2)
+
+    face_contact = ContactPairDefinition(
+        "box_robot", box, loc_box_robot, robot, loc_robot
+    )
+    point_contact = ContactPairDefinition(
+        "box_table", box, loc_box_table, table, loc_table
+    )
+
+    scene_def = ContactSceneDefinition(
+        [table, box, robot],
+        [point_contact, face_contact],
+        table,
+    )
+    return scene_def
+
+
+def test_contact_scene_program_construction_rolling(
+    contact_scene_def: ContactSceneDefinition,
+):
+    num_ctrl_points = 4
+    contact_modes = {
+        "box_robot": ContactMode.ROLLING,
+        "box_table": ContactMode.ROLLING,
+    }
+
+    scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
+    prog = scene_prob.prog
+
+    # Friction cone for each control point
+    assert len(prog.linear_constraints()) == 1 * num_ctrl_points
+
+    # one for lams, one for trig terms, for each control point
+    assert len(prog.bounding_box_constraints()) == 2 * num_ctrl_points
+
+    # Should not be any generic constraints
+    assert len(prog.generic_constraints()) == 0
+
+    # 1 * for so(2) constraint
+    # 1 * for torque balance for each control point
+    # 2 (dims) * equal contact points for each control point
+    # 2 * 2 (dims) * equal rel pos for each control point
+    # 2 * 2 (dims) * equal opposite forces for each control point
+    assert len(prog.quadratic_constraints()) == 12 * num_ctrl_points
+
+    # 1 * force balance for each control point
+    # 1 * 2 (dims) for equal contact points
+    assert len(prog.linear_equality_constraints()) == 3 * num_ctrl_points
+
+
+def test_contact_scene_program_construction_sliding(
+    contact_scene_def: ContactSceneDefinition,
+):
+    num_ctrl_points = 4
+    contact_modes = {
+        "box_robot": ContactMode.ROLLING,
+        "box_table": ContactMode.SLIDING_LEFT,
+    }
+
+    scene_prob = ContactSceneProgram(contact_scene_def, num_ctrl_points, contact_modes)
+    prog = scene_prob.prog
+
+    # Friction cone for each control point
+    assert len(prog.linear_constraints()) == 1 * num_ctrl_points
+
+    # one for lams, one for trig terms, for each control point
+    assert len(prog.bounding_box_constraints()) == 2 * num_ctrl_points
+
+    # Should not be any generic constraints
+    assert len(prog.generic_constraints()) == 0
+
+    # 1 * for so(2) constraint
+    # 1 * for torque balance for each control point
+    # 2 (dims) * equal contact points for each control point
+    # 2 * 2 (dims) * equal rel pos for each control point
+    # 2 * 2 (dims) * equal opposite forces for each control point
+    assert len(prog.quadratic_constraints()) == 12 * num_ctrl_points
+
+    # 1 * force balance for each control point
+    # 1 * 2 (dims) for equal contact points
+    assert len(prog.linear_equality_constraints()) == 12 * num_ctrl_points
