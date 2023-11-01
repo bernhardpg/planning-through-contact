@@ -307,25 +307,6 @@ class ContactSceneCtrlPoint:
         pos_W = _convert_to_expr(p_WB)
         return pos_W
 
-    # TODO remove
-    def get_contact_point_orientations(self) -> List[NpExpressionArray]:
-        Rs = [
-            self.contact_scene_instance._get_rotation_to_W(point.body)
-            for pair in self.contact_scene_instance.contact_pairs
-            for point in pair.contact_points
-        ]
-        return Rs
-
-    def get_gravitational_forces_in_world_frame(self) -> List[npt.NDArray[np.float64]]:
-        """
-        Returns the gravitational forces for all the unactuated objects in the scene.
-        """
-        gravitational_forces = [
-            body.gravity_force_in_W
-            for body in self.contact_scene_instance.unactuated_bodies
-        ]
-        return gravitational_forces
-
     def get_contact_forces_in_world_frame(self) -> List[NpExpressionArray]:
         forces_W = []
         for pair in self.contact_scene_instance.contact_pairs:

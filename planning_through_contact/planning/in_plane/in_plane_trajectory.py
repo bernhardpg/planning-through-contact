@@ -81,6 +81,7 @@ class InPlaneTrajectory:
     body_rotations: Dict[RigidBody, List[npt.NDArray[np.float64]]]
     contact_forces: Dict[str, List[npt.NDArray[np.float64]]]
     contact_positions: Dict[str, List[npt.NDArray[np.float64]]]
+    gravity_forces: Dict[RigidBody, List[npt.NDArray[np.float64]]]
 
     @classmethod
     def create_from_result(
@@ -113,8 +114,18 @@ class InPlaneTrajectory:
             for idx in range(num_contact_forces)
         }  # one for each force
 
+        gravity_forces = {
+            body: [body.gravity_force_in_W] * problem.num_ctrl_points
+            for body in problem.contact_scene_def.unactuated_bodies
+        }
+
         return cls(
-            bodies, body_positions, body_rotations, contact_forces, contact_positions
+            bodies,
+            body_positions,
+            body_rotations,
+            contact_forces,
+            contact_positions,
+            gravity_forces,
         )
 
     # NOTE: Only used for legacy plotter

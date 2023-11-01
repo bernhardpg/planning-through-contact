@@ -52,13 +52,23 @@ def visualize_in_plane_manipulation_plan(
         )
     ]
 
+    viz_gravity_forces = [
+        VisualizationForce2d(
+            np.hstack(traj.body_positions[body]).T,
+            CONTACT_COLOR,
+            np.hstack(traj.gravity_forces[body]).T,
+        )
+        for body in problem.contact_scene_def.unactuated_bodies
+    ]
+
+    # TODO: A bit hacky visualization of gravity
     viz = Visualizer2d(PLOT_SCALE=1000, FORCE_SCALE=0.25, POINT_RADIUS=0.005)
 
     frames_per_sec = 1
 
     viz.visualize(
         [] + viz_com_points,
-        viz_contact_forces,
+        viz_contact_forces + viz_gravity_forces,
         viz_polygons,
         frames_per_sec,
         None,
