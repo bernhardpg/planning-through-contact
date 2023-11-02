@@ -14,6 +14,12 @@ class ContactLocation(Enum):
     VERTEX = 2
 
 
+class ContactMode(Enum):
+    ROLLING = 1
+    SLIDING_LEFT = 2
+    SLIDING_RIGHT = 3
+
+
 # TODO: move this?
 class PolytopeContactLocation(NamedTuple):
     pos: ContactLocation
@@ -82,7 +88,7 @@ class CollisionGeometry(ABC):
     def from_drake(cls, drake_shape: DrakeShape):
         pass
 
-    def get_shortest_vec_from_com_to_face(
+    def get_shortest_vec_from_com_to_loc(
         self, location: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
         v1, v2 = self.get_proximate_vertices_from_location(location)

@@ -10,7 +10,7 @@ from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.primitives import VectorLog
 
 from planning_through_contact.geometry.bezier import BezierCurve
-from planning_through_contact.geometry.two_d.contact.contact_pair_2d import (
+from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
 

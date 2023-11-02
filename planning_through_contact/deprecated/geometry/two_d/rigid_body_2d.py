@@ -5,8 +5,10 @@ from typing import List, NamedTuple, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 
+from planning_through_contact.deprecated.geometry.two_d.contact.types import (
+    ContactLocation,
+)
 from planning_through_contact.geometry.hyperplane import Hyperplane
-from planning_through_contact.geometry.two_d.contact.types import ContactLocation
 
 GRAV_ACC = 9.81
 

@@ -4,44 +4,76 @@ from typing import List, Tuple
 import numpy as np
 import numpy.typing as npt
 
+from planning_through_contact.deprecated.geometry.two_d.contact.types import (
+    ContactLocation,
+)
+from planning_through_contact.deprecated.geometry.two_d.rigid_body_2d import (
+    PolytopeContactLocation,
+    RigidBody2d,
+)
 from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
-)
-from planning_through_contact.geometry.two_d.contact.types import ContactLocation
-from planning_through_contact.geometry.two_d.rigid_body_2d import (
-    PolytopeContactLocation,
-    RigidBody2d,
 )
 from planning_through_contact.geometry.utilities import normalize_vec
 
 
 @dataclass
-class EquilateralPolytope2d(RigidBody2d):
-    vertex_distance: float  # distance from COM to vertices
-    num_vertices: int
+class TPusher(RigidBody2d):
+    scale: float = 0.05
 
-    # First vertex starts at pi / 2, i.e. along the positive y-axis
-    # The vertices and faces are ordered similarly to the Box2d class, i.e. counter-clockwise
-
-    @property
-    def corner_angle(self) -> float:
-        return 2 * np.pi / self.num_vertices
-
-    @property
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
-        make_ray = lambda th: np.array([[np.cos(th)], [np.sin(th)]])
-        wrap_around = lambda th: th % (np.pi * 2)
-
-        # First vertex starts at pi / 2, i.e. along the positive y-axis
-        start_angle = np.pi / 2
-        angles = [
-            wrap_around(
-                start_angle - self.corner_angle * idx
-            )  # NOTE: minus because of counter-clockwise ordering
-            for idx in range(self.num_vertices)
+    def __post_init__(self):
+        self.vertices = [
+            np.expand_dims(np.array(v), 1) * self.scale
+            for v in reversed(
+                [
+                    [1, -4],
+                    [1, 0],
+                    [3, 0],
+                    [3, 2],
+                    [-3, 2],
+                    [-3, 0],
+                    [-1, 0],
+                    [-1, -4],
+                ]
+            )
         ]
-        return [make_ray(th) * self.vertex_distance for th in angles]
+
+        self.num_vertices = len(self.vertices)
+
+    def get_faces_for_collision_free_set(
+        self, location: PolytopeContactLocation
+    ) -> List[Hyperplane]:
+        """
+        Gets the faces that defines the collision free sets outside of each face.
+        This function is hand designed for the object geometry!
+        """
+        if not location.pos == ContactLocation.FACE:
+            raise NotImplementedError(
+                "Can only find faces for collisionfree regions for faces."
+            )
+        else:
+            face_idx = location.idx
+            if face_idx == 0:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 1:
+                return [self.faces[0], self.faces[1]]  # normals pointing outwards
+            elif face_idx == 2:
+                return [self.faces[2]]
+            elif face_idx == 3:
+                return [self.faces[3]]
+            elif face_idx == 4:
+                return [self.faces[4]]
+            elif face_idx == 5:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 6:
+                return [self.faces[5], self.faces[6]]
+            elif face_idx == 7:
+                return [self.faces[7]]
+            else:
+                raise NotImplementedError("Currently only face 0 is supported")
+
+    # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
 
     @property
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
@@ -157,10 +189,4 @@ class EquilateralPolytope2d(RigidBody2d):
             )
 
     def get_face_length(self, location: PolytopeContactLocation) -> float:
-        if not location.pos == ContactLocation.FACE:
-            raise ValueError("Can only get face length for a face")
-
-        face_length = (
-            self.vertex_distance * np.cos(np.pi / 2 - self.corner_angle / 2) * 2
-        )
-        return face_length
+        raise NotImplementedError("Face length not yet implemented for the TPusher.")
