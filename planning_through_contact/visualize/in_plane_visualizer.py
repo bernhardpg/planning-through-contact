@@ -77,15 +77,15 @@ def visualize_in_plane_manipulation_plan(
     ) -> List[npt.NDArray[np.float64]]:
         return [fc.R_WFc for fc in cone_ctrl_points]  # type: ignore
 
-    viz_friction_cones = [
-        VisualizationCone2d.from_ctrl_points(
-            np.hstack(_get_fc_positions(fc)),
-            _get_fc_rotations(fc),
-            fc[0].normal_vec_local,
-            np.arctan(fc[0].friction_coeff),
-        )
-        for fc in traj.friction_cones.values()
-    ]
+    # viz_friction_cones = [
+    #     VisualizationCone2d.from_ctrl_points(
+    #         np.hstack(_get_fc_positions(fc)),
+    #         _get_fc_rotations(fc),
+    #         fc[0].normal_vec_local,
+    #         np.arctan(fc[0].friction_coeff),
+    #     )
+    #     for fc in traj.friction_cones.values()
+    # ]
 
     # viz_friction_cones_mirrored = [
     #     VisualizationCone2d.from_ctrl_points(
@@ -109,7 +109,7 @@ def visualize_in_plane_manipulation_plan(
     viz.visualize(
         [] + viz_com_points,
         viz_contact_forces + viz_gravity_forces,
-        viz_polygons + viz_friction_cones,
+        viz_polygons,
         frames_per_sec,
         None,
     )

@@ -34,7 +34,7 @@ def test_contact_force_face_rolling(box_fric_coeff_lam):
     loc = PolytopeContactLocation(ContactLocation.FACE, 0)
     p_Bc: NpExpressionArray = box.geometry.get_p_Bc_from_lam(lam, loc)  # type: ignore
 
-    force_def = ContactForceDefinition("test_force", mu, loc, box.geometry)
+    force_def = ContactForceDefinition("test_force", box, mu, loc)
 
     force = ContactForce.from_definition(force_def, p_Bc)
 
@@ -58,7 +58,7 @@ def test_contact_force_face_sticking(box_fric_coeff_lam):
     p_Bc: NpExpressionArray = box.geometry.get_p_Bc_from_lam(lam, loc)  # type: ignore
 
     force_def = ContactForceDefinition(
-        "test_force", mu, loc, box.geometry, fixed_to_friction_cone_boundary="LEFT"
+        "test_force", box, mu, loc, fixed_to_friction_cone_boundary="LEFT"
     )
 
     force = ContactForce.from_definition(force_def, p_Bc)
@@ -85,7 +85,7 @@ def test_contact_force_vertex(box_fric_coeff_lam):
     loc = PolytopeContactLocation(ContactLocation.VERTEX, 0)
     p_Bc = box.geometry.vertices[loc.idx]
 
-    force_def = ContactForceDefinition("test_force", mu, loc, box.geometry)
+    force_def = ContactForceDefinition("test_force", box, mu, loc)
 
     force = ContactForce.from_definition(force_def, p_Bc)
 

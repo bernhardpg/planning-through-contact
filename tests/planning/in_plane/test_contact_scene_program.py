@@ -40,7 +40,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 )
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
-DEBUG = True
+DEBUG = False
 
 
 @pytest.fixture

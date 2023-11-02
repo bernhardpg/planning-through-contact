@@ -25,7 +25,7 @@ def mu_box():
 def test_contact_point_face_rolling(mu_box):
     mu, box = mu_box
     loc = PolytopeContactLocation(ContactLocation.FACE, 0)
-    force_def = ContactForceDefinition(f"test_force", mu, loc, box.geometry)
+    force_def = ContactForceDefinition(f"test_force", box, mu, loc)
 
     cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
 
@@ -52,7 +52,7 @@ def test_contact_point_face_sticking(mu_box):
     mu, box = mu_box
     loc = PolytopeContactLocation(ContactLocation.FACE, 0)
     force_def = ContactForceDefinition(
-        f"test_force", mu, loc, box.geometry, fixed_to_friction_cone_boundary="RIGHT"
+        f"test_force", box, mu, loc, fixed_to_friction_cone_boundary="RIGHT"
     )
 
     cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
@@ -79,12 +79,8 @@ def test_contact_point_face_sticking(mu_box):
 def test_contact_point_two_forces(mu_box):
     mu, box = mu_box
     loc = PolytopeContactLocation(ContactLocation.FACE, 0)
-    f1_def = ContactForceDefinition(
-        f"test_force_1", mu, loc, box.geometry, displacement=0.02
-    )
-    f2_def = ContactForceDefinition(
-        f"test_force_2", mu, loc, box.geometry, displacement=-0.02
-    )
+    f1_def = ContactForceDefinition(f"test_force_1", box, mu, loc, displacement=0.02)
+    f2_def = ContactForceDefinition(f"test_force_2", box, mu, loc, displacement=-0.02)
     cp = ContactPoint(box, loc, [f1_def, f2_def], mu, name=f"test_contact_point")
 
     assert len(cp.contact_forces) == 2
@@ -102,7 +98,7 @@ def test_contact_point_two_forces(mu_box):
 def test_contact_point_vertex_rolling(mu_box):
     mu, box = mu_box
     loc = PolytopeContactLocation(ContactLocation.VERTEX, 0)
-    force_def = ContactForceDefinition(f"test_force", mu, loc, box.geometry)
+    force_def = ContactForceDefinition(f"test_force", box, mu, loc)
 
     cp = ContactPoint(box, loc, [force_def], mu, name=f"test_contact_point")
 
