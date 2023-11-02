@@ -24,6 +24,9 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.deprecated.geometry.two_d.equilateral_polytope_2d import (
+    EquilateralPolytope2d,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -37,9 +40,6 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 )
 from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
-    EquilateralPolytope2d,
-)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,

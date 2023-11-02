@@ -1,15 +1,10 @@
 from typing import Any, Dict, List, Literal, Optional, TypeVar
 
-import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge, le
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.solvers import MathematicalProgram
 from pydrake.symbolic import Variable
 
-from planning_through_contact.convex_relaxation.mccormick import (
-    add_bilinear_constraints_to_prog,
-    add_bilinear_frame_constraints_to_prog,
-)
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactMode,
 )
@@ -23,7 +18,7 @@ from planning_through_contact.geometry.in_plane.contact_scene import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
-from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 
 

@@ -7,11 +7,11 @@ from typing import List, Optional
 import numpy as np
 import numpy.typing as npt
 
+from planning_through_contact.deprecated.geometry.two_d.rigid_body_2d import RigidBody2d
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
 )
-from planning_through_contact.geometry.two_d.rigid_body_2d import RigidBody2d
 from planning_through_contact.visualize.colors import COLORS, RGB
 
 
