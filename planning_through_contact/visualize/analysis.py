@@ -192,6 +192,9 @@ def plot_cos_sine_trajs(rot_trajs: npt.NDArray[np.float64]):  # (num_steps, 2)
     for i in range(rot_trajs.shape[0]):
         ax.annotate(str(i), (rot_trajs[i, 0] + OFFSET, rot_trajs[i, 1]))  # type: ignore
 
+    # ax.plot([-0.535, 0.935], [-0.845, -0.355])
+    ax.plot([-0.985, 0.685], [-0.172, -0.728])
+
     plt.show()
 
 
