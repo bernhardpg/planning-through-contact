@@ -1,9 +1,15 @@
 import numpy as np
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.math import eq, le
+from pydrake.solvers import (
+    CommonSolverOption,
+    MakeSemidefiniteRelaxation,
+    MathematicalProgram,
+    Solve,
+    SolverOptions,
+)
 
-from convex_relaxation.sdp import create_sdp_relaxation
-from visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 NUM_CTRL_POINTS = 8
 NUM_DIMS = 2
@@ -34,8 +40,8 @@ if minimize_squares:
         prog.AddCost(r_i.T.dot(r_i))
 
 # Initial conditions
-th_initial = 0
-th_final = np.pi - 0.2
+th_initial = np.pi
+th_final = 0 + 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -48,8 +54,21 @@ for c in initial_cond:
 for c in final_cond:
     prog.AddConstraint(c)
 
+A = np.array([[1, -3], [-2, -6]])
+b = np.array([2, 3])
+
+for var in r.T:
+    consts = le(A.dot(var), b)
+    prog.AddConstraint(consts)
+
 # Solve SDP relaxation
 relaxed_prog, X, mon_basis = create_sdp_relaxation(prog)
+# relaxed_prog = MakeSemidefiniteRelaxation(prog)
+print("Finished formulating SDP relaxation")
+
+# solver_options = SolverOptions()
+# solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
 result = Solve(relaxed_prog)
 assert result.is_success()
 print(f"Cost: {result.get_optimal_cost()}")
@@ -61,6 +80,7 @@ num_nonzero_eigvals = len(
     [val for val in np.linalg.eigvals(X_val) if np.abs(val) >= tol]
 )
 print(f"Rank of X: {num_nonzero_eigvals}")
+print(f"cost: {result.get_optimal_cost()}")
 
 x_val = X_val[:, 0]
 
@@ -69,5 +89,4 @@ r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
 # TODO continue here
 
-plot_cos_sine_trajs(r_val.T)
-breakpoint()
+plot_cos_sine_trajs(r_val.T, A, b)

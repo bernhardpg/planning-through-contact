@@ -163,7 +163,11 @@ FORCE_REF = 10  # Current max force
 TORQUE_REF = FORCE_REF * DISTANCE_REF  # Almost max torque
 
 
-def plot_cos_sine_trajs(rot_trajs: npt.NDArray[np.float64]):  # (num_steps, 2)
+def plot_cos_sine_trajs(
+    rot_trajs: npt.NDArray[np.float64],
+    A: Optional[npt.NDArray[np.float64]] = None,
+    b: Optional[npt.NDArray[np.float64]] = None,
+):  # (num_steps, 2)
     """
     @param rot_trajs: Matrix of size (num_steps, 2), where the first col is
     cosines and the second col is sines.
@@ -182,15 +186,39 @@ def plot_cos_sine_trajs(rot_trajs: npt.NDArray[np.float64]):  # (num_steps, 2)
         marker="o",
         label="Ctrl points",
     )
-    ax.set_aspect("equal", "box")  # type: ignore
-    ax.set_title("Effect of relaxing SO(2) constraints")  # type: ignore
-    ax.set_xlabel(r"$\cos{\theta}$")  # type: ignore
-    ax.set_ylabel(r"$\sin{\theta}$")  # type: ignore
-    ax.legend()  # type: ignore
 
     OFFSET = 0.1
     for i in range(rot_trajs.shape[0]):
         ax.annotate(str(i), (rot_trajs[i, 0] + OFFSET, rot_trajs[i, 1]))  # type: ignore
+
+    # Plot start and end
+    plt.plot(
+        rot_trajs[0, 0], rot_trajs[0, 1], "go", label="start"
+    )  # 'ro' indicates red color and circle marker
+    plt.plot(rot_trajs[-1, 0], rot_trajs[-1, 1], "ro", label="target")
+
+    ax.set_aspect("equal", "box")  # type: ignore
+    ax.set_title("Effect of relaxing SO(2) constraints")  # type: ignore
+    ax.set_xlabel(r"$\cos{\theta}$")  # type: ignore
+    ax.set_ylabel(r"$\sin{\theta}$")  # type: ignore
+    ax.legend(loc="lower left")  # type: ignore
+
+    if A is not None and b is not None:
+        x_values = np.linspace(-1.5, 1.5, 400)
+
+        # Plot each line
+        for i in range(A.shape[0]):
+            if A[i, 1] != 0:
+                # Solve for y
+                y_values = (b[i] - A[i, 0] * x_values) / A[i, 1]
+            else:
+                # If A[i, 1] is zero, it's a vertical line
+                x_values_line = np.full_like(x_values, b[i] / A[i, 0])
+                y_values = x_values
+                ax.plot(x_values_line, y_values, label=f"Line {i+1}")
+                continue
+
+            ax.plot(x_values, y_values, label=f"Line {i+1}")
 
     plt.show()
 

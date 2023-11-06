@@ -4,9 +4,14 @@ import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 
-from convex_relaxation.deprecated.sdp_deprecated import SdpRelaxation
-from geometry.box import Box2d, construct_2d_plane_from_points
-from geometry.utilities import cross_2d
+from planning_through_contact.convex_relaxation.deprecated.sdp_deprecated import (
+    SdpRelaxation,
+)
+from planning_through_contact.geometry.collision_geometry.box_2d import (
+    Box2d,
+    construct_2d_plane_from_points,
+)
+from planning_through_contact.geometry.utilities import cross_2d
 
 
 def test_sdp_relaxation():
@@ -67,7 +72,7 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
     use_relaxation = True
     from sympy import And, Eq, plot_implicit, symbols
 
-    BOX_WIDTH = 3
+    BOX_WIDTH = 2
     BOX_HEIGHT = 2
     BOX_MASS = 1
 
@@ -84,18 +89,18 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
     so_2_constraint = 1 - cos_th**2 - sin_th**2
 
     # Fix a box corner
-    p_Bm4 = box.p4
-    p_Wm4 = np.array([0, 0]).reshape((-1, 1))
+    p_Bm4 = box.vertices[3]
+    p_Wm4 = np.array([0, 1.8]).reshape((-1, 1))
 
     # Position of COG is a function of rotation when a corner is fixed
     p_WB = p_Wm4 - R_WB.dot(p_Bm4)
 
     # Add Non-penetration
-    p_Wm1 = R_WB.dot(box.p1) + p_WB
-    p_Wm2 = R_WB.dot(box.p2) + p_WB
-    p_Wm3 = R_WB.dot(box.p3) + p_WB
+    p_Wm1 = R_WB.dot(box.vertices[0]) + p_WB
+    p_Wm2 = R_WB.dot(box.vertices[1]) + p_WB
+    p_Wm3 = R_WB.dot(box.vertices[2]) + p_WB
 
-    a, b = table.a1
+    a, b = table.faces[0]
     nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
     nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
 
@@ -111,9 +116,9 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
     feasible_points = [p for p in points if all([a.T.dot(p) >= 0 for a in planes])]
     assert len(feasible_points) == 2
 
-    a, b = construct_2d_plane_from_points(feasible_points[0], feasible_points[1])
-    x = np.array([cos_th, sin_th]).reshape((-1, 1))
-    cut = (a.T.dot(x) - b)[0, 0]
+    # a, b = construct_2d_plane_from_points(feasible_points[0], feasible_points[1])
+    # x = np.array([cos_th, sin_th]).reshape((-1, 1))
+    # cut = (a.T.dot(x) - b)[0, 0]
 
     # Unused constraints:
     # We are fixing point 4
@@ -127,7 +132,7 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
                 nonpen_constr_1 > 0,
                 nonpen_constr_3 > 0,
                 so_2_constraint > 0,
-                cut > 0,
+                # cut > 0,
             ),
             x_var=cos_th,
             y_var=sin_th,
@@ -145,10 +150,10 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
         )
 
 
-def plot_cuts_with_fixed_position(use_relaxation: bool = False):
+def plot_cuts_with_fixed_position(use_relaxation: bool = True):
     from sympy import And, Eq, plot_implicit, symbols
 
-    BOX_WIDTH = 3
+    BOX_WIDTH = 2
     BOX_HEIGHT = 2
     BOX_MASS = 1
 
@@ -158,7 +163,7 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = False):
     cos_th, sin_th = symbols("c s")
 
     # Useful variables
-    p_WB = np.array([0, 1.5]).reshape((-1, 1))
+    p_WB = np.array([0, 1.3]).reshape((-1, 1))
     u1 = np.array([cos_th, sin_th]).reshape((-1, 1))
     u2 = np.array([-sin_th, cos_th]).reshape((-1, 1))
     R_WB = np.hstack([u1, u2])
@@ -166,12 +171,12 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = False):
     so_2_constraint = 1 - cos_th**2 - sin_th**2
 
     # Add Non-penetration
-    p_Wm1 = R_WB.dot(box.p1) + p_WB
-    p_Wm2 = R_WB.dot(box.p2) + p_WB
-    p_Wm3 = R_WB.dot(box.p3) + p_WB
-    p_Wm4 = R_WB.dot(box.p4) + p_WB
+    p_Wm1 = R_WB.dot(box.vertices[0]) + p_WB
+    p_Wm2 = R_WB.dot(box.vertices[1]) + p_WB
+    p_Wm3 = R_WB.dot(box.vertices[2]) + p_WB
+    p_Wm4 = R_WB.dot(box.vertices[3]) + p_WB
 
-    a, b = table.a1
+    a, b = table.faces[0]
     nonpen_constr_1 = (a.T.dot(p_Wm1) - b)[0, 0]
     nonpen_constr_2 = (a.T.dot(p_Wm2) - b)[0, 0]
     nonpen_constr_3 = (a.T.dot(p_Wm3) - b)[0, 0]
@@ -186,8 +191,8 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = False):
                 nonpen_constr_4 > 0,
                 so_2_constraint > 0,
             ),
-            x_var=cos_th,
-            y_var=sin_th,
+            (cos_th, -1.5, 1.5),
+            (sin_th, -1.5, 1.5),
         )
     else:
         plot_implicit(
@@ -198,13 +203,32 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = False):
                 nonpen_constr_4 > 0,
                 Eq(so_2_constraint, 0),
             ),
-            x_var=cos_th,
-            y_var=sin_th,
+            (cos_th, -1.5, 1.5),
+            (sin_th, -1.5, 1.5),
         )
 
     # Plot box
-    corners_box = np.hstack([box.p1, box.p2, box.p3, box.p4, box.p1]) + p_WB
-    corners_table = np.hstack([table.p1, table.p2, table.p3, table.p4, table.p1])
+    corners_box = (
+        np.hstack(
+            [
+                box.vertices[0],
+                box.vertices[1],
+                box.vertices[2],
+                box.vertices[3],
+                box.vertices[0],
+            ]
+        )
+        + p_WB
+    )
+    corners_table = np.hstack(
+        [
+            table.vertices[0],
+            table.vertices[1],
+            table.vertices[2],
+            table.vertices[3],
+            table.vertices[4],
+        ]
+    )
     plt.plot(corners_box[0, :], corners_box[1, :])
     plt.plot(corners_table[0, :], corners_table[1, :])
     plt.ylim(-5, 5)
@@ -464,4 +488,6 @@ def simple_rotations_test(use_sdp_relaxation: bool = True):
 
 if __name__ == "__main__":
     # test_sdp_relaxation()
-    plot_so_2()
+    # plot_so_2()
+    # plot_cuts_corners_fixed()
+    plot_cuts_with_fixed_position()
