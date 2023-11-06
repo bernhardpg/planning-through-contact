@@ -11,7 +11,7 @@ from pydrake.solvers import (
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
-NUM_CTRL_POINTS = 4
+NUM_CTRL_POINTS = 8
 NUM_DIMS = 2
 
 prog = MathematicalProgram()
@@ -40,8 +40,8 @@ if minimize_squares:
         prog.AddCost(r_i.T.dot(r_i))
 
 # Initial conditions
-th_initial = 0
-th_final = np.pi + 0.01
+th_initial = np.pi
+th_final = 0 + 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -54,12 +54,11 @@ for c in initial_cond:
 for c in final_cond:
     prog.AddConstraint(c)
 
-# A = np.array([[1, -1], [1, -3], [-1, -1], [-2, -6]])
 A = np.array([[1, -3], [-2, -6]])
 b = np.array([2, 3])
 
 for var in r.T:
-    consts = le(A.dot(var), b)[1]
+    consts = le(A.dot(var), b)
     prog.AddConstraint(consts)
 
 # Solve SDP relaxation
@@ -90,4 +89,4 @@ r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
 # TODO continue here
 
-plot_cos_sine_trajs(r_val.T)
+plot_cos_sine_trajs(r_val.T, A, b)
