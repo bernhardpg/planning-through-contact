@@ -16,7 +16,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
-from planning_through_contact.visualize.planar import (
+from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
