@@ -312,7 +312,7 @@ class FaceContactMode(AbstractContactMode):
             for p_WB in self.variables.p_WBs:
                 self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
 
-        self.bound_sin_cos = False
+        self.bound_sin_cos = True
         if self.bound_sin_cos:
             # Bounds on cosines and sines
             for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
@@ -320,7 +320,7 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
         # TODO(bernhardpg): Experimental research feature, remove this
-        self.enforce_equal_forces = True
+        self.enforce_equal_forces = False
         if self.enforce_equal_forces:
             # Enforces forces are constant
             for c_n_curr, c_n_next in zip(
