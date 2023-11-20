@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.math import eq, le
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     CommonSolverOption,
     MakeSemidefiniteRelaxation,
@@ -25,7 +25,6 @@ for i in range(NUM_CTRL_POINTS):
     so_2_constraint = r_i.T.dot(r_i) == 1
     prog.AddConstraint(so_2_constraint)
 
-USE_SQ_EUCL_DISTANCE = False
 # Minimize squared euclidean distances in rotation parameters
 r_displacements = []
 for i in range(NUM_CTRL_POINTS - 1):
@@ -35,13 +34,11 @@ for i in range(NUM_CTRL_POINTS - 1):
     r_displacements.append(r_disp_i)
 
     rot_cost_i = r_disp_i.T.dot(r_disp_i)
-
-    if USE_SQ_EUCL_DISTANCE:
-        prog.AddCost(rot_cost_i)
+    prog.AddCost(rot_cost_i)
 
 # Initial conditions
 th_initial = 0
-th_final = np.pi
+th_final = np.pi + 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -55,31 +52,34 @@ for c in final_cond:
     prog.AddConstraint(c)
 
 # Add in angular velocity
-th_dots = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "th_dot")
+r_dots = prog.NewContinuousVariables(NUM_DIMS, NUM_CTRL_POINTS - 1, "r_dot")
 
 
 def skew_symmetric(th):
     return np.array([[0, -th], [th, 0]])
 
 
-def rodriguez(om_hat, dt):
-    return np.eye(2) + om_hat * np.sin(dt) + om_hat @ om_hat * (1 - np.cos(dt))
+# def rodriguez(om_hat, th):
+#     return np.eye(2) + om_hat * np.sin(th) + om_hat @ om_hat * (1 - np.cos(th))
+
+
+def rodriguez(om_hat, cos_th, sin_th):
+    return np.eye(2) + om_hat * sin_th + om_hat @ om_hat * (1 - cos_th)
 
 
 def rot_matrix(r):
     return np.array([[r[0], -r[1]], [r[1], r[0]]])
 
 
-delta_t = 0.2
+om_hat_norm = skew_symmetric(1.0)
 
 ang_vel_constraints = []
 for k in range(NUM_CTRL_POINTS - 1):
-    th_dot_k = th_dots[k]
     R_k = rot_matrix(r[:, k])
     R_k_next = rot_matrix(r[:, k + 1])
-    om_hat_k = skew_symmetric(th_dot_k)
+    cos_th_dot, sin_th_dot = r_dots[0, k], r_dots[1, k]
 
-    exp_om_dt = rodriguez(om_hat_k, delta_t)
+    exp_om_dt = rodriguez(om_hat_norm, cos_th_dot, sin_th_dot)
     lhs = R_k.T @ R_k_next
 
     constraint = eq(exp_om_dt, lhs)
@@ -90,69 +90,41 @@ for k in range(NUM_CTRL_POINTS - 1):
         [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
     )
 
-    # # Second side of constraint
-    # lhs = R_k_next
-    # rhs = R_k @ exp_om_dt
-    # constraint = eq(lhs, rhs)
-    # for c in constraint.flatten():
-    #     prog.AddConstraint(c)
-    #
+    # Second side of constraint
+    lhs = R_k_next
+    rhs = R_k @ exp_om_dt
+    constraint = eq(lhs, rhs)
+    for c in constraint.flatten():
+        prog.AddConstraint(c)
+
     # second_side_ang_vel_constraints.append(
     #     [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
     # )
 
 
+# th_dots = r_dots[0, :]  # small angle approx: sin(th) \approx th
+# prog.AddConstraint(ge(th_dots, 0))
+
+# prog.AddCost(th_dots.T @ th_dots)
+# prog.AddCost(0.1 * np.sum(th_dots))
+# With this magic number it seems that (almost) every cut will choose the obstacle free path
+# prog.AddCost(-5.0175 * np.sum(th_dots))
+
 # Absolute value cost
 # s = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "s")
-# prog.AddCost(10 * np.sum(s))
+# prog.AddCost(np.sum(s))
 #
 # for k in range(NUM_CTRL_POINTS - 1):
 #     prog.AddLinearConstraint(s[k] >= th_dots[k])
 #     prog.AddLinearConstraint(s[k] >= -th_dots[k])
 
-# A = np.array([[0, -1]])
-# b = np.array([0.9])
-
-# A = np.array([[1, -3], [-2, -6]])
-# b = np.array([2, 3])
-#
-# for var in r.T:
-#     consts = le(A.dot(var), b)
-#     prog.AddConstraint(consts)
 
 # prog.AddCost(th_dots.T @ th_dots)
-# prog.AddCost(-10 * np.sum(th_dots))
-# With this magic number it seems that (almost) every cut will choose the obstacle free path
-# prog.AddCost(-5.0175 * np.sum(th_dots))
-
-A = np.array([[1, -3], [-2, -6]])
-b = np.array([2, 3])
-
-for var in r.T:
-    consts = le(A.dot(var), b)
-    prog.AddConstraint(consts)
-
-prog.AddCost(th_dots.T @ th_dots)
-prog.AddCost(-np.sum(th_dots))
+# prog.AddCost(-np.sum(th_dots))
 
 
 # Solve SDP relaxation
 relaxed_prog = MakeSemidefiniteRelaxation(prog)
-
-# Is not tight
-USE_EUCLIDEAN_DISTANCE = True
-if USE_EUCLIDEAN_DISTANCE:
-    s = relaxed_prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "s")
-    relaxed_prog.AddCost(np.sum(s))
-
-    for k in range(NUM_CTRL_POINTS - 1):
-        mat = np.zeros((3, 3), dtype=object)
-        mat[:2, :2] = np.eye(2) * s[k]
-        mat[2, :2] = r_displacements[k].T
-        mat[:2, 2] = r_displacements[k]
-        mat[2, 2] = s[k]
-
-        relaxed_prog.AddPositiveSemidefiniteConstraint(mat)
 
 
 print("Finished formulating SDP relaxation")
@@ -167,5 +139,5 @@ print(f"Cost: {result.get_optimal_cost()}")
 r_val = result.GetSolution(r)
 r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
-# plot_cos_sine_trajs(r_val.T)
-plot_cos_sine_trajs(r_val.T, A, b)
+plot_cos_sine_trajs(r_val.T)
+# plot_cos_sine_trajs(r_val.T, A, b)
