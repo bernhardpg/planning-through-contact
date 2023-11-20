@@ -90,6 +90,41 @@ for k in range(NUM_CTRL_POINTS - 1):
         [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
     )
 
+    # # Second side of constraint
+    # lhs = R_k_next
+    # rhs = R_k @ exp_om_dt
+    # constraint = eq(lhs, rhs)
+    # for c in constraint.flatten():
+    #     prog.AddConstraint(c)
+    #
+    # second_side_ang_vel_constraints.append(
+    #     [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
+    # )
+
+
+# Absolute value cost
+# s = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "s")
+# prog.AddCost(10 * np.sum(s))
+#
+# for k in range(NUM_CTRL_POINTS - 1):
+#     prog.AddLinearConstraint(s[k] >= th_dots[k])
+#     prog.AddLinearConstraint(s[k] >= -th_dots[k])
+
+# A = np.array([[0, -1]])
+# b = np.array([0.9])
+
+# A = np.array([[1, -3], [-2, -6]])
+# b = np.array([2, 3])
+#
+# for var in r.T:
+#     consts = le(A.dot(var), b)
+#     prog.AddConstraint(consts)
+
+# prog.AddCost(th_dots.T @ th_dots)
+# prog.AddCost(-10 * np.sum(th_dots))
+# With this magic number it seems that (almost) every cut will choose the obstacle free path
+# prog.AddCost(-5.0175 * np.sum(th_dots))
+
 A = np.array([[1, -3], [-2, -6]])
 b = np.array([2, 3])
 
