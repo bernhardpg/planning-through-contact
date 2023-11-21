@@ -94,6 +94,12 @@ class SliderPusherSystemConfig:
         D = np.diag([1 / self.f_max**2, 1 / self.f_max**2, 1 / self.tau_max**2])
         return D
 
+    @cached_property
+    def limit_surface_const(self) -> float:
+        nu_f = 1 / self.f_max**2
+        nu_tau = 1 / self.tau_max**2
+        return nu_tau / nu_f
+
 
 @dataclass
 class PlanarSolverParams:
@@ -127,8 +133,8 @@ class PlanarCostFunctionTerms:
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
-    time_in_contact: float = 2
-    time_non_collision: float = 0.5
+    time_in_contact: float = 2  # TODO: remove, no time
+    time_non_collision: float = 0.5  # TODO: remove, there is no time
     avoid_object: bool = False
     allow_teleportation: bool = False
     avoidance_cost: Literal[
@@ -139,9 +145,6 @@ class PlanarPlanConfig:
     ] = "quadratic"
     minimize_squared_eucl_dist: bool = True
     use_eq_elimination: bool = False
-    use_redundant_dynamic_constraints: bool = (
-        True  # TODO(bernhardpg): This sometimes makes nonlinear rounding not work
-    )
     penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False

@@ -41,9 +41,8 @@ def evaluate_np_expressions_array(
     return solutions
 
 
-def forward_differences(vars, dt: float) -> List[npt.NDArray[np.float64]]:
-    # TODO: It is cleaner to implement this using a forward difference matrix, but as a first step keep it like this
-    forward_diffs = [
-        (var_next - var_curr) / dt for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
+def calc_displacements(vars) -> List[npt.NDArray[np.float64]]:
+    displacements = [
+        (var_next - var_curr) for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
     ]
-    return forward_diffs
+    return displacements

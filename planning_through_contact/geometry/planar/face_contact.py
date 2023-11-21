@@ -34,7 +34,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
-from planning_through_contact.tools.utils import forward_differences
+from planning_through_contact.tools.utils import calc_displacements
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -47,6 +47,7 @@ class FaceContactVariables(AbstractModeVariables):
     friction_forces: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     cos_ths: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     sin_ths: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
+    theta_dots: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     p_WB_xs: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
     p_WB_ys: NpVariableArray | npt.NDArray[np.float64]  # (num_knot_points, )
 
@@ -66,18 +67,20 @@ class FaceContactVariables(AbstractModeVariables):
         pusher_radius: float,
     ) -> "FaceContactVariables":
         # Contact positions
-        lams = prog.NewContinuousVariables(num_knot_points, "lam")
+        rel_finger_pos = prog.NewContinuousVariables(num_knot_points, "rel_finger_pos")
         pv1, pv2 = object_geometry.get_proximate_vertices_from_location(
             contact_location
         )
 
         # Contact forces
-        normal_forces = prog.NewContinuousVariables(num_knot_points, "c_n")
-        friction_forces = prog.NewContinuousVariables(num_knot_points, "c_f")
+        num_inputs = num_knot_points - 1
+        normal_forces = prog.NewContinuousVariables(num_inputs, "c_n")
+        friction_forces = prog.NewContinuousVariables(num_inputs, "c_f")
         (
             normal_vec,
             tangent_vec,
         ) = object_geometry.get_norm_and_tang_vecs_from_location(contact_location)
+        theta_dots = prog.NewContinuousVariables(num_inputs, "theta_dot")
 
         # Rotations
         cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
@@ -87,19 +90,20 @@ class FaceContactVariables(AbstractModeVariables):
         p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
         p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
 
-        dt = time_in_mode / num_knot_points
+        dt = time_in_mode / num_knot_points  # TODO: Remove
 
         return FaceContactVariables(
             contact_location,
             num_knot_points,
-            time_in_mode,
-            dt,
+            time_in_mode,  # TODO: Remove
+            dt,  # TODO: Remove
             pusher_radius,
-            lams,
+            rel_finger_pos,
             normal_forces,
             friction_forces,
             cos_ths,
             sin_ths,
+            theta_dots,
             p_WB_xs,
             p_WB_ys,
             pv1,
@@ -130,6 +134,7 @@ class FaceContactVariables(AbstractModeVariables):
             get_float_from_result(self.friction_forces),
             get_float_from_result(self.cos_ths),
             get_float_from_result(self.sin_ths),
+            get_float_from_result(self.theta_dots),
             get_float_from_result(self.p_WB_xs),
             get_float_from_result(self.p_WB_ys),
             self.pv1,
@@ -161,6 +166,7 @@ class FaceContactVariables(AbstractModeVariables):
             get_original_vars_from_reduced(self.friction_forces),
             get_original_vars_from_reduced(self.cos_ths),
             get_original_vars_from_reduced(self.sin_ths),
+            get_original_vars_from_reduced(self.theta_dots),
             get_original_vars_from_reduced(self.p_WB_xs),
             get_original_vars_from_reduced(self.p_WB_ys),
             self.pv1,
@@ -201,31 +207,15 @@ class FaceContactVariables(AbstractModeVariables):
 
     @property
     def v_WBs(self):
-        return forward_differences(self.p_WBs, self.dt)
-
-    @property
-    def cos_th_dots(self):
-        return forward_differences(self.cos_ths, self.dt)
-
-    @property
-    def sin_th_dots(self):
-        return forward_differences(self.sin_ths, self.dt)
+        return calc_displacements(self.p_WBs)
 
     @property
     def v_BPs(self):
-        return forward_differences(
-            self.p_BPs, self.dt
-        )  # NOTE: Not real velocity, only time differentiation of coordinates (not equal as B is not an inertial frame)!
+        return calc_displacements(self.p_BPs)
 
     @property
     def omega_WBs(self):
-        R_WB_dots = [
-            np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
-            for cos_dot, sin_dot in zip(self.cos_th_dots, self.sin_th_dots)
-        ]
-        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
-        oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, R_WB_dots)]
-        return oms
+        return self.theta_dots
 
     @property
     def p_WPs(self):
@@ -319,67 +309,29 @@ class FaceContactMode(AbstractContactMode):
                 self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
                 self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
-        # TODO(bernhardpg): Experimental research feature, remove this
-        self.enforce_equal_forces = False
-        if self.enforce_equal_forces:
-            # Enforces forces are constant
-            for c_n_curr, c_n_next in zip(
-                self.variables.normal_forces[:-1], self.variables.normal_forces[1:]
-            ):
-                self.prog.AddLinearConstraint(c_n_curr == c_n_next)
-            for c_f_curr, c_f_next in zip(
-                self.variables.friction_forces[:-1], self.variables.friction_forces[1:]
-            ):
-                self.prog.AddLinearConstraint(c_f_curr == c_f_next)
-
         # Quasi-static dynamics
-        use_midpoint = True
         for k in range(self.num_knot_points - 1):
             v_WB = self.variables.v_WBs[k]
-            omega_WB = self.variables.omega_WBs[k]
+            theta_WB_dot = self.variables.theta_dots[k]
 
-            # NOTE: We enforce dynamics at midway points as this is where the velocity is 'valid'
-            if use_midpoint:
-                f_c_B = self._get_midpoint(self.variables.f_c_Bs, k)
-                p_BP = self._get_midpoint(self.variables.p_BPs, k)
-                R_WB = self._get_midpoint(self.variables.R_WBs, k)
-            else:
-                f_c_B = self.variables.f_c_Bs[k]
-                p_BP = self.variables.p_BPs[k]
-                R_WB = self.variables.R_WBs[k]
+            f_c_B = self.variables.f_c_Bs[k]
+            p_BP = self.variables.p_BPs[k]
+            R_WB = self.variables.R_WBs[k]
 
-            # quasi-static dynamics in W
-            x_dot, dyn = self.quasi_static_dynamics_in_W(
-                v_WB,
-                omega_WB,
-                f_c_B,
-                p_BP,
-                R_WB,
-                self.dynamics_config.ellipsoidal_limit_surface,
-            )
-            quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
-            for row in quasi_static_dynamic_constraint:
-                self.prog.AddConstraint(row)
+            trans_vel_constraint = v_WB - R_WB @ f_c_B
+            for c in trans_vel_constraint.flatten():
+                self.prog.AddQuadraticConstraint(c, 0, 0)
 
-            # quasi-static dynamics in B
-            if self.config.use_redundant_dynamic_constraints:
-                x_dot, dyn = self.quasi_static_dynamics_in_B(
-                    v_WB,
-                    omega_WB,
-                    f_c_B,
-                    p_BP,
-                    R_WB,
-                    self.dynamics_config.ellipsoidal_limit_surface,
-                )
-                quasi_static_dynamic_constraint = eq(x_dot - dyn, 0)
-                self.quasi_static_dynamics_constraints_in_B = []
-                for row in quasi_static_dynamic_constraint:
-                    c = self.prog.AddConstraint(row)
-                    self.quasi_static_dynamics_constraints_in_B.append(c)
+            trans_vel_constraint = R_WB.T @ v_WB - f_c_B
+            for c in trans_vel_constraint.flatten():
+                self.prog.AddQuadraticConstraint(c, 0, 0)
+
+            c = self.config.dynamics_config.limit_surface_const
+            ang_vel_constraint = theta_WB_dot - c * cross_2d(p_BP, f_c_B)
+            self.prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
 
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_BPs:
-            # NOTE: This is not constraining the real velocity, but it does ensure sticking
             self.prog.AddLinearConstraint(eq(v_c_B, 0))
 
     def _define_costs(self) -> None:
@@ -479,6 +431,7 @@ class FaceContactMode(AbstractContactMode):
         )
         cos_ths = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.cos_ths, result)  # type: ignore
         sin_ths = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.sin_ths, result)  # type: ignore
+        theta_dots = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.theta_dots, result)  # type: ignore
         p_WB_xs = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_xs, result)  # type: ignore
         p_WB_ys = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.p_WB_ys, result)  # type: ignore
 
@@ -493,6 +446,7 @@ class FaceContactMode(AbstractContactMode):
             friction_forces,
             cos_ths,
             sin_ths,
+            theta_dots,
             p_WB_xs,
             p_WB_ys,
             self.variables.pv1,
@@ -510,6 +464,7 @@ class FaceContactMode(AbstractContactMode):
         friction_forces = result.GetSolution(self.variables.friction_forces)
         cos_ths = result.GetSolution(self.variables.cos_ths)  # type: ignore
         sin_ths = result.GetSolution(self.variables.sin_ths)  # type: ignore
+        theta_dots = result.GetSolution(self.variables.theta_dots)  # type: ignore
         p_WB_xs = result.GetSolution(self.variables.p_WB_xs)  # type: ignore
         p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
 
@@ -524,6 +479,7 @@ class FaceContactMode(AbstractContactMode):
             friction_forces,
             cos_ths,
             sin_ths,
+            theta_dots,
             p_WB_xs,
             p_WB_ys,
             self.variables.pv1,
@@ -571,67 +527,3 @@ class FaceContactMode(AbstractContactMode):
         bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
         for b in bindings:
             vertex.AddCost(b)
-
-    @staticmethod
-    def _get_midpoint(vals, k: int):
-        return (vals[k] + vals[k + 1]) / 2
-
-    @staticmethod
-    def quasi_static_dynamics_in_W(
-        v_WB,
-        omega_WB,
-        f_c_B,
-        p_BP,
-        R_WB,
-        ellipsoidal_limit_surface,
-    ):
-        D = ellipsoidal_limit_surface
-
-        # We need to add an entry for multiplication with the wrench,
-        # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
-        R = np.zeros((3, 3), dtype="O")
-        R[2, 2] = 1
-        R[0:2, 0:2] = R_WB
-
-        # Contact torques
-        tau_c_B = cross_2d(p_BP, f_c_B)
-
-        x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
-        wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
-        wrench_W = R.dot(wrench_B)
-        dynamics_in_W = D.dot(
-            wrench_W
-        )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
-
-        return x_dot_in_W, dynamics_in_W  # (3,1), (3,1)
-
-    @staticmethod
-    def quasi_static_dynamics_in_B(
-        v_WB,
-        omega_WB,
-        f_c_B,
-        p_BP,
-        R_WB,
-        ellipsoidal_limit_surface,
-    ):
-        D = ellipsoidal_limit_surface
-
-        # We need to add an entry for multiplication with the wrench,
-        # see paper "Reactive Planar Manipulation with Convex Hybrid MPC"
-        R = np.zeros((3, 3), dtype="O")
-        R[2, 2] = 1
-        R[0:2, 0:2] = R_WB
-
-        # Contact torques
-        tau_c_B = cross_2d(p_BP, f_c_B)
-
-        x_dot_in_W = np.concatenate((v_WB, [[omega_WB]]))
-        wrench_B = np.concatenate((f_c_B, [[tau_c_B]]))
-
-        x_dot_in_B = R.T.dot(x_dot_in_W)
-        dynamics_in_B = D.dot(
-            wrench_B
-        )  # Note: A and R are switched here compared to original paper, but A is diagonal so it makes no difference
-
-        # x_dot, f(x,u)
-        return x_dot_in_B, dynamics_in_B

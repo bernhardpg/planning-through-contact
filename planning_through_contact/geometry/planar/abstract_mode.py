@@ -101,8 +101,8 @@ class ContinuityVariables:
 class AbstractModeVariables(ABC):
     contact_location: PolytopeContactLocation
     num_knot_points: int
-    time_in_mode: float
-    dt: float
+    time_in_mode: float  # TODO: remove, there is no time!
+    dt: float  # TODO: Remove, there is no time!
     pusher_radius: float
 
     @abstractmethod
