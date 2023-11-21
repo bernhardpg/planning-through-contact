@@ -46,3 +46,12 @@ def calc_displacements(vars) -> List[npt.NDArray[np.float64]]:
         (var_next - var_curr) for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
     ]
     return displacements
+
+
+def skew_symmetric_so2(a):
+    return np.array([[0, -a], [a, 0]])
+
+
+def approx_exponential_map(omega_hat, num_dims: int = 2):
+    # Approximates the exponential map (matrix exponential) by truncating terms of higher degree than 2
+    return np.eye(num_dims) + omega_hat + 0.5 * omega_hat @ omega_hat

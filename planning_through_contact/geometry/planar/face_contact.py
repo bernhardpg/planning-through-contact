@@ -34,7 +34,11 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
-from planning_through_contact.tools.utils import calc_displacements
+from planning_through_contact.tools.utils import (
+    approx_exponential_map,
+    calc_displacements,
+    skew_symmetric_so2,
+)
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -196,6 +200,10 @@ class FaceContactVariables(AbstractModeVariables):
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
+    @property
+    def omega_hats(self):
+        return [skew_symmetric_so2(th_dot) for th_dot in self.theta_dots]
+
     def _get_p_BP(self, lam: float, pusher_radius: float):
         point_on_surface = lam * self.pv1 + (1 - lam) * self.pv2
         radius_displacement = -self.normal_vec * pusher_radius
@@ -212,10 +220,6 @@ class FaceContactVariables(AbstractModeVariables):
     @property
     def v_BPs(self):
         return calc_displacements(self.p_BPs)
-
-    @property
-    def omega_WBs(self):
-        return self.theta_dots
 
     @property
     def p_WPs(self):
@@ -269,6 +273,18 @@ class FaceContactMode(AbstractContactMode):
         # SO(2) constraints
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
             self.prog.AddConstraint(c**2 + s**2 == 1)
+
+        # so(2) (tangent space) constraints
+        for k in range(self.num_knot_points - 1):
+            R_k = self.variables.R_WBs[k]
+            R_k_next = self.variables.R_WBs[k + 1]
+            omega_hat_k = self.variables.omega_hats[k]
+            exp_map = approx_exponential_map(omega_hat_k)
+
+            # NOTE: For now we only add the one side of the exp map constraint
+            constraint = exp_map - R_k.T @ R_k_next
+            for c in constraint.flatten():
+                self.prog.AddQuadraticConstraint(c, 0, 0)
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
@@ -341,14 +357,7 @@ class FaceContactMode(AbstractContactMode):
             self.config.cost_terms.cost_param_lin_vels * sq_linear_vels
         )
 
-        sq_angular_vels = np.sum(
-            [
-                cos_dot**2 + sin_dot**2
-                for cos_dot, sin_dot in zip(
-                    self.variables.cos_th_dots, self.variables.sin_th_dots
-                )
-            ]
-        )
+        sq_angular_vels = self.variables.theta_dots @ self.variables.theta_dots  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
     def set_finger_pos(self, lam_target: float) -> None:

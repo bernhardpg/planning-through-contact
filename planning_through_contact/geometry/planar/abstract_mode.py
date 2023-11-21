@@ -126,11 +126,6 @@ class AbstractModeVariables(ABC):
 
     @property
     @abstractmethod
-    def omega_WBs(self):
-        pass
-
-    @property
-    @abstractmethod
     def p_WPs(self):
         pass
 
