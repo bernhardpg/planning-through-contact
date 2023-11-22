@@ -76,18 +76,21 @@ class SliderPusherSystemConfig:
 
     @cached_property
     def integration_constant(self) -> float:
+        return 0.6
+
+    @cached_property
+    def max_contact_radius(self) -> float:
         geometry = self.slider.geometry
         if isinstance(geometry, Box2d):
             return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
         else:
-            return 0.6
             raise NotImplementedError(
                 f"Integration constant for {type(geometry)} is not implemented"
             )
 
     @cached_property
     def tau_max(self) -> float:
-        return self.f_max * self.integration_constant
+        return self.f_max * self.max_contact_radius * self.integration_constant
 
     @cached_property
     def ellipsoidal_limit_surface(self) -> npt.NDArray[np.float64]:
@@ -96,9 +99,7 @@ class SliderPusherSystemConfig:
 
     @cached_property
     def limit_surface_const(self) -> float:
-        nu_f = 1 / self.f_max**2
-        nu_tau = 1 / self.tau_max**2
-        return nu_tau / nu_f
+        return (self.max_contact_radius * self.integration_constant) ** -2
 
 
 @dataclass
@@ -127,6 +128,7 @@ class PlanarCostFunctionTerms:
     # Face contact
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
+    cost_param_forces: float = 1.0
 
 
 @dataclass
@@ -157,6 +159,7 @@ class PlanarPlanConfig:
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
+    use_approx_exponential_map: bool = True
 
     @property
     def slider_geometry(self) -> CollisionGeometry:

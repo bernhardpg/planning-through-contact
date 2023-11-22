@@ -527,11 +527,11 @@ def analyze_mode_result(
     traj: PlanarPushingTrajectory,
     result: MathematicalProgramResult,
 ) -> None:
-    X = (
-        mode.relaxed_prog.positive_semidefinite_constraints()[0]
-        .variables()
-        .reshape((30, 30))
-    )
+    X = mode.relaxed_prog.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
 
     X_sol = result.GetSolution(X)
 
