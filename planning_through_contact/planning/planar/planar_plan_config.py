@@ -69,14 +69,11 @@ class SliderPusherSystemConfig:
     friction_coeff_table_slider: float = 0.5
     friction_coeff_slider_pusher: float = 0.5
     grav_acc: float = 9.81
+    integration_constant: float = 0.6
 
     @cached_property
     def f_max(self) -> float:
         return self.friction_coeff_table_slider * self.grav_acc * self.slider.mass
-
-    @cached_property
-    def integration_constant(self) -> float:
-        return 0.6
 
     @cached_property
     def max_contact_radius(self) -> float:
