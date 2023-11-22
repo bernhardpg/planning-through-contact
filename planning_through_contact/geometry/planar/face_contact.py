@@ -263,6 +263,13 @@ class FaceContactMode(AbstractContactMode):
             self.time_in_mode,
             self.dynamics_config.pusher_radius,
         )
+        self.constraints = {
+            "SO2": [],
+            "rotational_dynamics": [],
+            "translational_dynamics": [],
+            "translational_dynamics_red": [],
+            "exponential_map": [],
+        }
         self._define_constraints()
         self._define_costs()
 
@@ -272,7 +279,9 @@ class FaceContactMode(AbstractContactMode):
 
         # SO(2) constraints
         for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
-            self.prog.AddConstraint(c**2 + s**2 == 1)
+            constraint = c**2 + s**2 - 1
+            self.prog.AddQuadraticConstraint(constraint, 0, 0)
+            self.constraints["SO2"].append(constraint)
 
         # so(2) (tangent space) constraints
         for k in range(self.num_knot_points - 1):
@@ -283,6 +292,7 @@ class FaceContactMode(AbstractContactMode):
 
             # NOTE: For now we only add the one side of the exp map constraint
             constraint = exp_map - R_k.T @ R_k_next
+            self.constraints["exponential_map"].append(constraint.flatten())
             for c in constraint.flatten():
                 self.prog.AddQuadraticConstraint(c, 0, 0)
 
@@ -335,15 +345,22 @@ class FaceContactMode(AbstractContactMode):
             R_WB = self.variables.R_WBs[k]
 
             trans_vel_constraint = v_WB - R_WB @ f_c_B
+            self.constraints["translational_dynamics"].append(
+                trans_vel_constraint.flatten()
+            )
             for c in trans_vel_constraint.flatten():
                 self.prog.AddQuadraticConstraint(c, 0, 0)
 
             trans_vel_constraint = R_WB.T @ v_WB - f_c_B
+            self.constraints["translational_dynamics_red"].append(
+                trans_vel_constraint.flatten()
+            )
             for c in trans_vel_constraint.flatten():
                 self.prog.AddQuadraticConstraint(c, 0, 0)
 
             c = self.config.dynamics_config.limit_surface_const
             ang_vel_constraint = theta_WB_dot - c * cross_2d(p_BP, f_c_B)
+            self.constraints["rotational_dynamics"].append(ang_vel_constraint)
             self.prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
 
         # Ensure sticking on the contact point
