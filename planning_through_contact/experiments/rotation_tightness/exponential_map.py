@@ -27,7 +27,7 @@ for i in range(NUM_CTRL_POINTS):
 
 # Initial conditions
 th_initial = 0
-th_final = np.pi
+th_final = np.pi - 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -72,12 +72,12 @@ for k in range(NUM_CTRL_POINTS - 1):
         [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
     )
 
-A = np.array([[1, -3], [-2, -6]])
-b = np.array([2, 3])
-
-for var in r.T:
-    consts = le(A.dot(var), b)
-    prog.AddConstraint(consts)
+# A = np.array([[1, -3], [-2, -6]])
+# b = np.array([2, 3])
+#
+# for var in r.T:
+#     consts = le(A.dot(var), b)
+#     prog.AddConstraint(consts)
 
 prog.AddCost(th_dots.T @ th_dots)
 # prog.AddCost(np.sum(th_dots))
@@ -98,6 +98,6 @@ print(f"Cost: {result.get_optimal_cost()}")
 r_val = result.GetSolution(r)
 r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
-# plot_cos_sine_trajs(r_val.T)
-plot_cos_sine_trajs(r_val.T, A, b)
+plot_cos_sine_trajs(r_val.T)
+# plot_cos_sine_trajs(r_val.T, A, b)
 print(result.get_optimal_cost())
