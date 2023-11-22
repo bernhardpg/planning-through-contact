@@ -360,6 +360,13 @@ class FaceContactMode(AbstractContactMode):
         sq_angular_vels = self.variables.theta_dots @ self.variables.theta_dots  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
+        # TODO(bernhardpg): Remove
+        # delta_cos_ths = np.array(calc_displacements(self.variables.cos_ths))
+        # delta_sin_ths = np.array(calc_displacements(self.variables.sin_ths))
+        # self.prog.AddQuadraticCost(
+        #     delta_cos_ths.T @ delta_cos_ths + delta_sin_ths.T @ delta_sin_ths
+        # )
+
         sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_normal_forces)  # type: ignore
 
