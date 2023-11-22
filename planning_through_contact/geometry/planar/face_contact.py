@@ -360,6 +360,9 @@ class FaceContactMode(AbstractContactMode):
         sq_angular_vels = self.variables.theta_dots @ self.variables.theta_dots  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_angular_vels)  # type: ignore
 
+        sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
+        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_normal_forces)  # type: ignore
+
     def set_finger_pos(self, lam_target: float) -> None:
         """
         Set finger position along the contact face.
@@ -532,7 +535,7 @@ class FaceContactMode(AbstractContactMode):
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
         var_idxs, evaluators = self._get_cost_terms()
-        vars = vertex.x()[var_idxs]
+        vars = [vertex.x()[idxs] for idxs in var_idxs]
         bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
         for b in bindings:
             vertex.AddCost(b)
