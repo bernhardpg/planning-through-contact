@@ -178,7 +178,9 @@ class FaceContactVariables(AbstractModeVariables):
             get_original_vars_from_reduced(self.friction_forces),
             get_original_vars_from_reduced(self.cos_ths),
             get_original_vars_from_reduced(self.sin_ths),
-            get_original_vars_from_reduced(self.theta_dots),
+            get_original_vars_from_reduced(self.theta_dots)
+            if self.theta_dots is not None
+            else None,
             get_original_vars_from_reduced(self.p_WB_xs),
             get_original_vars_from_reduced(self.p_WB_ys),
             self.pv1,
@@ -328,7 +330,7 @@ class FaceContactMode(AbstractContactMode):
 
         # Friction cone constraints
         for c_n in self.variables.normal_forces:
-            self.prog.AddLinearConstraint(c_n >= 0)
+            self.prog.AddBoundingBoxConstraint(0, np.inf, c_n)
 
         mu = self.dynamics_config.friction_coeff_slider_pusher
         for c_n, c_f in zip(
@@ -336,18 +338,6 @@ class FaceContactMode(AbstractContactMode):
         ):
             self.prog.AddLinearConstraint(c_f <= mu * c_n)
             self.prog.AddLinearConstraint(c_f >= -mu * c_n)
-
-        # Will automatically be bounded as long as p_WB is constrained to move only
-        # a finite distance, which we will
-        self.bound_forces = True
-        if self.bound_forces:
-            # Bounds on forces
-            for c_n, c_f in zip(
-                self.variables.normal_forces, self.variables.friction_forces
-            ):
-                self.prog.AddBoundingBoxConstraint(
-                    -self.dynamics_config.f_max, self.dynamics_config.f_max, c_f
-                )
 
         # These position bounds should never be needed, as either the initial position,
         # target position, or edge constraints with this mode (in the case of GCS)
@@ -358,12 +348,10 @@ class FaceContactMode(AbstractContactMode):
             for p_WB in self.variables.p_WBs:
                 self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
 
-        self.bound_sin_cos = True
-        if self.bound_sin_cos:
-            # Bounds on cosines and sines
-            for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
-                self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
-                self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
+        # Bounds on cosines and sines
+        for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
+            self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
+            self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
 
         # Quasi-static dynamics
         for k in range(self.num_knot_points - 1):
@@ -400,7 +388,7 @@ class FaceContactMode(AbstractContactMode):
 
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_BPs:
-            self.prog.AddLinearConstraint(eq(v_c_B, 0))
+            self.prog.AddLinearEqualityConstraint(v_c_B.flatten(), np.zeros((2,)))
 
     def _define_costs(self) -> None:
         # Minimize kinetic energy through squared velocities

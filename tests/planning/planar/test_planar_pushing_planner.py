@@ -58,16 +58,22 @@ def test_planner_construction(
     for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
-        # angular velocity and linear velocity
-        assert len(costs) == 2
+        # angular velocity, linear velocity, normal force, friction force
+        assert len(costs) == 4
 
-        lin_vel, ang_vel = costs
+        lin_vel, ang_vel, normal_force, friction_force = costs
 
         target_lin_vars = Variables(v.x()[m._get_cost_terms()[0][0]])
         assert target_lin_vars.EqualTo(Variables(lin_vel.variables()))
 
         target_ang_vars = Variables(v.x()[m._get_cost_terms()[0][1]])
         assert target_ang_vars.EqualTo(Variables(ang_vel.variables()))
+
+        target_norm_force_vars = Variables(v.x()[m._get_cost_terms()[0][2]])
+        assert target_norm_force_vars.EqualTo(Variables(normal_force.variables()))
+
+        target_fric_force_vars = Variables(v.x()[m._get_cost_terms()[0][3]])
+        assert target_fric_force_vars.EqualTo(Variables(friction_force.variables()))
 
         # Costs should be linear in SDP relaxation
         assert isinstance(lin_vel.evaluator(), LinearCost)

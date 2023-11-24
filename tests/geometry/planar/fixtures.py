@@ -58,7 +58,9 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
-    cfg = PlanarPlanConfig(dynamics_config=dynamics_config)
+    cfg = PlanarPlanConfig(
+        dynamics_config=dynamics_config, use_approx_exponential_map=False
+    )
     return cfg
 
 
@@ -123,13 +125,12 @@ def face_contact_mode(
         plan_config.dynamics_config.slider = t_pusher
 
     face_idx = request.param.get("face_idx", 3)
-    config = PlanarPlanConfig(dynamics_config=SliderPusherSystemConfig(pusher_radius=0))
-    config.use_eq_elimination = request.param.get("use_eq_elimination", False)
+    plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
-        config,
+        plan_config,
     )
     return mode
 

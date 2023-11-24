@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -78,11 +79,11 @@ class SliderPusherSystemConfig:
     @cached_property
     def max_contact_radius(self) -> float:
         geometry = self.slider.geometry
-        if isinstance(geometry, Box2d):
+        if isinstance(geometry, Box2d) or isinstance(geometry, TPusher2d):
             return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
         else:
             raise NotImplementedError(
-                f"Integration constant for {type(geometry)} is not implemented"
+                f"max_contact_radius for {type(geometry)} is not implemented"
             )
 
     @cached_property

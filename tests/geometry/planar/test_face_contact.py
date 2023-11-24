@@ -49,8 +49,8 @@ def test_face_contact_variables(
     num_knot_points = face_contact_vars.num_knot_points
 
     assert face_contact_vars.lams.shape == (num_knot_points,)
-    assert face_contact_vars.normal_forces.shape == (num_knot_points,)
-    assert face_contact_vars.friction_forces.shape == (num_knot_points,)
+    assert face_contact_vars.normal_forces.shape == (num_knot_points - 1,)
+    assert face_contact_vars.friction_forces.shape == (num_knot_points - 1,)
     assert face_contact_vars.cos_ths.shape == (num_knot_points,)
     assert face_contact_vars.sin_ths.shape == (num_knot_points,)
     assert face_contact_vars.p_WB_xs.shape == (num_knot_points,)
@@ -67,7 +67,7 @@ def test_face_contact_variables(
     for p in face_contact_vars.p_WBs:
         assert p.shape == (2, 1)
 
-    assert len(face_contact_vars.f_c_Bs) == num_knot_points
+    assert len(face_contact_vars.f_c_Bs) == num_knot_points - 1
     for f in face_contact_vars.f_c_Bs:
         assert f.shape == (2, 1)
 
@@ -79,27 +79,27 @@ def test_face_contact_variables(
     for v in face_contact_vars.v_WBs:
         assert v.shape == (2, 1)
 
-    assert len(face_contact_vars.cos_th_dots) == num_knot_points - 1
-    for c in face_contact_vars.cos_th_dots:
+    assert len(face_contact_vars.delta_cos_ths) == num_knot_points - 1
+    for c in face_contact_vars.delta_cos_ths:
         assert isinstance(c, Expression)
 
-    assert len(face_contact_vars.sin_th_dots) == num_knot_points - 1
-    for s in face_contact_vars.cos_th_dots:
+    assert len(face_contact_vars.delta_sin_ths) == num_knot_points - 1
+    for s in face_contact_vars.delta_sin_ths:
         assert isinstance(s, Expression)
 
     assert len(face_contact_vars.v_BPs) == num_knot_points - 1
     for v in face_contact_vars.v_BPs:
         assert v.shape == (2, 1)
 
-    assert len(face_contact_vars.omega_WBs) == num_knot_points - 1
-    for o in face_contact_vars.omega_WBs:
+    assert len(face_contact_vars.delta_omega_WBs) == num_knot_points - 1
+    for o in face_contact_vars.delta_omega_WBs:
         assert isinstance(o, Expression)
 
     assert len(face_contact_vars.p_WPs) == num_knot_points
     for p in face_contact_vars.p_WPs:
         assert p.shape == (2, 1)
 
-    assert len(face_contact_vars.f_c_Ws) == num_knot_points
+    assert len(face_contact_vars.f_c_Ws) == num_knot_points - 1
     for f in face_contact_vars.f_c_Ws:
         assert f.shape == (2, 1)
 
@@ -136,25 +136,25 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     # assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # NOTE(bernhardpg): With the current setup, we will have one bounding box constraint for the
-    # lams, c_ns
-    num_bbox = 2 * num_knot_points
+    # 3 state vars, 1 input var
+    num_bbox = 3 * num_knot_points + (num_knot_points - 1)
     assert len(mode.prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
-    # v_c_B == 0, c_n_next == c_n_prev, same for c_f (this will be removed)
-    num_lin_eq = 3 * (num_knot_points - 1)
+    # v_c_B == 0
+    num_lin_eq = 1 * (num_knot_points - 1)
     assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
     # | c_f | <= \mu * c_n
-    num_lin = num_knot_points * 2
+    num_lin = (num_knot_points - 1) * 2
     assert len(mode.prog.linear_constraints()) == num_lin
 
     # for each knot point:
     # c**2 + s**2 == 1
     # for each finite diff point:
-    # quasi_static_dynamics (3 constraints, and we add them both ways, so 6)
-    num_quad = num_knot_points + (num_knot_points - 1) * 6
+    # quasi_static_dynamics (5 constraints)
+    num_quad = num_knot_points + (num_knot_points - 1) * 5
     assert len(mode.prog.quadratic_constraints()) == num_quad
 
     tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
@@ -162,8 +162,8 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     assert len(mode.prog.linear_costs()) == 0
 
-    # One quadratic cost for linear and angular velocities
-    assert len(mode.prog.quadratic_costs()) == 2
+    # lin vels, ang vels, normal forces, friction forces
+    assert len(mode.prog.quadratic_costs()) == 4
 
     lin_vel_vars = Variables(mode.prog.quadratic_costs()[0].variables())
     target_lin_vel_vars = Variables(np.concatenate(mode.variables.p_WBs))
@@ -174,50 +174,6 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
         np.concatenate((mode.variables.cos_ths, mode.variables.sin_ths))
     )
     assert ang_vel_vars.EqualTo(target_ang_vel_vars)
-
-
-def test_quasi_static_dynamics(face_contact_vars: FaceContactVariables) -> None:
-    k = 0
-
-    f_c_B = face_contact_vars.f_c_Bs[k]
-    p_BP = face_contact_vars.p_BPs[k]
-    R_WB = face_contact_vars.R_WBs[k]
-    v_WB = face_contact_vars.v_WBs[k]
-    omega_WB = face_contact_vars.omega_WBs[k]
-
-    config = SliderPusherSystemConfig()
-
-    _, dyn = FaceContactMode.quasi_static_dynamics_in_W(
-        v_WB, omega_WB, f_c_B, p_BP, R_WB, config.ellipsoidal_limit_surface
-    )
-
-    check_vars_eq = lambda e, v: e.GetVariables().EqualTo(Variables(v))
-    assert check_vars_eq(
-        dyn[0, 0],
-        [
-            face_contact_vars.sin_ths[0],
-            face_contact_vars.cos_ths[0],
-            face_contact_vars.normal_forces[0],
-            face_contact_vars.friction_forces[0],
-        ],
-    )
-    assert check_vars_eq(
-        dyn[1, 0],
-        [
-            face_contact_vars.sin_ths[0],
-            face_contact_vars.cos_ths[0],
-            face_contact_vars.normal_forces[0],
-            face_contact_vars.friction_forces[0],
-        ],
-    )
-    assert check_vars_eq(
-        dyn[2, 0],
-        [
-            face_contact_vars.lams[0],
-            face_contact_vars.normal_forces[0],
-            face_contact_vars.friction_forces[0],
-        ],
-    )
 
 
 @pytest.mark.parametrize(

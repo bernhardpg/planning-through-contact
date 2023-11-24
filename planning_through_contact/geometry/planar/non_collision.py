@@ -172,7 +172,8 @@ class NonCollisionVariables(AbstractModeVariables):
     @property
     def f_c_Ws(self):
         NUM_DIMS = 2
-        return [np.zeros((NUM_DIMS, 1))] * self.num_knot_points
+        # Input has length 1 less than the state
+        return [np.zeros((NUM_DIMS, 1))] * (self.num_knot_points - 1)
 
 
 @dataclass
