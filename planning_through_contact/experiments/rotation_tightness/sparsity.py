@@ -7,7 +7,7 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
-from pydrake.symbolic import Variables
+from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
@@ -16,7 +16,71 @@ from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 class BandSparseSemidefiniteRelaxation:
     def __init__(self, num_groups: int) -> None:
-        ...
+        self.prog = MathematicalProgram()
+        self.num_groups = num_groups
+
+        self.groups = {idx: [] for idx in range(num_groups)}
+        self.linear_constraints = {idx: [] for idx in range(num_groups)}
+        self.linear_equality_constraints = {idx: [] for idx in range(num_groups)}
+
+        # Quadratic constraints and costs is what couples the groups
+        self.quadratic_constraints = {
+            (i, j): [] for i, j in zip(range(num_groups - 1), range(1, num_groups))
+        }
+        self.quadratic_costs = {
+            (i, j): [] for i, j in zip(range(num_groups - 1), range(1, num_groups))
+        }
+
+        # Include quadratic terms
+        for i in range(num_groups):
+            self.quadratic_constraints[i, i] = []
+            self.quadratic_costs[i, i] = []
+
+    def _find_numbered_idx(self, idx: int) -> int:
+        assert idx < self.num_groups
+        if idx == -1:
+            return self.num_groups - 1
+        else:
+            return idx
+
+    def new_variables(self, group_idx: int, *args):
+        group_idx = self._find_numbered_idx(group_idx)
+        vars = self.prog.NewContinuousVariables(*args)
+        self.groups[group_idx].append(vars)
+
+        return vars
+
+    def add_linear_inequality_constraint(self, group_idx: int, *args):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddLinearConstraint(*args)
+        self.linear_constraints[group_idx].append(constraint)
+
+        return constraint
+
+    def add_linear_equality_constraint(self, group_idx: int, *args):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddLinearEqualityConstraint(*args)
+        self.linear_equality_constraints[group_idx].append(constraint)
+
+        return constraint
+
+    def add_quadratic_constraint(self, group_idx_1: int, group_idx_2: int, *args):
+        group_idx_1 = self._find_numbered_idx(group_idx_1)
+        group_idx_2 = self._find_numbered_idx(group_idx_2)
+
+        constraint = self.prog.AddQuadraticConstraint(*args)
+        self.quadratic_constraints[(group_idx_1, group_idx_2)].append(constraint)
+
+        return constraint
+
+    def add_quadratic_cost(self, group_idx_1: int, group_idx_2: int, *args):
+        group_idx_1 = self._find_numbered_idx(group_idx_1)
+        group_idx_2 = self._find_numbered_idx(group_idx_2)
+
+        cost = self.prog.AddQuadraticCost(*args)
+        self.quadratic_costs[(group_idx_1, group_idx_2)].append(cost)
+
+        return cost
 
 
 # This script tries to use the Semidefinite relaxation while exploiting sparsity
@@ -25,15 +89,15 @@ class BandSparseSemidefiniteRelaxation:
 NUM_CTRL_POINTS = 20
 NUM_DIMS = 2
 
-prog = MathematicalProgram()
+prog = BandSparseSemidefiniteRelaxation(NUM_CTRL_POINTS)
 
-r = prog.NewContinuousVariables(NUM_DIMS, NUM_CTRL_POINTS, "r")
+rs = [prog.new_variables(idx, NUM_DIMS, f"r_{idx}") for idx in range(NUM_CTRL_POINTS)]
 
 # Constrain the points to lie on the unit circle
 for i in range(NUM_CTRL_POINTS):
-    r_i = r[:, i]
-    so_2_constraint = r_i.T.dot(r_i) == 1
-    prog.AddConstraint(so_2_constraint)
+    r_i = rs[i]
+    so_2_constraint = r_i.T.dot(r_i) - 1
+    prog.add_quadratic_constraint(i, i, so_2_constraint, 1, 1)
 
 # Initial conditions
 th_initial = 0
@@ -41,17 +105,19 @@ th_final = np.pi - 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
-initial_cond = eq(r[:, 0], create_r_vec_from_angle(th_initial))
-final_cond = eq(r[:, -1], create_r_vec_from_angle(th_final))
+initial_cond = eq(rs[0], create_r_vec_from_angle(th_initial))
+final_cond = eq(rs[-1], create_r_vec_from_angle(th_final))
 
 for c in initial_cond:
-    prog.AddConstraint(c)
+    prog.add_linear_equality_constraint(0, c)
 
 for c in final_cond:
-    prog.AddConstraint(c)
+    prog.add_linear_equality_constraint(-1, c)
 
 # Add in angular velocity
-th_dots = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "th_dot")
+th_dots = [
+    prog.new_variables(idx, 1, f"th_dot_{idx}")[0] for idx in range(NUM_CTRL_POINTS - 1)
+]
 
 
 def skew_symmetric(a):
@@ -67,20 +133,18 @@ def rot_matrix(r):
 
 
 ang_vel_constraints = []
-for k in range(NUM_CTRL_POINTS - 1):
-    th_dot_k = th_dots[k]
-    R_k = rot_matrix(r[:, k])
-    R_k_next = rot_matrix(r[:, k + 1])
+for idx in range(NUM_CTRL_POINTS - 1):
+    th_dot_k = th_dots[idx]
+    R_k = rot_matrix(rs[idx])
+    R_k_next = rot_matrix(rs[idx + 1])
     omega_hat_k = skew_symmetric(th_dot_k)
 
     exp_om_dt = approximate_exp_map(omega_hat_k)
-    constraint = eq(exp_om_dt, R_k.T @ R_k_next)
+    constraint = exp_om_dt - R_k.T @ R_k_next
     for c in constraint.flatten():
-        prog.AddConstraint(c)
+        prog.add_quadratic_constraint(idx, idx + 1, c, 0, 0)
 
-    ang_vel_constraints.append(
-        [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
-    )
+    ang_vel_constraints.append([expr for expr in constraint.flatten()])
 
 # A = np.array([[1, -3], [-2, -6]])
 # b = np.array([2, 3])
@@ -89,19 +153,11 @@ for k in range(NUM_CTRL_POINTS - 1):
 #     consts = le(A.dot(var), b)
 #     prog.AddConstraint(consts)
 
-prog.AddCost(th_dots.T @ th_dots)
-# prog.AddCost(np.sum(th_dots))
-
-# Sparsity
-variable_groups = {}
-for k in range(NUM_CTRL_POINTS - 1):
-    group = Variables(np.concatenate([r[:, k], r[:, k + 1], [th_dots[k]]]))
-    variable_groups[group] = True
+for i in range(NUM_CTRL_POINTS - 1):
+    prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
 
 # Solve SDP relaxation
-relaxed_prog = MakeSemidefiniteRelaxation(prog, variable_groups)
-# relaxed_prog = MakeSemidefiniteRelaxation(prog, False)  # Segfaults
-
+relaxed_prog = MakeSemidefiniteRelaxation(prog)
 print("Finished formulating SDP relaxation")
 
 solver_options = SolverOptions()
@@ -116,7 +172,7 @@ assert result.is_success()
 print(f"Cost: {result.get_optimal_cost()}")
 print(f"Elapsed time: {elapsed_time}")
 
-r_val = result.GetSolution(r)
+r_val = result.GetSolution(rs)
 r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
 # plot_cos_sine_trajs(r_val.T)
