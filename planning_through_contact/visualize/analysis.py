@@ -13,6 +13,10 @@ from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 
 
 def save_gcs_graph_diagram(
@@ -481,3 +485,72 @@ def create_force_plot(
 
     for ax in axs:
         ax.grid()
+
+
+from typing import Dict, List
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
+from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
+
+
+def plot_constraint_violation(data: Dict[str, npt.NDArray[np.float64]]) -> None:
+    # Preparing the plot
+    fig, ax = plt.subplots()
+    group_names = list(data.keys())
+    max_bars = max(
+        [len(data[key].flatten()) for key in group_names]
+    )  # maximum number of bars in a group
+    bar_width = 0.8 / max_bars  # width of each bar
+    opacity = 0.8
+
+    # Creating the bars
+    for i, key in enumerate(group_names):
+        values = data[key].flatten()
+        bar_positions = np.arange(len(values)) * (1 / max_bars) + i - 0.4
+        ax.bar(bar_positions, np.abs(values), bar_width, alpha=opacity, label=key)
+
+    # Adjusting the labels
+    ax.set_ylabel("Values")
+    ax.set_title("Violation of quadratic constraints")
+    ax.set_xticks([])
+    ax.legend()
+
+    # Show the plot
+    plt.show()
+
+
+def analyze_mode_result(
+    mode: FaceContactMode,
+    traj: PlanarPushingTrajectory,
+    result: MathematicalProgramResult,
+) -> None:
+    X = mode.relaxed_prog.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+
+    X_sol = result.GetSolution(X)
+
+    eigs, _ = np.linalg.eig(X_sol)
+    norms = np.abs(eigs)
+
+    plt.bar(range(len(norms)), norms)
+    plt.xlabel("Index of Eigenvalue")
+    plt.ylabel("Norm of Eigenvalue")
+    plt.title("Norms of the Eigenvalues of the Matrix")
+    plt.show()
+
+    constraint_violations = {
+        key: evaluate_np_expressions_array(value, result)
+        for key, value in mode.constraints.items()
+    }
+    plot_constraint_violation(constraint_violations)
+
+    # (num_knot_points, 2): first col cosines, second col sines
+
+    rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])
+    plot_cos_sine_trajs(rs)

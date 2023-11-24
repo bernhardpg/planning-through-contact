@@ -41,9 +41,17 @@ def evaluate_np_expressions_array(
     return solutions
 
 
-def forward_differences(vars, dt: float) -> List[npt.NDArray[np.float64]]:
-    # TODO: It is cleaner to implement this using a forward difference matrix, but as a first step keep it like this
-    forward_diffs = [
-        (var_next - var_curr) / dt for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
+def calc_displacements(vars) -> List[npt.NDArray[np.float64]]:
+    displacements = [
+        (var_next - var_curr) for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
     ]
-    return forward_diffs
+    return displacements
+
+
+def skew_symmetric_so2(a):
+    return np.array([[0, -a], [a, 0]])
+
+
+def approx_exponential_map(omega_hat, num_dims: int = 2):
+    # Approximates the exponential map (matrix exponential) by truncating terms of higher degree than 2
+    return np.eye(num_dims) + omega_hat + 0.5 * omega_hat @ omega_hat

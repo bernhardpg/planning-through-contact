@@ -31,13 +31,13 @@ class OldPlanarPushingTrajectory:
     R_WB: List[npt.NDArray[np.float64]]  # [(2,2) x traj_length]
     p_WB: npt.NDArray[np.float64]  # (2, traj_length)
     p_WP: npt.NDArray[np.float64]  # (2, traj_length)
-    f_c_W: npt.NDArray[np.float64]  # (2, traj_length)
+    f_c_W: npt.NDArray[np.float64]  # (2, traj_length - 1)
     p_BP: npt.NDArray[np.float64]  # (2, traj_length)
 
     def __post_init__(self) -> None:
+        # NOTE: The length of f_c_W will have length -1
         all_traj_lenths = np.array(
-            [traj.shape[1] for traj in (self.p_WB, self.p_WP, self.f_c_W)]
-            + [len(self.R_WB)]
+            [traj.shape[1] for traj in (self.p_WB, self.p_WP)] + [len(self.R_WB)]
         )
         traj_lengths_equal = np.all(all_traj_lenths == all_traj_lenths[0])
         if not traj_lengths_equal:

@@ -87,7 +87,7 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
         assert p.shape == (2, 1)
         assert isinstance(p[0, 0], sym.Expression)
 
-    assert len(non_collision_vars.f_c_Ws) == num_knot_points
+    assert len(non_collision_vars.f_c_Ws) == num_knot_points - 1
     for f in non_collision_vars.f_c_Ws:
         assert f.shape == (2, 1)
         assert np.all(f == 0)

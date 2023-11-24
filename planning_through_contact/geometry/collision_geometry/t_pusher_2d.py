@@ -120,6 +120,14 @@ class TPusher2d(CollisionGeometry):
             raise ValueError(f"No collision-free region for loc_idx {loc_idx}")
 
     @property
+    def width(self) -> float:
+        return self.box_1.width
+
+    @property
+    def height(self) -> float:
+        return self.box_1.height + self.box_2.height
+
+    @property
     def contact_locations(self) -> List[PolytopeContactLocation]:
         # TODO(bernhardpg): Only returns FACEs, should ideally return
         # both vertices and faces

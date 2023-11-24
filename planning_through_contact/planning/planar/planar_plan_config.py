@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -69,30 +70,34 @@ class SliderPusherSystemConfig:
     friction_coeff_table_slider: float = 0.5
     friction_coeff_slider_pusher: float = 0.5
     grav_acc: float = 9.81
+    integration_constant: float = 0.6
 
     @cached_property
     def f_max(self) -> float:
         return self.friction_coeff_table_slider * self.grav_acc * self.slider.mass
 
     @cached_property
-    def integration_constant(self) -> float:
+    def max_contact_radius(self) -> float:
         geometry = self.slider.geometry
-        if isinstance(geometry, Box2d):
+        if isinstance(geometry, Box2d) or isinstance(geometry, TPusher2d):
             return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
         else:
-            return 0.6
             raise NotImplementedError(
-                f"Integration constant for {type(geometry)} is not implemented"
+                f"max_contact_radius for {type(geometry)} is not implemented"
             )
 
     @cached_property
     def tau_max(self) -> float:
-        return self.f_max * self.integration_constant
+        return self.f_max * self.max_contact_radius * self.integration_constant
 
     @cached_property
     def ellipsoidal_limit_surface(self) -> npt.NDArray[np.float64]:
         D = np.diag([1 / self.f_max**2, 1 / self.f_max**2, 1 / self.tau_max**2])
         return D
+
+    @cached_property
+    def limit_surface_const(self) -> float:
+        return (self.max_contact_radius * self.integration_constant) ** -2
 
 
 @dataclass
@@ -121,14 +126,15 @@ class PlanarCostFunctionTerms:
     # Face contact
     cost_param_lin_vels: float = 1.0
     cost_param_ang_vels: float = 1.0
+    cost_param_forces: float = 1.0
 
 
 @dataclass
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
-    time_in_contact: float = 2
-    time_non_collision: float = 0.5
+    time_in_contact: float = 2  # TODO: remove, no time
+    time_non_collision: float = 0.5  # TODO: remove, there is no time
     avoid_object: bool = False
     allow_teleportation: bool = False
     avoidance_cost: Literal[
@@ -139,9 +145,6 @@ class PlanarPlanConfig:
     ] = "quadratic"
     minimize_squared_eucl_dist: bool = True
     use_eq_elimination: bool = False
-    use_redundant_dynamic_constraints: bool = (
-        True  # TODO(bernhardpg): This sometimes makes nonlinear rounding not work
-    )
     penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False
@@ -154,6 +157,7 @@ class PlanarPlanConfig:
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
+    use_approx_exponential_map: bool = True
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
