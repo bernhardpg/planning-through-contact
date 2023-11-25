@@ -1,5 +1,3 @@
-from typing import List
-
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, le
@@ -118,7 +116,7 @@ class BandSparseSemidefiniteRelaxation:
             X = relaxed_prog.NewSymmetricContinuousVariables(num_vars, f"X_{idx}")
             self.Xs[idx] = X
 
-            # Y = [1; x] [1; x]^T
+            # Y = [1; x; x_next] [1; x'; x_next']'
             y = np.concatenate((x, x_next))
             # fmt: off
             Y = np.block([[1, y.T],
@@ -132,11 +130,14 @@ class BandSparseSemidefiniteRelaxation:
             X = self.Xs[idx]
             X_next = self.Xs[idx + 1]
 
-            x_len = len(self.xs[idx])
-            x_next_len = len(self.xs[idx + 1])
-
-            # X.downRightCorner == X.upperLeftCorner
-            const = X[x_len:, x_len:] - X_next[:x_next_len, :x_next_len]
+            # X = [x; y][x' y']
+            # X = [xx' xy'
+            #      yx' yy']
+            # X_next = [yy' zy'
+            #           zy' zz']
+            # We enforce yy' == yy'
+            y_len = len(self.xs[idx + 1])
+            const = X[-y_len:, -y_len:] - X_next[:y_len, :y_len]
             for c in const.flatten():
                 relaxed_prog.AddLinearEqualityConstraint(c, 0)
 
@@ -148,28 +149,42 @@ class BandSparseSemidefiniteRelaxation:
                 # TODO(bernhardpg): For some reason, the drake API for equality constraints doesn't support bindings
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
 
-        # # Add constraints implied by linear equality constraints
-        # for i in range(self.num_groups - 1):
-        #     x = self.xs[i]
-        #     y = self.xs[i + 1]
-        #     eqs_i = self.linear_equality_constraints[i]
-        #     A_i = linear_bindings_to_homogenuous_form(eqs_i, np.array([]), x)
-        #
-        #     # NOTE: This is not correct
-        #     Y = self.Ys[i]
-        #     A_i_Y = A_i.dot(Y)
-        #     for c in A_i_Y.flatten():
-        #         relaxed_prog.AddLinearEqualityConstraint(c, 0)
-        #
-        #     eqs_j = self.linear_equality_constraints[j]
-        #     A_j = linear_bindings_to_homogenuous_form(eqs_j, np.array([]), x)
-        #     A_i_Y = A_i.dot(Y)
-        #     for c in A_i_Y.flatten():
-        #         relaxed_prog.AddLinearEqualityConstraint(c, 0)
-        #
-        #     breakpoint()
-        #
-        #     eqs_j = self.linear_equality_constraints[j]
+        # Add constraints implied by linear equality constraints
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx]
+            y = self.xs[idx + 1]
+            eqs_i = self.linear_equality_constraints[idx]
+            eqs_j = self.linear_equality_constraints[idx + 1]
+
+            # [b A][1; x] = 0
+            A = linear_bindings_to_homogenuous_form(eqs_i, np.array([]), x)
+            B = linear_bindings_to_homogenuous_form(eqs_j, np.array([]), y)
+
+            x_len = len(x)
+            y_len = len(y)
+
+            # X = [xx' xy'
+            #      yx' yy']
+            X = self.Xs[idx]
+            xxT = X[:x_len, :x_len]
+            xyT = X[:x_len, -y_len:]
+            yyT = X[-y_len:, -y_len:]
+
+            x_bar_x_bar_T = np.block([[1, x.T], [x, xxT]])
+            x_bar_y_bar_T = np.block([[1, y.T], [x, xyT]])
+            y_bar_y_bar_T = np.block([[1, y.T], [y, yyT]])
+
+            # A[1; x] = 0 => A[1; x][1; x]' = 0 and A[1; x][1; y]' = 0
+            for c in A.dot(x_bar_x_bar_T).flatten():
+                relaxed_prog.AddLinearEqualityConstraint(c, 0)
+            for c in A.dot(x_bar_y_bar_T).flatten():
+                relaxed_prog.AddLinearEqualityConstraint(c, 0)
+
+            # B[1; y] = 0 => B[1; y][1; y]' = 0 and B[1; y][1; x]' = 0
+            for c in B.dot(y_bar_y_bar_T).flatten():
+                relaxed_prog.AddLinearEqualityConstraint(c, 0)
+            for c in B.dot(x_bar_y_bar_T.T).flatten():
+                relaxed_prog.AddLinearEqualityConstraint(c, 0)
 
         # # Add products of linear constraints
         # for i, j in zip(range(self.num_groups - 1), range(1, self.num_groups)):
@@ -189,12 +204,6 @@ class BandSparseSemidefiniteRelaxation:
         assert result.is_success()
         breakpoint()
         return self.relaxed_prog
-
-    @staticmethod
-    def get_A_b_from_lin_consts(bindings: List[Binding], vars: npt.NDArray[Variable]):  # type: ignore
-        consts = [b.evaluator() for b in bindings]
-
-        breakpoint()
 
 
 # This script tries to use the Semidefinite relaxation while exploiting sparsity
