@@ -280,52 +280,49 @@ class BandSparseSemidefiniteRelaxation:
                     0.5 * eval.upper_bound(),
                 )
 
-        # # Quadratic costs
-        # for (i, j), consts in self.quadratic_costs.items():
-        #     # Only constraint coupling subsequent groups is supported
-        #     assert i == i or i + 1 == j
-        #
-        #     # We add each quadratic constraint separately
-        #     for c in consts:
-        #         eval = c.evaluator()
-        #         vars = c.variables()
-        #
-        #         bTx = eval.b().T @ vars
-        #         Q = eval.Q()
-        #
-        #         if i + 1 == j:
-        #             # get the variables in the monomials described by Q
-        #             Q_idxs = list(zip(*np.where(Q != 0)))
-        #
-        #             # get the idxs of these variables in our variable groups
-        #             x = np.concatenate((self.xs[i], self.xs[j]))
-        #             idxs_map = {
-        #                 k: l
-        #                 for k, var_k in enumerate(vars)
-        #                 for l, var_l in enumerate(x.flatten())
-        #                 if var_k.EqualTo(var_l)
-        #             }
-        #             var_idxs = [(idxs_map[i], idxs_map[j]) for i, j in Q_idxs]
-        #
-        #             X = self.Xs[i]
-        #             vars = np.array([X[k, l] for (k, l) in var_idxs])
-        #             coeffs = np.array([Q[k, l] for (k, l) in Q_idxs])
-        #
-        #             # 0.5 x'Qx + b'x
-        #             const = 0.5 * coeffs.T @ vars + bTx
-        #             relaxed_prog.AddLinearConstraint(
-        #                 const,
-        #                 eval.lower_bound(),
-        #                 eval.upper_bound(),
-        #             )
+        # Quadratic costs
+        for (i, j), costs in self.quadratic_costs.items():
+            # Only constraint coupling subsequent groups is supported
+            assert i == i or i + 1 == j
+
+            # We add each quadratic constraint separately
+            for c in costs:
+                eval = c.evaluator()
+                vars = c.variables()
+
+                bTx = eval.b().T @ vars
+                Q = eval.Q()
+
+                # get the variables in the monomials described by Q
+                Q_idxs = list(zip(*np.where(Q != 0)))
+
+                # get the idxs of these variables in our variable groups
+                if i + 1 == j:
+                    x = np.concatenate((self.xs[i], self.xs[j]))
+                elif i == j:  # only squared terms
+                    x = self.xs[i]
+
+                idxs_map = {
+                    k: l
+                    for k, var_k in enumerate(vars)
+                    for l, var_l in enumerate(x.flatten())
+                    if var_k.EqualTo(var_l)
+                }
+                var_idxs = [(idxs_map[i], idxs_map[j]) for i, j in Q_idxs]
+
+                if i == 19:  # TODO: fix
+                    continue
+                X = self.Xs[i]
+                X_vars = np.array([X[k, l] for (k, l) in var_idxs])
+                coeffs = np.array([Q[k, l] for (k, l) in Q_idxs])
+
+                # 0.5 x'Qx + b'x
+                cost = 0.5 * coeffs.T @ X_vars + bTx + eval.c()
+                # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
+                relaxed_prog.AddLinearCost(cost)
 
         self.relaxed_prog = relaxed_prog
 
-        solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        result = Solve(relaxed_prog, solver_options=solver_options)
-        assert result.is_success()
-        breakpoint()
         return self.relaxed_prog
 
 
@@ -408,10 +405,8 @@ for idx in range(NUM_CTRL_POINTS - 1):
 for i in range(NUM_CTRL_POINTS - 1):
     prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
 
-relaxed_prog = prog.make_relaxation()
-
 # Solve SDP relaxation
-relaxed_prog = MakeSemidefiniteRelaxation(prog)
+relaxed_prog = prog.make_relaxation()
 print("Finished formulating SDP relaxation")
 
 solver_options = SolverOptions()
@@ -427,8 +422,8 @@ print(f"Cost: {result.get_optimal_cost()}")
 print(f"Elapsed time: {elapsed_time}")
 
 r_val = result.GetSolution(rs)
+breakpoint()
 r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
-
-# plot_cos_sine_trajs(r_val.T)
+plot_cos_sine_trajs(r_val.T)
 # plot_cos_sine_trajs(r_val.T, A, b)
 # print(result.get_optimal_cost())
