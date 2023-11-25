@@ -157,6 +157,7 @@ class BandSparseSemidefiniteRelaxation:
             eqs_j = self.linear_equality_constraints[idx + 1]
 
             # [b A][1; x] = 0
+            # TODO: what about BBOX constraints?
             A = linear_bindings_to_homogenuous_form(eqs_i, np.array([]), x)
             B = linear_bindings_to_homogenuous_form(eqs_j, np.array([]), y)
 
@@ -174,6 +175,8 @@ class BandSparseSemidefiniteRelaxation:
             x_bar_y_bar_T = np.block([[1, y.T], [x, xyT]])
             y_bar_y_bar_T = np.block([[1, y.T], [y, yyT]])
 
+            # TODO: Will be adding some constraints multiple times here!
+
             # A[1; x] = 0 => A[1; x][1; x]' = 0 and A[1; x][1; y]' = 0
             for c in A.dot(x_bar_x_bar_T).flatten():
                 relaxed_prog.AddLinearEqualityConstraint(c, 0)
@@ -186,15 +189,40 @@ class BandSparseSemidefiniteRelaxation:
             for c in B.dot(x_bar_y_bar_T.T).flatten():
                 relaxed_prog.AddLinearEqualityConstraint(c, 0)
 
-        # # Add products of linear constraints
-        # for i, j in zip(range(self.num_groups - 1), range(1, self.num_groups)):
-        #     x = self.xs[i]
-        #
-        #     ineqs_i = self.linear_inequality_constraints[i]
-        #     ineqs_j = self.linear_inequality_constraints[j]
-        #
-        #     self.get_A_b_from_lin_consts(ineqs_i, x)
-        #     A, b = DecomposeAffineExpressions(ineqs_i, x)
+        # Add constraints implied by linear equality constraints
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx]
+            y = self.xs[idx + 1]
+            ineqs_i = self.linear_inequality_constraints[idx]
+            ineqs_j = self.linear_inequality_constraints[idx + 1]
+
+            # [b A][1; x] >= 0
+            A = linear_bindings_to_homogenuous_form(ineqs_i, np.array([]), x)
+            B = linear_bindings_to_homogenuous_form(ineqs_j, np.array([]), y)
+
+            x_len = len(x)
+            y_len = len(y)
+
+            # X = [xx' xy'
+            #      yx' yy']
+            X = self.Xs[idx]
+            xxT = X[:x_len, :x_len]
+            xyT = X[:x_len, -y_len:]
+            yyT = X[-y_len:, -y_len:]
+
+            x_bar_x_bar_T = np.block([[1, x.T], [x, xxT]])
+            x_bar_y_bar_T = np.block([[1, y.T], [x, xyT]])
+            y_bar_y_bar_T = np.block([[1, y.T], [y, yyT]])
+
+            # TODO: Will be adding some constraints multiple times here!
+            # A[1; x] >= 0 and B[1; y] >= 0
+            # => A[1; x][1; x]'A' >= 0 and A[1; x][1; y]'B' >= 0 and B[1; y][1; y]'B' >=
+            for c in (A @ x_bar_x_bar_T @ A.T).flatten():
+                relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+            for c in (A @ x_bar_y_bar_T @ B.T).flatten():
+                relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+            for c in (B @ y_bar_y_bar_T @ B.T).flatten():
+                relaxed_prog.AddLinearConstraint(c, 0, np.inf)
 
         self.relaxed_prog = relaxed_prog
 
