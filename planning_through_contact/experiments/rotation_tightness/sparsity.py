@@ -33,6 +33,7 @@ class BandSparseSemidefiniteRelaxation:
         self.num_groups = num_groups
 
         self.groups = {idx: [] for idx in range(num_groups)}
+        self.linear_costs = {idx: [] for idx in range(num_groups)}
         self.linear_inequality_constraints = {idx: [] for idx in range(num_groups)}
         self.linear_equality_constraints = {idx: [] for idx in range(num_groups)}
 
@@ -62,6 +63,13 @@ class BandSparseSemidefiniteRelaxation:
         self.groups[group_idx].append(vars)
 
         return vars
+
+    def add_linear_cost(self, group_idx: int, *args):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddLinearCost(*args)
+        self.linear_costs[group_idx].append(constraint)
+
+        return constraint
 
     def add_linear_inequality_constraint(self, group_idx: int, *args):
         group_idx = self._find_numbered_idx(group_idx)
@@ -148,6 +156,11 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
             for const in self.linear_equality_constraints[idx]:
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
+        # Add all linear costs directly
+        for idx in range(self.num_groups):
+            for const in self.linear_costs[idx]:
+                relaxed_prog.AddCost(const.evaluator(), const.variables())
 
         # Add constraints implied by linear equality constraints
         for idx in range(self.num_groups - 1):
@@ -332,7 +345,7 @@ class BandSparseSemidefiniteRelaxation:
 # This script tries to use the Semidefinite relaxation while exploiting sparsity
 # It uses the formulation with the approximate exponential map
 
-NUM_CTRL_POINTS = 2000
+NUM_CTRL_POINTS = 400
 NUM_DIMS = 2
 
 prog = BandSparseSemidefiniteRelaxation(NUM_CTRL_POINTS)
@@ -363,8 +376,8 @@ for i in range(NUM_CTRL_POINTS):
 #     prog.add_quadratic_cost(i, i + 1, rot_cost_i)
 
 # Initial conditions
-th_initial = np.pi - 0.2
-th_final = 0
+th_initial = 0
+th_final = np.pi - 0.1
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -418,6 +431,9 @@ for idx in range(NUM_CTRL_POINTS - 1):
 
 for i in range(NUM_CTRL_POINTS - 1):
     prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
+
+# for i in range(NUM_CTRL_POINTS - 1):
+#     prog.add_linear_cost(i, -0.2 * th_dots[i])
 
 # Solve SDP relaxation
 relaxed_prog = prog.make_relaxation()
