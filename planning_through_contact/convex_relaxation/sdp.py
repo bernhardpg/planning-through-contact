@@ -98,7 +98,7 @@ def _affine_terms_to_homogenous_form(
     return A_homogenous
 
 
-def _linear_bindings_to_homogenuous_form(
+def linear_bindings_to_homogenuous_form(
     linear_bindings: List[Binding],
     bounding_box_expressions: NpExpressionArray,
     vars: NpVariableArray,
@@ -451,7 +451,7 @@ def create_sdp_relaxation(
     )
     A_eq = None
     if has_linear_eq_constraints:
-        A_eq = _linear_bindings_to_homogenuous_form(
+        A_eq = linear_bindings_to_homogenuous_form(
             prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
         )
         multiplied_constraints = eq(A_eq.dot(X).flatten(), 0)
@@ -468,7 +468,7 @@ def create_sdp_relaxation(
     )
     A_ineq = None
     if has_linear_ineq_constraints:
-        A_ineq = _linear_bindings_to_homogenuous_form(
+        A_ineq = linear_bindings_to_homogenuous_form(
             prog.linear_constraints(), bounding_box_ineqs, decision_vars
         )
         multiplied_constraints = ge(A_ineq.dot(X).dot(A_ineq.T), 0)

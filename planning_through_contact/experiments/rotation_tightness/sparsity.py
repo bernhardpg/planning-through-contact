@@ -1,15 +1,29 @@
+from typing import List
+
 import numpy as np
+import numpy.typing as npt
 from pydrake.math import eq, le
 from pydrake.solvers import (
+    Binding,
     CommonSolverOption,
+    LinearConstraint,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     Solve,
     SolverOptions,
 )
-from pydrake.symbolic import Expression, Variables
+from pydrake.symbolic import (
+    DecomposeAffineExpression,
+    DecomposeAffineExpressions,
+    Expression,
+    Variable,
+    Variables,
+)
 
-from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
+from planning_through_contact.convex_relaxation.sdp import (
+    create_sdp_relaxation,
+    linear_bindings_to_homogenuous_form,
+)
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
@@ -20,7 +34,7 @@ class BandSparseSemidefiniteRelaxation:
         self.num_groups = num_groups
 
         self.groups = {idx: [] for idx in range(num_groups)}
-        self.linear_constraints = {idx: [] for idx in range(num_groups)}
+        self.linear_inequality_constraints = {idx: [] for idx in range(num_groups)}
         self.linear_equality_constraints = {idx: [] for idx in range(num_groups)}
 
         # Quadratic constraints and costs is what couples the groups
@@ -53,7 +67,7 @@ class BandSparseSemidefiniteRelaxation:
     def add_linear_inequality_constraint(self, group_idx: int, *args):
         group_idx = self._find_numbered_idx(group_idx)
         constraint = self.prog.AddLinearConstraint(*args)
-        self.linear_constraints[group_idx].append(constraint)
+        self.linear_inequality_constraints[group_idx].append(constraint)
 
         return constraint
 
@@ -82,6 +96,106 @@ class BandSparseSemidefiniteRelaxation:
 
         return cost
 
+    def make_relaxation(self) -> MathematicalProgram:
+        relaxed_prog = MathematicalProgram()
+
+        # First gather variables
+        self.xs = {
+            idx: np.concatenate(self.groups[idx]).reshape((-1, 1))
+            for idx in range(self.num_groups)
+        }
+
+        # Form smaller PSD cones
+        self.Xs = {}
+        self.Ys = {}
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx]
+            x_next = self.xs[idx + 1]
+
+            relaxed_prog.AddDecisionVariables(x)
+            relaxed_prog.AddDecisionVariables(x_next)
+            num_vars = len(x) + len(x_next)
+            X = relaxed_prog.NewSymmetricContinuousVariables(num_vars, f"X_{idx}")
+            self.Xs[idx] = X
+
+            # Y = [1; x] [1; x]^T
+            y = np.concatenate((x, x_next))
+            # fmt: off
+            Y = np.block([[1, y.T],
+                          [y, X]])
+            # fmt: on
+            relaxed_prog.AddPositiveSemidefiniteConstraint(Y)
+            self.Ys[idx] = Y
+
+        # Cones must intersect
+        for idx in range(self.num_groups - 2):
+            X = self.Xs[idx]
+            X_next = self.Xs[idx + 1]
+
+            x_len = len(self.xs[idx])
+            x_next_len = len(self.xs[idx + 1])
+
+            # X.downRightCorner == X.upperLeftCorner
+            const = X[x_len:, x_len:] - X_next[:x_next_len, :x_next_len]
+            for c in const.flatten():
+                relaxed_prog.AddLinearEqualityConstraint(c, 0)
+
+        # Add all linear constraints directly
+        for idx in range(self.num_groups):
+            for const in self.linear_inequality_constraints[idx]:
+                relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+            for const in self.linear_equality_constraints[idx]:
+                # TODO(bernhardpg): For some reason, the drake API for equality constraints doesn't support bindings
+                relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
+        # # Add constraints implied by linear equality constraints
+        # for i in range(self.num_groups - 1):
+        #     x = self.xs[i]
+        #     y = self.xs[i + 1]
+        #     eqs_i = self.linear_equality_constraints[i]
+        #     A_i = linear_bindings_to_homogenuous_form(eqs_i, np.array([]), x)
+        #
+        #     # NOTE: This is not correct
+        #     Y = self.Ys[i]
+        #     A_i_Y = A_i.dot(Y)
+        #     for c in A_i_Y.flatten():
+        #         relaxed_prog.AddLinearEqualityConstraint(c, 0)
+        #
+        #     eqs_j = self.linear_equality_constraints[j]
+        #     A_j = linear_bindings_to_homogenuous_form(eqs_j, np.array([]), x)
+        #     A_i_Y = A_i.dot(Y)
+        #     for c in A_i_Y.flatten():
+        #         relaxed_prog.AddLinearEqualityConstraint(c, 0)
+        #
+        #     breakpoint()
+        #
+        #     eqs_j = self.linear_equality_constraints[j]
+
+        # # Add products of linear constraints
+        # for i, j in zip(range(self.num_groups - 1), range(1, self.num_groups)):
+        #     x = self.xs[i]
+        #
+        #     ineqs_i = self.linear_inequality_constraints[i]
+        #     ineqs_j = self.linear_inequality_constraints[j]
+        #
+        #     self.get_A_b_from_lin_consts(ineqs_i, x)
+        #     A, b = DecomposeAffineExpressions(ineqs_i, x)
+
+        self.relaxed_prog = relaxed_prog
+
+        solver_options = SolverOptions()
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        result = Solve(relaxed_prog, solver_options=solver_options)
+        assert result.is_success()
+        breakpoint()
+        return self.relaxed_prog
+
+    @staticmethod
+    def get_A_b_from_lin_consts(bindings: List[Binding], vars: npt.NDArray[Variable]):  # type: ignore
+        consts = [b.evaluator() for b in bindings]
+
+        breakpoint()
+
 
 # This script tries to use the Semidefinite relaxation while exploiting sparsity
 # It uses the formulation with the approximate exponential map
@@ -98,6 +212,12 @@ for i in range(NUM_CTRL_POINTS):
     r_i = rs[i]
     so_2_constraint = r_i.T.dot(r_i) - 1
     prog.add_quadratic_constraint(i, i, so_2_constraint, 1, 1)
+
+# Constrain the cosines and sines
+for i in range(NUM_CTRL_POINTS):
+    r_i = rs[i]
+    prog.add_linear_inequality_constraint(i, le(r_i, 1))
+    prog.add_linear_inequality_constraint(i, le(-1, r_i))
 
 # Initial conditions
 th_initial = 0
@@ -155,6 +275,8 @@ for idx in range(NUM_CTRL_POINTS - 1):
 
 for i in range(NUM_CTRL_POINTS - 1):
     prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
+
+relaxed_prog = prog.make_relaxation()
 
 # Solve SDP relaxation
 relaxed_prog = MakeSemidefiniteRelaxation(prog)
