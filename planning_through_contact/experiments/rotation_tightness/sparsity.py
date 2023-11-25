@@ -147,7 +147,6 @@ class BandSparseSemidefiniteRelaxation:
             for const in self.linear_inequality_constraints[idx]:
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
             for const in self.linear_equality_constraints[idx]:
-                # TODO(bernhardpg): For some reason, the drake API for equality constraints doesn't support bindings
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
 
         # Add constraints implied by linear equality constraints
@@ -322,7 +321,6 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddLinearCost(cost)
 
         self.relaxed_prog = relaxed_prog
-
         return self.relaxed_prog
 
 
@@ -349,8 +347,8 @@ for i in range(NUM_CTRL_POINTS):
     prog.add_linear_inequality_constraint(i, le(-1, r_i))
 
 # Initial conditions
-th_initial = 0
-th_final = np.pi - 0.1
+th_initial = 1.3
+th_final = np.pi / 2 + 0.3
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -422,8 +420,6 @@ print(f"Cost: {result.get_optimal_cost()}")
 print(f"Elapsed time: {elapsed_time}")
 
 r_val = result.GetSolution(rs)
-breakpoint()
-r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
-plot_cos_sine_trajs(r_val.T)
+plot_cos_sine_trajs(r_val)
 # plot_cos_sine_trajs(r_val.T, A, b)
 # print(result.get_optimal_cost())
