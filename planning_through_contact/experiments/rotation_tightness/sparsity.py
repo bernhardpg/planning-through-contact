@@ -3,6 +3,7 @@ import numpy.typing as npt
 from pydrake.math import eq, le
 from pydrake.solvers import (
     Binding,
+    BoundingBoxConstraint,
     CommonSolverOption,
     LinearConstraint,
     MakeSemidefiniteRelaxation,
@@ -156,6 +157,11 @@ class BandSparseSemidefiniteRelaxation:
             eqs_i = self.linear_equality_constraints[idx]
             eqs_j = self.linear_equality_constraints[idx + 1]
 
+            for c in eqs_i + eqs_j:
+                if isinstance(c, Binding[BoundingBoxConstraint]):
+                    # NOTE: I am not sure if I am handling these yet!
+                    breakpoint()
+
             # [b A][1; x] = 0
             # TODO: what about BBOX constraints?
             A = linear_bindings_to_homogenuous_form(eqs_i, np.array([]), x)
@@ -196,6 +202,11 @@ class BandSparseSemidefiniteRelaxation:
             ineqs_i = self.linear_inequality_constraints[idx]
             ineqs_j = self.linear_inequality_constraints[idx + 1]
 
+            for c in ineqs_i + ineqs_j:
+                if isinstance(c, Binding[BoundingBoxConstraint]):
+                    # NOTE: I am not sure if I am handling these yet!
+                    breakpoint()
+
             # [b A][1; x] >= 0
             A = linear_bindings_to_homogenuous_form(ineqs_i, np.array([]), x)
             B = linear_bindings_to_homogenuous_form(ineqs_j, np.array([]), y)
@@ -223,6 +234,45 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddLinearConstraint(c, 0, np.inf)
             for c in (B @ y_bar_y_bar_T @ B.T).flatten():
                 relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+
+        # Quadratic constraints
+        for (i, j), consts in self.quadratic_constraints.items():
+            # Only constraint coupling subsequent groups is supported
+            assert i == i or i + 1 == j
+
+            # We add each quadratic constraint separately
+            for c in consts:
+                eval = c.evaluator()
+                vars = c.variables()
+
+                bTx = eval.b().T @ vars
+                Q = eval.Q()
+
+                if i + 1 == j:
+                    # get the variables in the monomials described by Q
+                    Q_idxs = list(zip(*np.where(Q != 0)))
+
+                    # get the idxs of these variables in our variable groups
+                    x = np.concatenate((self.xs[i], self.xs[j]))
+                    idxs_map = {
+                        k: l
+                        for k, var_k in enumerate(vars)
+                        for l, var_l in enumerate(x.flatten())
+                        if var_k.EqualTo(var_l)
+                    }
+                    var_idxs = [(idxs_map[i], idxs_map[j]) for i, j in Q_idxs]
+
+                    X = self.Xs[i]
+                    vars = np.array([X[k, l] for (k, l) in var_idxs])
+                    coeffs = np.array([Q[k, l] for (k, l) in Q_idxs])
+
+                    # 0.5 x'Qx + b'x
+                    const = 0.5 * coeffs.T @ vars + bTx
+                    relaxed_prog.AddLinearConstraint(
+                        const,
+                        eval.lower_bound(),
+                        eval.upper_bound(),
+                    )
 
         self.relaxed_prog = relaxed_prog
 
