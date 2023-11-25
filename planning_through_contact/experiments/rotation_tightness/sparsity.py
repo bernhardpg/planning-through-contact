@@ -253,8 +253,14 @@ class BandSparseSemidefiniteRelaxation:
                 # get the idxs of these variables in our variable groups
                 if i + 1 == j:
                     x = np.concatenate((self.xs[i], self.xs[j]))
+                    # TODO(bernhardpg): Why is the lower and upper bound changing when we only have quadratic terms?
+                    # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
+                    SCALE = 1
                 elif i == j:  # only squared terms
                     x = self.xs[i]
+                    # TODO(bernhardpg): Why is the lower and upper bound changing when we only have quadratic terms?
+                    # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
+                    SCALE = 0.5
 
                 idxs_map = {
                     k: l
@@ -272,11 +278,10 @@ class BandSparseSemidefiniteRelaxation:
 
                 # 0.5 x'Qx + b'x
                 const = 0.5 * coeffs.T @ X_vars + bTx
-                # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
                 relaxed_prog.AddLinearConstraint(
                     const,
-                    0.5 * eval.lower_bound(),
-                    0.5 * eval.upper_bound(),
+                    SCALE * eval.lower_bound(),
+                    SCALE * eval.upper_bound(),
                 )
 
         # Quadratic costs
@@ -327,7 +332,7 @@ class BandSparseSemidefiniteRelaxation:
 # This script tries to use the Semidefinite relaxation while exploiting sparsity
 # It uses the formulation with the approximate exponential map
 
-NUM_CTRL_POINTS = 1000
+NUM_CTRL_POINTS = 2000
 NUM_DIMS = 2
 
 prog = BandSparseSemidefiniteRelaxation(NUM_CTRL_POINTS)
@@ -347,15 +352,15 @@ for i in range(NUM_CTRL_POINTS):
     prog.add_linear_inequality_constraint(i, le(-1, r_i))
 
 # Minimize squared euclidean distances in rotation parameters
-r_displacements = []
-for i in range(NUM_CTRL_POINTS - 1):
-    r_i = rs[i]
-    r_next = rs[i + 1]
-    r_disp_i = r_next - r_i
-    r_displacements.append(r_disp_i)
-
-    rot_cost_i = r_disp_i.T.dot(r_disp_i)
-    prog.add_quadratic_cost(i, i + 1, rot_cost_i)
+# r_displacements = []
+# for i in range(NUM_CTRL_POINTS - 1):
+#     r_i = rs[i]
+#     r_next = rs[i + 1]
+#     r_disp_i = r_next - r_i
+#     r_displacements.append(r_disp_i)
+#
+#     rot_cost_i = r_disp_i.T.dot(r_disp_i)
+#     prog.add_quadratic_cost(i, i + 1, rot_cost_i)
 
 # Initial conditions
 th_initial = np.pi - 0.2
@@ -373,9 +378,9 @@ for c in final_cond:
     prog.add_linear_equality_constraint(-1, c)
 
 # Add in angular velocity
-# th_dots = [
-#     prog.new_variables(idx, 1, f"th_dot_{idx}")[0] for idx in range(NUM_CTRL_POINTS - 1)
-# ]
+th_dots = [
+    prog.new_variables(idx, 1, f"th_dot_{idx}")[0] for idx in range(NUM_CTRL_POINTS - 1)
+]
 
 
 def skew_symmetric(a):
@@ -390,19 +395,19 @@ def rot_matrix(r):
     return np.array([[r[0], -r[1]], [r[1], r[0]]])
 
 
-# ang_vel_constraints = []
-# for idx in range(NUM_CTRL_POINTS - 1):
-#     th_dot_k = th_dots[idx]
-#     R_k = rot_matrix(rs[idx])
-#     R_k_next = rot_matrix(rs[idx + 1])
-#     omega_hat_k = skew_symmetric(th_dot_k)
-#
-#     exp_om_dt = approximate_exp_map(omega_hat_k)
-#     constraint = exp_om_dt - R_k.T @ R_k_next
-#     for c in constraint.flatten():
-#         prog.add_quadratic_constraint(idx, idx + 1, c, 0, 0)
-#
-#     ang_vel_constraints.append([expr for expr in constraint.flatten()])
+ang_vel_constraints = []
+for idx in range(NUM_CTRL_POINTS - 1):
+    th_dot_k = th_dots[idx]
+    R_k = rot_matrix(rs[idx])
+    R_k_next = rot_matrix(rs[idx + 1])
+    omega_hat_k = skew_symmetric(th_dot_k)
+
+    exp_om_dt = approximate_exp_map(omega_hat_k)
+    constraint = exp_om_dt - R_k.T @ R_k_next
+    for c in constraint.flatten():
+        prog.add_quadratic_constraint(idx, idx + 1, c, 0, 0)
+
+    ang_vel_constraints.append([expr for expr in constraint.flatten()])
 #
 # A = np.array([[1, -3], [-2, -6]])
 # b = np.array([2, 3])
@@ -411,8 +416,8 @@ def rot_matrix(r):
 #     consts = le(A.dot(var), b)
 #     prog.AddConstraint(consts)
 
-# for i in range(NUM_CTRL_POINTS - 1):
-#     prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
+for i in range(NUM_CTRL_POINTS - 1):
+    prog.add_quadratic_cost(i, i, pow(th_dots[i], 2))
 
 # Solve SDP relaxation
 relaxed_prog = prog.make_relaxation()
@@ -430,7 +435,7 @@ assert result.is_success()
 print(f"Cost: {result.get_optimal_cost()}")
 print(f"Elapsed time: {elapsed_time}")
 
-# r_val = result.GetSolution(rs)
-# plot_cos_sine_trajs(r_val)
+r_val = result.GetSolution(rs)
+plot_cos_sine_trajs(r_val)
 # plot_cos_sine_trajs(r_val.T, A, b)
 # print(result.get_optimal_cost())

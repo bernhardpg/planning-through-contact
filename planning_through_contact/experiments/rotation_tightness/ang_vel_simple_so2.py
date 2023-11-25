@@ -130,7 +130,7 @@ relaxed_prog = MakeSemidefiniteRelaxation(prog)
 print("Finished formulating SDP relaxation")
 
 solver_options = SolverOptions()
-# solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
 from time import time
 
