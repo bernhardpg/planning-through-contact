@@ -1,11 +1,20 @@
+from typing import List
+
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, le
-from pydrake.solvers import Binding, BoundingBoxConstraint, MathematicalProgram
+from pydrake.solvers import (
+    Binding,
+    BoundingBoxConstraint,
+    LinearConstraint,
+    MakeSemidefiniteRelaxation,
+    MathematicalProgram,
+)
 
 from planning_through_contact.convex_relaxation.sdp import (
     linear_bindings_to_homogenuous_form,
 )
+from planning_through_contact.tools.types import NpExpressionArray
 
 
 class BandSparseSemidefiniteRelaxation:
@@ -25,6 +34,9 @@ class BandSparseSemidefiniteRelaxation:
         self.quadratic_costs = {
             (i, j): [] for i, j in zip(range(num_groups - 1), range(1, num_groups))
         }
+
+        # Constraints that will just be added directly to SDP and will not be multiplied
+        self.independent_constraints = []
 
         # Include quadratic terms
         for i in range(num_groups):
@@ -91,6 +103,33 @@ class BandSparseSemidefiniteRelaxation:
 
         return cost
 
+    def add_independent_constraint(self, *args):
+        constraint = self.prog.AddConstraint(*args)
+        self.independent_constraints.append(constraint)
+
+    # TODO(bernhardpg): Temporary function to make it possible to use my old code
+    def _make_bbox_to_expr(
+        self, bounding_box_bindings: List[Binding[BoundingBoxConstraint]]  # type: ignore
+    ) -> NpExpressionArray:
+        bounding_box_constraints = []
+        for b in bounding_box_bindings:
+            x = b.variables()
+            b_upper = b.evaluator().upper_bound()
+            b_lower = b.evaluator().lower_bound()
+
+            for x_i, b_u, b_l in zip(x, b_upper, b_lower):
+                if b_u == b_l:  # eq constraint
+                    # TODO: Remove this part
+                    raise ValueError("Bounding box equalities are not supported!")
+                    bounding_box_constraints.append((x_i - b_u, ConstraintType.EQ))
+                else:
+                    if not np.isinf(b_u):
+                        bounding_box_constraints.append(b_u - x_i)
+                    if not np.isinf(b_l):
+                        bounding_box_constraints.append(x_i - b_l)
+
+        return np.array(bounding_box_constraints)
+
     def make_relaxation(self) -> MathematicalProgram:
         relaxed_prog = MathematicalProgram()
 
@@ -138,6 +177,10 @@ class BandSparseSemidefiniteRelaxation:
             for c in const.flatten():
                 relaxed_prog.AddLinearEqualityConstraint(c, 0)
 
+        # We add independent constraints without any fancy relaxation machinery
+        for const in self.independent_constraints:
+            relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
         # Add all linear constraints directly
         for idx in range(self.num_groups):
             for const in self.linear_inequality_constraints[idx]:
@@ -160,7 +203,8 @@ class BandSparseSemidefiniteRelaxation:
             for c in eqs_i + eqs_j:
                 if isinstance(c, Binding[BoundingBoxConstraint]):
                     # NOTE: I am not sure if I am handling these yet!
-                    breakpoint()
+                    # breakpoint()
+                    ...
 
             # [b A][1; x] = 0
             # TODO: what about BBOX constraints?
@@ -199,17 +243,34 @@ class BandSparseSemidefiniteRelaxation:
         for idx in range(self.num_groups - 1):
             x = self.xs[idx]
             y = self.xs[idx + 1]
-            ineqs_i = self.linear_inequality_constraints[idx]
-            ineqs_j = self.linear_inequality_constraints[idx + 1]
-
-            for c in ineqs_i + ineqs_j:
-                if isinstance(c, Binding[BoundingBoxConstraint]):
-                    # NOTE: I am not sure if I am handling these yet!
-                    breakpoint()
+            ineqs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints[idx]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints[idx]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
+            ineqs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints[idx + 1]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints[idx + 1]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
 
             # [b A][1; x] >= 0
-            A = linear_bindings_to_homogenuous_form(ineqs_i, np.array([]), x)
-            B = linear_bindings_to_homogenuous_form(ineqs_j, np.array([]), y)
+            A = linear_bindings_to_homogenuous_form(
+                ineqs_i, self._make_bbox_to_expr(bboxs_i), x
+            )
+            B = linear_bindings_to_homogenuous_form(
+                ineqs_j, self._make_bbox_to_expr(bboxs_j), y
+            )
 
             x_len = len(x)
             y_len = len(y)
@@ -261,7 +322,7 @@ class BandSparseSemidefiniteRelaxation:
                     x = self.xs[i]
                     # TODO(bernhardpg): Why is the lower and upper bound changing when we only have quadratic terms?
                     # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
-                    SCALE = 0.5
+                    SCALE = 1.0
 
                 idxs_map = {
                     k: l
@@ -327,4 +388,8 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddLinearCost(cost)
 
         self.relaxed_prog = relaxed_prog
+        return self.relaxed_prog
+
+    def make_full_relaxation(self) -> MathematicalProgram:
+        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         return self.relaxed_prog

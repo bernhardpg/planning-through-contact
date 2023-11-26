@@ -431,9 +431,7 @@ class FaceContactMode(AbstractContactMode):
 
         # Ensure sticking on the contact point
         for idx, v_c_B in enumerate(self.variables.v_BPs):
-            self.prog.add_linear_equality_constraint(
-                idx, v_c_B.flatten(), np.zeros((2,))
-            )
+            self.prog.add_independent_constraint(eq(v_c_B.flatten(), np.zeros((2,))))
 
     def _define_costs(self) -> None:
         # Minimize kinetic energy through squared velocities
@@ -531,7 +529,10 @@ class FaceContactMode(AbstractContactMode):
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
-            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog.prog)
+            if self.config.use_band_sparsity:
+                self.relaxed_prog = self.prog.make_relaxation()
+            else:
+                self.relaxed_prog = self.prog.make_full_relaxation()
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:

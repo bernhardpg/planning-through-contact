@@ -159,6 +159,7 @@ class PlanarPlanConfig:
     )
     use_approx_exponential_map: bool = True
     minimize_sq_forces: bool = True
+    use_band_sparsity: bool = True
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
