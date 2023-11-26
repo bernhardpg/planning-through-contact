@@ -386,6 +386,58 @@ class FaceContactMode(AbstractContactMode):
             self.constraints["rotational_dynamics"].append(ang_vel_constraint)
             self.prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
 
+        if self.config.use_approx_exponential_map:
+            f_x_th_dots = self.prog.NewContinuousVariables(
+                self.num_knot_points - 1, "f_x_th_dot"
+            )
+            f_y_th_dots = self.prog.NewContinuousVariables(
+                self.num_knot_points - 1, "f_y_th_dot"
+            )
+            p_x_th_dots = self.prog.NewContinuousVariables(
+                self.num_knot_points - 1, "p_x_th_dot"
+            )
+            p_y_th_dots = self.prog.NewContinuousVariables(
+                self.num_knot_points - 1, "p_y_th_dot"
+            )
+            for k in range(self.num_knot_points - 1):
+                assert self.variables.theta_dots is not None
+                theta_dot = self.variables.theta_dots[k]
+                f_c_B = self.variables.f_c_Bs[k].flatten()
+                p_BP = self.variables.p_BPs[k].flatten()
+
+                f_x_th_dot = f_x_th_dots[k]
+                f_y_th_dot = f_y_th_dots[k]
+                p_x_th_dot = p_x_th_dots[k]
+                p_y_th_dot = p_y_th_dots[k]
+
+                # Equivalence
+                self.prog.AddQuadraticConstraint(
+                    f_x_th_dot - f_c_B[0] * theta_dot, 0, 0
+                )
+                self.prog.AddQuadraticConstraint(
+                    f_y_th_dot - f_c_B[1] * theta_dot, 0, 0
+                )
+                self.prog.AddQuadraticConstraint(p_x_th_dot - p_BP[0] * theta_dot, 0, 0)
+                self.prog.AddQuadraticConstraint(p_y_th_dot - p_BP[1] * theta_dot, 0, 0)
+
+                # Triple product constraints
+                self.prog.AddQuadraticConstraint(
+                    theta_dot**2 - (p_BP[0] * f_y_th_dot - p_BP[1] * f_x_th_dot), 0, 0
+                )
+                self.prog.AddQuadraticConstraint(
+                    theta_dot**2 - (-f_c_B[0] * p_y_th_dot + f_c_B[1] * p_x_th_dot),
+                    0,
+                    0,
+                )
+                self.prog.AddQuadraticConstraint(
+                    f_c_B[0] * p_x_th_dot
+                    + f_c_B[1] * p_y_th_dot
+                    - p_BP[0] * f_x_th_dot
+                    - p_BP[1] * f_y_th_dot,
+                    0,
+                    0,
+                )
+
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_BPs:
             self.prog.AddLinearEqualityConstraint(v_c_B.flatten(), np.zeros((2,)))
@@ -410,7 +462,7 @@ class FaceContactMode(AbstractContactMode):
         sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
 
-        sq_friction_forces = self.variables.normal_forces @ self.variables.friction_forces  # type: ignore
+        sq_friction_forces = self.variables.friction_forces @ self.variables.friction_forces  # type: ignore
         self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
 
     def set_finger_pos(self, lam_target: float) -> None:
