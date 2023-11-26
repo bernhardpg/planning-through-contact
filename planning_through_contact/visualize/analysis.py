@@ -520,7 +520,6 @@ def plot_constraint_violation(
         ref = ref_vals[key]
         if show_abs:
             values = np.abs(values)
-            ref = np.abs(ref)
 
         bar_positions = np.arange(len(values)) * (1 / max_bars) + i - 0.4
         color = colors[i]
@@ -532,6 +531,8 @@ def plot_constraint_violation(
 
         # Draw reference value
         if ref is not None:
+            if show_abs:
+                ref = np.abs(ref)
             ax.axhline(ref, color="red", linestyle="--", label="ref")
 
         # Only show legend on last plot
@@ -576,6 +577,7 @@ def analyze_mode_result(
         "rotational_dynamics": np.mean(traj.path_knot_points[0].delta_omega_WBs),
         "translational_dynamics": np.mean(traj.path_knot_points[0].v_WBs),
         "translational_dynamics_red": np.mean(traj.path_knot_points[0].v_WBs),
+        "exponential_map": np.mean(traj.path_knot_points[0].theta_dots),
     }
     plot_constraint_violation(constraint_violations, ref_vals)
 

@@ -14,6 +14,9 @@ from pydrake.solvers import (
     MathematicalProgramResult,
 )
 
+from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
+    BandSparseSemidefiniteRelaxation,
+)
 from planning_through_contact.convex_relaxation.sdp import (
     eliminate_equality_constraints,
 )
@@ -65,7 +68,7 @@ class FaceContactVariables(AbstractModeVariables):
     @classmethod
     def from_prog(
         cls,
-        prog: MathematicalProgram,
+        prog: BandSparseSemidefiniteRelaxation,
         object_geometry: CollisionGeometry,
         contact_location: PolytopeContactLocation,
         num_knot_points: int,
@@ -74,31 +77,66 @@ class FaceContactVariables(AbstractModeVariables):
         define_theta_dots: bool = True,
     ) -> "FaceContactVariables":
         # Contact positions
-        rel_finger_pos = prog.NewContinuousVariables(num_knot_points, "rel_finger_pos")
+        rel_finger_pos = np.concatenate(
+            [
+                prog.new_variables(idx, 1, f"rel_finger_pos_{idx}")
+                for idx in range(num_knot_points)
+            ]
+        )
         pv1, pv2 = object_geometry.get_proximate_vertices_from_location(
             contact_location
         )
 
         # Contact forces
         num_inputs = num_knot_points - 1
-        normal_forces = prog.NewContinuousVariables(num_inputs, "c_n")
-        friction_forces = prog.NewContinuousVariables(num_inputs, "c_f")
+        normal_forces = np.concatenate(
+            [prog.new_variables(idx, 1, f"c_n_{idx}") for idx in range(num_inputs)]
+        )
+        friction_forces = np.concatenate(
+            [prog.new_variables(idx, 1, f"c_f_{idx}") for idx in range(num_inputs)]
+        )
         (
             normal_vec,
             tangent_vec,
         ) = object_geometry.get_norm_and_tang_vecs_from_location(contact_location)
+
         if define_theta_dots:
-            theta_dots = prog.NewContinuousVariables(num_inputs, "theta_dot")
+            theta_dots = np.concatenate(
+                [
+                    prog.new_variables(idx, 1, f"theta_dot_{idx}")
+                    for idx in range(num_inputs)
+                ]
+            )
         else:
             theta_dots = None
 
         # Rotations
-        cos_ths = prog.NewContinuousVariables(num_knot_points, "cos_th")
-        sin_ths = prog.NewContinuousVariables(num_knot_points, "sin_th")
+        cos_ths = np.concatenate(
+            [
+                prog.new_variables(idx, 1, f"cos_th_{idx}")
+                for idx in range(num_knot_points)
+            ]
+        )
+        sin_ths = np.concatenate(
+            [
+                prog.new_variables(idx, 1, f"sin_th_{idx}")
+                for idx in range(num_knot_points)
+            ]
+        )
 
         # Box position relative to world frame
-        p_WB_xs = prog.NewContinuousVariables(num_knot_points, "p_WB_x")
-        p_WB_ys = prog.NewContinuousVariables(num_knot_points, "p_WB_y")
+        p_WB_xs = np.concatenate(
+            [
+                prog.new_variables(idx, 1, f"p_WB_x_{idx}")
+                for idx in range(num_knot_points)
+            ]
+        )
+        p_WB_ys = np.concatenate(
+            [
+                prog.new_variables(idx, 1, f"p_WB_y_{idx}")
+                for idx in range(num_knot_points)
+            ]
+        )
 
         dt = time_in_mode / num_knot_points  # TODO: Remove
 
@@ -270,18 +308,19 @@ class FaceContactMode(AbstractContactMode):
         contact_location: PolytopeContactLocation,
         config: PlanarPlanConfig,
     ) -> "FaceContactMode":
-        prog = MathematicalProgram()
         name = str(contact_location)
+
         return cls(
             name,
             config.num_knot_points_contact,
             config.time_in_contact,
             contact_location,
-            prog,
             config,
         )
 
     def __post_init__(self) -> None:
+        self.prog = BandSparseSemidefiniteRelaxation(self.num_knot_points)
+
         self.dynamics_config = self.config.dynamics_config
         self.relaxed_prog = None
         self.variables = FaceContactVariables.from_prog(
@@ -305,13 +344,15 @@ class FaceContactMode(AbstractContactMode):
         self._define_costs()
 
     def _define_constraints(self) -> None:
-        for lam in self.variables.lams:
-            self.prog.AddBoundingBoxConstraint(0, 1, lam)
+        for idx, lam in enumerate(self.variables.lams):
+            self.prog.add_bounding_box_constraint(idx, 0, 1, lam)
 
         # SO(2) constraints
-        for c, s in zip(self.variables.cos_ths, self.variables.sin_ths):
+        for idx, (c, s) in enumerate(
+            zip(self.variables.cos_ths, self.variables.sin_ths)
+        ):
             constraint = c**2 + s**2 - 1
-            self.prog.AddQuadraticConstraint(constraint, 0, 0)
+            self.prog.add_quadratic_constraint(idx, idx, constraint, 0, 0)
             self.constraints["SO2"].append(constraint)
 
         if self.config.use_approx_exponential_map:
@@ -326,32 +367,34 @@ class FaceContactMode(AbstractContactMode):
                 constraint = exp_map - R_k.T @ R_k_next
                 self.constraints["exponential_map"].append(constraint.flatten())
                 for c in constraint.flatten():
-                    self.prog.AddQuadraticConstraint(c, 0, 0)
+                    self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
 
         # Friction cone constraints
-        for c_n in self.variables.normal_forces:
-            self.prog.AddBoundingBoxConstraint(0, np.inf, c_n)
+        for idx, c_n in enumerate(self.variables.normal_forces):
+            self.prog.add_bounding_box_constraint(idx, 0, np.inf, c_n)
 
         mu = self.dynamics_config.friction_coeff_slider_pusher
-        for c_n, c_f in zip(
-            self.variables.normal_forces, self.variables.friction_forces
+        for idx, (c_n, c_f) in enumerate(
+            zip(self.variables.normal_forces, self.variables.friction_forces)
         ):
-            self.prog.AddLinearConstraint(c_f <= mu * c_n)
-            self.prog.AddLinearConstraint(c_f >= -mu * c_n)
+            self.prog.add_linear_inequality_constraint(idx, c_f <= mu * c_n)
+            self.prog.add_linear_inequality_constraint(idx, c_f >= -mu * c_n)
 
         # These position bounds should never be needed, as either the initial position,
         # target position, or edge constraints with this mode (in the case of GCS)
         # will constrain them
-        self.bound_positions = False
-        if self.bound_positions:
-            lb, ub = self.config.workspace.slider.bounds
-            for p_WB in self.variables.p_WBs:
-                self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
+        # self.bound_positions = False
+        # if self.bound_positions:
+        #     lb, ub = self.config.workspace.slider.bounds
+        #     for p_WB in self.variables.p_WBs:
+        #         self.prog.AddBoundingBoxConstraint(lb, ub, p_WB)
 
         # Bounds on cosines and sines
-        for cos_th, sin_th in zip(self.variables.cos_ths, self.variables.sin_ths):
-            self.prog.AddBoundingBoxConstraint(-1, 1, cos_th)
-            self.prog.AddBoundingBoxConstraint(-1, 1, sin_th)
+        for idx, (cos_th, sin_th) in enumerate(
+            zip(self.variables.cos_ths, self.variables.sin_ths)
+        ):
+            self.prog.add_bounding_box_constraint(idx, -1, 1, cos_th)
+            self.prog.add_bounding_box_constraint(idx, -1, 1, sin_th)
 
         # Quasi-static dynamics
         for k in range(self.num_knot_points - 1):
@@ -372,47 +415,58 @@ class FaceContactMode(AbstractContactMode):
                 trans_vel_constraint.flatten()
             )
             for c in trans_vel_constraint.flatten():
-                self.prog.AddQuadraticConstraint(c, 0, 0)
+                self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
 
             trans_vel_constraint = R_WB.T @ v_WB - f_c_B
             self.constraints["translational_dynamics_red"].append(
                 trans_vel_constraint.flatten()
             )
             for c in trans_vel_constraint.flatten():
-                self.prog.AddQuadraticConstraint(c, 0, 0)
+                self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
 
             c = self.config.dynamics_config.limit_surface_const
             ang_vel_constraint = theta_WB_dot - c * cross_2d(p_BP, f_c_B)
             self.constraints["rotational_dynamics"].append(ang_vel_constraint)
-            self.prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
+            self.prog.add_quadratic_constraint(k, k + 1, ang_vel_constraint, 0, 0)
 
         # Ensure sticking on the contact point
-        for v_c_B in self.variables.v_BPs:
-            self.prog.AddLinearEqualityConstraint(v_c_B.flatten(), np.zeros((2,)))
+        for idx, v_c_B in enumerate(self.variables.v_BPs):
+            self.prog.add_linear_equality_constraint(
+                idx, v_c_B.flatten(), np.zeros((2,))
+            )
 
     def _define_costs(self) -> None:
         # Minimize kinetic energy through squared velocities
-        sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in self.variables.v_WBs]).item()  # type: ignore
-        self.prog.AddQuadraticCost(
-            self.config.cost_terms.cost_param_lin_vels * sq_linear_vels
-        )
+        sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
+        for idx, term in enumerate(sq_linear_vels):
+            self.prog.add_quadratic_cost(
+                idx, idx + 1, self.config.cost_terms.cost_param_lin_vels * term
+            )
 
         # TODO(bernhardpg): Remove
         if self.config.use_approx_exponential_map:
-            sq_angular_vels = self.variables.theta_dots @ self.variables.theta_dots  # type: ignore
-            self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_ang_vels * sq_angular_vels)  # type: ignore
+            for k, th_dot in enumerate(self.variables.theta_dots):
+                self.prog.add_quadratic_cost(
+                    k, k, self.config.cost_terms.cost_param_ang_vels * th_dot**2
+                )
         else:
-            self.prog.AddQuadraticCost(
-                self.variables.delta_cos_ths.T @ self.variables.delta_cos_ths  # type: ignore
-                + self.variables.delta_sin_ths.T @ self.variables.delta_sin_ths
-            )
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+            ):
+                self.prog.add_quadratic_cost(
+                    k, k + 1, delta_sin_th**2 + delta_cos_th**2
+                )
 
         if self.config.minimize_sq_forces:
-            sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
-            self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
+            for k, c_n in enumerate(self.variables.normal_forces):
+                self.prog.add_quadratic_cost(
+                    k, k, self.config.cost_terms.cost_param_forces * c_n**2
+                )
 
-            sq_friction_forces = self.variables.friction_forces @ self.variables.friction_forces  # type: ignore
-            self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
+            for k, c_f in enumerate(self.variables.friction_forces):
+                self.prog.add_quadratic_cost(
+                    k, k, self.config.cost_terms.cost_param_forces * c_f**2
+                )
 
     def set_finger_pos(self, lam_target: float) -> None:
         """
@@ -434,16 +488,26 @@ class FaceContactMode(AbstractContactMode):
         )
 
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
-        self.prog.AddLinearConstraint(self.variables.cos_ths[0] == np.cos(pose.theta))
-        self.prog.AddLinearConstraint(self.variables.sin_ths[0] == np.sin(pose.theta))
-        self.prog.AddLinearConstraint(eq(self.variables.p_WBs[0], pose.pos()))
+        self.prog.add_linear_equality_constraint(
+            0, self.variables.cos_ths[0] == np.cos(pose.theta)
+        )
+        self.prog.add_linear_equality_constraint(
+            0, self.variables.sin_ths[0] == np.sin(pose.theta)
+        )
+        for c in eq(self.variables.p_WBs[0], pose.pos()).flatten():
+            self.prog.add_linear_equality_constraint(0, c)
 
         self.slider_initial_pose = pose
 
     def set_slider_final_pose(self, pose: PlanarPose) -> None:
-        self.prog.AddLinearConstraint(self.variables.cos_ths[-1] == np.cos(pose.theta))
-        self.prog.AddLinearConstraint(self.variables.sin_ths[-1] == np.sin(pose.theta))
-        self.prog.AddLinearConstraint(eq(self.variables.p_WBs[-1], pose.pos()))
+        self.prog.add_linear_equality_constraint(
+            -1, self.variables.cos_ths[-1] == np.cos(pose.theta)
+        )
+        self.prog.add_linear_equality_constraint(
+            -1, self.variables.sin_ths[-1] == np.sin(pose.theta)
+        )
+        for c in eq(self.variables.p_WBs[-1], pose.pos()).flatten():
+            self.prog.add_linear_equality_constraint(-1, c)
 
         self.slider_final_pose = pose
 
@@ -467,7 +531,7 @@ class FaceContactMode(AbstractContactMode):
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
-            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog.prog)
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:

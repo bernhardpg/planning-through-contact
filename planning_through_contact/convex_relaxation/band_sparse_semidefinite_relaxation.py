@@ -52,6 +52,13 @@ class BandSparseSemidefiniteRelaxation:
 
         return constraint
 
+    def add_bounding_box_constraint(self, group_idx: int, *args):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddBoundingBoxConstraint(*args)
+        self.linear_inequality_constraints[group_idx].append(constraint)
+
+        return constraint
+
     def add_linear_inequality_constraint(self, group_idx: int, *args):
         group_idx = self._find_numbered_idx(group_idx)
         constraint = self.prog.AddLinearConstraint(*args)

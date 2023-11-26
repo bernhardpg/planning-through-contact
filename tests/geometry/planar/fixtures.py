@@ -9,6 +9,9 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
+from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
+    BandSparseSemidefiniteRelaxation,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -72,10 +75,10 @@ def t_pusher() -> RigidBody:
 
 @pytest.fixture
 def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
-    prog = MathematicalProgram()
+    num_knot_points = 4
+    prog = BandSparseSemidefiniteRelaxation(num_groups=num_knot_points)
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    num_knot_points = 4
     time_in_contact = 2
 
     vars = FaceContactVariables.from_prog(

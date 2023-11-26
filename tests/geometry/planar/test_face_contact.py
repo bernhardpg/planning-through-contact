@@ -104,6 +104,9 @@ def test_face_contact_variables(
         assert f.shape == (2, 1)
 
 
+@pytest.mark.skip(
+    reason="Stopped supported equation elimination so this test will fail"
+)
 def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> None:
     original_prog = face_contact_mode.prog
     reduced_prog, get_x = eliminate_equality_constraints(original_prog)
@@ -120,10 +123,10 @@ def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> N
     assert vars.p_WB_ys.shape == reduced_vars.p_WB_ys.shape
 
 
-# TODO(bernhardpg): This test currently fails
 def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     num_knot_points = mode.num_knot_points
+    prog = mode.prog.prog
 
     # NOTE(bernhardpg): These are commented out, as we are currently not using bbox constraints
     # (they slow down the solution times a lot.
@@ -133,43 +136,47 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     # each variable should have a bounding box constraint
     # lam, c_n, c_f, cos_th, sin_th, p_WB_x, p_WB_y
     # num_bbox = num_knot_points * 7
-    # assert len(mode.prog.bounding_box_constraints()) == num_bbox
+    # assert len(prog.bounding_box_constraints()) == num_bbox
 
     # NOTE(bernhardpg): With the current setup, we will have one bounding box constraint for the
     # 3 state vars, 1 input var
     num_bbox = 3 * num_knot_points + (num_knot_points - 1)
-    assert len(mode.prog.bounding_box_constraints()) == num_bbox
+    assert len(prog.bounding_box_constraints()) == num_bbox
 
     # for each finite difference knot point:
     # v_c_B == 0
     num_lin_eq = 1 * (num_knot_points - 1)
-    assert len(mode.prog.linear_equality_constraints()) == num_lin_eq
+    assert len(prog.linear_equality_constraints()) == num_lin_eq
 
     # for each knot point:
     # | c_f | <= \mu * c_n
     num_lin = (num_knot_points - 1) * 2
-    assert len(mode.prog.linear_constraints()) == num_lin
+    assert len(prog.linear_constraints()) == num_lin
 
     # for each knot point:
     # c**2 + s**2 == 1
     # for each finite diff point:
     # quasi_static_dynamics (5 constraints)
     num_quad = num_knot_points + (num_knot_points - 1) * 5
-    assert len(mode.prog.quadratic_constraints()) == num_quad
+    assert len(prog.quadratic_constraints()) == num_quad
 
     tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
-    assert len(mode.prog.GetAllConstraints()) == tot_num_consts
+    assert len(prog.GetAllConstraints()) == tot_num_consts
 
-    assert len(mode.prog.linear_costs()) == 0
+    assert len(prog.linear_costs()) == 0
 
     # lin vels, ang vels, normal forces, friction forces
-    assert len(mode.prog.quadratic_costs()) == 4
+    assert len(prog.quadratic_costs()) == 3 * 4
 
-    lin_vel_vars = Variables(mode.prog.quadratic_costs()[0].variables())
+    lin_vel_vars = Variables(
+        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[0:3]])
+    )
     target_lin_vel_vars = Variables(np.concatenate(mode.variables.p_WBs))
     assert lin_vel_vars.EqualTo(target_lin_vel_vars)
 
-    ang_vel_vars = Variables(mode.prog.quadratic_costs()[1].variables())
+    ang_vel_vars = Variables(
+        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[3:6]])
+    )
     target_ang_vel_vars = Variables(
         np.concatenate((mode.variables.cos_ths, mode.variables.sin_ths))
     )
@@ -203,7 +210,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.object.geometry
+            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
@@ -235,7 +242,7 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
 
     if DEBUG:
         visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.object.geometry
+            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
@@ -268,7 +275,7 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.object.geometry
+            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
@@ -300,13 +307,16 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
         vars = face_contact_mode.variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.object.geometry
+            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
 
 
+@pytest.mark.skip(
+    reason="Stopped supported equation elimination so this test will fail"
+)
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
@@ -342,7 +352,7 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
         vars = face_contact_mode.reduced_variables.eval_result(result)
         traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
         visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.object.geometry
+            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
