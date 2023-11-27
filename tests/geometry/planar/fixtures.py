@@ -62,7 +62,9 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     cfg = PlanarPlanConfig(
-        dynamics_config=dynamics_config, use_approx_exponential_map=False
+        dynamics_config=dynamics_config,
+        use_approx_exponential_map=False,
+        use_band_sparsity=False,
     )
     return cfg
 
@@ -160,6 +162,8 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
+
+    plan_config.use_band_sparsity = False
 
     gcs = opt.GraphOfConvexSets()
 
