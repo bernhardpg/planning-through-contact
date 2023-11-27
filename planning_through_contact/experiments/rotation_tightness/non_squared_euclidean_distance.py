@@ -54,54 +54,6 @@ for c in initial_cond:
 for c in final_cond:
     prog.AddConstraint(c)
 
-# Add in angular velocity
-th_dots = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "th_dot")
-
-
-def skew_symmetric(th):
-    return np.array([[0, -th], [th, 0]])
-
-
-def rodriguez(om_hat, dt):
-    return np.eye(2) + om_hat + np.sin(dt) * om_hat @ om_hat * (1 - np.cos(dt))
-
-
-def rot_matrix(r):
-    return np.array([[r[0], -r[1]], [r[1], r[0]]])
-
-
-delta_t = np.pi / 2 - 0.5
-
-ang_vel_constraints = []
-for k in range(NUM_CTRL_POINTS - 1):
-    th_dot_k = th_dots[k]
-    R_k = rot_matrix(r[:, k])
-    R_k_next = rot_matrix(r[:, k + 1])
-    om_hat_k = skew_symmetric(th_dot_k)
-
-    exp_om_dt = rodriguez(om_hat_k, delta_t)
-    lhs = R_k.T @ R_k_next
-
-    constraint = eq(exp_om_dt, lhs)
-    for c in constraint.flatten():
-        prog.AddConstraint(c)
-
-    ang_vel_constraints.append(
-        [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
-    )
-
-    # # Second side of constraint
-    # lhs = R_k_next
-    # rhs = R_k @ exp_om_dt
-    # constraint = eq(lhs, rhs)
-    # for c in constraint.flatten():
-    #     prog.AddConstraint(c)
-    #
-    # second_side_ang_vel_constraints.append(
-    #     [convert_formula_to_lhs_expression(f) for f in constraint.flatten()]
-    # )
-
-
 # Absolute value cost
 # s = prog.NewContinuousVariables(NUM_CTRL_POINTS - 1, "s")
 # prog.AddCost(10 * np.sum(s))
@@ -109,31 +61,6 @@ for k in range(NUM_CTRL_POINTS - 1):
 # for k in range(NUM_CTRL_POINTS - 1):
 #     prog.AddLinearConstraint(s[k] >= th_dots[k])
 #     prog.AddLinearConstraint(s[k] >= -th_dots[k])
-
-# A = np.array([[0, -1]])
-# b = np.array([0.9])
-
-# A = np.array([[1, -3], [-2, -6]])
-# b = np.array([2, 3])
-#
-# for var in r.T:
-#     consts = le(A.dot(var), b)
-#     prog.AddConstraint(consts)
-
-# prog.AddCost(th_dots.T @ th_dots)
-# prog.AddCost(-10 * np.sum(th_dots))
-# With this magic number it seems that (almost) every cut will choose the obstacle free path
-# prog.AddCost(-5.0175 * np.sum(th_dots))
-
-A = np.array([[1, -3], [-2, -6]])
-b = np.array([2, 3])
-
-for var in r.T:
-    consts = le(A.dot(var), b)
-    prog.AddConstraint(consts)
-
-prog.AddCost(th_dots.T @ th_dots)
-prog.AddCost(-np.sum(th_dots))
 
 
 # Solve SDP relaxation
@@ -154,7 +81,6 @@ if USE_EUCLIDEAN_DISTANCE:
 
         relaxed_prog.AddPositiveSemidefiniteConstraint(mat)
 
-
 print("Finished formulating SDP relaxation")
 
 solver_options = SolverOptions()
@@ -167,6 +93,4 @@ print(f"Cost: {result.get_optimal_cost()}")
 r_val = result.GetSolution(r)
 r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
-# plot_cos_sine_trajs(r_val.T)
-breakpoint()
-plot_cos_sine_trajs(r_val.T, A, b)
+plot_cos_sine_trajs(r_val.T)
