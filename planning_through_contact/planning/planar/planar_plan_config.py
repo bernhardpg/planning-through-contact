@@ -158,6 +158,7 @@ class PlanarPlanConfig:
         default_factory=lambda: PlanarCostFunctionTerms()
     )
     use_approx_exponential_map: bool = True
+    minimize_sq_forces: bool = True
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
