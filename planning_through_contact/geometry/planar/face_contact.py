@@ -477,13 +477,8 @@ class FaceContactMode(AbstractContactMode):
         if lam_target >= 1 or lam_target <= 0:
             raise ValueError("The finger position should be set between 0 and 1")
 
-        # for lam in self.variables.lams:
-        #     self.prog.AddLinearConstraint(lam >= lam_target)
-        #     self.prog.AddLinearConstraint(lam <= lam_target)
-
-        self.prog.AddLinearConstraint(
-            eq(self.variables.lams, np.full(self.variables.lams.shape, lam_target))
-        )
+        for lam in self.variables.lams:
+            self.prog.add_independent_constraint(lam - lam_target == 0)
 
     def get_Xs(self) -> List[NpVariableArray]:
         assert self.relaxed_prog is not None
@@ -555,7 +550,7 @@ class FaceContactMode(AbstractContactMode):
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
-        return self.prog.FindDecisionVariableIndices(vars)
+        return self.prog.prog.FindDecisionVariableIndices(vars)
         # NOTE: This function relies on the fact that the sdp relaxation
         # returns an ordering of variables [1, x1, x2, ...],
         # where [x1, x2, ...] is the original ordering in self.prog

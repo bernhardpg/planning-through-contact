@@ -31,6 +31,7 @@ class VertexModePair(NamedTuple):
     mode: AbstractContactMode
 
 
+# TODO(bernhardpg): This function should be somewhere else
 def gcs_add_edge_with_continuity(
     gcs: opt.GraphOfConvexSets,
     outgoing: VertexModePair,

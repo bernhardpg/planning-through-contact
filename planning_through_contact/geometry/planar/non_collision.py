@@ -191,14 +191,11 @@ class NonCollisionMode(AbstractContactMode):
 
         num_knot_points = 1 if one_knot_point else config.num_knot_points_non_collision
 
-        prog = MathematicalProgram()
-
         return cls(
             name,
             num_knot_points,
             config.time_non_collision,
             contact_location,
-            prog,
             config,
         )
 
@@ -244,6 +241,7 @@ class NonCollisionMode(AbstractContactMode):
                 self.contact_location.idx
             )
         )
+        self.prog = MathematicalProgram()
         self.variables = NonCollisionVariables.from_prog(
             self.prog,
             self.num_knot_points,

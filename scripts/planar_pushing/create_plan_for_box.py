@@ -33,7 +33,8 @@ config = PlanarPlanConfig(
     no_cycles=False,
     dynamics_config=dynamics_config,
     allow_teleportation=True,
-    use_band_sparsity=True,
+    use_band_sparsity=False,
+    use_entry_and_exit_subgraphs=False,
 )
 
 planner = PlanarPushingPlanner(config)
@@ -42,7 +43,7 @@ solver_params = PlanarSolverParams(
     gcs_max_rounded_paths=10,
     print_flows=False,
     assert_determinants=False,
-    print_solver_output=False,
+    print_solver_output=True,
     print_path=True,
     print_cost=True,
     measure_solve_time=True,
@@ -62,4 +63,6 @@ planner.set_initial_poses(plan.pusher_initial_pose, plan.slider_initial_pose)
 planner.set_target_poses(plan.pusher_target_pose, plan.slider_target_pose)
 
 traj = planner.plan_trajectory(solver_params)
-visualize_planar_pushing_trajectory(traj, visualize_knot_points=True)
+visualize_planar_pushing_trajectory(
+    traj, visualize_knot_points=True, save=True, filename="generated_trajectory"
+)
