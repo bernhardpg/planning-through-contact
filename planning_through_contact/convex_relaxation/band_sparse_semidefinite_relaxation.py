@@ -14,12 +14,14 @@ from pydrake.solvers import (
 from planning_through_contact.convex_relaxation.sdp import (
     linear_bindings_to_homogenuous_form,
 )
-from planning_through_contact.tools.types import NpExpressionArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 
 class BandSparseSemidefiniteRelaxation:
     def __init__(self, num_groups: int) -> None:
         self.prog = MathematicalProgram()
+        self.relaxed_prog = None
+        self.Xs = None
         self.num_groups = num_groups
 
         self.groups = {idx: [] for idx in range(num_groups)}
@@ -390,6 +392,50 @@ class BandSparseSemidefiniteRelaxation:
         self.relaxed_prog = relaxed_prog
         return self.relaxed_prog
 
+    def get_full_X(self) -> NpVariableArray:
+        """
+        Gets the full X = [xx'] after using the band sparse relaxation.
+        Fills in 0 for all terms that are not present in sparse relaxation.
+
+        NOTE: Does not get the full X with normal relaxation!
+        """
+        assert self.relaxed_prog is not None
+        assert self.Xs is not None
+        assert self.xs is not None
+
+        # y = [1; x]
+        num_vars = len(self.prog.decision_variables()) + 1
+        big_X = np.zeros((num_vars, num_vars), dtype=object)
+        big_X[0, 0] = 1
+
+        # Fill in first row and column
+        count = 1
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx].flatten()
+            big_X[count : count + len(x), 0] = x
+            big_X[0, count : count + len(x)] = x
+            count += len(x)
+        big_X[count : count + len(x), 0] = self.xs[self.num_groups - 1].flatten()
+        big_X[0, count : count + len(x)] = self.xs[self.num_groups - 1].flatten()
+
+        # Fill in blocks
+        count = 1
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx].flatten()
+            X = self.Xs[idx]
+            big_X[count : count + len(x), count : count + len(x)] = X[
+                : len(x), : len(x)
+            ]
+            count += len(x)
+
+        x = self.xs[self.num_groups - 1].flatten()
+        big_X[count : count + len(x), count : count + len(x)] = self.Xs[
+            self.num_groups - 2
+        ][-len(x) :, -len(x) :]
+
+        return big_X
+
+    # TODO: This should not really be a part of this class
     def make_full_relaxation(self) -> MathematicalProgram:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         return self.relaxed_prog

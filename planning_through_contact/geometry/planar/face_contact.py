@@ -485,6 +485,20 @@ class FaceContactMode(AbstractContactMode):
             eq(self.variables.lams, np.full(self.variables.lams.shape, lam_target))
         )
 
+    def get_Xs(self) -> List[NpVariableArray]:
+        assert self.relaxed_prog is not None
+        if not self.config.use_band_sparsity:
+            assert len(self.relaxed_prog.positive_semidefinite_constraints()) == 1
+            # We can just get the one PSD constraint matrix
+            X = self.relaxed_prog.positive_semidefinite_constraints()[0].variables()
+            N = np.sqrt(len(X))
+            assert int(N) == N
+            X = X.reshape((int(N), int(N)))
+            return [X]
+        else:
+            assert self.prog.Ys is not None
+            return list(self.prog.Ys.values())
+
     def set_slider_initial_pose(self, pose: PlanarPose) -> None:
         self.prog.add_linear_equality_constraint(
             0, self.variables.cos_ths[0] == np.cos(pose.theta)

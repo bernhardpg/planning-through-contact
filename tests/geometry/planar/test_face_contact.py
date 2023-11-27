@@ -25,6 +25,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     SliderPusherSystemConfig,
 )
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
@@ -357,3 +358,54 @@ def test_face_contact_equality_elimination(face_contact_mode: FaceContactMode) -
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
         plot_cos_sine_trajs(rs)
+
+
+def test_get_X(rigid_body_box: RigidBody) -> None:
+    face_idx = 3
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
+    dynamics_config = SliderPusherSystemConfig(slider=rigid_body_box, pusher_radius=0.0)
+    cfg = PlanarPlanConfig(
+        dynamics_config=dynamics_config,
+        use_approx_exponential_map=False,
+        use_band_sparsity=False,
+    )
+    mode = FaceContactMode.create_from_plan_spec(contact_location, cfg)
+
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.8)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    X = mode.get_Xs()[0]
+
+    result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
+    X_sol = result.GetSolution(X)
+    assert X.shape == (27, 27)
+    assert X_sol.shape == (27, 27)
+
+
+def test_get_X_band_sparse(rigid_body_box: RigidBody) -> None:
+    face_idx = 3
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
+    dynamics_config = SliderPusherSystemConfig(slider=rigid_body_box, pusher_radius=0.0)
+    cfg = PlanarPlanConfig(
+        dynamics_config=dynamics_config,
+        use_approx_exponential_map=False,
+        use_band_sparsity=True,
+    )
+    mode = FaceContactMode.create_from_plan_spec(contact_location, cfg)
+
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0, 0.8)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    Xs = mode.get_Xs()
+    result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
+    X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
+
+    for X_val in X_sols:
+        # Should be symmetric
+        assert np.allclose(X_val - X_val.T, 0)
