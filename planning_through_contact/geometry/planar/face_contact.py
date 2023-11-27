@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from itertools import combinations
 from typing import Callable, List, Literal, Optional, Tuple
 
 import numpy as np
@@ -386,6 +387,23 @@ class FaceContactMode(AbstractContactMode):
             self.constraints["rotational_dynamics"].append(ang_vel_constraint)
             self.prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
 
+        c = self.config.dynamics_config.limit_surface_const
+        for k, l in combinations(range(self.num_knot_points - 1), 2):
+            assert self.variables.theta_dots is not None
+            th1 = self.variables.theta_dots[k]
+            f1 = self.variables.f_c_Bs[k]
+            p1 = self.variables.p_BPs[k]
+            th2 = self.variables.theta_dots[l]
+            f2 = self.variables.f_c_Bs[l]
+            p2 = self.variables.p_BPs[l]
+
+            const = (
+                c * (cross_2d(p1 - p2, f1 - f2) + cross_2d(p1, f2) + cross_2d(p2, f1))
+                - th1
+                - th2
+            )
+            self.prog.AddQuadraticConstraint(const, 0, 0)
+
         # Ensure sticking on the contact point
         for v_c_B in self.variables.v_BPs:
             self.prog.AddLinearEqualityConstraint(v_c_B.flatten(), np.zeros((2,)))
@@ -406,12 +424,12 @@ class FaceContactMode(AbstractContactMode):
                 self.variables.delta_cos_ths.T @ self.variables.delta_cos_ths  # type: ignore
                 + self.variables.delta_sin_ths.T @ self.variables.delta_sin_ths
             )
-
-        sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
-        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
-
-        sq_friction_forces = self.variables.normal_forces @ self.variables.friction_forces  # type: ignore
-        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
+        #
+        # sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
+        # self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
+        #
+        # sq_friction_forces = self.variables.friction_forces @ self.variables.friction_forces  # type: ignore
+        # self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
 
     def set_finger_pos(self, lam_target: float) -> None:
         """
