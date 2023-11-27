@@ -407,11 +407,12 @@ class FaceContactMode(AbstractContactMode):
                 + self.variables.delta_sin_ths.T @ self.variables.delta_sin_ths
             )
 
-        sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
-        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
+        if self.config.minimize_sq_forces:
+            sq_normal_forces = self.variables.normal_forces @ self.variables.normal_forces  # type: ignore
+            self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_normal_forces)  # type: ignore
 
-        sq_friction_forces = self.variables.friction_forces @ self.variables.friction_forces  # type: ignore
-        self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
+            sq_friction_forces = self.variables.friction_forces @ self.variables.friction_forces  # type: ignore
+            self.prog.AddQuadraticCost(self.config.cost_terms.cost_param_forces * sq_friction_forces)  # type: ignore
 
     def set_finger_pos(self, lam_target: float) -> None:
         """
