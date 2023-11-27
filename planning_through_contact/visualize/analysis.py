@@ -496,9 +496,14 @@ from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 
-def plot_constraint_violation(data: Dict[str, npt.NDArray[np.float64]]) -> None:
+def plot_constraint_violation(
+    data: Dict[str, npt.NDArray[np.float64]],
+    ref_vals: Dict[str, float],
+    show_abs: bool = True,
+) -> None:
     # Preparing the plot
-    fig, ax = plt.subplots()
+    num_groups = len(data)
+    fig, axs = plt.subplots(1, num_groups)
     group_names = list(data.keys())
     max_bars = max(
         [len(data[key].flatten()) for key in group_names]
@@ -506,19 +511,36 @@ def plot_constraint_violation(data: Dict[str, npt.NDArray[np.float64]]) -> None:
     bar_width = 0.8 / max_bars  # width of each bar
     opacity = 0.8
 
-    # Creating the bars
-    for i, key in enumerate(group_names):
-        values = data[key].flatten()
-        bar_positions = np.arange(len(values)) * (1 / max_bars) + i - 0.4
-        ax.bar(bar_positions, np.abs(values), bar_width, alpha=opacity, label=key)
+    # Colors for each subplot
+    colors = ["red", "blue", "green", "purple", "orange"]
 
-    # Adjusting the labels
-    ax.set_ylabel("Values")
-    ax.set_title("Violation of quadratic constraints")
-    ax.set_xticks([])
-    ax.legend()
+    # Creating the bars
+    for i, (ax, key) in enumerate(zip(axs, group_names)):
+        values = data[key].flatten()
+        ref = ref_vals[key]
+        if show_abs:
+            values = np.abs(values)
+            ref = np.abs(ref)
+
+        bar_positions = np.arange(len(values)) * (1 / max_bars) + i - 0.4
+        color = colors[i]
+        ax.bar(bar_positions, values, bar_width, alpha=opacity, color=color)
+
+        # adjusting the labels
+        ax.set_xlabel(f"{key}", rotation=45)
+        ax.set_xticks([])
+
+        # Draw reference value
+        if ref is not None:
+            ax.axhline(ref, color="red", linestyle="--", label="ref")
+
+        # Only show legend on last plot
+        if i == len(data) - 1:
+            ax.legend()
 
     # Show the plot
+    fig.suptitle("Quadratic constraint violations")
+    plt.tight_layout()  # Adjust the layout
     plt.show()
 
 
@@ -548,7 +570,14 @@ def analyze_mode_result(
         key: evaluate_np_expressions_array(value, result)
         for key, value in mode.constraints.items()
     }
-    plot_constraint_violation(constraint_violations)
+
+    ref_vals = {
+        "SO2": 1,
+        "rotational_dynamics": np.mean(traj.path_knot_points[0].delta_omega_WBs),
+        "translational_dynamics": np.mean(traj.path_knot_points[0].v_WBs),
+        "translational_dynamics_red": np.mean(traj.path_knot_points[0].v_WBs),
+    }
+    plot_constraint_violation(constraint_violations, ref_vals)
 
     # (num_knot_points, 2): first col cosines, second col sines
 
