@@ -48,7 +48,9 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = True
+DEBUG = False
+# TODO(bernhardpg): Old visualizer is no longer working after an update to the integration scheme, replace all old visualizer instances
+# with the new visualizer!
 
 
 @pytest.mark.parametrize(
@@ -534,8 +536,7 @@ def test_subgraph_with_contact_modes_band_sparsity(
     This unit test tests much of the code that is implemented in the PlanarPushingPlanner.
     """
 
-    # subgraph.config.use_band_sparsity = True
-    # subgraph.config.minimize_sq_forces = True
+    subgraph.config.use_band_sparsity = True
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     source_mode = FaceContactMode.create_from_plan_spec(
@@ -575,25 +576,25 @@ def test_subgraph_with_contact_modes_band_sparsity(
     pairs["source"] = source
     pairs["target"] = target
 
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, source_vertex, target_vertex, pairs
-    ).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory.from_result(
+        subgraph.config, result, subgraph.gcs, source_vertex, target_vertex, pairs
+    )
 
-    assert_initial_and_final_poses_LEGACY(
+    assert_initial_and_final_poses(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_BP) <= 1.0)
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
 
     if subgraph.config.avoid_object:
-        first_segment_start_idx = subgraph.config.num_knot_points_contact
-        first_segment_end_idx = (
-            subgraph.config.num_knot_points_contact
-            + subgraph.config.num_knot_points_non_collision
-            + 1
-        )
-        first_segment = traj.p_BP[:, first_segment_start_idx:first_segment_end_idx]
+        first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,
             first_segment,
@@ -601,11 +602,7 @@ def test_subgraph_with_contact_modes_band_sparsity(
             start_idx=2,
             end_idx=-2,
         )
-
-        second_segment_end_idx = (
-            first_segment_end_idx + subgraph.config.num_knot_points_non_collision
-        )
-        second_segment = traj.p_BP[:, first_segment_end_idx:second_segment_end_idx]
+        second_segment = np.hstack(traj.path_knot_points[2].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,
             second_segment,
@@ -616,6 +613,6 @@ def test_subgraph_with_contact_modes_band_sparsity(
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, subgraph.slider.geometry, pusher_radius=0.01
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )

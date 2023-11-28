@@ -58,26 +58,16 @@ def test_planner_construction(
     for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
-        # angular velocity, linear velocity, normal force, friction force
-        assert len(costs) == 4
+        # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
+        assert len(costs) == 4 * (m.num_knot_points - 1)
 
-        lin_vel, ang_vel, normal_force, friction_force = costs
+        for idx, cost in enumerate(costs):
+            var_idxs = m._get_cost_terms()[0][idx]
+            target_vars = Variables(v.x()[var_idxs])
+            assert target_vars.EqualTo(Variables(cost.variables()))
 
-        target_lin_vars = Variables(v.x()[m._get_cost_terms()[0][0]])
-        assert target_lin_vars.EqualTo(Variables(lin_vel.variables()))
-
-        target_ang_vars = Variables(v.x()[m._get_cost_terms()[0][1]])
-        assert target_ang_vars.EqualTo(Variables(ang_vel.variables()))
-
-        target_norm_force_vars = Variables(v.x()[m._get_cost_terms()[0][2]])
-        assert target_norm_force_vars.EqualTo(Variables(normal_force.variables()))
-
-        target_fric_force_vars = Variables(v.x()[m._get_cost_terms()[0][3]])
-        assert target_fric_force_vars.EqualTo(Variables(friction_force.variables()))
-
-        # Costs should be linear in SDP relaxation
-        assert isinstance(lin_vel.evaluator(), LinearCost)
-        assert isinstance(ang_vel.evaluator(), LinearCost)
+            # Costs should be linear in SDP relaxation
+            assert isinstance(cost.evaluator(), LinearCost)
 
     assert planner.source_subgraph is not None
     assert planner.target_subgraph is not None
