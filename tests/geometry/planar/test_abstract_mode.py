@@ -36,7 +36,7 @@ from tests.geometry.planar.fixtures import (
     plan_config,
     rigid_body_box,
 )
-from tests.geometry.planar.tools import assert_initial_and_final_poses
+from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 DEBUG = False
 
@@ -95,7 +95,7 @@ def test_add_continuity_constraints_between_non_collision_modes(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         slider_pose,
         finger_initial_pose,
@@ -146,7 +146,7 @@ def test_add_continuity_between_non_coll_and_face_contact(
         result, gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         slider_initial_pose,
         None,

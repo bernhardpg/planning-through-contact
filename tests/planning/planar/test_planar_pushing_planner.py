@@ -33,7 +33,7 @@ from tests.geometry.planar.fixtures import (
     t_pusher,
 )
 from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
     assert_planning_path_matches_target,
 )
 
@@ -266,7 +266,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
         interpolate=False, assert_determinants=False
     )
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
         planner.finger_pose_initial,
@@ -438,7 +438,7 @@ def test_make_plan(
     path = planner.get_solution_path(result)
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
         planner.finger_pose_initial,

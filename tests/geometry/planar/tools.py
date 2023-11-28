@@ -48,7 +48,7 @@ def _assert_traj_finger_pos(
         assert np.allclose(traj.p_WP[:, -1:], p_c_W_target, atol=atol)
 
 
-def assert_initial_and_final_poses(
+def assert_initial_and_final_poses_LEGACY(
     traj: OldPlanarPushingTrajectory,
     initial_slider_pose: Optional[PlanarPose],
     initial_finger_pose: Optional[PlanarPose],

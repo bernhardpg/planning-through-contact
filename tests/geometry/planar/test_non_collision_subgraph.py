@@ -39,7 +39,7 @@ from tests.geometry.planar.fixtures import (
     subgraph,
 )
 from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
     assert_object_is_avoided,
 )
 
@@ -198,7 +198,7 @@ def test_subgraph_planning(
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         subgraph.source.mode.slider_pose,
         subgraph.source.mode.finger_initial_pose,
@@ -319,7 +319,7 @@ def test_subgraph_with_contact_modes(
         result, subgraph.gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 
@@ -401,7 +401,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         subgraph.source.mode.slider_pose,
         subgraph.source.mode.finger_initial_pose,
@@ -496,7 +496,7 @@ def test_subgraph_contact_modes_t_pusher(
         result, subgraph.gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 

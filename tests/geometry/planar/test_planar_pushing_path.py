@@ -37,7 +37,7 @@ from tests.geometry.planar.fixtures import (
     rigid_body_box,
     t_pusher,
 )
-from tests.geometry.planar.tools import assert_initial_and_final_poses
+from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
@@ -88,7 +88,7 @@ def test_rounding_one_mode() -> None:
     vars = face_contact_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
+    assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
         visualize_planar_pushing_trajectory_legacy(
