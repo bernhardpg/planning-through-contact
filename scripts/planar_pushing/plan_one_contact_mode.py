@@ -36,7 +36,7 @@ cfg = SliderPusherSystemConfig(
     friction_coeff_table_slider=0.5,
     integration_constant=0.7,
 )
-cost_terms = PlanarCostFunctionTerms(cost_param_forces=1.0, cost_param_ang_vels=1.0)
+cost_terms = PlanarCostFunctionTerms(sq_forces=1.0, ang_displacements=1.0)
 plan_cfg = PlanarPlanConfig(
     dynamics_config=cfg,
     num_knot_points_contact=40,

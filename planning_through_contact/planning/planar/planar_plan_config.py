@@ -119,15 +119,15 @@ class PlanarSolverParams:
 @dataclass
 class PlanarCostFunctionTerms:
     # Non-collision
-    cost_param_avoidance_lin: float = 0.1
-    cost_param_avoidance_quad_dist: float = 0.2
-    cost_param_avoidance_quad_weight: float = 0.4
-    cost_param_avoidance_socp_weight: float = 0.001
-    cost_param_eucl: float = 1.0
+    obj_avoidance_lin: float = 0.1  # TODO: Remove
+    obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
+    obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
+    obj_avoidance_socp: float = 0.001
+    sq_eucl_dist: float = 1.0
     # Face contact
-    cost_param_lin_vels: float = 1.0
-    cost_param_ang_vels: float = 1.0
-    cost_param_forces: float = 1.0
+    lin_displacements: float = 1.0
+    ang_displacements: float = 1.0
+    sq_forces: float = 1.0
 
 
 @dataclass

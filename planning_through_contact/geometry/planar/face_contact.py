@@ -438,14 +438,14 @@ class FaceContactMode(AbstractContactMode):
         sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
         for idx, term in enumerate(sq_linear_vels):
             self.prog.add_quadratic_cost(
-                idx, idx + 1, self.config.cost_terms.cost_param_lin_vels * term
+                idx, idx + 1, self.config.cost_terms.lin_displacements * term
             )
 
         # TODO(bernhardpg): Remove
         if self.config.use_approx_exponential_map:
             for k, th_dot in enumerate(self.variables.theta_dots):
                 self.prog.add_quadratic_cost(
-                    k, k, self.config.cost_terms.cost_param_ang_vels * th_dot**2
+                    k, k, self.config.cost_terms.ang_displacements * th_dot**2
                 )
         else:
             for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -458,12 +458,12 @@ class FaceContactMode(AbstractContactMode):
         if self.config.minimize_sq_forces:
             for k, c_n in enumerate(self.variables.normal_forces):
                 self.prog.add_quadratic_cost(
-                    k, k, self.config.cost_terms.cost_param_forces * c_n**2
+                    k, k, self.config.cost_terms.sq_forces * c_n**2
                 )
 
             for k, c_f in enumerate(self.variables.friction_forces):
                 self.prog.add_quadratic_cost(
-                    k, k, self.config.cost_terms.cost_param_forces * c_f**2
+                    k, k, self.config.cost_terms.sq_forces * c_f**2
                 )
 
     def set_finger_pos(self, lam_target: float) -> None:
