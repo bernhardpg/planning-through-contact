@@ -121,8 +121,8 @@ class PlanarCostFunctionTerms:
     # Non-collision
     obj_avoidance_lin: float = 0.1  # TODO: Remove
     obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
-    obj_avoidance_quad_weight: float = 1.0  # TODO: Remove
-    obj_avoidance_socp: float = 0.1
+    obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
+    obj_avoidance_socp: float = 0.001
     sq_eucl_dist: float = 1.0
     # Face contact
     lin_displacements: float = 1.0
