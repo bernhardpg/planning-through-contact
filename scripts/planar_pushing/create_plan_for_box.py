@@ -16,34 +16,34 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
-from scripts.planar_pushing.create_plan import get_sugar_box
+from scripts.planar_pushing.create_plan import get_sugar_box, get_tee
 
 slider = get_sugar_box()
+# slider = get_tee()
 pusher_radius = 0.035
 
 dynamics_config = SliderPusherSystemConfig(pusher_radius=pusher_radius, slider=slider)
 
 config = PlanarPlanConfig(
-    time_non_collision=2.0,
-    time_in_contact=2.0,
-    num_knot_points_contact=4,
-    num_knot_points_non_collision=4,
-    avoid_object=False,
-    avoidance_cost="socp",
-    no_cycles=False,
     dynamics_config=dynamics_config,
-    allow_teleportation=True,
-    use_band_sparsity=False,
-    use_entry_and_exit_subgraphs=False,
+    num_knot_points_contact=3,
+    num_knot_points_non_collision=3,
+    avoid_object=True,
+    avoidance_cost="quadratic",
+    allow_teleportation=False,
+    use_band_sparsity=True,
+    minimize_sq_forces=True,
+    use_entry_and_exit_subgraphs=True,
+    penalize_mode_transitions=False,
 )
 
 planner = PlanarPushingPlanner(config)
 
 solver_params = PlanarSolverParams(
-    gcs_max_rounded_paths=10,
+    gcs_max_rounded_paths=20,
     print_flows=False,
-    assert_determinants=False,
     print_solver_output=True,
+    save_solver_output=False,
     print_path=True,
     print_cost=True,
     measure_solve_time=True,
@@ -52,7 +52,7 @@ solver_params = PlanarSolverParams(
 
 
 slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-slider_target_pose = PlanarPose(x=0.0, y=-0.3, theta=0.0)
+slider_target_pose = PlanarPose(x=0.2, y=-0.3, theta=2.0)
 finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 plan = PlanarPushingStartAndGoal(
@@ -64,5 +64,5 @@ planner.set_target_poses(plan.pusher_target_pose, plan.slider_target_pose)
 
 traj = planner.plan_trajectory(solver_params)
 visualize_planar_pushing_trajectory(
-    traj, visualize_knot_points=True, save=True, filename="generated_trajectory"
+    traj, visualize_knot_points=True, save=True, filename="generated_trajectory"  # type: ignore
 )
