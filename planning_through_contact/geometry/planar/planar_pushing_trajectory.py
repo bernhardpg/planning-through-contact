@@ -208,7 +208,11 @@ class PlanarPushingTrajSegment:
         p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
-        f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
+        # Start and target vertices may only have one knot point, hence num_inputs = num_knot_points - 1 = 0
+        if len(knot_points.f_c_Ws) == 0:
+            f_c_W = LinTrajSegment.from_knot_points(np.zeros((2, 1)), start_time, end_time)  # type: ignore
+        else:
+            f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
 
         if isinstance(knot_points, NonCollisionVariables):
             mode = PlanarPushingContactMode.NO_CONTACT

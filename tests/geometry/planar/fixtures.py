@@ -164,8 +164,6 @@ def subgraph(
     plan_config.num_knot_points_non_collision = num_knot_points
     plan_config.avoid_object = request.param.get("avoid_object", False)
 
-    plan_config.use_band_sparsity = False
-
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
@@ -210,6 +208,7 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
+    plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
@@ -218,9 +217,6 @@ def planner(
     )
     plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
-    plan_config.use_redundant_dynamic_constraints = request.param.get(
-        "use_redundant_dynamic_constraints", True
-    )
 
     planner = PlanarPushingPlanner(
         plan_config,
