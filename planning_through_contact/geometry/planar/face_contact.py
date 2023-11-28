@@ -452,7 +452,10 @@ class FaceContactMode(AbstractContactMode):
                 zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
             ):
                 self.prog.add_quadratic_cost(
-                    k, k + 1, delta_sin_th**2 + delta_cos_th**2
+                    k,
+                    k + 1,
+                    self.config.cost_terms.ang_displacements
+                    * (delta_sin_th**2 + delta_cos_th**2),
                 )
 
         if self.config.minimize_sq_forces:
@@ -539,9 +542,13 @@ class FaceContactMode(AbstractContactMode):
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
             if self.config.use_band_sparsity:
-                self.relaxed_prog = self.prog.make_relaxation()
+                self.relaxed_prog = self.prog.make_relaxation(
+                    minimize_trace=self.config.minimize_trace
+                )
             else:
-                self.relaxed_prog = self.prog.make_full_relaxation()
+                self.relaxed_prog = self.prog.make_full_relaxation(
+                    minimize_trace=self.config.minimize_trace
+                )
 
     def get_convex_set(self) -> opt.Spectrahedron:
         if self.relaxed_prog is None:
