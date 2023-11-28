@@ -70,8 +70,6 @@ class PlanarPushingPlanner:
     corresponds to a contact mode.
     """
 
-    cost_param_transition_cost: float = 0.5
-
     def __init__(
         self,
         config: PlanarPlanConfig,
@@ -107,7 +105,7 @@ class PlanarPushingPlanner:
 
         if self.config.penalize_mode_transitions:
             for v in self.contact_vertices:
-                v.AddCost(self.cost_param_transition_cost)
+                v.AddCost(self.config.cost_terms.mode_transition_cost)
 
     @property
     def num_contact_modes(self) -> int:

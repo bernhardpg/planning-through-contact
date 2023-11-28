@@ -121,13 +121,16 @@ class PlanarCostFunctionTerms:
     # Non-collision
     obj_avoidance_lin: float = 0.1  # TODO: Remove
     obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
-    obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
-    obj_avoidance_socp: float = 0.001
+    obj_avoidance_quad_weight: float = 1.0  # TODO: Remove
+    obj_avoidance_socp: float = 0.1
     sq_eucl_dist: float = 1.0
     # Face contact
     lin_displacements: float = 1.0
     ang_displacements: float = 1.0
     sq_forces: float = 1.0
+    mode_transition_cost: float = (
+        0.5  # not used unless 'penalize_mode_transitions' is true
+    )
 
 
 @dataclass
