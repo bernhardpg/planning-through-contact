@@ -109,6 +109,7 @@ class PlanarSolverParams:
     assert_determinants: bool = True
     nonlinear_traj_rounding: bool = True
     print_solver_output: bool = False
+    save_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
     print_cost: bool = False

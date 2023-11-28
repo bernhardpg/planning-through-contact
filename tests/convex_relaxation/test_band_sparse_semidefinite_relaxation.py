@@ -46,7 +46,7 @@ def test_band_sparse_sdp_formulation() -> None:
     for i in range(NUM_CTRL_POINTS):
         r_i = rs[i]
         so_2_constraint = r_i.T.dot(r_i) - 1
-        prog.add_quadratic_constraint(i, i, so_2_constraint, 1, 1)
+        prog.add_quadratic_constraint(i, i, so_2_constraint, 0, 0)
 
     # Constrain the cosines and sines
     for i in range(NUM_CTRL_POINTS):
