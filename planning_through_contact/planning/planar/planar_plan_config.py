@@ -105,7 +105,7 @@ class PlanarSolverParams:
     gcs_max_rounded_paths: int = 10
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
-    assert_determinants: bool = True  # TODO: Remove this
+    assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
     nonlinear_traj_rounding: bool = True
     print_solver_output: bool = False
