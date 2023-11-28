@@ -28,13 +28,14 @@ config = PlanarPlanConfig(
     time_in_contact=2.0,
     num_knot_points_contact=4,
     num_knot_points_non_collision=4,
-    avoid_object=False,
+    avoid_object=True,
     avoidance_cost="socp",
     no_cycles=False,
     dynamics_config=dynamics_config,
-    allow_teleportation=True,
-    use_band_sparsity=False,
-    use_entry_and_exit_subgraphs=False,
+    allow_teleportation=False,
+    use_band_sparsity=True,
+    use_entry_and_exit_subgraphs=True,
+    minimize_sq_forces=True,
 )
 
 planner = PlanarPushingPlanner(config)
@@ -44,6 +45,7 @@ solver_params = PlanarSolverParams(
     print_flows=False,
     assert_determinants=False,
     print_solver_output=True,
+    save_solver_output=True,
     print_path=True,
     print_cost=True,
     measure_solve_time=True,
@@ -64,5 +66,5 @@ planner.set_target_poses(plan.pusher_target_pose, plan.slider_target_pose)
 
 traj = planner.plan_trajectory(solver_params)
 visualize_planar_pushing_trajectory(
-    traj, visualize_knot_points=True, save=True, filename="generated_trajectory"
+    traj, visualize_knot_points=True, save=True, filename="generated_trajectory"  # type: ignore
 )
