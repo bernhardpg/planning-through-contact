@@ -65,6 +65,7 @@ def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
         dynamics_config=dynamics_config,
         use_approx_exponential_map=False,
         use_band_sparsity=False,
+        avoidance_cost="quadratic",  # TODO: Tests should be updated to use socp cost
     )
     return cfg
 
@@ -163,6 +164,7 @@ def subgraph(
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
     plan_config.avoid_object = request.param.get("avoid_object", False)
+    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
 
     gcs = opt.GraphOfConvexSets()
 

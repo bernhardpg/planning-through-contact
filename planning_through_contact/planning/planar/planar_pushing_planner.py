@@ -417,7 +417,11 @@ class PlanarPushingPlanner:
         result = self._solve(solver_params)
         end = time.time()
 
-        assert result.is_success()
+        if solver_params.assert_result:
+            assert result.is_success()
+        else:
+            if not result.is_success():
+                print("WARNING: Solver did not find a solution!")
 
         if solver_params.measure_solve_time:
             elapsed_time = end - start

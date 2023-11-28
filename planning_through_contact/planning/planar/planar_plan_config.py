@@ -103,10 +103,10 @@ class SliderPusherSystemConfig:
 @dataclass
 class PlanarSolverParams:
     gcs_max_rounded_paths: int = 10
-    # NOTE: Currently, there is no way to solve the MISDP, so this must be true
-    gcs_convex_relaxation: bool = True
+    gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
-    assert_determinants: bool = True
+    assert_determinants: bool = True  # TODO: Remove this
+    assert_result: bool = True
     nonlinear_traj_rounding: bool = True
     print_solver_output: bool = False
     save_solver_output: bool = False
@@ -143,12 +143,12 @@ class PlanarPlanConfig:
         "quadratic",
         "socp",
         "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
-    ] = "quadratic"
+    ] = "socp"
     minimize_squared_eucl_dist: bool = True
-    use_eq_elimination: bool = False
+    use_eq_elimination: bool = False  # TODO: Remove
     penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True
-    no_cycles: bool = False
+    no_cycles: bool = False  # TODO: remove, not used
     workspace: PlanarPushingWorkspace = field(
         default_factory=lambda: PlanarPushingWorkspace()
     )
@@ -158,7 +158,7 @@ class PlanarPlanConfig:
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
-    use_approx_exponential_map: bool = True
+    use_approx_exponential_map: bool = False
     minimize_sq_forces: bool = True
     use_band_sparsity: bool = True
 
