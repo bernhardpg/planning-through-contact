@@ -9,6 +9,9 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
+from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
+    BandSparseSemidefiniteRelaxation,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -59,7 +62,9 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     cfg = PlanarPlanConfig(
-        dynamics_config=dynamics_config, use_approx_exponential_map=False
+        dynamics_config=dynamics_config,
+        use_approx_exponential_map=False,
+        use_band_sparsity=False,
     )
     return cfg
 
@@ -72,10 +77,10 @@ def t_pusher() -> RigidBody:
 
 @pytest.fixture
 def face_contact_vars(box_geometry: Box2d) -> FaceContactVariables:
-    prog = MathematicalProgram()
+    num_knot_points = 4
+    prog = BandSparseSemidefiniteRelaxation(num_groups=num_knot_points)
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
 
-    num_knot_points = 4
     time_in_contact = 2
 
     vars = FaceContactVariables.from_prog(
@@ -157,6 +162,7 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
+    plan_config.avoid_object = request.param.get("avoid_object", False)
 
     gcs = opt.GraphOfConvexSets()
 
@@ -202,6 +208,7 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
+    plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
@@ -210,9 +217,6 @@ def planner(
     )
     plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
-    plan_config.use_redundant_dynamic_constraints = request.param.get(
-        "use_redundant_dynamic_constraints", True
-    )
 
     planner = PlanarPushingPlanner(
         plan_config,

@@ -355,6 +355,10 @@ class PlanarPushingPlanner:
             # options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
             options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
+        if solver_params.save_solver_output:
+            options.solver_options = SolverOptions()
+            options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
+
         options.convex_relaxation = solver_params.gcs_convex_relaxation
         if options.convex_relaxation is True:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?

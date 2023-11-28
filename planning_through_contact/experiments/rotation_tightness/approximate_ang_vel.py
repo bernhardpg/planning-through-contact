@@ -12,7 +12,7 @@ from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
-NUM_CTRL_POINTS = 1000
+NUM_CTRL_POINTS = 8
 NUM_DIMS = 2
 
 prog = MathematicalProgram()
@@ -121,6 +121,7 @@ for k in range(NUM_CTRL_POINTS - 1):
 
 # prog.AddCost(th_dots.T @ th_dots)
 # prog.AddCost(-np.sum(th_dots))
+# prog.AddCost(10 * np.sum(r_displacements))
 
 
 # Solve SDP relaxation
@@ -141,8 +142,8 @@ assert result.is_success()
 print(f"Cost: {result.get_optimal_cost()}")
 print(f"Elapsed time: {elapsed_time}")
 
-# r_val = result.GetSolution(r)
-# r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
+r_val = result.GetSolution(r)
+r_val = r_val.reshape((NUM_DIMS, NUM_CTRL_POINTS), order="F")
 
-# plot_cos_sine_trajs(r_val.T)
+plot_cos_sine_trajs(r_val.T)
 # plot_cos_sine_trajs(r_val.T, A, b)

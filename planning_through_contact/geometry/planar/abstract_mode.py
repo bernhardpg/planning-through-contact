@@ -155,7 +155,6 @@ class AbstractContactMode(ABC):
     num_knot_points: int
     time_in_mode: float
     contact_location: PolytopeContactLocation
-    prog: MathematicalProgram
     config: PlanarPlanConfig
 
     @abstractmethod

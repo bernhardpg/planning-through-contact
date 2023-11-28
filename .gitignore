@@ -2,6 +2,9 @@
 *.swp
 *.swo
 
+# Log files etc
+*log.txt
+
 # MAC
 .DS_STORE
 

@@ -37,7 +37,7 @@ from tests.geometry.planar.fixtures import (
     rigid_body_box,
 )
 from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
     assert_object_is_avoided,
 )
 
@@ -143,7 +143,7 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     vars = non_collision_mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
     )
 
@@ -227,7 +227,7 @@ def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
     vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
     )
 
@@ -272,7 +272,7 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
     vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         slider_pose,
         finger_initial_pose,
@@ -315,7 +315,7 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
     vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         slider_pose,
         finger_initial_pose,
@@ -386,7 +386,7 @@ def test_avoid_object_t_pusher(
     vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         slider_pose,
         initial,

@@ -20,6 +20,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
@@ -28,6 +31,7 @@ from planning_through_contact.planning.planar.planar_plan_config import PlanarPl
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
+    visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
@@ -40,10 +44,13 @@ from tests.geometry.planar.fixtures import (
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
     assert_object_is_avoided,
 )
 
 DEBUG = False
+# TODO(bernhardpg): Old visualizer is no longer working after an update to the integration scheme, replace all old visualizer instances
+# with the new visualizer!
 
 
 @pytest.mark.parametrize(
@@ -198,7 +205,7 @@ def test_subgraph_planning(
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         subgraph.source.mode.slider_pose,
         subgraph.source.mode.finger_initial_pose,
@@ -252,47 +259,30 @@ def test_subgraph_planning(
 
 
 @pytest.mark.parametrize(
-    "subgraph, use_eq_elimination",
+    "subgraph",
     [
-        (
-            {
-                "boundary_conds": False,
-                "avoid_object": False,
-            },
-            False,
-        ),
-        (
-            {
-                "boundary_conds": False,
-                "avoid_object": True,
-            },
-            False,
-        ),
-        # (
-        #     {
-        #         "boundary_conds": False,
-        #         "avoid_object": False,
-        #     },
-        #     True,
-        # ),
+        {
+            "boundary_conds": False,
+            "avoid_object": False,
+        },
+        {
+            "boundary_conds": False,
+            "avoid_object": True,
+        },
     ],
     indirect=["subgraph"],
     ids=[
         "simple",
         "avoid_object",
-        # "eq_elimination"
     ],
 )
 def test_subgraph_with_contact_modes(
     subgraph: NonCollisionSubGraph,
     gcs_options: opt.GraphOfConvexSetsOptions,
-    use_eq_elimination: bool,
 ):
     """
     This unit test tests much of the code that is implemented in the PlanarPushingPlanner.
     """
-
-    subgraph.config.use_eq_elimination = use_eq_elimination
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     source_mode = FaceContactMode.create_from_plan_spec(
@@ -332,25 +322,25 @@ def test_subgraph_with_contact_modes(
     pairs["source"] = source
     pairs["target"] = target
 
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, source_vertex, target_vertex, pairs
-    ).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory.from_result(
+        subgraph.config, result, subgraph.gcs, source_vertex, target_vertex, pairs
+    )
 
     assert_initial_and_final_poses(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_BP) <= 1.0)
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
 
     if subgraph.config.avoid_object:
-        first_segment_start_idx = subgraph.config.num_knot_points_contact
-        first_segment_end_idx = (
-            subgraph.config.num_knot_points_contact
-            + subgraph.config.num_knot_points_non_collision
-            + 1
-        )
-        first_segment = traj.p_BP[:, first_segment_start_idx:first_segment_end_idx]
+        first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,
             first_segment,
@@ -358,11 +348,7 @@ def test_subgraph_with_contact_modes(
             start_idx=2,
             end_idx=-2,
         )
-
-        second_segment_end_idx = (
-            first_segment_end_idx + subgraph.config.num_knot_points_non_collision
-        )
-        second_segment = traj.p_BP[:, first_segment_end_idx:second_segment_end_idx]
+        second_segment = np.hstack(traj.path_knot_points[2].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,
             second_segment,
@@ -373,8 +359,8 @@ def test_subgraph_with_contact_modes(
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, subgraph.slider.geometry, pusher_radius=0.01
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -418,7 +404,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         subgraph.source.mode.slider_pose,
         subgraph.source.mode.finger_initial_pose,
@@ -513,7 +499,7 @@ def test_subgraph_contact_modes_t_pusher(
         result, subgraph.gcs, source_vertex, target_vertex, pairs
     ).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 
@@ -521,4 +507,112 @@ def test_subgraph_contact_modes_t_pusher(
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
         visualize_planar_pushing_trajectory_legacy(
             traj, subgraph.slider.geometry, plan_config.pusher_radius
+        )
+
+
+@pytest.mark.parametrize(
+    "subgraph",
+    [
+        {
+            "boundary_conds": False,
+            "avoid_object": False,
+        },
+        {
+            "boundary_conds": False,
+            "avoid_object": True,
+        },
+    ],
+    indirect=["subgraph"],
+    ids=[
+        "simple",
+        "avoid_object",
+    ],
+)
+def test_subgraph_with_contact_modes_band_sparsity(
+    subgraph: NonCollisionSubGraph,
+    gcs_options: opt.GraphOfConvexSetsOptions,
+):
+    """
+    This unit test tests much of the code that is implemented in the PlanarPushingPlanner.
+    """
+
+    subgraph.config.use_band_sparsity = True
+
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+    source_mode = FaceContactMode.create_from_plan_spec(
+        contact_location_start, subgraph.config
+    )
+    source_mode.set_finger_pos(0.5)
+
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 2)
+    target_mode = FaceContactMode.create_from_plan_spec(
+        contact_location_end, subgraph.config
+    )
+    target_mode.set_finger_pos(0.5)
+
+    slider_initial_pose = PlanarPose(0.3, 0, 0)
+    source_mode.set_slider_initial_pose(slider_initial_pose)
+    source_vertex = subgraph.gcs.AddVertex(source_mode.get_convex_set(), "source")
+    source_mode.add_cost_to_vertex(source_vertex)
+    source = VertexModePair(source_vertex, source_mode)
+
+    slider_final_pose = PlanarPose(0.5, 0.3, 0.4)
+    target_mode.set_slider_final_pose(slider_final_pose)
+    target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "target")
+    target_mode.add_cost_to_vertex(target_vertex)
+    target = VertexModePair(target_vertex, target_mode)
+
+    subgraph.connect_with_continuity_constraints(
+        contact_location_start.idx, source, outgoing=False
+    )
+    subgraph.connect_with_continuity_constraints(
+        contact_location_end.idx, target, incoming=False
+    )
+
+    result = subgraph.gcs.SolveShortestPath(source_vertex, target_vertex, gcs_options)
+    assert result.is_success()
+
+    pairs = subgraph.get_all_vertex_mode_pairs()
+    pairs["source"] = source
+    pairs["target"] = target
+
+    traj = PlanarPushingTrajectory.from_result(
+        subgraph.config, result, subgraph.gcs, source_vertex, target_vertex, pairs
+    )
+
+    assert_initial_and_final_poses(
+        traj, slider_initial_pose, None, slider_final_pose, None
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
+
+    if subgraph.config.avoid_object:
+        first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
+        assert_object_is_avoided(
+            subgraph.slider.geometry,
+            first_segment,
+            min_distance=0.001,
+            start_idx=2,
+            end_idx=-2,
+        )
+        second_segment = np.hstack(traj.path_knot_points[2].p_BPs)  # type: ignore
+        assert_object_is_avoided(
+            subgraph.slider.geometry,
+            second_segment,
+            min_distance=0.001,
+            start_idx=2,
+            end_idx=-2,
+        )
+
+    if DEBUG:
+        save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )

@@ -11,6 +11,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
@@ -22,6 +25,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
+    visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
@@ -34,6 +38,7 @@ from tests.geometry.planar.fixtures import (
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
     assert_planning_path_matches_target,
 )
 
@@ -58,26 +63,16 @@ def test_planner_construction(
     for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
-        # angular velocity, linear velocity, normal force, friction force
-        assert len(costs) == 4
+        # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
+        assert len(costs) == 4 * (m.num_knot_points - 1)
 
-        lin_vel, ang_vel, normal_force, friction_force = costs
+        for idx, cost in enumerate(costs):
+            var_idxs = m._get_cost_terms()[0][idx]
+            target_vars = Variables(v.x()[var_idxs])
+            assert target_vars.EqualTo(Variables(cost.variables()))
 
-        target_lin_vars = Variables(v.x()[m._get_cost_terms()[0][0]])
-        assert target_lin_vars.EqualTo(Variables(lin_vel.variables()))
-
-        target_ang_vars = Variables(v.x()[m._get_cost_terms()[0][1]])
-        assert target_ang_vars.EqualTo(Variables(ang_vel.variables()))
-
-        target_norm_force_vars = Variables(v.x()[m._get_cost_terms()[0][2]])
-        assert target_norm_force_vars.EqualTo(Variables(normal_force.variables()))
-
-        target_fric_force_vars = Variables(v.x()[m._get_cost_terms()[0][3]])
-        assert target_fric_force_vars.EqualTo(Variables(friction_force.variables()))
-
-        # Costs should be linear in SDP relaxation
-        assert isinstance(lin_vel.evaluator(), LinearCost)
-        assert isinstance(ang_vel.evaluator(), LinearCost)
+            # Costs should be linear in SDP relaxation
+            assert isinstance(cost.evaluator(), LinearCost)
 
     assert planner.source_subgraph is not None
     assert planner.target_subgraph is not None
@@ -266,7 +261,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
         interpolate=False, assert_determinants=False
     )
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
         planner.finger_pose_initial,
@@ -438,7 +433,7 @@ def test_make_plan(
     path = planner.get_solution_path(result)
     traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
 
-    assert_initial_and_final_poses(
+    assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
         planner.finger_pose_initial,
@@ -453,4 +448,147 @@ def test_make_plan(
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory_legacy(
             traj, planner.slider.geometry, planner.config.pusher_radius
+        )
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            "use_band_sparsity": True,
+        },
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
+                "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
+            },
+            "use_band_sparsity": True,
+        },
+    ],
+    indirect=["planner"],
+    ids=[1, 2],
+)
+def test_make_plan_band_sparsity(
+    planner: PlanarPushingPlanner,
+) -> None:
+    solver_params = PlanarSolverParams(print_solver_output=DEBUG)
+    result = planner._solve(solver_params)
+    assert result.is_success()
+
+    path = planner.get_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
+
+    traj = PlanarPushingTrajectory.from_result(
+        planner.config,
+        result,
+        planner.gcs,
+        planner.source.vertex,
+        planner.target.vertex,
+        planner._get_all_vertex_mode_pairs(),
+    )
+
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
+
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+
+
+@pytest.mark.skip(reason="Not working yet due to UNKNOWN mosek error")
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            "use_band_sparsity": True,
+            "body": "t_pusher",
+        },
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
+                "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
+            },
+            "use_band_sparsity": True,
+            "body": "t_pusher",
+        },
+    ],
+    indirect=["planner"],
+    ids=[1, 2],
+)
+def test_make_plan_band_sparsity_t_pusher(
+    planner: PlanarPushingPlanner,
+) -> None:
+    solver_params = PlanarSolverParams(save_solver_output=DEBUG)
+    result = planner._solve(solver_params)
+    assert result.is_success()
+
+    path = planner.get_solution_path(result)
+    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
+
+    traj = PlanarPushingTrajectory.from_result(
+        planner.config,
+        result,
+        planner.gcs,
+        planner.source.vertex,
+        planner.target.vertex,
+        planner._get_all_vertex_mode_pairs(),
+    )
+
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.finger_pose_initial,
+        planner.slider_pose_target,
+        planner.finger_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
+
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
