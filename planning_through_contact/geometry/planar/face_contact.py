@@ -521,6 +521,37 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_final_pose = pose
 
+    def add_so2_cut_from_boundary_conds(self) -> None:
+        """
+        This function only works when the slider initial pose and final pose are constant values.
+        It is not yet clear how to implement something like this in the GCS case.
+        """
+        assert self.slider_initial_pose is not None
+        assert self.slider_final_pose is not None
+
+        ths = sorted([self.slider_initial_pose.theta, self.slider_final_pose.theta])
+
+        if ths[0] == ths[1]:  # no rotation
+            # add the plane that is simply pointing outwards from the two points
+            th = ths[0]
+            a = np.array([np.cos(th), np.sin(th)])
+            b = 1
+        else:
+            p1 = np.array([np.cos(ths[0]), np.sin(ths[0]), 0])
+            p2 = np.array([np.cos(ths[1]), np.sin(ths[1]), 0])
+            v = p2 - p1
+            e3 = np.array([0, 0, 1])
+            a = np.cross(v, e3)
+            a = (a / np.linalg.norm(a))[:2]  # only want x and y components
+            b = a.T @ p1[:2]
+
+        for idx, (cos_th, sin_th) in enumerate(
+            zip(self.variables.cos_ths, self.variables.sin_ths)
+        ):
+            self.prog.add_linear_inequality_constraint(
+                idx, a[0] * cos_th + a[1] * sin_th >= b
+            )
+
     def formulate_convex_relaxation(self) -> None:
         if self.config.use_eq_elimination:
             self.original_prog = self.prog

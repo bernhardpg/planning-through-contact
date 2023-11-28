@@ -4,6 +4,7 @@ from IPython.display import HTML, SVG, display
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarCostFunctionTerms,
     PlanarPlanConfig,
     PlanarSolverParams,
     SliderPusherSystemConfig,
@@ -24,8 +25,17 @@ pusher_radius = 0.035
 
 dynamics_config = SliderPusherSystemConfig(pusher_radius=pusher_radius, slider=slider)
 
+cost_terms = PlanarCostFunctionTerms(
+    sq_forces=1.0,
+    ang_displacements=1.0,
+    lin_displacements=1.0,
+    obj_avoidance_quad_weight=0.4,
+    mode_transition_cost=1.0,
+)
+
 config = PlanarPlanConfig(
     dynamics_config=dynamics_config,
+    cost_terms=cost_terms,
     num_knot_points_contact=3,
     num_knot_points_non_collision=3,
     avoid_object=True,
@@ -34,13 +44,13 @@ config = PlanarPlanConfig(
     use_band_sparsity=True,
     minimize_sq_forces=True,
     use_entry_and_exit_subgraphs=True,
-    penalize_mode_transitions=False,
+    penalize_mode_transitions=True,
 )
 
 planner = PlanarPushingPlanner(config)
 
 solver_params = PlanarSolverParams(
-    gcs_max_rounded_paths=20,
+    gcs_max_rounded_paths=100,
     print_flows=False,
     print_solver_output=True,
     save_solver_output=False,
@@ -52,7 +62,7 @@ solver_params = PlanarSolverParams(
 
 
 slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-slider_target_pose = PlanarPose(x=0.2, y=-0.3, theta=2.0)
+slider_target_pose = PlanarPose(x=0.5, y=-0.3, theta=2.0)
 finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 plan = PlanarPushingStartAndGoal(
