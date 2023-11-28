@@ -162,6 +162,7 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
+    plan_config.avoid_object = request.param.get("avoid_object", False)
 
     plan_config.use_band_sparsity = False
 

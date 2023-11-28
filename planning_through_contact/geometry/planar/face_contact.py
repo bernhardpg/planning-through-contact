@@ -550,10 +550,7 @@ class FaceContactMode(AbstractContactMode):
         return opt.Spectrahedron(self.relaxed_prog)
 
     def get_variable_indices_in_gcs_vertex(self, vars: NpVariableArray) -> List[int]:
-        return self.prog.prog.FindDecisionVariableIndices(vars)
-        # NOTE: This function relies on the fact that the sdp relaxation
-        # returns an ordering of variables [1, x1, x2, ...],
-        # where [x1, x2, ...] is the original ordering in self.prog
+        return self.relaxed_prog.FindDecisionVariableIndices(vars)
 
     def get_variable_solutions_for_vertex(
         self, vertex: GcsVertex, result: MathematicalProgramResult

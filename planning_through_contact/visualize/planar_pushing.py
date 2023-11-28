@@ -314,6 +314,9 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
 
         slider_geometry = self.traj.config.slider_geometry
         pusher_radius = self.traj.config.pusher_radius
+        MIN_PUSHER_RADIUS_VIZ = 0.01  # we need some radius for the visualization
+        if pusher_radius == 0:
+            pusher_radius = MIN_PUSHER_RADIUS_VIZ
 
         self.DeclareAbstractOutputPort(
             "geometry_pose",

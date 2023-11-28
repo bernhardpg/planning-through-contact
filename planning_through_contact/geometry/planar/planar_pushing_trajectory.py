@@ -362,7 +362,7 @@ class PlanarPushingTrajectory:
         pairs: Dict[str, VertexModePair],
         round_solution: bool = False,
         print_path: bool = False,
-        assert_determinants: bool = True,
+        assert_determinants: bool = False,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
