@@ -38,7 +38,7 @@ cost_terms = PlanarCostFunctionTerms(
 config = PlanarPlanConfig(
     dynamics_config=dynamics_config,
     cost_terms=cost_terms,
-    num_knot_points_contact=5,
+    num_knot_points_contact=3,
     num_knot_points_non_collision=3,
     avoid_object=True,
     avoidance_cost="quadratic",
@@ -53,6 +53,7 @@ config = PlanarPlanConfig(
 planner = PlanarPushingPlanner(config)
 
 solver_params = PlanarSolverParams(
+    measure_solve_time=True,
     gcs_max_rounded_paths=20,
     print_flows=False,
     print_solver_output=True,
@@ -71,10 +72,10 @@ solver_params = PlanarSolverParams(
 # finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 
 # Traj 2
-slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
-slider_target_pose = PlanarPose(x=-0.3, y=-0.15, theta=-0.5)
-finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
-finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+# slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+# slider_target_pose = PlanarPose(x=-0.3, y=-0.15, theta=-0.5)
+# finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+# finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 
 # Traj 3
 # slider_initial_pose = PlanarPose(x=0.5, y=0.0, theta=1.0)
@@ -87,6 +88,14 @@ finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 # slider_target_pose = PlanarPose(x=0.55, y=-0.15, theta=1.2)
 # finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
 # finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+
+# Traj 5
+# A bit loose
+# slider_initial_pose = PlanarPose(x=0.65, y=0.0, theta=0)
+# slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi / 2)
+# finger_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+# finger_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+
 plan = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, finger_initial_pose, finger_target_pose
 )
