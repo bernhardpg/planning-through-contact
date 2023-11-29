@@ -95,6 +95,12 @@ class PlanarPushingPlanner:
         if self.contact_locations is None:
             self.contact_locations = self.slider.geometry.contact_locations
 
+    def formulate_problem(self) -> None:
+        assert self.slider_pose_initial is not None
+        assert self.slider_pose_target is not None
+        assert self.finger_pose_target is not None
+        assert self.finger_pose_initial is not None
+
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
         self._build_graph()
@@ -124,6 +130,11 @@ class PlanarPushingPlanner:
             )
             for loc in self.contact_locations
         ]
+
+        for mode in self.contact_modes:
+            mode.add_so2_cut(
+                self.slider_pose_initial.theta, self.slider_pose_target.theta
+            )
 
     def _build_graph(self):
         self.contact_vertices = [
@@ -159,6 +170,9 @@ class PlanarPushingPlanner:
             if self.config.use_entry_and_exit_subgraphs:
                 self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
                 self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+
+        self._set_initial_poses(self.finger_pose_initial, self.slider_pose_initial)
+        self._set_target_poses(self.finger_pose_target, self.slider_pose_target)
 
     def _build_subgraph_between_contact_modes(
         self,
@@ -269,11 +283,11 @@ class PlanarPushingPlanner:
         self.finger_pose_initial = finger_pose
         self.slider_pose_initial = slider_pose
 
-        if self.source is not None:
-            print("Source vertex is already set, removing old vertex and adding new")
-            self.gcs.RemoveVertex(self.source.vertex)
-            self.source = None
-
+    def _set_initial_poses(
+        self,
+        finger_pose: PlanarPose,
+        slider_pose: PlanarPose,
+    ) -> None:
         if (
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
@@ -293,11 +307,11 @@ class PlanarPushingPlanner:
         self.finger_pose_target = finger_pose
         self.slider_pose_target = slider_pose
 
-        if self.target is not None:
-            print("Target vertex is already set, removing old vertex and adding new")
-            self.gcs.RemoveVertex(self.target.vertex)
-            self.target = None
-
+    def _set_target_poses(
+        self,
+        finger_pose: PlanarPose,
+        slider_pose: PlanarPose,
+    ) -> None:
         if (
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
@@ -362,7 +376,17 @@ class PlanarPushingPlanner:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = solver_params.gcs_max_rounded_paths
 
-        options.solver = MosekSolver()
+        mosek = MosekSolver()
+        options.solver = mosek
+        options.solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-3
+        )
+        options.solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-3
+        )
+        options.solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
+        )
 
         assert self.source is not None
         assert self.target is not None
