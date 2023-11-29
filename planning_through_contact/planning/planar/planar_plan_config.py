@@ -163,6 +163,7 @@ class PlanarPlanConfig:
     )
     use_approx_exponential_map: bool = False
     minimize_sq_forces: bool = True
+    minimize_trace: bool = False
     use_band_sparsity: bool = True
 
     @property

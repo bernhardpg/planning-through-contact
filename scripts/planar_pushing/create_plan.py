@@ -9,12 +9,14 @@ from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPu
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarCostFunctionTerms,
     PlanarPlanConfig,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
+    PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
@@ -50,39 +52,64 @@ def create_plan(
     save_traj: bool = False,
 ):
     if body_to_use == "box":
-        body = get_slider_box()
+        slider = get_slider_box()
     elif body_to_use == "t_pusher":
-        body = get_tee()
+        slider = get_tee()
     elif body_to_use == "sugar_box":
-        body = get_sugar_box()
+        slider = get_sugar_box()
 
-    dynamics_config = SliderPusherSystemConfig(pusher_radius=0.035, slider=body)
+    pusher_radius = 0.035
+    dynamics_config = SliderPusherSystemConfig(
+        pusher_radius=pusher_radius, slider=slider, friction_coeff_slider_pusher=0.25
+    )
+
+    cost_terms = PlanarCostFunctionTerms(
+        sq_forces=10.0,
+        ang_displacements=1.0,
+        lin_displacements=1.0,
+        obj_avoidance_quad_weight=0.4,
+        mode_transition_cost=1.0,
+    )
 
     config = PlanarPlanConfig(
-        time_non_collision=2.0,
-        time_in_contact=2.0,
-        num_knot_points_contact=4,
-        num_knot_points_non_collision=4,
-        avoid_object=True,
-        avoidance_cost="socp",
-        no_cycles=True,
         dynamics_config=dynamics_config,
+        cost_terms=cost_terms,
+        num_knot_points_contact=3,
+        num_knot_points_non_collision=3,
+        avoid_object=True,
+        avoidance_cost="quadratic",
         allow_teleportation=False,
+        use_band_sparsity=True,
+        minimize_sq_forces=True,
+        use_entry_and_exit_subgraphs=True,
+        penalize_mode_transitions=False,
     )
 
     planner = PlanarPushingPlanner(config)
 
-    if traj_number == 1:  # loose
+    solver_params = PlanarSolverParams(
+        measure_solve_time=True,
+        gcs_max_rounded_paths=20,
+        print_flows=False,
+        print_solver_output=True,
+        save_solver_output=False,
+        print_path=True,
+        print_cost=True,
+        nonlinear_traj_rounding=False,
+        assert_result=False,
+    )
+
+    if traj_number == 1:
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-    elif traj_number == 2:  # works
+    elif traj_number == 2:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-    elif traj_number == 3:  # crazy movement
+    elif traj_number == 3:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
         pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
@@ -92,62 +119,80 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.75, y=-0.2, theta=np.pi / 2 + 0.4)
         pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
-    elif traj_number == 5:  # loose
+    elif traj_number == 5:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=np.pi / 2)
         slider_target_pose = PlanarPose(x=0.70, y=-0.05, theta=np.pi / 2 + 0.4)
         pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
-    elif traj_number == 6:  # t pusher
+    elif traj_number == 6:
         slider_initial_pose = PlanarPose(x=0.60, y=0.0, theta=np.pi / 2)
         slider_target_pose = PlanarPose(x=0.65, y=-0.1, theta=np.pi / 2 + 0.3)
         pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 7:
+        slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+        slider_target_pose = PlanarPose(x=0.3, y=-0.15, theta=-0.5)
+        pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 8:
+        slider_initial_pose = PlanarPose(x=0.0, y=0.0, theta=0.0)
+        slider_target_pose = PlanarPose(x=-0.3, y=-0.15, theta=-0.5)
+        pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 9:
+        slider_initial_pose = PlanarPose(x=0.5, y=0.0, theta=1.0)
+        slider_target_pose = PlanarPose(x=0.6, y=-0.15, theta=-0.5)
+        pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 10:
+        slider_initial_pose = PlanarPose(x=0.7, y=0.2, theta=0.3)
+        slider_target_pose = PlanarPose(x=0.55, y=-0.15, theta=1.2)
+        pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 11:
+        # Rotate in place is a bit loose
+        slider_initial_pose = PlanarPose(x=0.65, y=0.0, theta=0)
+        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi / 2)
+        pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
     planner.set_initial_poses(pusher_initial_pose, slider_initial_pose)
     planner.set_target_poses(pusher_target_pose, slider_target_pose)
-
-    if False:
-        visualize_planar_pushing_start_and_goal(
-            config.slider_geometry,
-            config.pusher_radius,
-            slider_initial_pose,
-            slider_target_pose,
-            pusher_initial_pose,
-            pusher_target_pose,
-            save=True,
-            filename="start_goal_test",
-        )
+    planner.formulate_problem()
 
     if debug:
         planner.create_graph_diagram(Path("graph.svg"))
 
-    solver_params = PlanarSolverParams(
-        gcs_max_rounded_paths=10,
-        print_flows=True,
-        nonlinear_traj_rounding=False,
-        assert_determinants=False,
-        print_solver_output=True,
-        print_path=True,
-    )
     traj = planner.plan_trajectory(solver_params)
 
     if save_traj:
         traj_name = f"trajectories/{body_to_use}_pushing_{traj_number}.pkl"
-        traj.save(traj_name)
+        traj.save(traj_name)  # type: ignore
 
     if visualize:
+        plan = PlanarPushingStartAndGoal(
+            slider_initial_pose,
+            slider_target_pose,
+            pusher_initial_pose,
+            pusher_target_pose,
+        )
+        visualize_planar_pushing_start_and_goal(
+            config.slider_geometry,
+            config.pusher_radius,
+            plan,
+            save=True,
+            filename=f"trajectory_{traj_number}_start_and_goal",
+        )
+
         ani = visualize_planar_pushing_trajectory(
-            traj, save=True, filename="test", visualize_knot_points=True
+            traj,  # type: ignore
+            save=True,
+            filename=f"trajectory_{traj_number}",
+            visualize_knot_points=True,
         )
         return ani
-        # visualize_planar_pushing_trajectory_legacy(
-        #     traj.to_old_format(),
-        #     body.geometry,
-        #     config.pusher_radius,
-        #     visualize_robot_base=True,
-        # )
 
 
 if __name__ == "__main__":
@@ -160,4 +205,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     traj_number = args.traj
-    create_plan(debug=True, body_to_use="box", traj_number=traj_number, visualize=True)
+    create_plan(
+        debug=True,
+        body_to_use="box",
+        traj_number=traj_number,
+        visualize=True,
+        save_traj=True,
+    )

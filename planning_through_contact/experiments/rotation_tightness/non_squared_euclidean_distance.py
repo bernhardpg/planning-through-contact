@@ -81,6 +81,19 @@ if USE_EUCLIDEAN_DISTANCE:
 
         relaxed_prog.AddPositiveSemidefiniteConstraint(mat)
 
+
+minimize_trace = True
+if minimize_trace:
+    EPS = 0.1
+
+    # the first constraint is the PSD constraint we want
+    X = relaxed_prog.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+    relaxed_prog.AddLinearCost(EPS * np.trace(X))
+
+
 print("Finished formulating SDP relaxation")
 
 solver_options = SolverOptions()

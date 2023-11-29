@@ -42,7 +42,7 @@ plan_cfg = PlanarPlanConfig(
     num_knot_points_contact=40,
     cost_terms=cost_terms,
     use_approx_exponential_map=True,
-    use_band_sparsity=False,
+    use_band_sparsity=True,
 )
 
 

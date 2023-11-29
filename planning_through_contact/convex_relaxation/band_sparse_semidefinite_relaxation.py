@@ -132,7 +132,7 @@ class BandSparseSemidefiniteRelaxation:
 
         return np.array(bounding_box_constraints)
 
-    def make_relaxation(self) -> MathematicalProgram:
+    def make_relaxation(self, minimize_trace: bool = False) -> MathematicalProgram:
         relaxed_prog = MathematicalProgram()
 
         # First gather variables
@@ -389,6 +389,11 @@ class BandSparseSemidefiniteRelaxation:
                 # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
                 relaxed_prog.AddLinearCost(cost)
 
+        if minimize_trace:
+            EPS = 1.0
+            for X in self.Xs.values():
+                relaxed_prog.AddLinearCost(EPS * np.trace(X))
+
         self.relaxed_prog = relaxed_prog
         return self.relaxed_prog
 
@@ -436,6 +441,18 @@ class BandSparseSemidefiniteRelaxation:
         return big_X
 
     # TODO: This should not really be a part of this class
-    def make_full_relaxation(self) -> MathematicalProgram:
+    def make_full_relaxation(self, minimize_trace: bool = False) -> MathematicalProgram:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+
+        if minimize_trace:
+            EPS = 0.01
+
+            assert (
+                len(self.relaxed_prog.positive_semidefinite_constraints()) == 1
+            )  # should only be one big X
+            X = self.relaxed_prog.positive_semidefinite_constraints()[0].variables()
+            N = np.sqrt(len(X))
+            assert int(N) == N
+            X = X.reshape((int(N), int(N)))
+            self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
         return self.relaxed_prog
