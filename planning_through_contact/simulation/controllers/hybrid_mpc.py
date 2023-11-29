@@ -175,8 +175,6 @@ class HybridMpc:
             lam_dot = u_i[2]
 
             prog.AddLinearConstraint(c_n >= 0)
-            prog.AddLinearConstraint(lam_dot <= 1.0)
-            prog.AddLinearConstraint(lam_dot >= -1.0)
 
             if mode == HybridModes.STICKING or i > num_sliding_steps:
                 prog.AddLinearConstraint(c_f <= mu * c_n)
@@ -198,9 +196,9 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0]) * 1000
-        R = np.diag([1, 1, 0.1]) * 0.01
-        Q_N = Q * 10
+        Q = np.diag([1, 1, 1, 0.001]) * 60
+        R = np.diag([1, 1, 1]) * 0.5
+        Q_N = Q
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
@@ -236,8 +234,6 @@ class HybridMpc:
         result = results[best_idx]
 
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
-        if state_sol.shape[1] == 1:
-            breakpoint()
 
         x_next = state_sol[:, 1]
 

@@ -268,7 +268,9 @@ def test_get_control_with_disturbance(
 def one_contact_mode(
     slider_pusher_system: SliderPusherSystem,  # type:ignore
 ) -> FaceContactMode:
-    config = PlanarPlanConfig(dynamics_config=slider_pusher_system.config)
+    config = PlanarPlanConfig(
+        dynamics_config=slider_pusher_system.config, minimize_sq_forces=True
+    )
     mode = FaceContactMode.create_from_plan_spec(
         slider_pusher_system.contact_location, config
     )
