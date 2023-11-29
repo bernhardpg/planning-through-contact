@@ -67,10 +67,10 @@ def _linear_bindings_to_affine_terms(
     """
     if len(linear_bindings) > 0:
         binding_type = type(linear_bindings[0].evaluator())
-        if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
-            raise ValueError(
-                "When converting to homogenous form, all bindings must be either eq or ineqs."
-            )
+        # if not all([isinstance(b.evaluator(), binding_type) for b in linear_bindings]):
+        #     raise ValueError(
+        #         "When converting to homogenous form, all bindings must be either eq or ineqs."
+        #     )
 
         linear_exprs = np.concatenate(
             [

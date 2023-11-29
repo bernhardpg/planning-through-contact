@@ -345,7 +345,9 @@ class FaceContactMode(AbstractContactMode):
 
     def _define_constraints(self) -> None:
         for idx, lam in enumerate(self.variables.lams):
-            self.prog.add_bounding_box_constraint(idx, 0, 1, lam)
+            # self.prog.add_bounding_box_constraint(idx, 0, 1, lam)
+            self.prog.add_linear_inequality_constraint_only_self_multiply(idx, lam <= 1)
+            self.prog.add_linear_inequality_constraint_only_self_multiply(idx, 0 <= lam)
 
         # SO(2) constraints
         for idx, (c, s) in enumerate(
@@ -371,7 +373,8 @@ class FaceContactMode(AbstractContactMode):
 
         # Friction cone constraints
         for idx, c_n in enumerate(self.variables.normal_forces):
-            self.prog.add_bounding_box_constraint(idx, 0, np.inf, c_n)
+            # self.prog.add_bounding_box_constraint(idx, 0, np.inf, c_n)
+            self.prog.add_linear_inequality_constraint_only_self_multiply(idx, c_n >= 0)
 
         mu = self.dynamics_config.friction_coeff_slider_pusher
         for idx, (c_n, c_f) in enumerate(
@@ -395,6 +398,18 @@ class FaceContactMode(AbstractContactMode):
         ):
             self.prog.add_bounding_box_constraint(idx, -1, 1, cos_th)
             self.prog.add_bounding_box_constraint(idx, -1, 1, sin_th)
+            # self.prog.add_linear_inequality_constraint_only_self_multiply(
+            #     idx, cos_th <= 1
+            # )
+            # self.prog.add_linear_inequality_constraint_only_self_multiply(
+            #     idx, -1 <= cos_th
+            # )
+            # self.prog.add_linear_inequality_constraint_only_self_multiply(
+            #     idx, sin_th <= 1
+            # )
+            # self.prog.add_linear_inequality_constraint_only_self_multiply(
+            #     idx, -1 <= sin_th
+            # )
 
         # Quasi-static dynamics
         for k in range(self.num_knot_points - 1):
@@ -521,6 +536,27 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_final_pose = pose
 
+    def add_so2_cut(self) -> None:
+        first = np.array(
+            [
+                self.variables.cos_ths[0],
+                self.variables.sin_ths[0],
+            ]
+        )
+        last = np.array(
+            [
+                self.variables.cos_ths[-1],
+                self.variables.sin_ths[-1],
+            ]
+        )
+        v = (last - first).reshape((2, 1))
+
+        for idx, (cos_th, sin_th) in enumerate(
+            zip(self.variables.cos_ths[1:-1], self.variables.sin_ths[1:-1])
+        ):
+            q = np.array([cos_th, sin_th]).reshape((2, 1))
+            self.prog.add_independent_constraint(cross_2d(q, v) >= 0)
+
     def add_so2_cut_from_boundary_conds(self) -> None:
         """
         This function only works when the slider initial pose and final pose are constant values.
@@ -548,9 +584,15 @@ class FaceContactMode(AbstractContactMode):
         for idx, (cos_th, sin_th) in enumerate(
             zip(self.variables.cos_ths, self.variables.sin_ths)
         ):
-            self.prog.add_linear_inequality_constraint(
+            # self.prog.add_linear_inequality_constraint(
+            #     idx, a[0] * cos_th + a[1] * sin_th >= b
+            # )
+            self.prog.add_linear_inequality_constraint_only_self_multiply(
                 idx, a[0] * cos_th + a[1] * sin_th >= b
             )
+            # self.prog.add_linear_inequality_constraint_only_cross_multiply(
+            #     idx, a[0] * cos_th + a[1] * sin_th >= b
+            # )
 
     def formulate_convex_relaxation(self) -> None:
         if self.config.use_eq_elimination:

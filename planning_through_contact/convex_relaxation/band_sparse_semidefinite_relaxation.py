@@ -27,6 +27,12 @@ class BandSparseSemidefiniteRelaxation:
         self.groups = {idx: [] for idx in range(num_groups)}
         self.linear_costs = {idx: [] for idx in range(num_groups)}
         self.linear_inequality_constraints = {idx: [] for idx in range(num_groups)}
+        self.linear_inequality_constraints_only_self_multiply = {
+            idx: [] for idx in range(num_groups)
+        }
+        self.linear_inequality_constraints_only_cross_multiply = {
+            idx: [] for idx in range(num_groups)
+        }
         self.linear_equality_constraints = {idx: [] for idx in range(num_groups)}
 
         # Quadratic constraints and costs is what couples the groups
@@ -77,6 +83,28 @@ class BandSparseSemidefiniteRelaxation:
         group_idx = self._find_numbered_idx(group_idx)
         constraint = self.prog.AddLinearConstraint(*args)
         self.linear_inequality_constraints[group_idx].append(constraint)
+
+        return constraint
+
+    def add_linear_inequality_constraint_only_self_multiply(
+        self, group_idx: int, *args
+    ):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddLinearConstraint(*args)
+        self.linear_inequality_constraints_only_self_multiply[group_idx].append(
+            constraint
+        )
+
+        return constraint
+
+    def add_linear_inequality_constraint_only_cross_multiply(
+        self, group_idx: int, *args
+    ):
+        group_idx = self._find_numbered_idx(group_idx)
+        constraint = self.prog.AddLinearConstraint(*args)
+        self.linear_inequality_constraints_only_cross_multiply[group_idx].append(
+            constraint
+        )
 
         return constraint
 
@@ -190,6 +218,12 @@ class BandSparseSemidefiniteRelaxation:
             for const in self.linear_equality_constraints[idx]:
                 relaxed_prog.AddConstraint(const.evaluator(), const.variables())
 
+            for const in self.linear_inequality_constraints_only_self_multiply[idx]:
+                relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
+            for const in self.linear_inequality_constraints_only_cross_multiply[idx]:
+                relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
         # Add all linear costs directly
         for idx in range(self.num_groups):
             for const in self.linear_costs[idx]:
@@ -241,7 +275,7 @@ class BandSparseSemidefiniteRelaxation:
             for c in B.dot(x_bar_y_bar_T.T).flatten():
                 relaxed_prog.AddLinearEqualityConstraint(c, 0)
 
-        # Add constraints implied by linear equality constraints
+        # Add constraints implied by linear inequality constraints
         for idx in range(self.num_groups - 1):
             x = self.xs[idx]
             y = self.xs[idx + 1]
@@ -297,6 +331,116 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddLinearConstraint(c, 0, np.inf)
             for c in (B @ y_bar_y_bar_T @ B.T).flatten():
                 relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+
+        # Add constraints implied by linear inequality constraints (only cross-multiply)
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx]
+            y = self.xs[idx + 1]
+            ineqs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_cross_multiply[idx]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_cross_multiply[idx]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
+            ineqs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_cross_multiply[
+                    idx + 1
+                ]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_cross_multiply[
+                    idx + 1
+                ]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
+
+            # [b A][1; x] >= 0
+            A = linear_bindings_to_homogenuous_form(
+                ineqs_i, self._make_bbox_to_expr(bboxs_i), x
+            )
+            B = linear_bindings_to_homogenuous_form(
+                ineqs_j, self._make_bbox_to_expr(bboxs_j), y
+            )
+
+            x_len = len(x)
+            y_len = len(y)
+
+            # X = [xx' xy'
+            #      yx' yy']
+            X = self.Xs[idx]
+            xyT = X[:x_len, -y_len:]
+
+            x_bar_y_bar_T = np.block([[1, y.T], [x, xyT]])
+
+            # TODO: Will be adding some constraints multiple times here!
+            # A[1; x] >= 0 and B[1; y] >= 0
+            # => A[1; x][1; x]'A' >= 0 and A[1; x][1; y]'B' >= 0 and B[1; y][1; y]'B' >=
+            for c in (A @ x_bar_y_bar_T @ B.T).flatten():
+                relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+
+        # Add constraints implied by linear inequality constraints (only self multiply!)
+        for idx in range(self.num_groups - 1):
+            x = self.xs[idx]
+            y = self.xs[idx + 1]
+            ineqs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_self_multiply[idx]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_i = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_self_multiply[idx]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
+            ineqs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_self_multiply[
+                    idx + 1
+                ]
+                if isinstance(ineq, Binding[LinearConstraint])
+            ]
+            bboxs_j = [
+                ineq
+                for ineq in self.linear_inequality_constraints_only_self_multiply[
+                    idx + 1
+                ]
+                if isinstance(ineq, Binding[BoundingBoxConstraint])
+            ]
+
+            # [b A][1; x] >= 0
+            A = linear_bindings_to_homogenuous_form(
+                ineqs_i, self._make_bbox_to_expr(bboxs_i), x
+            )
+            B = linear_bindings_to_homogenuous_form(
+                ineqs_j, self._make_bbox_to_expr(bboxs_j), y
+            )
+
+            x_len = len(x)
+            y_len = len(y)
+
+            # X = [xx' xy'
+            #      yx' yy']
+            X = self.Xs[idx]
+            xxT = X[:x_len, :x_len]
+            yyT = X[-y_len:, -y_len:]
+
+            x_bar_x_bar_T = np.block([[1, x.T], [x, xxT]])
+            y_bar_y_bar_T = np.block([[1, y.T], [y, yyT]])
+
+            # TODO: Will be adding some constraints multiple times here!
+            # A[1; x] >= 0 and B[1; y] >= 0
+            # => A[1; x][1; x]'A' >= 0 and A[1; x][1; y]'B' >= 0 and B[1; y][1; y]'B' >=
+            for c in (A @ x_bar_x_bar_T @ A.T).flatten():
+                relaxed_prog.AddLinearConstraint(c, 0, np.inf)
+            # for c in (B @ y_bar_y_bar_T @ B.T).flatten():
+            #     relaxed_prog.AddLinearConstraint(c, 0, np.inf)
 
         # Quadratic constraints
         for (i, j), consts in self.quadratic_constraints.items():
