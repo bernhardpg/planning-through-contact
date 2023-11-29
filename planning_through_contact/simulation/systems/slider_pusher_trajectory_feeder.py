@@ -78,7 +78,10 @@ class SliderPusherTrajSegment:
         )
 
     def eval_control(self, t: float) -> npt.NDArray[np.float64]:
-        return np.array([self.c_n.eval(t), self.c_f.eval(t), self.lam_dot.eval(t)])
+        if t <= self.end_time:
+            return np.array([self.c_n.eval(t), self.c_f.eval(t), self.lam_dot.eval(t)])
+        else:
+            return np.array([0, 0, 0])
 
 
 # TODO(bernhardpg): Use the PlanarPushingTrajectory class instead of the duplicated functionality
@@ -135,10 +138,9 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
 
     def get_control(self, t: float) -> npt.NDArray[np.float64]:
         if t >= self.end_times[-1]:
-            t = self.end_times[
-                -1
-            ]  # repeat last element when we want trajectory after end time
-        traj = self._get_traj_segment_for_time(t)
+            traj = self.traj_segments[-1]
+        else:
+            traj = self._get_traj_segment_for_time(t)
         control = traj.eval_control(t)
         return control
 
@@ -165,9 +167,9 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         ts = np.arange(curr_t, end_time, self.cfg.step_size)[: self.cfg.horizon]
 
         # Remove any trajectory pieces that are after the trajectory ends
-        if any(ts >= self.end_times[-1] + self.cfg.step_size):
-            idx = np.where(ts >= self.end_times[-1] + self.cfg.step_size)[0][0]
-            ts = ts[:idx]
+        # if any(ts >= self.end_times[-1] + self.cfg.step_size):
+        #     idx = np.where(ts >= self.end_times[-1] + self.cfg.step_size)[0][0]
+        #     ts = ts[:idx]
 
         traj = [func(t) for t in ts]
         return traj

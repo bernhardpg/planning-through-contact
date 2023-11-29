@@ -71,7 +71,8 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            self.D = self.config.ellipsoidal_limit_surface
+            c = self.config.limit_surface_const
+            self.D = np.diag([1, 1, c])
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
