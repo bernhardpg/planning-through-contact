@@ -68,12 +68,12 @@ class PlanarPoseTrajPublisher(LeafSystem):
         return traj
 
     def _calc_pusher_pose(self, t: float) -> PlanarPose:
-        p_c_W = self.traj.get_value(t, "p_c_W")
+        p_WP = self.traj.get_value(t, "p_WP")
 
         # Avoid typing error
-        assert isinstance(p_c_W, type(np.array([])))
+        assert isinstance(p_WP, type(np.array([])))
 
-        planar_pose = PlanarPose(p_c_W[0].item(), p_c_W[1].item(), theta=0)
+        planar_pose = PlanarPose(p_WP[0].item(), p_WP[1].item(), theta=0)
         return planar_pose
 
     def DoCalcPusherPoseTrajOutput(self, context: Context, output):
