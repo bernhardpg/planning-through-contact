@@ -74,6 +74,8 @@ def create_plan(
     config = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         cost_terms=cost_terms,
+        time_in_contact=7,
+        time_non_collision=7,
         num_knot_points_contact=3,
         num_knot_points_non_collision=3,
         avoid_object=True,
@@ -155,6 +157,16 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi / 2)
         pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
+    elif traj_number == 12:
+        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0.9)
+        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=0.9)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 13:
+        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0.9)
+        slider_target_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi/2)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 

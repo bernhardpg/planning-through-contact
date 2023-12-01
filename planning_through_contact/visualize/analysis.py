@@ -69,6 +69,19 @@ class PlanarPushingLog:
         state_np_array = state_log.data()
         control_np_array = control_log.data()
         return cls.from_np(t, state_np_array, control_np_array)
+    
+    @classmethod
+    def from_pose_vector_log(
+        cls,
+        pose_vector_log: VectorLog,
+    ) -> "PlanarPushingLog":
+        t = pose_vector_log.sample_times()
+        state_np_array = pose_vector_log.data()
+        # Padding state since we didn't log lam
+        PAD_VAL = 0
+        state_np_array = np.vstack((state_np_array, PAD_VAL* np.ones_like(state_np_array[0, :])))
+        control_np_array = np.ones((3, len(t))) * PAD_VAL
+        return cls.from_np(t, state_np_array, control_np_array)
 
 
 def plot_planar_pushing_logs(
@@ -82,9 +95,21 @@ def plot_planar_pushing_logs(
 
     plot_planar_pushing_trajectory(actual, desired)
 
+def plot_planar_pushing_logs_from_pose_vectors(
+    pusher_pose_vector_log: VectorLog,
+    slider_pose_vector_log: VectorLog,
+    pusher_pose_vector_log_desired: VectorLog,
+    slider_pose_vector_log_desired: VectorLog) -> None:
+    actual_pusher = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log)
+    actual_slider = PlanarPushingLog.from_pose_vector_log(slider_pose_vector_log)
+    desired_pusher = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log_desired)
+    desired_slider = PlanarPushingLog.from_pose_vector_log(slider_pose_vector_log_desired)
+    plot_planar_pushing_trajectory(actual_slider, desired_slider, suffix="_slider")
+    plot_planar_pushing_trajectory(actual_pusher, desired_pusher, suffix="_pusher")
+
 
 def plot_planar_pushing_trajectory(
-    actual: PlanarPushingLog, desired: PlanarPushingLog
+    actual: PlanarPushingLog, desired: PlanarPushingLog, suffix: str = ""
 ) -> None:
     # State plot
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
@@ -92,12 +117,14 @@ def plot_planar_pushing_trajectory(
 
     pos = np.vstack((actual.x, actual.y))
     max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
+    # Note: this calculation doesn't center the plot on the right value, so 
+    # the line might not be visible
 
     axes[0].plot(actual.t, actual.x, label="Actual")
     axes[0].plot(actual.t, desired.x, linestyle="--", label="Desired")
     axes[0].set_title("x")
     axes[0].legend()
-    axes[0].set_ylim(-max_pos_change, max_pos_change)
+    # axes[0].set_ylim(-max_pos_change, max_pos_change)
 
     axes[1].plot(actual.t, actual.y, label="Actual")
     axes[1].plot(actual.t, desired.y, linestyle="--", label="Desired")
@@ -111,7 +138,7 @@ def plot_planar_pushing_trajectory(
     axes[2].plot(actual.t, desired.theta, linestyle="--", label="Desired")
     axes[2].set_title("theta")
     axes[2].legend()
-    axes[2].set_ylim(-th_change, th_change)
+    # axes[2].set_ylim(-th_change, th_change)
 
     axes[3].plot(actual.t, actual.lam, label="Actual")
     axes[3].plot(actual.t, desired.lam, linestyle="--", label="Desired")
@@ -120,7 +147,7 @@ def plot_planar_pushing_trajectory(
     axes[3].set_ylim(0, 1)
 
     plt.tight_layout()
-    plt.savefig("planar_pushing_states.pdf")
+    plt.savefig(f"planar_pushing_states{suffix}.pdf")
 
     # Control input
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 8))
@@ -156,7 +183,7 @@ def plot_planar_pushing_trajectory(
 
     # Adjust layout
     plt.tight_layout()
-    plt.savefig("planar_pushing_control.pdf")
+    plt.savefig(f"planar_pushing_control{suffix}.pdf")
 
 
 PLOT_WIDTH_INCH = 7
