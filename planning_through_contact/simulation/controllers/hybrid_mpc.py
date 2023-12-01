@@ -196,9 +196,9 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([1, 1, 1, 0.001]) * 60
-        R = np.diag([1, 1, 1]) * 0.5
-        Q_N = Q
+        Q = np.diag([3, 3, 0.1, 0]) * 10 
+        R = np.diag([1, 1, 0]) * 0.5
+        Q_N = np.diag([3, 3, 0.1, 0]) * 2000
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
@@ -243,7 +243,7 @@ class HybridMpc:
         u_next = control_sol[:, 0]
         return x_dot_curr, u_next
 
-
+# Not used in pusher pose controller
 class HybridModelPredictiveControlSystem(LeafSystem):
     def __init__(
         self, model: System, config: HybridMpcConfig = HybridMpcConfig()
@@ -272,7 +272,6 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         x_curr: npt.NDArray[np.float64] = self.state_port.Eval(context)  # type: ignore
         x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
-
         if len(u_traj) > 1:
             _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
         else:

@@ -37,7 +37,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     slider = get_slider_box()
 
     config = PlanarPushingSimConfig(
-        body="box",
+        slider=slider,
+        dynamics_config=traj.config.dynamics_config,
         contact_model=ContactModel.kHydroelastic,
         pusher_start_pose=traj.initial_pusher_planar_pose,
         slider_start_pose=traj.initial_slider_planar_pose,
@@ -48,7 +49,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         delay_before_execution=2.0,
         use_diff_ik=True,
         closed_loop=False,
-        mpc_config=HybridMpcConfig(rate_Hz=50, pusher_radius=traj.pusher_radius),
+        mpc_config=HybridMpcConfig(rate_Hz=50),
     )
 
     builder = DiagramBuilder()
@@ -103,6 +104,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         config.pusher_start_pose.to_pose(BUFFER_TO_TABLE),
         config.slider_start_pose.to_pose(station.get_slider_min_height()),
         config.default_joint_positions,
+        current_joint_pos=config.default_joint_positions,
     )
     station.mbp.SetPositions(mbp_context, station.iiwa, start_joint_positions)
 
@@ -114,4 +116,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_4.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_2.pkl", save_recording=True, debug=True)

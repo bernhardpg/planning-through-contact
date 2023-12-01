@@ -21,7 +21,7 @@ class OpenLoopPushingController(Diagram):
         self,
         traj: PlanarPushingTrajectory,
         slider: RigidBody,
-        config: PlanarPushingSimConfig = PlanarPushingSimConfig(),
+        config: PlanarPushingSimConfig,
     ) -> None:
         super().__init__()
 
@@ -41,14 +41,14 @@ class OpenLoopPushingController(Diagram):
         )
 
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
-            builder,
-            slider,
-            config.mpc_config,
-            self.planar_pose_pub.GetOutputPort("contact_mode"),
-            self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
-            self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
-            self.planar_pose_pub.GetOutputPort("contact_force_traj"),
-            self.pusher_pose_to_joint_pos.get_pose_input_port(),
+            builder=builder,
+            dynamics_config=config.dynamics_config,
+            mpc_config=config.mpc_config,
+            contact_mode_traj=self.planar_pose_pub.GetOutputPort("contact_mode_traj"),
+            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
+            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            contact_force_traj=self.planar_pose_pub.GetOutputPort("contact_force_traj"),
+            pose_cmd=self.pusher_pose_to_joint_pos.get_pose_input_port(),
             closed_loop=False,
             pusher_planar_pose_measured=None,
             slider_pose_measured=None,

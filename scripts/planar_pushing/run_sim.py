@@ -21,7 +21,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
     slider = traj.config.dynamics_config.slider
 
-    mpc_config = HybridMpcConfig(rate_Hz=50, horizon=20, step_size=0.05)
+    mpc_config = HybridMpcConfig(rate_Hz=20, horizon=10, step_size=0.05)
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -31,11 +31,12 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         visualize_desired=True,
         time_step=1e-3,
         use_realtime=False,
-        delay_before_execution=2.0,
+        delay_before_execution=1.0,
         use_diff_ik=True,
-        closed_loop=False,
+        closed_loop= False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
+        save_plots=True,
     )
 
     sim = PlanarPushingSimulation(traj, sim_config)
@@ -48,4 +49,4 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_1.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_12.pkl", save_recording=True, debug=True)
