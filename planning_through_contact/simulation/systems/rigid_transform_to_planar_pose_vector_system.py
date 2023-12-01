@@ -2,7 +2,7 @@ from pydrake.systems.framework import LeafSystem, BasicVector
 from pydrake.all import (RigidTransform, AbstractValue)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
-class RigidTransformToPlanrPoseVectorSystem(LeafSystem):
+class RigidTransformToPlanarPoseVectorSystem(LeafSystem):
     """Converts a RigidTransform to a [x,y,theta] vector"""
     def __init__(self):
         super().__init__()

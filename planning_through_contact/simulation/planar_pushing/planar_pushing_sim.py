@@ -15,7 +15,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import RigidTransformToPlanrPoseVectorSystem
+from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import RigidTransformToPlanarPoseVectorSystem
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
 )
@@ -102,15 +102,15 @@ class PlanarPushingSimulation:
 
         if sim_config.save_plots:
             # state logger
-            pusher_pose_to_vector = builder.AddSystem(RigidTransformToPlanrPoseVectorSystem())
+            pusher_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
             builder.Connect(self.station.GetOutputPort("pusher_pose"), pusher_pose_to_vector.get_input_port())
             pusher_pose_logger = LogVectorOutput(pusher_pose_to_vector.get_output_port(), builder)
 
-            slider_pose_to_vector = builder.AddSystem(RigidTransformToPlanrPoseVectorSystem())
+            slider_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
             builder.Connect(self.station.GetOutputPort("slider_pose"), slider_pose_to_vector.get_input_port())
             slider_pose_logger = LogVectorOutput(slider_pose_to_vector.get_output_port(), builder)
             zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")
-            pusher_cmd_to_vector = builder.AddSystem(RigidTransformToPlanrPoseVectorSystem())
+            pusher_cmd_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
             builder.Connect(zero_order_hold.get_output_port(), pusher_cmd_to_vector.get_input_port())
             pusher_pose_desired_logger = LogVectorOutput(pusher_cmd_to_vector.get_output_port(), builder)
             # pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
