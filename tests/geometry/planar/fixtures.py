@@ -237,4 +237,5 @@ def planner(
             boundary_conds["box_target_pose"],
         )
 
+    planner.formulate_problem()
     return planner

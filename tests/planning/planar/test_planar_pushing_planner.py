@@ -46,7 +46,21 @@ DEBUG = False
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 
-@pytest.mark.parametrize("planner", [{"partial": False}], indirect=["planner"])
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "partial": False,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+        }
+    ],
+    indirect=["planner"],
+)
 def test_planner_construction(
     planner: PlanarPushingPlanner,
 ) -> None:
@@ -124,70 +138,18 @@ def test_planner_set_initial_and_final(
 
 
 @pytest.mark.parametrize(
-    "planner, source_idx, target_idx, target_path",
-    [
-        (
-            {"partial": True},
-            0,
-            1,
-            [
-                "FACE_0",
-                "FACE_0_to_FACE_1_NON_COLL_0",
-                "FACE_0_to_FACE_1_NON_COLL_1",
-                "FACE_1",
-            ],
-        )
-    ],
-    indirect=["planner"],
-)
-def test_planner_without_boundary_conds(
-    planner: PlanarPushingPlanner,
-    source_idx: int,
-    target_idx: int,
-    target_path: List[str],
-) -> None:
-    # face contact as source and target
-    planner.source = VertexModePair(
-        planner.contact_vertices[source_idx],
-        planner.contact_modes[source_idx],
-    )
-    planner.target = VertexModePair(
-        planner.contact_vertices[target_idx],
-        planner.contact_modes[target_idx],
-    )
-
-    solver_params = PlanarSolverParams(print_solver_output=DEBUG)
-    result = planner._solve(solver_params)
-    # should find a solution when there are no initial conditions
-    assert result.is_success()
-
-    assert_planning_path_matches_target(planner, result, target_path)
-
-    if DEBUG:
-        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-
-
-@pytest.mark.parametrize(
     "planner",
     [
-        (
-            {
-                "partial": False,
-                "allow_teleportation": True,
-            }
-        ),
-        (
-            {
-                "partial": False,
-                "allow_teleportation": True,
-                "boundary_conds": {
-                    "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
-                    "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                    "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                    "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-                },
-            }
-        ),
+        {
+            "partial": False,
+            "allow_teleportation": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.4, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+        }
     ],
     indirect=["planner"],
 )
