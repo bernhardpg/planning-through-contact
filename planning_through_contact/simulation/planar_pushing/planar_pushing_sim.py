@@ -109,11 +109,13 @@ class PlanarPushingSimulation:
             slider_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
             builder.Connect(self.station.GetOutputPort("slider_pose"), slider_pose_to_vector.get_input_port())
             slider_pose_logger = LogVectorOutput(slider_pose_to_vector.get_output_port(), builder)
-            zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")
-            pusher_cmd_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
-            builder.Connect(zero_order_hold.get_output_port(), pusher_cmd_to_vector.get_input_port())
-            pusher_pose_desired_logger = LogVectorOutput(pusher_cmd_to_vector.get_output_port(), builder)
-            # pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
+            # To see what commands are being sent to the robot
+            # zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")
+            # pusher_cmd_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
+            # builder.Connect(zero_order_hold.get_output_port(), pusher_cmd_to_vector.get_input_port())
+            # pusher_pose_desired_logger = LogVectorOutput(pusher_cmd_to_vector.get_output_port(), builder)
+            # To see the reference pusher trajectory
+            pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
             slider_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"), builder)
             
             self._pusher_pose_logger=pusher_pose_logger

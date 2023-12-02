@@ -196,9 +196,10 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q = np.diag([3, 3, 0.1, 0]) * 10 
+        Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
+        Q = Q_base * 10
         R = np.diag([1, 1, 0]) * 0.5
-        Q_N = np.diag([3, 3, 0.1, 0]) * 2000
+        Q_N = Q_base * 2000
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
@@ -228,7 +229,6 @@ class HybridMpc:
             for result in results
         ]  # we do not allow infeasible results
         best_idx = np.argmin(costs)
-
         state = states[best_idx]
         control = controls[best_idx]
         result = results[best_idx]
@@ -236,11 +236,11 @@ class HybridMpc:
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]
-
         x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
+        # print(f"lowest cost: {costs[best_idx]:.4f}, mode: {HybridModes(best_idx).name} horizon: {len(x_traj)}, u_next: {u_next}")
         return x_dot_curr, u_next
 
 # Not used in pusher pose controller
