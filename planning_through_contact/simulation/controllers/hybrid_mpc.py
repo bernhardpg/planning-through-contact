@@ -197,7 +197,7 @@ class HybridMpc:
 
         # Cost
         Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
-        Q = Q_base * 10
+        Q = Q_base * 100
         R = np.diag([1, 1, 0]) * 0.5
         Q_N = Q_base * 2000
 

@@ -10,19 +10,14 @@ from pydrake.systems.framework import (
     InputPort,
     LeafSystem,
     OutputPort,
+    AbstractStateIndex,
 )
 from pydrake.systems.primitives import ZeroOrderHold
 
-from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
-    PolytopeContactLocation,
-)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
 )
@@ -34,6 +29,8 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
     SliderPusherSystem,
 )
 
+# Set the print precision to 4 decimal places
+np.set_printoptions(precision=4)
 
 class PusherPoseController(LeafSystem):
     def __init__(
@@ -58,6 +55,8 @@ class PusherPoseController(LeafSystem):
             loc: HybridMpc(system, mpc_config, dynamics_config)
             for loc, system in self.systems.items()
         }
+        self.pusher_pose_cmd_index = self.DeclareAbstractState(AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)))
+        self.slider_pose_cmd_index = self.DeclareAbstractState(AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)))
 
         self.pusher_planar_pose_traj = self.DeclareAbstractInputPort(
             "pusher_planar_pose_traj",
@@ -173,6 +172,8 @@ class PusherPoseController(LeafSystem):
         pusher_pose_traj: List[PlanarPose],
         contact_force_traj: List[npt.NDArray[np.float64]],
         mode_traj: List[PlanarPushingContactMode],
+        pusher_pose_cmd_state: Optional[AbstractStateIndex] = None,
+        slider_pose_cmd_state: Optional[AbstractStateIndex] = None,
     ) -> PlanarPose:
         mode = mode_traj[0]
         controller = self._get_mpc_for_mode(mode)
@@ -206,15 +207,29 @@ class PusherPoseController(LeafSystem):
         )
 
         h = 1 / self.mpc_config.rate_Hz
-        x_at_next_mpc_step = x_curr + h * x_dot_curr
+        # Without Accumulation
+        # x_at_next_mpc_step = x_curr + h * x_dot_curr
+        # With Accumulation
+        x_acc = system.get_state_from_planar_poses(slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value())
+        x_at_next_mpc_step = x_acc + h * x_dot_curr
+        next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
         next_pusher_pose = system.get_pusher_planar_pose_from_state(x_at_next_mpc_step)
+        pusher_pose_cmd_state.set_value(next_pusher_pose)
+        slider_pose_cmd_state.set_value(next_slider_pose)
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
         mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
         curr_mode_desired = mode_traj[0]
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
-
+        
+        if self.closed_loop:
+            pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
+            pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
+            slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
+            slider_planar_pose = PlanarPose.from_pose(slider_pose)
+            pusher_pose_cmd_state = context.get_mutable_abstract_state(self.pusher_pose_cmd_index)
+            slider_pose_cmd_state = context.get_mutable_abstract_state(self.slider_pose_cmd_index)
         if (
             not self.closed_loop
             or curr_mode_desired == PlanarPushingContactMode.NO_CONTACT
@@ -222,24 +237,25 @@ class PusherPoseController(LeafSystem):
             curr_planar_pose = pusher_planar_pose_traj[0]
             pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_desired)
-        else:  # do control of angle
-            slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
+            if self.closed_loop:
+                # Reset the MPC controller integrator (set commanded position to current position)
+                pusher_pose_cmd_state.set_value(pusher_planar_pose)
+                slider_pose_cmd_state.set_value(slider_planar_pose)
 
+        else:  # do control of angle
             slider_planar_pose = PlanarPose.from_pose(slider_pose)
             slider_planar_pose_traj: List[PlanarPose] = self.slider_planar_pose_traj.Eval(context)  # type: ignore
-
-            pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
-            pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
-
             contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
-            pusher_planar_pose_cmd = self._call_mpc(
+            next_pusher_pose = self._call_mpc(
                 slider_planar_pose,
                 pusher_planar_pose,
                 slider_planar_pose_traj,
                 pusher_planar_pose_traj,
                 contact_force_traj,
                 mode_traj,
+                pusher_pose_cmd_state=pusher_pose_cmd_state,
+                slider_pose_cmd_state=slider_pose_cmd_state,
             )
-
-            pusher_pose_command = pusher_planar_pose_cmd.to_pose(z_value=self.z_dist)
+            # print(f"t: {context.get_time():.4f}, y_ref: {pusher_planar_pose_traj[0].y:.4f}, acc_pose: {acc_pose.pos()}, pusher_vel: {pusher_vel}")
+            pusher_pose_command = next_pusher_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_command)

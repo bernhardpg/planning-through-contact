@@ -203,19 +203,19 @@ class PlanarPushingTrajSegment:
     def from_knot_points(
         cls, knot_points: AbstractModeVariables, start_time: float, end_time: float
     ) -> "PlanarPushingTrajSegment":
+        knot_pts_p_WBs = knot_points.p_WBs
+        knot_pts_p_WPs = knot_points.p_WPs
+        knot_pts_R_WBs = knot_points.R_WBs
         if isinstance(knot_points, NonCollisionVariables):
             mode = PlanarPushingContactMode.NO_CONTACT
-            knot_pts_p_WBs = knot_points.p_WBs
-            knot_pts_p_WPs = knot_points.p_WPs
-            knot_pts_R_WBs = knot_points.R_WBs
         else:  # FaceContactVariables
             mode = PlanarPushingContactMode.from_contact_location(
                 knot_points.contact_location
             )
             # Repeat last knot point for contact modes to add padding for the hybrid mpc
-            knot_pts_p_WBs = knot_points.p_WBs + [knot_points.p_WBs[-1]]
-            knot_pts_p_WPs = knot_points.p_WPs + [knot_points.p_WPs[-1]]
-            knot_pts_R_WBs = knot_points.R_WBs + [knot_points.R_WBs[-1]]
+            # knot_pts_p_WBs = knot_points.p_WBs + [knot_points.p_WBs[-1]]
+            # knot_pts_p_WPs = knot_points.p_WPs + [knot_points.p_WPs[-1]]
+            # knot_pts_R_WBs = knot_points.R_WBs + [knot_points.R_WBs[-1]]
 
         p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_pts_p_WBs), start_time, end_time)  # type: ignore
         p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_pts_p_WPs), start_time, end_time)  # type: ignore
