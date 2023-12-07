@@ -203,11 +203,19 @@ class NonCollisionMode(AbstractContactMode):
     def create_source_or_target_mode(
         cls,
         config: PlanarPlanConfig,
-        slider_pose: PlanarPose,
-        pusher_pose: PlanarPose,
+        slider_pose_world: PlanarPose,
+        pusher_pose_world: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> "NonCollisionMode":
-        loc = find_first_matching_location(pusher_pose, config)
+        p_WP = pusher_pose_world.pos()
+        R_WB = slider_pose_world.two_d_rot_matrix()
+        p_WB = slider_pose_world.pos()
+
+        # We need to compute the pusher pos in the frame of the slider
+        p_BP = R_WB.T @ (p_WP - p_WB)
+        pusher_pose_body = PlanarPose(p_BP[0, 0], p_BP[1, 0], 0)
+
+        loc = find_first_matching_location(pusher_pose_body, config)
         mode_name = "source" if initial_or_final == "initial" else "target"
         mode = cls.create_from_plan_spec(
             loc,
@@ -215,12 +223,12 @@ class NonCollisionMode(AbstractContactMode):
             mode_name,
             one_knot_point=True,
         )
-        mode.set_slider_pose(slider_pose)
+        mode.set_slider_pose(slider_pose_world)
 
         if initial_or_final == "initial":
-            mode.set_finger_initial_pose(pusher_pose)
+            mode.set_finger_initial_pose(pusher_pose_body)
         else:  # final
-            mode.set_finger_final_pose(pusher_pose)
+            mode.set_finger_final_pose(pusher_pose_body)
 
         return mode
 

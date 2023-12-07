@@ -131,9 +131,9 @@ def get_plans_to_origin(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi, np.pi)
+        th_initial = np.random.uniform(-np.pi / 2, np.pi / 2)
 
-        pusher_pose = PlanarPose(x_min, y_min, th_initial)
+        pusher_pose = PlanarPose(0.3, -0.24, 0)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(0, 0, 0)
@@ -168,6 +168,18 @@ def create_plan(
     dynamics_config = SliderPusherSystemConfig(
         pusher_radius=pusher_radius, slider=slider, friction_coeff_slider_pusher=0.25
     )
+
+    if animation_output_dir != "":
+        traj_name = animation_output_dir + "/" + traj_name
+
+    if debug:
+        visualize_planar_pushing_start_and_goal(
+            slider.geometry,
+            pusher_radius,
+            plan_spec,
+            save=True,
+            filename=f"{traj_name}_start_and_goal_{body_to_use}",
+        )
 
     cost_terms = PlanarCostFunctionTerms(
         sq_forces=10.0,
@@ -224,18 +236,6 @@ def create_plan(
         traj.save(filename)  # type: ignore
 
     if visualize:
-        if animation_output_dir != "":
-            traj_name = animation_output_dir + "/" + traj_name
-
-        if debug:
-            visualize_planar_pushing_start_and_goal(
-                config.slider_geometry,
-                config.pusher_radius,
-                plan_spec,
-                save=True,
-                filename=f"{traj_name}_start_and_goal_{body_to_use}",
-            )
-
         ani = visualize_planar_pushing_trajectory(
             traj,  # type: ignore
             save=True,
@@ -272,7 +272,7 @@ if __name__ == "__main__":
         for idx, plan in enumerate(plans):
             create_plan(
                 plan,
-                debug=False,
+                debug=True,
                 body_to_use=args.body,
                 traj_name=f"demo_{idx}",
                 visualize=True,
