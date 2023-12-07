@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 import numpy as np
 
@@ -119,11 +119,41 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     )
 
 
+def get_plans_to_origin(num_plans: int) -> List[PlanarPushingStartAndGoal]:
+    # We want the plans to always be the same
+    np.random.seed(1)
+
+    x_min = -0.3
+    x_max = 0.3
+    y_min = -0.3
+    y_max = 0.3
+
+    plans = []
+    for _ in range(num_plans):
+        x_initial = np.random.uniform(x_min, x_max)
+        y_initial = np.random.uniform(y_min, y_max)
+        th_initial = np.random.uniform(0, 2 * np.pi)
+
+        pusher_pose = PlanarPose(x_min, y_min, th_initial)
+
+        slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
+        slider_target_pose = PlanarPose(0, 0, 0)
+
+        plans.append(
+            PlanarPushingStartAndGoal(
+                slider_initial_pose, slider_target_pose, pusher_pose, pusher_pose
+            )
+        )
+
+    return plans
+
+
 def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
     body_to_use: Literal["box", "t_pusher", "sugar_box"] = "sugar_box",
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
+    animation_output_dir: str = "",
     save_traj: bool = False,
     debug: bool = False,
 ):
@@ -170,7 +200,7 @@ def create_plan(
         measure_solve_time=True,
         gcs_max_rounded_paths=20,
         print_flows=False,
-        print_solver_output=True,
+        print_solver_output=debug,
         save_solver_output=False,
         print_path=True,
         print_cost=True,
@@ -194,18 +224,22 @@ def create_plan(
         traj.save(filename)  # type: ignore
 
     if visualize:
-        visualize_planar_pushing_start_and_goal(
-            config.slider_geometry,
-            config.pusher_radius,
-            plan_spec,
-            save=True,
-            filename=f"trajectory_{traj_name}_start_and_goal_{body_to_use}",
-        )
+        if animation_output_dir != "":
+            traj_name = animation_output_dir + "/" + traj_name
+
+        if debug:
+            visualize_planar_pushing_start_and_goal(
+                config.slider_geometry,
+                config.pusher_radius,
+                plan_spec,
+                save=True,
+                filename=f"{traj_name}_start_and_goal_{body_to_use}",
+            )
 
         ani = visualize_planar_pushing_trajectory(
             traj,  # type: ignore
             save=True,
-            filename=f"trajectory_{traj_name}_{body_to_use}",
+            filename=f"{traj_name}_{body_to_use}",
             visualize_knot_points=True,
         )
         return ani
@@ -225,16 +259,32 @@ if __name__ == "__main__":
         type=str,
         default="box",
     )
+    parser.add_argument("--demos", help="Generate demos", action="store_true")
     args = parser.parse_args()
     traj_number = args.traj
+    make_demos = args.demos
 
-    plan_spec = get_predefined_plan(traj_number)
+    if make_demos:
+        plans = get_plans_to_origin(9)
+        for idx, plan in enumerate(plans):
+            create_plan(
+                plan,
+                debug=False,
+                body_to_use=args.body,
+                traj_name=f"demo_{idx}",
+                visualize=True,
+                save_traj=False,
+                animation_output_dir="demos",
+            )
 
-    create_plan(
-        plan_spec,
-        debug=True,
-        body_to_use=args.body,
-        traj_name=str(traj_number),
-        visualize=True,
-        save_traj=True,
-    )
+    else:
+        plan_spec = get_predefined_plan(traj_number)
+
+        create_plan(
+            plan_spec,
+            debug=True,
+            body_to_use=args.body,
+            traj_name=str(traj_number),
+            visualize=True,
+            save_traj=True,
+        )
