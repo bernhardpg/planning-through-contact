@@ -540,6 +540,7 @@ def visualize_planar_pushing_trajectory(
     save: bool = False,
     filename: Optional[str] = None,
     visualize_knot_points: bool = False,
+    lims: Optional[Tuple[float, float, float, float]] = None,
 ):
     if save:
         assert filename is not None
@@ -555,7 +556,10 @@ def visualize_planar_pushing_trajectory(
         visualize_knot_points,
     )
 
-    x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
+    if lims is None:
+        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
+    else:
+        x_min, x_max, y_min, y_max = lims
 
     def connect_planar_visualizer(
         builder: DiagramBuilder, scene_graph: SceneGraph
