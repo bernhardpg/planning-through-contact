@@ -138,8 +138,12 @@ class PlanarPushingStartGoalGeometry(LeafSystem):
 
         self.slider_initial_pose = slider_initial_pose
         self.slider_target_pose = slider_target_pose
-        self.pusher_initial_pose = pusher_initial_pose
-        self.pusher_target_pose = pusher_target_pose
+        self.pusher_initial_pose = self._rotate_to_world(
+            pusher_initial_pose, slider_initial_pose
+        )
+        self.pusher_target_pose = self._rotate_to_world(
+            pusher_target_pose, slider_target_pose
+        )
 
         self.DeclareAbstractOutputPort(
             "geometry_pose",
@@ -172,6 +176,20 @@ class PlanarPushingStartGoalGeometry(LeafSystem):
             self.pusher_frame_id,
             alpha=TRANSPARENCY,
         )
+
+    @staticmethod
+    def _rotate_to_world(
+        pusher_pose: PlanarPose, slider_pose: PlanarPose
+    ) -> PlanarPose:
+        p_WP = pusher_pose.pos()
+        R_WB = slider_pose.two_d_rot_matrix()
+        p_WB = slider_pose.pos()
+
+        # We need to compute the pusher pos in the frame of the slider
+        p_BP = R_WB.T @ (p_WP - p_WB)
+        pusher_pose_world = PlanarPose(p_BP[0, 0], p_BP[1, 0], 0)
+
+        return pusher_pose_world
 
     @classmethod
     def add_to_builder(
