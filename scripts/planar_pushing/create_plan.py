@@ -152,7 +152,10 @@ def create_plan(
     body_to_use: Literal["box", "t_pusher", "sugar_box"] = "sugar_box",
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
+    time_in_contact: float = 7,
+    time_in_non_collision: float = 7,
     animation_output_dir: str = "",
+    animation_smooth: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
     debug: bool = False,
@@ -192,8 +195,8 @@ def create_plan(
     config = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         cost_terms=cost_terms,
-        time_in_contact=7,
-        time_non_collision=7,
+        time_in_contact=time_in_contact,
+        time_non_collision=time_in_non_collision,
         num_knot_points_contact=3,
         num_knot_points_non_collision=3,
         avoid_object=True,
@@ -240,7 +243,7 @@ def create_plan(
             traj,  # type: ignore
             save=True,
             filename=f"{traj_name}_{body_to_use}",
-            visualize_knot_points=True,
+            visualize_knot_points=not animation_smooth,
             lims=animation_lims,
         )
         return ani
@@ -272,13 +275,16 @@ if __name__ == "__main__":
         for idx, plan in enumerate(plans):
             create_plan(
                 plan,
-                debug=True,
+                debug=False,
                 body_to_use=args.body,
                 traj_name=f"demo_{idx}",
                 visualize=True,
                 save_traj=False,
                 animation_output_dir="demos",
                 animation_lims=animation_lims,
+                time_in_contact=2.0,
+                time_in_non_collision=1.0,
+                animation_smooth=True,
             )
 
     else:
