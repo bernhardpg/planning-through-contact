@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -121,20 +121,19 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     )
 
 
-def get_plans_to_origin(num_plans: int) -> List[PlanarPushingStartAndGoal]:
+def get_plans_to_origin(
+    num_plans: int, lims: Tuple[float, float, float, float]
+) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
 
-    x_min = -0.3
-    x_max = 0.3
-    y_min = -0.3
-    y_max = 0.3
+    x_min, x_max, y_min, y_max = lims
 
     plans = []
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(0, 2 * np.pi)
+        th_initial = np.random.uniform(-np.pi, np.pi)
 
         pusher_pose = PlanarPose(x_min, y_min, th_initial)
 
@@ -156,6 +155,7 @@ def create_plan(
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
     animation_output_dir: str = "",
+    animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
     debug: bool = False,
 ):
@@ -245,6 +245,7 @@ def create_plan(
             save=True,
             filename=f"{traj_name}_{body_to_use}",
             visualize_knot_points=True,
+            lims=animation_lims,
         )
         return ani
 
@@ -269,7 +270,9 @@ if __name__ == "__main__":
     make_demos = args.demos
 
     if make_demos:
-        plans = get_plans_to_origin(9)
+        lims = (-0.3, 0.3, -0.3, 0.3)
+        animation_lims = (np.array(lims) * 1.3).tolist()
+        plans = get_plans_to_origin(9, lims)
         for idx, plan in enumerate(plans):
             create_plan(
                 plan,
@@ -279,6 +282,7 @@ if __name__ == "__main__":
                 visualize=True,
                 save_traj=False,
                 animation_output_dir="demos",
+                animation_lims=animation_lims,
             )
 
     else:
