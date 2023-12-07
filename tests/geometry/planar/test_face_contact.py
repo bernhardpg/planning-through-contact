@@ -45,7 +45,7 @@ from tests.geometry.planar.fixtures import (
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
-DEBUG = True
+DEBUG = False
 
 
 def test_face_contact_variables(
