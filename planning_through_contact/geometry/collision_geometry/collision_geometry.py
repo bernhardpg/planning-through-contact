@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, NamedTuple, Tuple
+from typing import Any, List, NamedTuple, Tuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -174,3 +174,14 @@ class CollisionGeometry(ABC):
     def max_dist_from_com(self) -> float:
         dists = [np.linalg.norm(v) for v in self.vertices]
         return np.max(dists)  # type: ignore
+
+    T = TypeVar("T", bound=Any)
+
+    def get_p_Wv_i(
+        self, i: int, R_WB: npt.NDArray[T], p_WB: npt.NDArray[T]
+    ) -> npt.NDArray[T]:
+        """
+        Get the position of vertex i in the world frame, provided p_WB and R_WB.
+        """
+        p_Bv_i = self.vertices[i]
+        return p_WB + R_WB @ p_Bv_i  # type: ignore
