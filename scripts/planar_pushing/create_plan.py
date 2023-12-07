@@ -120,20 +120,20 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
 
 
 def get_plans_to_origin(
-    num_plans: int, lims: Tuple[float, float, float, float]
+    num_plans: int, lims: Tuple[float, float, float, float], pusher_radius: float
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
 
     x_min, x_max, y_min, y_max = lims
+    EPS = 0.01
+    pusher_pose = PlanarPose(0, y_max + pusher_radius + EPS, 0)
 
     plans = []
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
         th_initial = np.random.uniform(-np.pi / 2, np.pi / 2)
-
-        pusher_pose = PlanarPose(0.3, -0.24, 0)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(0, 0, 0)
@@ -152,6 +152,7 @@ def create_plan(
     body_to_use: Literal["box", "t_pusher", "sugar_box"] = "sugar_box",
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
+    pusher_radius: float = 0.035,
     time_in_contact: float = 7,
     time_in_non_collision: float = 7,
     animation_output_dir: str = "",
@@ -167,7 +168,6 @@ def create_plan(
     elif body_to_use == "sugar_box":
         slider = get_sugar_box()
 
-    pusher_radius = 0.035
     dynamics_config = SliderPusherSystemConfig(
         pusher_radius=pusher_radius, slider=slider, friction_coeff_slider_pusher=0.25
     )
@@ -205,7 +205,7 @@ def create_plan(
         use_band_sparsity=True,
         minimize_sq_forces=True,
         use_entry_and_exit_subgraphs=True,
-        penalize_mode_transitions=False,
+        penalize_mode_transitions=True,
         minimize_keypoint_displacement=True,
     )
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
         "--traj",
         help="Which trajectory to plan",
         type=int,
-        default=1,
+        default=None,
     )
     parser.add_argument(
         "--body",
@@ -264,21 +264,27 @@ if __name__ == "__main__":
         default="box",
     )
     parser.add_argument("--demos", help="Generate demos", action="store_true")
+    parser.add_argument("--debug", help="Debug mode", action="store_true")
     args = parser.parse_args()
     traj_number = args.traj
     make_demos = args.demos
+    debug = args.debug
+
+    pusher_radius = 0.035
 
     if make_demos:
         lims = (-0.3, 0.3, -0.3, 0.3)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_origin(9, lims)
-        for idx, plan in enumerate(plans):
+        plans = get_plans_to_origin(9, lims, pusher_radius)
+
+        if traj_number is not None:
             create_plan(
-                plan,
-                debug=False,
+                plans[traj_number],
+                debug=debug,
                 body_to_use=args.body,
-                traj_name=f"demo_{idx}",
+                traj_name=f"demo_{traj_number}",
                 visualize=True,
+                pusher_radius=pusher_radius,
                 save_traj=False,
                 animation_output_dir="demos",
                 animation_lims=animation_lims,
@@ -286,13 +292,30 @@ if __name__ == "__main__":
                 time_in_non_collision=1.0,
                 animation_smooth=True,
             )
+        else:
+            for idx, plan in enumerate(plans):
+                create_plan(
+                    plan,
+                    debug=debug,
+                    body_to_use=args.body,
+                    traj_name=f"demo_{idx}",
+                    visualize=True,
+                    pusher_radius=pusher_radius,
+                    save_traj=False,
+                    animation_output_dir="demos",
+                    animation_lims=animation_lims,
+                    time_in_contact=2.0,
+                    time_in_non_collision=1.0,
+                    animation_smooth=True,
+                )
 
     else:
         plan_spec = get_predefined_plan(traj_number)
 
         create_plan(
             plan_spec,
-            debug=True,
+            debug=debug,
+            pusher_radius=pusher_radius,
             body_to_use=args.body,
             traj_name=str(traj_number),
             visualize=True,
