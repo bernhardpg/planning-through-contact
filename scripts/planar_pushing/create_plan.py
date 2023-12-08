@@ -85,6 +85,7 @@ def create_plan(
         minimize_sq_forces=True,
         use_entry_and_exit_subgraphs=True,
         penalize_mode_transitions=False,
+        minimize_keypoint_displacement=True,
     )
 
     planner = PlanarPushingPlanner(config)
@@ -113,7 +114,7 @@ def create_plan(
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 3:
         slider_initial_pose = PlanarPose(x=0.60, y=0.1, theta=-0.2)
-        slider_target_pose = PlanarPose(x=0.70, y=-0.2, theta=0.5)
+        slider_target_pose = PlanarPose(x=0.70, y=0.4, theta=0.5)
         pusher_initial_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=0.0, theta=0.0)
     elif traj_number == 4:
@@ -182,11 +183,15 @@ def create_plan(
         slider_target_pose = PlanarPose(x=0.50, y=-0.1, theta=np.pi/2)
         pusher_initial_pose = PlanarPose(x=0.2, y=0, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.2, y=0, theta=0.0)
-    elif traj_number == 17: # Fails
+    elif traj_number == 17:
         slider_initial_pose = PlanarPose(x=0.45, y=0.1, theta=1.2)
         slider_target_pose = PlanarPose(x=0.60, y=0.0, theta=np.pi/2)
         pusher_initial_pose = PlanarPose(x=0.2, y=0, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.2, y=0, theta=0.0)
+    elif traj_number == 18:
+        slider_target_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi / 2)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -215,14 +220,13 @@ def create_plan(
             config.pusher_radius,
             plan,
             save=True,
-            filename=f"trajectory_{traj_number}_start_and_goal",
-            show=True,
+            filename=f"trajectory_{traj_number}_start_and_goal_{body_to_use}",
         )
 
         ani = visualize_planar_pushing_trajectory(
             traj,  # type: ignore
             save=True,
-            filename=f"trajectory_{traj_number}",
+            filename=f"trajectory_{traj_number}_{body_to_use}",
             visualize_knot_points=True,
             show=True,
         )
@@ -237,11 +241,17 @@ if __name__ == "__main__":
         type=int,
         default=1,
     )
+    parser.add_argument(
+        "--body",
+        help="Which body to plan for",
+        type=str,
+        default="box",
+    )
     args = parser.parse_args()
     traj_number = args.traj
     create_plan(
         debug=True,
-        body_to_use="box",
+        body_to_use=args.body,
         traj_number=traj_number,
         visualize=False,
         save_traj=True,

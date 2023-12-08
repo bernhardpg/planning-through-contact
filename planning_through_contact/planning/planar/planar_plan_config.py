@@ -148,6 +148,7 @@ class PlanarPlanConfig:
         "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
     ] = "socp"
     minimize_squared_eucl_dist: bool = True
+    minimize_keypoint_displacement: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
     penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True

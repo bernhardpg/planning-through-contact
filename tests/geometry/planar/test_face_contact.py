@@ -17,6 +17,9 @@ from planning_through_contact.geometry.planar.face_contact import (
     FaceContactVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
@@ -28,6 +31,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar_pushing import (
+    visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
@@ -195,7 +199,7 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
 )
 def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0, 0.8)
+    final_pose = PlanarPose(0.3, 0.2, 0.8)
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
@@ -210,11 +214,51 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
+
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
         # (num_knot_points, 2): first col cosines, second col sines
-        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
+        plot_cos_sine_trajs(rs)
+
+
+@pytest.mark.parametrize(
+    "face_contact_mode",
+    [
+        {"face_idx": 3, "minimize_keypoint_displacement": True},
+    ],
+    indirect=["face_contact_mode"],
+)
+def test_one_contact_mode_minimize_keypoints(
+    face_contact_mode: FaceContactMode,
+) -> None:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0.2, 0.8)
+    face_contact_mode.set_slider_initial_pose(initial_pose)
+    face_contact_mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.formulate_convex_relaxation()
+    solver = MosekSolver()
+    result = solver.Solve(face_contact_mode.relaxed_prog)  # type: ignore
+    assert result.is_success()
+
+    vars = face_contact_mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
+
+    if DEBUG:
+        vars = face_contact_mode.variables.eval_result(result)
+        traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
+
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
         plot_cos_sine_trajs(rs)
 
 

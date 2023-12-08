@@ -130,6 +130,10 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
+    plan_config.minimize_keypoint_displacement = request.param.get(
+        "minimize_keypoint_displacement", False
+    )
+
     face_idx = request.param.get("face_idx", 3)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 

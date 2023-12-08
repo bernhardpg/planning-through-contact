@@ -434,29 +434,43 @@ class FaceContactMode(AbstractContactMode):
             self.prog.add_independent_constraint(eq(v_c_B.flatten(), np.zeros((2,))))
 
     def _define_costs(self) -> None:
-        # Minimize kinetic energy through squared velocities
-        sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
-        for idx, term in enumerate(sq_linear_vels):
-            self.prog.add_quadratic_cost(
-                idx, idx + 1, self.config.cost_terms.lin_displacements * term
-            )
+        if not self.config.minimize_keypoint_displacement:
+            sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
+            for idx, term in enumerate(sq_linear_vels):
+                self.prog.add_quadratic_cost(
+                    idx, idx + 1, self.config.cost_terms.lin_displacements * term
+                )
+            # TODO(bernhardpg): Remove
+            if self.config.use_approx_exponential_map:
+                for k, th_dot in enumerate(self.variables.theta_dots):
+                    self.prog.add_quadratic_cost(
+                        k, k, self.config.cost_terms.ang_displacements * th_dot**2
+                    )
+            else:
+                for k, (delta_cos_th, delta_sin_th) in enumerate(
+                    zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+                ):
+                    self.prog.add_quadratic_cost(
+                        k,
+                        k + 1,
+                        self.config.cost_terms.ang_displacements
+                        * (delta_sin_th**2 + delta_cos_th**2),
+                    )
 
-        # TODO(bernhardpg): Remove
-        if self.config.use_approx_exponential_map:
-            for k, th_dot in enumerate(self.variables.theta_dots):
-                self.prog.add_quadratic_cost(
-                    k, k, self.config.cost_terms.ang_displacements * th_dot**2
-                )
-        else:
-            for k, (delta_cos_th, delta_sin_th) in enumerate(
-                zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
-            ):
-                self.prog.add_quadratic_cost(
-                    k,
-                    k + 1,
-                    self.config.cost_terms.ang_displacements
-                    * (delta_sin_th**2 + delta_cos_th**2),
-                )
+        if self.config.minimize_keypoint_displacement:
+            slider = self.config.dynamics_config.slider.geometry
+            p_Wv_is = [
+                [
+                    slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
+                    for vertex_idx in range(len(slider.vertices))
+                ]
+                for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
+            ]
+            for k in range(self.num_knot_points - 1):
+                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                    disp = vertex_k_next - vertex_k
+                    sq_disp = (disp.T @ disp).item()
+                    self.prog.add_quadratic_cost(k, k + 1, sq_disp)
 
         if self.config.minimize_sq_forces:
             for k, c_n in enumerate(self.variables.normal_forces):
