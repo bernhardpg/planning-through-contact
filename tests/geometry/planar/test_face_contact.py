@@ -459,6 +459,8 @@ def test_get_X_band_sparse(rigid_body_box: RigidBody) -> None:
 def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> None:
     plan_config.contact_config.delta_theta_max = 0.2
     plan_config.contact_config.delta_vel_max = 0.05
+    plan_config.use_band_sparsity = True
+    plan_config.num_knot_points_contact = 4
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
     initial_pose = PlanarPose(0.3, 0.2, 1.0)
