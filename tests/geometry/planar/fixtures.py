@@ -34,6 +34,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
+    ContactCostType,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
@@ -130,10 +131,9 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
-    plan_config.minimize_keypoint_displacement = request.param.get(
-        "minimize_keypoint_displacement", False
+    plan_config.contact_cost = request.param.get(
+        "contact_cost", ContactCostType.SQ_VELOCITIES
     )
-    plan_config.optimal_control_cost = request.param.get("optimal_control_cost", False)
 
     face_idx = request.param.get("face_idx", 3)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
@@ -143,6 +143,7 @@ def face_contact_mode(
         contact_location,
         plan_config,
     )
+    mode.formulate_problem()
     return mode
 
 

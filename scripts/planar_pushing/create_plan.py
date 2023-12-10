@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPu
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactCostType,
     PlanarCostFunctionTerms,
     PlanarPlanConfig,
     PlanarSolverParams,
@@ -85,7 +86,7 @@ def create_plan(
         minimize_sq_forces=True,
         use_entry_and_exit_subgraphs=True,
         penalize_mode_transitions=False,
-        minimize_keypoint_displacement=True,
+        contact_cost=ContactCostType.KEYPOINT_DISPLACEMENTS,
     )
 
     planner = PlanarPushingPlanner(config)
