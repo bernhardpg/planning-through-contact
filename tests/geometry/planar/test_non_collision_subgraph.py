@@ -27,7 +27,10 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
+)
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
@@ -176,6 +179,7 @@ def test_non_collision_subgraph_initial_and_final(
         },
     ],
     indirect=["subgraph"],
+    ids=[1, 2, 3, 4],
 )
 def test_subgraph_planning(
     subgraph: NonCollisionSubGraph,
@@ -237,7 +241,6 @@ def test_subgraph_planning(
             "source",
             "Subgraph_TEST_NON_COLL_3",
             "Subgraph_TEST_NON_COLL_2",
-            "Subgraph_TEST_NON_COLL_1",
             "target",
         ]
     assert all([v == t for v, t in zip(vertex_names, targets)])
@@ -255,7 +258,18 @@ def test_subgraph_planning(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory_legacy(traj, subgraph.slider.geometry, 0.01)
+
+        traj = PlanarPushingTrajectory.from_result(
+            subgraph.config,
+            result,
+            subgraph.gcs,
+            subgraph.source.vertex,
+            subgraph.target.vertex,
+            subgraph.get_all_vertex_mode_pairs(),
+        )
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
 
 
 @pytest.mark.parametrize(
@@ -307,6 +321,10 @@ def test_subgraph_with_contact_modes(
     target_vertex = subgraph.gcs.AddVertex(target_mode.get_convex_set(), "target")
     target_mode.add_cost_to_vertex(target_vertex)
     target = VertexModePair(target_vertex, target_mode)
+
+    start_and_goal = PlanarPushingStartAndGoal(slider_initial_pose, slider_final_pose)
+    source_mode.config.start_and_goal = start_and_goal
+    target_mode.config.start_and_goal = start_and_goal
 
     subgraph.connect_with_continuity_constraints(
         contact_location_start.idx, source, outgoing=False

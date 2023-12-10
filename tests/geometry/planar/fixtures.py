@@ -188,6 +188,9 @@ def subgraph(
 
         subgraph.set_initial_poses(finger_initial_pose, slider_pose)
         subgraph.set_final_poses(finger_final_pose, slider_pose)
+        subgraph.config.start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_final_pose
+        )
 
     return subgraph
 
