@@ -135,7 +135,7 @@ def get_plans_to_origin(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi / 2, np.pi / 2)
+        th_initial = np.random.uniform(-np.pi + 0.01, np.pi - 0.01)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(0, 0, 0)
@@ -177,12 +177,12 @@ def create_plan(
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         # cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS,
-        sq_forces=10.0,
+        sq_forces=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=1.0,
-        delta_vel_max=0.05,
-        delta_theta_max=0.2,
+        delta_vel_max=0.1,
+        delta_theta_max=0.4,
     )
 
     if animation_output_dir != "":
@@ -206,19 +206,14 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=3,
+        num_knot_points_contact=5,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
-<<<<<<< HEAD
         contact_config=contact_config,
-=======
-        penalize_mode_transitions=True,
-        minimize_keypoint_displacement=True,
->>>>>>> 694ae92 (Minor improvements to plan generation script)
     )
 
     planner = PlanarPushingPlanner(config)
@@ -248,9 +243,6 @@ def create_plan(
         traj.save(filename)  # type: ignore
 
     if visualize:
-        if animation_output_dir != "":
-            traj_name = animation_output_dir + "/" + traj_name
-
         if debug:
             visualize_planar_pushing_start_and_goal(
                 config.slider_geometry,
@@ -311,7 +303,7 @@ if __name__ == "__main__":
                 animation_lims=animation_lims,
                 time_in_contact=2.0,
                 time_in_non_collision=1.0,
-                animation_smooth=True,
+                animation_smooth=False,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -327,7 +319,7 @@ if __name__ == "__main__":
                     animation_lims=animation_lims,
                     time_in_contact=2.0,
                     time_in_non_collision=1.0,
-                    animation_smooth=True,
+                    animation_smooth=False,
                 )
 
     else:
