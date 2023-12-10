@@ -75,7 +75,7 @@ def test_dist_from_origin():
 
 
 def test_more_knot_points():
-    NUM_CTRL_POINTS = 20
+    NUM_CTRL_POINTS = 10
     NUM_DIMS = 2
 
     prog = MathematicalProgram()
@@ -99,6 +99,7 @@ def test_more_knot_points():
     for i in range(NUM_CTRL_POINTS):
         r_i = r[:, i]
         prog.AddCost((r_i - r_t).T @ (r_i - r_t))
+        # prog.AddCost((r_i).T @ (r_i))
 
     def two_d_rot_matrix(r):
         return np.array([[r[0], -r[1]], [r[1], r[0]]])
