@@ -255,14 +255,6 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def set_initial_poses(
-        self,
-        pusher_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.pusher_pose_initial = pusher_pose
-        self.slider_pose_initial = slider_pose
-
     def _set_initial_poses(
         self,
         pusher_pose: PlanarPose,
@@ -278,14 +270,6 @@ class PlanarPushingPlanner:
         else:
             self.source_subgraph.set_initial_poses(pusher_pose, slider_pose)
             self.source = self.source_subgraph.source
-
-    def set_target_poses(
-        self,
-        pusher_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.pusher_pose_target = pusher_pose
-        self.slider_pose_target = slider_pose
 
     def _set_target_poses(
         self,

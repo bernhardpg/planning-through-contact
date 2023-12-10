@@ -175,8 +175,12 @@ def create_plan(
     else:
         raise NotImplementedError()
 
-    planner.set_initial_poses(pusher_initial_pose, slider_initial_pose)
-    planner.set_target_poses(pusher_target_pose, slider_target_pose)
+    planner.config.start_and_goal = PlanarPushingStartAndGoal(
+        slider_initial_pose,
+        slider_target_pose,
+        pusher_initial_pose,
+        pusher_initial_pose,
+    )
     planner.formulate_problem()
 
     if debug:
