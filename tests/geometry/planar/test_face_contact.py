@@ -25,7 +25,9 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactCostType,
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -203,6 +205,10 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     face_contact_mode.formulate_convex_relaxation()
     solver = MosekSolver()
     result = solver.Solve(face_contact_mode.relaxed_prog)  # type: ignore
@@ -228,7 +234,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 @pytest.mark.parametrize(
     "face_contact_mode",
     [
-        {"face_idx": 3, "minimize_keypoint_displacement": True},
+        {"face_idx": 3, "contact_cost": ContactCostType.KEYPOINT_DISPLACEMENTS},
     ],
     indirect=["face_contact_mode"],
 )
@@ -239,6 +245,10 @@ def test_one_contact_mode_minimize_keypoints(
     final_pose = PlanarPose(0.3, 0.2, 0.8)
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
 
     face_contact_mode.formulate_convex_relaxation()
     solver = MosekSolver()
@@ -278,6 +288,10 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     assert result.is_success()  # should fail when the relaxation is tight!
@@ -312,6 +326,10 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     face_contact_mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert not result.is_success()  # should fail when the relaxation is tight!
@@ -343,6 +361,10 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     final_pose = PlanarPose(0.3, 0, 0.3)
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
 
     mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
@@ -453,3 +475,43 @@ def test_get_X_band_sparse(rigid_body_box: RigidBody) -> None:
     for X_val in X_sols:
         # Should be symmetric
         assert np.allclose(X_val - X_val.T, 0)
+
+
+def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> None:
+    plan_config.contact_config.delta_theta_max = 0.2
+    plan_config.contact_config.delta_vel_max = 0.05
+    plan_config.use_band_sparsity = True
+    plan_config.num_knot_points_contact = 4
+
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
+    initial_pose = PlanarPose(0.3, 0.2, 1.0)
+    final_pose = PlanarPose(0, 0, 0)
+
+    plan_config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
+
+    plan_config.contact_config.cost_type = ContactCostType.OPTIMAL_CONTROL
+    mode = FaceContactMode.create_from_plan_spec(
+        contact_location,
+        plan_config,
+    )
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
+
+    mode.formulate_convex_relaxation()
+    solver = MosekSolver()
+    result = solver.Solve(mode.relaxed_prog)  # type: ignore
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+
+    if DEBUG:
+        vars = mode.variables.eval_result(result)
+        traj = PlanarPushingTrajectory(mode.config, [vars])
+
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
+        plot_cos_sine_trajs(rs)

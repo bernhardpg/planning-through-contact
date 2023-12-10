@@ -226,9 +226,9 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object
@@ -398,9 +398,9 @@ def test_make_plan(
     assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object
@@ -462,9 +462,9 @@ def test_make_plan_band_sparsity(
     assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object
@@ -535,9 +535,9 @@ def test_make_plan_band_sparsity_t_pusher(
     assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object

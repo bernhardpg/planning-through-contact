@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
@@ -43,26 +42,6 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
 
 
-@dataclass
-class PlanarPushingStartAndGoal:
-    slider_initial_pose: PlanarPose
-    slider_target_pose: PlanarPose
-    pusher_initial_pose: PlanarPose
-    pusher_target_pose: PlanarPose
-
-    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
-        new_slider_init = self.slider_initial_pose.rotate(theta)
-        new_slider_target = self.slider_target_pose.rotate(theta)
-
-        # NOTE: Pusher poses are already relative to slider frame, not world frame
-        return PlanarPushingStartAndGoal(
-            new_slider_init,
-            new_slider_target,
-            self.pusher_initial_pose,
-            self.pusher_target_pose,
-        )
-
-
 class PlanarPushingPlanner:
     """
     A planner that generates motion plans for pushing an object (the "slider") with a point finger (the "pusher").
@@ -96,10 +75,11 @@ class PlanarPushingPlanner:
             self.contact_locations = self.slider.geometry.contact_locations
 
     def formulate_problem(self) -> None:
-        assert self.slider_pose_initial is not None
-        assert self.slider_pose_target is not None
-        assert self.finger_pose_target is not None
-        assert self.finger_pose_initial is not None
+        assert self.config.start_and_goal is not None
+        self.slider_pose_initial = self.config.start_and_goal.slider_initial_pose
+        self.slider_pose_target = self.config.start_and_goal.slider_target_pose
+        self.pusher_pose_initial = self.config.start_and_goal.pusher_initial_pose
+        self.pusher_pose_target = self.config.start_and_goal.pusher_target_pose
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -109,9 +89,9 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.config.penalize_mode_transitions:
+        if self.config.contact_config.mode_transition_cost is not None:
             for v in self.contact_vertices:
-                v.AddCost(self.config.cost_terms.mode_transition_cost)
+                v.AddCost(self.config.contact_config.mode_transition_cost)
 
     @property
     def num_contact_modes(self) -> int:
@@ -171,8 +151,8 @@ class PlanarPushingPlanner:
                 self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
                 self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
 
-        self._set_initial_poses(self.finger_pose_initial, self.slider_pose_initial)
-        self._set_target_poses(self.finger_pose_target, self.slider_pose_target)
+        self._set_initial_poses(self.pusher_pose_initial, self.slider_pose_initial)
+        self._set_target_poses(self.pusher_pose_target, self.slider_pose_target)
 
     def _build_subgraph_between_contact_modes(
         self,
@@ -275,17 +255,9 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def set_initial_poses(
-        self,
-        finger_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.finger_pose_initial = finger_pose
-        self.slider_pose_initial = slider_pose
-
     def _set_initial_poses(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
         if (
@@ -293,23 +265,15 @@ class PlanarPushingPlanner:
             or not self.config.use_entry_and_exit_subgraphs
         ):
             self.source = self._add_single_source_or_target(
-                finger_pose, slider_pose, "initial"
+                pusher_pose, slider_pose, "initial"
             )
         else:
-            self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+            self.source_subgraph.set_initial_poses(pusher_pose, slider_pose)
             self.source = self.source_subgraph.source
-
-    def set_target_poses(
-        self,
-        finger_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.finger_pose_target = finger_pose
-        self.slider_pose_target = slider_pose
 
     def _set_target_poses(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
         if (
@@ -317,20 +281,20 @@ class PlanarPushingPlanner:
             or not self.config.use_entry_and_exit_subgraphs
         ):
             self.target = self._add_single_source_or_target(
-                finger_pose, slider_pose, "final"
+                pusher_pose, slider_pose, "final"
             )
         else:
-            self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+            self.target_subgraph.set_final_poses(pusher_pose, slider_pose)
             self.target = self.target_subgraph.target
 
     def _add_single_source_or_target(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, finger_pose, initial_or_final
+            self.config, slider_pose, pusher_pose, initial_or_final
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)

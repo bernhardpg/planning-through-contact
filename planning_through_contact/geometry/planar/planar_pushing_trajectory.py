@@ -2,7 +2,7 @@ import pickle
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -414,21 +414,24 @@ class PlanarPushingTrajectory:
 
     @property
     def target_slider_planar_pose(self) -> PlanarPose:
-        return self.get_slider_planar_pose(self.end_time)
+        assert self.config.start_and_goal
+        return self.config.start_and_goal.slider_target_pose
 
     @property
     def initial_slider_planar_pose(self) -> PlanarPose:
-        start_time = self.traj_segments[0].start_time
-        return self.get_slider_planar_pose(start_time)
+        assert self.config.start_and_goal
+        return self.config.start_and_goal.slider_initial_pose
 
     @property
-    def initial_pusher_planar_pose(self) -> PlanarPose:
-        start_time = self.traj_segments[0].start_time
-        return self.get_pusher_planar_pose(start_time)
+    def initial_pusher_planar_pose(self) -> Optional[PlanarPose]:
+        assert self.config.start_and_goal
+        assert self.config.start_and_goal.pusher_initial_pose
+        return self.config.start_and_goal.pusher_initial_pose
 
     @property
-    def target_pusher_planar_pose(self) -> PlanarPose:
-        return self.get_pusher_planar_pose(self.end_time)
+    def target_pusher_planar_pose(self) -> Optional[PlanarPose]:
+        assert self.config.start_and_goal
+        return self.config.start_and_goal.pusher_target_pose
 
     def get_pos_limits(self, buffer: float) -> Tuple[float, float, float, float]:
         # We use a fixed timestep to quickly check all values of pos.

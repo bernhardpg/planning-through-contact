@@ -33,7 +33,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     OldPlanarPushingTrajectory,
 )
-from planning_through_contact.planning.planar.planar_pushing_planner import (
+from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.colors import COLORS
@@ -455,13 +455,18 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         if self.visualize_goal:
             target_slider_planar_pose = self.traj.target_slider_planar_pose
             target_pusher_planar_pose = self.traj.target_pusher_planar_pose
+            if target_pusher_planar_pose is None:
+                # If there is no pusher pose, we display the pos outside the frame
+                target_pusher_pos = np.ones((2, 1)) * 99
+            else:
+                target_pusher_pos = target_pusher_planar_pose.pos()
 
             self._set_outputs(
                 self.slider_goal_frame_id,
                 self.pusher_goal_frame_id,
                 output,
                 target_slider_planar_pose.pos(),
-                target_pusher_planar_pose.pos(),
+                target_pusher_pos,
                 target_slider_planar_pose.rot_matrix(),
             )
 
