@@ -65,12 +65,15 @@ def create_plan(
         pusher_radius=pusher_radius, slider=slider, friction_coeff_slider_pusher=0.25
     )
 
-    contact_cost = ContactConfig(
-        ContactCostType.KEYPOINT_DISPLACEMENTS,
+    contact_config = ContactConfig(
+        cost_type=ContactCostType.OPTIMAL_CONTROL,
+        # cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS,
         sq_forces=10.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=1.0,
+        delta_vel_max=0.05,
+        delta_theta_max=0.2,
     )
 
     cost_terms = PlanarCostFunctionTerms(
@@ -82,14 +85,14 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=7,
         time_non_collision=7,
-        num_knot_points_contact=3,
+        num_knot_points_contact=4,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
-        contact_config=contact_cost,
+        contact_config=contact_config,
     )
 
     planner = PlanarPushingPlanner(config)
@@ -193,16 +196,10 @@ def create_plan(
         traj.save(traj_name)  # type: ignore
 
     if visualize:
-        plan = PlanarPushingStartAndGoal(
-            slider_initial_pose,
-            slider_target_pose,
-            pusher_initial_pose,
-            pusher_target_pose,
-        )
         visualize_planar_pushing_start_and_goal(
             config.slider_geometry,
             config.pusher_radius,
-            plan,
+            planner.config.start_and_goal,
             save=True,
             filename=f"trajectory_{traj_number}_start_and_goal_{body_to_use}",
         )
