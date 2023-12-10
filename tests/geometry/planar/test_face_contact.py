@@ -457,12 +457,15 @@ def test_get_X_band_sparse(rigid_body_box: RigidBody) -> None:
 
 
 def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> None:
+    plan_config.contact_config.delta_theta_max = 0.2
+    plan_config.contact_config.delta_vel_max = 0.05
+
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
     initial_pose = PlanarPose(0.3, 0.2, 1.0)
     final_pose = PlanarPose(0, 0, 0)
 
-    plan_config.contact_cost.type = ContactCostType.OPTIMAL_CONTROL
-    plan_config.contact_cost.target_slider_pose = final_pose
+    plan_config.contact_config.cost_type = ContactCostType.OPTIMAL_CONTROL
+    plan_config.contact_config.target_slider_pose = final_pose
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         plan_config,
@@ -477,8 +480,6 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
 
     vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-
-    # assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
         vars = mode.variables.eval_result(result)

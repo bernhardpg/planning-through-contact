@@ -68,7 +68,7 @@ def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
         use_band_sparsity=False,
         avoidance_cost="quadratic",  # TODO: Tests should be updated to use socp cost
     )
-    cfg.contact_cost.type = ContactCostType.SQ_VELOCITIES
+    cfg.contact_config.cost_type = ContactCostType.SQ_VELOCITIES
     return cfg
 
 
@@ -132,7 +132,7 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
-    plan_config.contact_cost.type = request.param.get(
+    plan_config.contact_config.cost_type = request.param.get(
         "contact_cost", ContactCostType.SQ_VELOCITIES
     )
 

@@ -136,24 +136,29 @@ class ContactCostType(Enum):
 
 
 @dataclass
-class ContactCost:
-    type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+class ContactConfig:
+    cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
     lin_displacements: Optional[float] = 1.0
     ang_displacements: Optional[float] = 1.0
     sq_forces: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
+
     target_slider_pose: Optional[PlanarPose] = None
 
+    delta_theta_max: Optional[float] = None
+    delta_vel_max: Optional[float] = None
+
     def __post_init__(self) -> None:
-        if self.type == ContactCostType.KEYPOINT_DISPLACEMENTS:
+        if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             assert self.lin_displacements is not None
             assert self.ang_displacements is not None
-        if self.type == ContactCostType.OPTIMAL_CONTROL:
+        if self.cost_type == ContactCostType.OPTIMAL_CONTROL:
             assert self.target_slider_pose is not None
 
 
 @dataclass
 class PlanarPlanConfig:
+    # TODO: Add initial and target configuration to this config
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2  # TODO: remove, no time
@@ -174,7 +179,7 @@ class PlanarPlanConfig:
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
-    contact_cost: ContactCost = field(default_factory=lambda: ContactCost())
+    contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
     minimize_squared_eucl_dist: bool = True
     minimize_trace: bool = False

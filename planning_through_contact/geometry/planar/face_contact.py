@@ -403,20 +403,22 @@ class FaceContactMode(AbstractContactMode):
             self.prog.add_bounding_box_constraint(idx, -1, 1, cos_th)
             self.prog.add_bounding_box_constraint(idx, -1, 1, sin_th)
 
-        # delta_theta_max = 0.2
-        # for k, (delta_cos_th, delta_sin_th) in enumerate(
-        #     zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
-        # ):
-        #     approx_delta_theta = delta_cos_th**2 + delta_sin_th**2
-        #     self.prog.add_quadratic_constraint(
-        #         k, k + 1, approx_delta_theta, 0, delta_theta_max**2
-        #     )
-        #
-        # delta_v_WB_max = 0.05
-        # for k, v_WB in enumerate(self.variables.v_WBs):
-        #     self.prog.add_quadratic_constraint(
-        #         k, k + 1, (v_WB.T @ v_WB).item(), 0, delta_v_WB_max**2
-        #     )
+        delta_th_max = self.config.contact_config.delta_theta_max
+        if delta_th_max is not None:
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+            ):
+                approx_delta_theta = delta_cos_th**2 + delta_sin_th**2
+                self.prog.add_quadratic_constraint(
+                    k, k + 1, approx_delta_theta, 0, delta_th_max**2
+                )
+
+        delta_v_WB_max = self.config.contact_config.delta_vel_max
+        if delta_v_WB_max is not None:
+            for k, v_WB in enumerate(self.variables.v_WBs):
+                self.prog.add_quadratic_constraint(
+                    k, k + 1, (v_WB.T @ v_WB).item(), 0, delta_v_WB_max**2
+                )
 
         # Quasi-static dynamics
         for k in range(self.num_knot_points - 1):
@@ -456,17 +458,17 @@ class FaceContactMode(AbstractContactMode):
             self.prog.add_independent_constraint(eq(v_c_B.flatten(), np.zeros((2,))))
 
     def _define_costs(self) -> None:
-        if self.config.contact_cost.type == ContactCostType.SQ_VELOCITIES:
+        if self.config.contact_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
             for idx, term in enumerate(sq_linear_vels):
                 self.prog.add_quadratic_cost(
-                    idx, idx + 1, self.config.contact_cost.lin_displacements * term
+                    idx, idx + 1, self.config.contact_config.lin_displacements * term
                 )
             # TODO(bernhardpg): Remove
             if self.config.use_approx_exponential_map:
                 for k, th_dot in enumerate(self.variables.theta_dots):
                     self.prog.add_quadratic_cost(
-                        k, k, self.config.contact_cost.ang_displacements * th_dot**2
+                        k, k, self.config.contact_config.ang_displacements * th_dot**2
                     )
             else:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -475,11 +477,14 @@ class FaceContactMode(AbstractContactMode):
                     self.prog.add_quadratic_cost(
                         k,
                         k + 1,
-                        self.config.contact_cost.ang_displacements
+                        self.config.contact_config.ang_displacements
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 
-        elif self.config.contact_cost.type == ContactCostType.KEYPOINT_DISPLACEMENTS:
+        elif (
+            self.config.contact_config.cost_type
+            == ContactCostType.KEYPOINT_DISPLACEMENTS
+        ):
             slider = self.config.dynamics_config.slider.geometry
             p_Wv_is = [
                 [
@@ -494,9 +499,9 @@ class FaceContactMode(AbstractContactMode):
                     sq_disp = (disp.T @ disp).item()
                     self.prog.add_quadratic_cost(k, k + 1, sq_disp)
 
-        elif self.config.contact_cost.type == ContactCostType.OPTIMAL_CONTROL:
-            assert self.config.contact_cost.target_slider_pose is not None
-            target_pose = self.config.contact_cost.target_slider_pose
+        elif self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
+            assert self.config.contact_config.target_slider_pose is not None
+            target_pose = self.config.contact_config.target_slider_pose
 
             cos_th_target = np.cos(target_pose.theta)
             sin_th_target = np.sin(target_pose.theta)
@@ -511,15 +516,15 @@ class FaceContactMode(AbstractContactMode):
                 cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
                 self.prog.add_quadratic_cost(k, k, cost)
 
-        if self.config.contact_cost.sq_forces is not None:
+        if self.config.contact_config.sq_forces is not None:
             for k, c_n in enumerate(self.variables.normal_forces):
                 self.prog.add_quadratic_cost(
-                    k, k, self.config.contact_cost.sq_forces * c_n**2
+                    k, k, self.config.contact_config.sq_forces * c_n**2
                 )
 
             for k, c_f in enumerate(self.variables.friction_forces):
                 self.prog.add_quadratic_cost(
-                    k, k, self.config.contact_cost.sq_forces * c_f**2
+                    k, k, self.config.contact_config.sq_forces * c_f**2
                 )
 
     def set_finger_pos(self, lam_target: float) -> None:
@@ -564,7 +569,7 @@ class FaceContactMode(AbstractContactMode):
 
     def set_slider_final_pose(self, pose: PlanarPose) -> None:
         # We don't strictly enforce target position with optimal control cost
-        if not self.config.contact_cost == ContactCostType.OPTIMAL_CONTROL:
+        if not self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             self.prog.add_linear_equality_constraint(
                 -1, self.variables.cos_ths[-1] == np.cos(pose.theta)
             )
