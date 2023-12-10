@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -11,6 +11,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -119,25 +120,36 @@ class PlanarSolverParams:
 
 @dataclass
 class PlanarCostFunctionTerms:
+    # TODO: Refactor this into NonCollisionCost similar to face contaacts
     # Non-collision
     obj_avoidance_lin: float = 0.1  # TODO: Remove
     obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
     obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
     obj_avoidance_socp: float = 0.001
     sq_eucl_dist: float = 1.0
-    # Face contact
-    lin_displacements: float = 1.0
-    ang_displacements: float = 1.0
-    sq_forces: float = 1.0
-    mode_transition_cost: float = (
-        0.5  # not used unless 'penalize_mode_transitions' is true
-    )
 
 
 class ContactCostType(Enum):
     SQ_VELOCITIES = 0
     KEYPOINT_DISPLACEMENTS = 1
     OPTIMAL_CONTROL = 2
+
+
+@dataclass
+class ContactCost:
+    type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    lin_displacements: Optional[float] = 1.0
+    ang_displacements: Optional[float] = 1.0
+    sq_forces: Optional[float] = 1.0
+    mode_transition_cost: Optional[float] = None
+    target_slider_pose: Optional[PlanarPose] = None
+
+    def __post_init__(self) -> None:
+        if self.type == ContactCostType.KEYPOINT_DISPLACEMENTS:
+            assert self.lin_displacements is not None
+            assert self.ang_displacements is not None
+        if self.type == ContactCostType.OPTIMAL_CONTROL:
+            assert self.target_slider_pose is not None
 
 
 @dataclass
@@ -162,12 +174,10 @@ class PlanarPlanConfig:
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
-    minimize_sq_forces: bool = True
-    penalize_mode_transitions: bool = False
+    contact_cost: ContactCost = field(default_factory=lambda: ContactCost())
     use_approx_exponential_map: bool = False
     minimize_squared_eucl_dist: bool = True
     minimize_trace: bool = False
-    contact_cost: ContactCostType = ContactCostType.SQ_VELOCITIES
     avoidance_cost: Literal[
         "linear",
         "quadratic",

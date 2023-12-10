@@ -46,7 +46,7 @@ from tests.geometry.planar.fixtures import (
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
-DEBUG = True
+DEBUG = False
 
 
 def test_face_contact_variables(
@@ -458,17 +458,17 @@ def test_get_X_band_sparse(rigid_body_box: RigidBody) -> None:
 
 def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> None:
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-    plan_config.contact_cost = ContactCostType.OPTIMAL_CONTROL
-    plan_config.minimize_sq_forces = True
+    initial_pose = PlanarPose(0.3, 0.2, 1.0)
+    final_pose = PlanarPose(0, 0, 0)
+
+    plan_config.contact_cost.type = ContactCostType.OPTIMAL_CONTROL
+    plan_config.contact_cost.target_slider_pose = final_pose
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         plan_config,
     )
-    initial_pose = PlanarPose(0.3, 0.2, 1.0)
-    final_pose = PlanarPose(0, 0, 0)
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
-    mode.formulate_problem()
 
     mode.formulate_convex_relaxation()
     solver = MosekSolver()
