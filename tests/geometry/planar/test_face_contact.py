@@ -27,6 +27,7 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactCostType,
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -204,6 +205,10 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     face_contact_mode.formulate_convex_relaxation()
     solver = MosekSolver()
     result = solver.Solve(face_contact_mode.relaxed_prog)  # type: ignore
@@ -240,6 +245,10 @@ def test_one_contact_mode_minimize_keypoints(
     final_pose = PlanarPose(0.3, 0.2, 0.8)
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
 
     face_contact_mode.formulate_convex_relaxation()
     solver = MosekSolver()
@@ -279,6 +288,10 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     assert result.is_success()  # should fail when the relaxation is tight!
@@ -313,6 +326,10 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
     face_contact_mode.set_slider_initial_pose(initial_pose)
     face_contact_mode.set_slider_final_pose(final_pose)
 
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
+
     face_contact_mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(face_contact_mode.relaxed_prog)  # type: ignore
     assert not result.is_success()  # should fail when the relaxation is tight!
@@ -344,6 +361,10 @@ def test_planning_for_t_pusher_infeasible(face_contact_mode: FaceContactMode) ->
     final_pose = PlanarPose(0.3, 0, 0.3)
     mode.set_slider_initial_pose(initial_pose)
     mode.set_slider_final_pose(final_pose)
+
+    face_contact_mode.config.start_and_goal = PlanarPushingStartAndGoal(
+        initial_pose, final_pose
+    )
 
     mode.formulate_convex_relaxation()
     result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
@@ -466,8 +487,9 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
     initial_pose = PlanarPose(0.3, 0.2, 1.0)
     final_pose = PlanarPose(0, 0, 0)
 
+    plan_config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
+
     plan_config.contact_config.cost_type = ContactCostType.OPTIMAL_CONTROL
-    plan_config.contact_config.target_slider_pose = final_pose
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         plan_config,

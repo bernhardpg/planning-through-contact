@@ -35,6 +35,7 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
     ContactCostType,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
@@ -233,14 +234,11 @@ def planner(
 
     if request.param.get("boundary_conds"):
         boundary_conds = request.param.get("boundary_conds")
-
-        planner.set_initial_poses(
-            boundary_conds["finger_initial_pose"],
+        planner.config.start_and_goal = PlanarPushingStartAndGoal(
             boundary_conds["box_initial_pose"],
-        )
-        planner.set_target_poses(
-            boundary_conds["finger_target_pose"],
             boundary_conds["box_target_pose"],
+            boundary_conds["finger_initial_pose"],
+            boundary_conds["finger_target_pose"],
         )
 
     planner.formulate_problem()

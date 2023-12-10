@@ -13,12 +13,12 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     ContactCostType,
     PlanarCostFunctionTerms,
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
-    PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,

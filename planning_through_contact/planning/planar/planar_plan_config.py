@@ -143,8 +143,6 @@ class ContactConfig:
     sq_forces: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
 
-    target_slider_pose: Optional[PlanarPose] = None
-
     delta_theta_max: Optional[float] = None
     delta_vel_max: Optional[float] = None
 
@@ -152,13 +150,32 @@ class ContactConfig:
         if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             assert self.lin_displacements is not None
             assert self.ang_displacements is not None
-        if self.cost_type == ContactCostType.OPTIMAL_CONTROL:
-            assert self.target_slider_pose is not None
+
+
+@dataclass
+class PlanarPushingStartAndGoal:
+    slider_initial_pose: PlanarPose
+    slider_target_pose: PlanarPose
+    pusher_initial_pose: Optional[PlanarPose] = None
+    pusher_target_pose: Optional[PlanarPose] = None
+
+    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
+        new_slider_init = self.slider_initial_pose.rotate(theta)
+        new_slider_target = self.slider_target_pose.rotate(theta)
+
+        # NOTE: Pusher poses are already relative to slider frame, not world frame
+        return PlanarPushingStartAndGoal(
+            new_slider_init,
+            new_slider_target,
+            self.pusher_initial_pose,
+            self.pusher_target_pose,
+        )
 
 
 @dataclass
 class PlanarPlanConfig:
     # TODO: Add initial and target configuration to this config
+    start_and_goal: Optional[PlanarPushingStartAndGoal] = None
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2  # TODO: remove, no time

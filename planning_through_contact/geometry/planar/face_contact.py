@@ -500,8 +500,8 @@ class FaceContactMode(AbstractContactMode):
                     self.prog.add_quadratic_cost(k, k + 1, sq_disp)
 
         elif self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
-            assert self.config.contact_config.target_slider_pose is not None
-            target_pose = self.config.contact_config.target_slider_pose
+            assert self.config.start_and_goal is not None
+            target_pose = self.config.start_and_goal.slider_target_pose
 
             cos_th_target = np.cos(target_pose.theta)
             sin_th_target = np.sin(target_pose.theta)
