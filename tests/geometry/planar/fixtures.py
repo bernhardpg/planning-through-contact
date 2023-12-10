@@ -133,6 +133,7 @@ def face_contact_mode(
     plan_config.minimize_keypoint_displacement = request.param.get(
         "minimize_keypoint_displacement", False
     )
+    plan_config.optimal_control_cost = request.param.get("optimal_control_cost", False)
 
     face_idx = request.param.get("face_idx", 3)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)

@@ -33,6 +33,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactCostType,
     PlanarPlanConfig,
     SliderPusherSystemConfig,
 )
@@ -434,7 +435,7 @@ class FaceContactMode(AbstractContactMode):
             self.prog.add_independent_constraint(eq(v_c_B.flatten(), np.zeros((2,))))
 
     def _define_costs(self) -> None:
-        if not self.config.minimize_keypoint_displacement:
+        if self.config.contact_cost == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
             for idx, term in enumerate(sq_linear_vels):
                 self.prog.add_quadratic_cost(
@@ -457,7 +458,7 @@ class FaceContactMode(AbstractContactMode):
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 
-        if self.config.minimize_keypoint_displacement:
+        elif self.config.contact_cost == ContactCostType.KEYPOINT_DISPLACEMENTS:
             slider = self.config.dynamics_config.slider.geometry
             p_Wv_is = [
                 [

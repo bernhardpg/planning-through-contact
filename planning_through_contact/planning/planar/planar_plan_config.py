@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import cached_property
 from typing import Literal, Tuple
 
@@ -133,6 +134,12 @@ class PlanarCostFunctionTerms:
     )
 
 
+class ContactCostType(Enum):
+    SQ_VELOCITIES = 0
+    KEYPOINT_DISPLACEMENTS = 1
+    OPTIMAL_CONTROL = 2
+
+
 @dataclass
 class PlanarPlanConfig:
     num_knot_points_contact: int = 4
@@ -141,16 +148,7 @@ class PlanarPlanConfig:
     time_non_collision: float = 0.5  # TODO: remove, there is no time
     avoid_object: bool = False
     allow_teleportation: bool = False
-    avoidance_cost: Literal[
-        "linear",
-        "quadratic",
-        "socp",
-        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
-    ] = "socp"
-    minimize_squared_eucl_dist: bool = True
-    minimize_keypoint_displacement: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
-    penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False  # TODO: remove, not used
     workspace: PlanarPushingWorkspace = field(
@@ -159,13 +157,23 @@ class PlanarPlanConfig:
     dynamics_config: SliderPusherSystemConfig = field(
         default_factory=lambda: SliderPusherSystemConfig()
     )
+    use_band_sparsity: bool = True
+    # TODO(bernhardpg): Refactor these cost terms into a struct
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
-    use_approx_exponential_map: bool = False
     minimize_sq_forces: bool = True
+    penalize_mode_transitions: bool = False
+    use_approx_exponential_map: bool = False
+    minimize_squared_eucl_dist: bool = True
     minimize_trace: bool = False
-    use_band_sparsity: bool = True
+    contact_cost: ContactCostType = ContactCostType.SQ_VELOCITIES
+    avoidance_cost: Literal[
+        "linear",
+        "quadratic",
+        "socp",
+        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
+    ] = "socp"
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
