@@ -797,6 +797,22 @@ class FaceContactMode(AbstractContactMode):
         for b in bindings:
             vertex.AddCost(b)
 
+    def eval_binding(
+        self,
+        binding: Binding,  # type: ignore
+        result: MathematicalProgramResult,
+    ) -> float:
+        # we only need to check quadratic constraints for now
+        assert isinstance(binding, Binding[QuadraticConstraint])
+
+        vars_sol = result.GetSolution(binding.variables())
+        eval = binding.evaluator()
+        assert eval.lower_bound() == eval.upper_bound()
+        # we only check quadratic equalities for now
+        const = eval.lower_bound().item()
+        binding_result = eval.Eval(vars_sol).item() - const
+        return binding_result
+
     def eval_binding_with_vertex_vars(
         self,
         binding: Binding,  # type: ignore

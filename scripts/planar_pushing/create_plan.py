@@ -187,8 +187,8 @@ def create_plan(
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,
-        delta_vel_max=0.1,
-        delta_theta_max=0.8,
+        delta_vel_max=0.05,
+        delta_theta_max=0.4,
     )
 
     if animation_output_dir != "":
@@ -212,7 +212,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=3,
+        num_knot_points_contact=7,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",

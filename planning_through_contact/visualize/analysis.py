@@ -708,10 +708,25 @@ def analyze_mode_result(
         plt.title("Norms of the Eigenvalues of the Matrix")
         plt.show()
 
-    constraint_violations = {
-        key: evaluate_np_expressions_array(value, result)
-        for key, value in mode.constraints.items()
-    }
+    keys = mode.constraints.keys()
+    constraint_violations = {key: [] for key in keys}
+    for key in keys:
+        for constraints in mode.constraints[key]:
+            if not isinstance(constraints, type(np.array([]))):  # only one constraint
+                constraint_violations[key].append(
+                    mode.eval_binding(constraints, result)
+                )
+            else:
+                constraint_violations[key].append(
+                    [
+                        mode.eval_binding(constraint, result)
+                        for constraint in constraints
+                    ]
+                )
+
+    # NOTE: This is super hacky
+    for key, item in constraint_violations.items():
+        constraint_violations[key] = np.array(item)
 
     ref_vals = {
         "SO2": 1,
