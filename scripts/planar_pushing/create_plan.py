@@ -177,10 +177,10 @@ def create_plan(
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         # cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS,
-        sq_forces=5.0,
+        sq_forces=None,
         ang_displacements=1.0,
         lin_displacements=1.0,
-        mode_transition_cost=1.0,
+        mode_transition_cost=None,
         delta_vel_max=0.1,
         delta_theta_max=0.4,
     )
@@ -206,13 +206,13 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=5,
+        num_knot_points_contact=3,
         num_knot_points_non_collision=3,
-        avoid_object=True,
+        avoid_object=False,
         avoidance_cost="quadratic",
-        allow_teleportation=False,
+        allow_teleportation=True,
         use_band_sparsity=True,
-        use_entry_and_exit_subgraphs=True,
+        use_entry_and_exit_subgraphs=False,
         contact_config=contact_config,
     )
 
@@ -221,7 +221,7 @@ def create_plan(
     solver_params = PlanarSolverParams(
         measure_solve_time=True,
         gcs_max_rounded_paths=20,
-        print_flows=False,
+        print_flows=True,
         print_solver_output=debug,
         save_solver_output=False,
         print_path=True,

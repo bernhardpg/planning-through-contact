@@ -139,6 +139,7 @@ class PlanarPushingPath:
         vars_on_path = [
             pair.mode.get_variable_solutions_for_vertex(pair.vertex, self.result)
             for pair in self.pairs
+            if pair.vertex.name() != "target"
         ]
         return vars_on_path
 

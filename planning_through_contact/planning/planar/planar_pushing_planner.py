@@ -4,6 +4,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
 import pydrake.geometry.optimization as opt
+from pydrake.geometry.optimization import Point
 from pydrake.solvers import (
     CommonSolverOption,
     MathematicalProgramResult,
@@ -122,15 +123,20 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
+        self.edges = {}
         if self.config.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (self.contact_modes[i].name, self.contact_modes[j].name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
                     VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
                     only_continuity_on_slider=True,
                 )
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (self.contact_modes[j].name, self.contact_modes[i].name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
                     VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
@@ -280,9 +286,18 @@ class PlanarPushingPlanner:
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
         ):
-            self.target = self._add_single_source_or_target(
-                pusher_pose, slider_pose, "final"
+            mode = NonCollisionMode.create_source_or_target_mode(
+                self.config, slider_pose, pusher_pose, "final"
             )
+            self.target = VertexModePair(self.gcs.AddVertex(Point(), "target"), mode)
+            for v in self.contact_vertices:
+                self.edges[(v.name(), "target")] = self.gcs.AddEdge(
+                    v, self.target.vertex
+                )
+
+            # self.target = self._add_single_source_or_target(
+            #     pusher_pose, slider_pose, "final"
+            # )
         else:
             self.target_subgraph.set_final_poses(pusher_pose, slider_pose)
             self.target = self.target_subgraph.target
@@ -305,7 +320,9 @@ class PlanarPushingPlanner:
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    ("source", contact_mode.name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     pair,
                     VertexModePair(contact_vertex, contact_mode),
@@ -315,7 +332,9 @@ class PlanarPushingPlanner:
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (contact_mode.name, "target")
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(contact_vertex, contact_mode),
                     pair,
@@ -355,9 +374,19 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
-        result = self.gcs.SolveShortestPath(
-            self.source.vertex, self.target.vertex, options
-        )
+        # result = self.gcs.SolveShortestPath(
+        #     self.source.vertex, self.target.vertex, options
+        # )
+        active_vertices = ["source", "FACE_2", "FACE_0", "target"]
+        active_edges = [
+            self.edges[(active_vertices[i], active_vertices[i + 1])]
+            for i in range(len(active_vertices) - 1)
+        ]
+        result = self.gcs.SolveConvexRestriction(active_edges, options)
+
+        # result = self.gcs.SolveShortestPath(
+        #     self.source.vertex, self.target.vertex, options
+        # )
 
         if solver_params.print_flows:
             self._print_edge_flows(result)
