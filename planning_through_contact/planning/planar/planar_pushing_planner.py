@@ -481,19 +481,20 @@ class PlanarPushingPlanner:
             )
             return original_traj, rounded_traj
 
-        traj = PlanarPushingTrajectory.from_result(
-            self.config,
-            result,
+        self.path = PlanarPushingPath.from_result(
             self.gcs,
+            result,
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
-            solver_params.nonlinear_traj_rounding,
-            solver_params.print_path,
-            solver_params.assert_determinants,
         )
+        if solver_params.print_path:
+            print(f"path: {self.path.get_path_names()}")
 
-        return traj
+        if solver_params.nonlinear_traj_rounding:
+            raise NotImplementedError("Not implemented yet")
+
+        return PlanarPushingTrajectory(self.config, self.path.get_vars())
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """

@@ -12,6 +12,7 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
+    QuadraticConstraint,
 )
 
 from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
@@ -358,8 +359,8 @@ class FaceContactMode(AbstractContactMode):
         for idx, (c, s) in enumerate(
             zip(self.variables.cos_ths, self.variables.sin_ths)
         ):
-            constraint = c**2 + s**2 - 1
-            self.prog.add_quadratic_constraint(idx, idx, constraint, 0, 0)
+            expr = c**2 + s**2 - 1
+            constraint = self.prog.add_quadratic_constraint(idx, idx, expr, 0, 0)
             self.constraints["SO2"].append(constraint)
 
         if self.config.use_approx_exponential_map:
@@ -371,10 +372,13 @@ class FaceContactMode(AbstractContactMode):
                 exp_map = approx_exponential_map(omega_hat_k)
 
                 # NOTE: For now we only add the one side of the exp map constraint
-                constraint = exp_map - R_k.T @ R_k_next
-                self.constraints["exponential_map"].append(constraint.flatten())
-                for c in constraint.flatten():
-                    self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                expr = exp_map - R_k.T @ R_k_next
+                constraint = []
+                for c in expr.flatten():
+                    constraint.append(
+                        self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                    )
+                self.constraints["exponential_map"].append(np.array(constraint))
 
         # Friction cone constraints
         for idx, c_n in enumerate(self.variables.normal_forces):
@@ -435,23 +439,23 @@ class FaceContactMode(AbstractContactMode):
             R_WB = self.variables.R_WBs[k]
 
             trans_vel_constraint = v_WB - R_WB @ f_c_B
-            self.constraints["translational_dynamics"].append(
-                trans_vel_constraint.flatten()
-            )
+            constraint = []
             for c in trans_vel_constraint.flatten():
-                self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                constraint.append(self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0))
+            self.constraints["translational_dynamics"].append(np.array(constraint))
 
             trans_vel_constraint = R_WB.T @ v_WB - f_c_B
-            self.constraints["translational_dynamics_red"].append(
-                trans_vel_constraint.flatten()
-            )
+            constraint = []
             for c in trans_vel_constraint.flatten():
-                self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                constraint.append(self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0))
+            self.constraints["translational_dynamics_red"].append(np.array(constraint))
 
             c = self.config.dynamics_config.limit_surface_const
             ang_vel_constraint = theta_WB_dot - c * cross_2d(p_BP, f_c_B)
-            self.constraints["rotational_dynamics"].append(ang_vel_constraint)
-            self.prog.add_quadratic_constraint(k, k + 1, ang_vel_constraint, 0, 0)
+            constraint = self.prog.add_quadratic_constraint(
+                k, k + 1, ang_vel_constraint, 0, 0
+            )
+            self.constraints["rotational_dynamics"].append(constraint)
 
         # Ensure sticking on the contact point
         for idx, v_c_B in enumerate(self.variables.v_BPs):
@@ -567,9 +571,10 @@ class FaceContactMode(AbstractContactMode):
 
         self.slider_initial_pose = pose
 
-    def set_slider_final_pose(self, pose: PlanarPose) -> None:
-        # We don't strictly enforce target position with optimal control cost
-        if not self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
+    def set_slider_final_pose(
+        self, pose: PlanarPose, hard_constraint: bool = True
+    ) -> None:
+        if hard_constraint:
             self.prog.add_linear_equality_constraint(
                 -1, self.variables.cos_ths[-1] == np.cos(pose.theta)
             )
@@ -791,3 +796,23 @@ class FaceContactMode(AbstractContactMode):
         bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
         for b in bindings:
             vertex.AddCost(b)
+
+    def eval_binding_with_vertex_vars(
+        self,
+        binding: Binding,  # type: ignore
+        vertex: GcsVertex,
+        result: MathematicalProgramResult,
+    ) -> float:
+        # we only need to check quadratic constraints for now
+        assert isinstance(binding, Binding[QuadraticConstraint])
+
+        vertex_vars = vertex.x()[
+            self.get_variable_indices_in_gcs_vertex(binding.variables())
+        ]
+        vars_sol = result.GetSolution(vertex_vars)
+        eval = binding.evaluator()
+        assert eval.lower_bound() == eval.upper_bound()
+        # we only check quadratic equalities for now
+        const = eval.lower_bound().item()
+        binding_result = eval.Eval(vars_sol).item() - const
+        return binding_result

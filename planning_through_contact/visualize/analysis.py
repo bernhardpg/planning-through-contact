@@ -13,7 +13,13 @@ from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.face_contact import (
+    FaceContactMode,
+    FaceContactVariables,
+)
+from planning_through_contact.geometry.planar.planar_pushing_path import (
+    PlanarPushingPath,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
@@ -69,7 +75,7 @@ class PlanarPushingLog:
         state_np_array = state_log.data()
         control_np_array = control_log.data()
         return cls.from_np(t, state_np_array, control_np_array)
-    
+
     @classmethod
     def from_pose_vector_log(
         cls,
@@ -79,7 +85,9 @@ class PlanarPushingLog:
         state_np_array = pose_vector_log.data()
         # Padding state since we didn't log lam
         PAD_VAL = 0
-        state_np_array = np.vstack((state_np_array, PAD_VAL* np.ones_like(state_np_array[0, :])))
+        state_np_array = np.vstack(
+            (state_np_array, PAD_VAL * np.ones_like(state_np_array[0, :]))
+        )
         control_np_array = np.ones((3, len(t))) * PAD_VAL
         return cls.from_np(t, state_np_array, control_np_array)
 
@@ -95,15 +103,21 @@ def plot_planar_pushing_logs(
 
     plot_planar_pushing_trajectory(actual, desired)
 
+
 def plot_planar_pushing_logs_from_pose_vectors(
     pusher_pose_vector_log: VectorLog,
     slider_pose_vector_log: VectorLog,
     pusher_pose_vector_log_desired: VectorLog,
-    slider_pose_vector_log_desired: VectorLog) -> None:
+    slider_pose_vector_log_desired: VectorLog,
+) -> None:
     actual_pusher = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log)
     actual_slider = PlanarPushingLog.from_pose_vector_log(slider_pose_vector_log)
-    desired_pusher = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log_desired)
-    desired_slider = PlanarPushingLog.from_pose_vector_log(slider_pose_vector_log_desired)
+    desired_pusher = PlanarPushingLog.from_pose_vector_log(
+        pusher_pose_vector_log_desired
+    )
+    desired_slider = PlanarPushingLog.from_pose_vector_log(
+        slider_pose_vector_log_desired
+    )
     plot_planar_pushing_trajectory(actual_slider, desired_slider, suffix="_slider")
     plot_planar_pushing_trajectory(actual_pusher, desired_pusher, suffix="_pusher")
 
@@ -117,7 +131,7 @@ def plot_planar_pushing_trajectory(
 
     pos = np.vstack((actual.x, actual.y))
     max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
-    # Note: this calculation doesn't center the plot on the right value, so 
+    # Note: this calculation doesn't center the plot on the right value, so
     # the line might not be visible
 
     axes[0].plot(actual.t, actual.x, label="Actual")
@@ -198,13 +212,14 @@ def plot_cos_sine_trajs(
     rot_trajs: npt.NDArray[np.float64],
     A: Optional[npt.NDArray[np.float64]] = None,
     b: Optional[npt.NDArray[np.float64]] = None,
+    filename: Optional[str] = None,
 ):  # (num_steps, 2)
     """
     @param rot_trajs: Matrix of size (num_steps, 2), where the first col is
     cosines and the second col is sines.
     """
     # For some reason pyright complains about the typing being wrong with ax
-    _, ax = plt.subplots(1, 1)
+    fig, ax = plt.subplots(1, 1)
 
     # Plot unit circle
     t = np.linspace(0, np.pi * 2, 100)
@@ -251,7 +266,10 @@ def plot_cos_sine_trajs(
 
             ax.plot(x_values, y_values, label=f"Line {i+1}")
 
-    plt.show()
+    if filename is not None:
+        fig.savefig(filename + "_rotations.png")  # type: ignore
+    else:
+        plt.show()
 
 
 def show_plots() -> None:
@@ -527,6 +545,7 @@ def plot_constraint_violation(
     data: Dict[str, npt.NDArray[np.float64]],
     ref_vals: Dict[str, float],
     show_abs: bool = True,
+    filename: Optional[str] = None,
 ) -> None:
     # Preparing the plot
     num_groups = len(data)
@@ -569,7 +588,86 @@ def plot_constraint_violation(
     # Show the plot
     fig.suptitle("Quadratic constraint violations")
     plt.tight_layout()  # Adjust the layout
-    plt.show()
+
+    if filename is not None:
+        fig.savefig(filename + "_constraints.png")  # type: ignore
+    else:
+        plt.show()
+
+
+def analyze_plan(
+    path: PlanarPushingPath, traj: PlanarPushingTrajectory, filename: str
+) -> None:
+    face_modes = [
+        pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
+    ]
+    face_vertices = [
+        pair.vertex for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
+    ]
+    result = path.result
+
+    keys = face_modes[0].constraints.keys()
+    constraint_violations = {key: [] for key in keys}
+    for key in keys:
+        for mode, vertex in zip(face_modes, face_vertices):
+            for constraints in mode.constraints[key]:
+                if not isinstance(
+                    constraints, type(np.array([]))
+                ):  # only one constraint
+                    constraint_violations[key].append(
+                        mode.eval_binding_with_vertex_vars(constraints, vertex, result)
+                    )
+                else:
+                    constraint_violations[key].append(
+                        [
+                            mode.eval_binding_with_vertex_vars(
+                                constraint, vertex, result
+                            )
+                            for constraint in constraints
+                        ]
+                    )
+
+    # NOTE: This is super hacky
+    for key, item in constraint_violations.items():
+        constraint_violations[key] = np.array(item)
+
+    num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
+    ref_theta_vel = np.mean(
+        np.concatenate(
+            [
+                points.delta_omega_WBs
+                for points in traj.path_knot_points
+                if isinstance(points, FaceContactVariables)
+            ]
+        )
+    )
+    ref_vel = np.mean(
+        np.concatenate(
+            [
+                [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
+                for points in traj.path_knot_points
+                if isinstance(points, FaceContactVariables)
+            ]
+        )
+    )
+    ref_vals = {
+        "SO2": 1,
+        "rotational_dynamics": ref_theta_vel,
+        "translational_dynamics": ref_vel,
+        "translational_dynamics_red": ref_vel,
+    }
+    plot_constraint_violation(constraint_violations, ref_vals, filename=filename)
+
+    # (num_knot_points, 2): first col cosines, second col sines
+
+    rs = np.vstack(
+        [
+            R_WB[:, 0]
+            for idx in range(len(traj.path_knot_points))
+            for R_WB in traj.path_knot_points[idx].R_WBs
+        ]
+    )
+    plot_cos_sine_trajs(rs, filename=filename)
 
 
 def analyze_mode_result(

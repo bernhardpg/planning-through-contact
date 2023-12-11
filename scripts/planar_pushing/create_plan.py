@@ -6,6 +6,7 @@ import numpy as np
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -19,6 +20,10 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
+)
+from planning_through_contact.visualize.analysis import (
+    analyze_mode_result,
+    analyze_plan,
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
@@ -100,7 +105,7 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     elif traj_number == 11:
         # Rotate in place is a bit loose
         slider_initial_pose = PlanarPose(x=0.65, y=0.0, theta=0)
-        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi - 0.1)
         pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     elif traj_number == 12:
@@ -161,6 +166,7 @@ def create_plan(
     animation_smooth: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
+    save_analysis: bool = False,
     debug: bool = False,
 ):
     if body_to_use == "box":
@@ -242,6 +248,9 @@ def create_plan(
         filename = f"trajectories/{body_to_use}_pushing_{traj_name}.pkl"
         traj.save(filename)  # type: ignore
 
+    if save_analysis:
+        analyze_plan(planner.path, traj, filename=f"{traj_name}_{body_to_use}")
+
     if visualize:
         if debug:
             visualize_planar_pushing_start_and_goal(
@@ -304,6 +313,7 @@ if __name__ == "__main__":
                 time_in_contact=2.0,
                 time_in_non_collision=1.0,
                 animation_smooth=False,
+                save_analysis=True,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -320,6 +330,7 @@ if __name__ == "__main__":
                     time_in_contact=2.0,
                     time_in_non_collision=1.0,
                     animation_smooth=False,
+                    save_analysis=True,
                 )
 
     else:
@@ -333,4 +344,5 @@ if __name__ == "__main__":
             traj_name=str(traj_number),
             visualize=True,
             save_traj=True,
+            save_analysis=True,
         )
