@@ -229,6 +229,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
         planner.pusher_pose_initial,
         planner.slider_pose_target,
         planner.pusher_pose_target,
+        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
@@ -236,8 +237,16 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, planner.slider.geometry, planner.config.pusher_radius
+        traj = PlanarPushingTrajectory.from_result(
+            planner.config,
+            result,
+            planner.gcs,
+            planner.source.vertex,
+            planner.target.vertex,
+            planner._get_all_vertex_mode_pairs(),
+        )
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -268,7 +277,6 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
                 "FACE_0_to_FACE_1_NON_COLL_0",
                 "FACE_0",
                 "EXIT_NON_COLL_0",
-                "EXIT_NON_COLL_3",
                 "target",
             ],
         ),
@@ -401,6 +409,7 @@ def test_make_plan(
         planner.pusher_pose_initial,
         planner.slider_pose_target,
         planner.pusher_pose_target,
+        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
