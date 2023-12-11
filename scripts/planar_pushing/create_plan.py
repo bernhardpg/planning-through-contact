@@ -177,7 +177,7 @@ def create_plan(
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         # cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS,
-        sq_forces=None,
+        sq_forces=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,
@@ -206,7 +206,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=3,
+        num_knot_points_contact=7,
         num_knot_points_non_collision=3,
         avoid_object=False,
         avoidance_cost="quadratic",

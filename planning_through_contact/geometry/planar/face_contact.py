@@ -511,10 +511,10 @@ class FaceContactMode(AbstractContactMode):
                 cost = (cos_th - cos_th_target) ** 2 + (sin_th - sin_th_target) ** 2
                 self.prog.add_quadratic_cost(k, k, cost)
 
-            # p_WB_target = target_pose.pos()
-            # for k, p_WB in enumerate(self.variables.p_WBs):
-            #     cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
-            #     self.prog.add_quadratic_cost(k, k, cost)
+            p_WB_target = target_pose.pos()
+            for k, p_WB in enumerate(self.variables.p_WBs):
+                cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
+                self.prog.add_quadratic_cost(k, k, cost)
 
         if self.config.contact_config.sq_forces is not None:
             for k, c_n in enumerate(self.variables.normal_forces):

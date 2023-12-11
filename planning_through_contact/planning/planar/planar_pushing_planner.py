@@ -34,6 +34,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactCostType,
     PlanarPlanConfig,
     PlanarSolverParams,
 )
@@ -286,18 +287,9 @@ class PlanarPushingPlanner:
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
         ):
-            mode = NonCollisionMode.create_source_or_target_mode(
-                self.config, slider_pose, pusher_pose, "final"
+            self.target = self._add_single_source_or_target(
+                pusher_pose, slider_pose, "final"
             )
-            self.target = VertexModePair(self.gcs.AddVertex(Point(), "target"), mode)
-            for v in self.contact_vertices:
-                self.edges[(v.name(), "target")] = self.gcs.AddEdge(
-                    v, self.target.vertex
-                )
-
-            # self.target = self._add_single_source_or_target(
-            #     pusher_pose, slider_pose, "final"
-            # )
         else:
             self.target_subgraph.set_final_poses(pusher_pose, slider_pose)
             self.target = self.target_subgraph.target
@@ -308,11 +300,31 @@ class PlanarPushingPlanner:
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
+        if (
+            initial_or_final == "final"
+            and self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL
+        ):  # we don't enforce target position for slider with this cost
+            # set_slider_pose = False
+            # terminal_cost = True
+            set_slider_pose = True
+            terminal_cost = False
+        else:
+            set_slider_pose = True
+            terminal_cost = False
+
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, pusher_pose, initial_or_final
+            self.config,
+            slider_pose,
+            pusher_pose,
+            initial_or_final,
+            set_slider_pose=set_slider_pose,
+            terminal_cost=terminal_cost,
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)
+
+        if terminal_cost:  # add cost on target vertex
+            mode.add_cost_to_vertex(vertex)
 
         # connect source or target to all contact modes
         if initial_or_final == "initial":
@@ -374,19 +386,17 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
-        # result = self.gcs.SolveShortestPath(
-        #     self.source.vertex, self.target.vertex, options
-        # )
-        active_vertices = ["source", "FACE_2", "FACE_0", "target"]
-        active_edges = [
-            self.edges[(active_vertices[i], active_vertices[i + 1])]
-            for i in range(len(active_vertices) - 1)
-        ]
-        result = self.gcs.SolveConvexRestriction(active_edges, options)
+        # TODO: The following commented out code allows you to pick which path to choose
+        # active_vertices = ["source", "FACE_2", "FACE_0", "target"]
+        # active_edges = [
+        #     self.edges[(active_vertices[i], active_vertices[i + 1])]
+        #     for i in range(len(active_vertices) - 1)
+        # ]
+        # result = self.gcs.SolveConvexRestriction(active_edges, options)
 
-        # result = self.gcs.SolveShortestPath(
-        #     self.source.vertex, self.target.vertex, options
-        # )
+        result = self.gcs.SolveShortestPath(
+            self.source.vertex, self.target.vertex, options
+        )
 
         if solver_params.print_flows:
             self._print_edge_flows(result)
