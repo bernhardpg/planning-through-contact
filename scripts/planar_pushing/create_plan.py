@@ -135,7 +135,7 @@ def get_plans_to_origin(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi + 0.01, np.pi - 0.01)
+        th_initial = np.random.uniform(-np.pi + 0.1, np.pi - 0.1)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(0, 0, 0)
@@ -182,7 +182,7 @@ def create_plan(
         lin_displacements=1.0,
         mode_transition_cost=None,
         delta_vel_max=0.1,
-        delta_theta_max=0.4,
+        delta_theta_max=0.8,
     )
 
     if animation_output_dir != "":
@@ -206,13 +206,13 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=7,
+        num_knot_points_contact=3,
         num_knot_points_non_collision=3,
-        avoid_object=False,
+        avoid_object=True,
         avoidance_cost="quadratic",
-        allow_teleportation=True,
+        allow_teleportation=False,
         use_band_sparsity=True,
-        use_entry_and_exit_subgraphs=False,
+        use_entry_and_exit_subgraphs=True,
         contact_config=contact_config,
     )
 
