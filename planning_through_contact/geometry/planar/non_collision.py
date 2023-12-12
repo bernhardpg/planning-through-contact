@@ -178,6 +178,8 @@ class NonCollisionVariables(AbstractModeVariables):
 
 @dataclass
 class NonCollisionMode(AbstractContactMode):
+    terminal_cost: bool = False
+
     @classmethod
     def create_from_plan_spec(
         cls,
@@ -185,6 +187,7 @@ class NonCollisionMode(AbstractContactMode):
         config: PlanarPlanConfig,
         name: Optional[str] = None,
         one_knot_point: bool = False,
+        terminal_cost: bool = False,
     ) -> "NonCollisionMode":
         if name is None:
             name = f"NON_COLL_{contact_location.idx}"
@@ -197,6 +200,7 @@ class NonCollisionMode(AbstractContactMode):
             config.time_non_collision,
             contact_location,
             config,
+            terminal_cost,
         )
 
     @classmethod
@@ -206,6 +210,8 @@ class NonCollisionMode(AbstractContactMode):
         slider_pose_world: PlanarPose,
         pusher_pose_world: PlanarPose,
         initial_or_final: Literal["initial", "final"],
+        set_slider_pose: bool = True,
+        terminal_cost: bool = False,
     ) -> "NonCollisionMode":
         p_WP = pusher_pose_world.pos()
         R_WB = slider_pose_world.two_d_rot_matrix()
@@ -218,12 +224,10 @@ class NonCollisionMode(AbstractContactMode):
         loc = find_first_matching_location(pusher_pose_body, config)
         mode_name = "source" if initial_or_final == "initial" else "target"
         mode = cls.create_from_plan_spec(
-            loc,
-            config,
-            mode_name,
-            one_knot_point=True,
+            loc, config, mode_name, one_knot_point=True, terminal_cost=terminal_cost
         )
-        mode.set_slider_pose(slider_pose_world)
+        if set_slider_pose:
+            mode.set_slider_pose(slider_pose_world)
 
         if initial_or_final == "initial":
             mode.set_finger_initial_pose(pusher_pose_body)
@@ -374,6 +378,24 @@ class NonCollisionMode(AbstractContactMode):
                         self.prog.AddLinearCost(
                             self.config.cost_terms.obj_avoidance_socp * s
                         )
+
+        if self.terminal_cost:  # Penalize difference from target position on slider
+            assert self.config.start_and_goal is not None
+
+            pos_diff = (
+                self.variables.p_WB
+                - self.config.start_and_goal.slider_target_pose.pos()
+            )
+            self.terminal_cost_pos = self.prog.AddQuadraticCost((pos_diff.T @ pos_diff).item())  # type: ignore
+
+            th = self.config.start_and_goal.slider_target_pose.theta
+            cos_th_target = np.cos(th)
+            sin_th_target = np.sin(th)
+
+            rot_diff = (self.variables.cos_th - cos_th_target) ** 2 + (
+                self.variables.sin_th - sin_th_target
+            ) ** 2
+            self.terminal_cost_rot = self.prog.AddQuadraticCost(rot_diff)  # type: ignore
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -543,45 +565,61 @@ class NonCollisionMode(AbstractContactMode):
         return var_idxs, object_avoidance_cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
-        # euclidean distance cost
-        var_idxs, evaluator = self._get_eucl_dist_cost_term()
-        vars = vertex.x()[var_idxs]
-        binding = Binding[QuadraticCost](evaluator, vars)
-        vertex.AddCost(binding)
+        is_target_or_source = self.num_knot_points == 1
+        if is_target_or_source:
+            assert (
+                len(self.prog.quadratic_costs()) == 2
+            )  # should be one cost for pos and one for rot
+            assert self.terminal_cost_pos is not None
+            assert self.terminal_cost_rot is not None
 
-        if self.config.avoid_object:
-            if self.config.avoidance_cost in ["quadratic", "linear"]:
-                var_idxs, evaluator = self._get_object_avoidance_cost_term()
+            for binding in (self.terminal_cost_pos, self.terminal_cost_rot):
+                var_idxs = self.get_variable_indices_in_gcs_vertex(binding.variables())
                 vars = vertex.x()[var_idxs]
-                cost_type = (
-                    LinearCost
-                    if self.config.avoidance_cost == "linear"
-                    else QuadraticCost
-                )
-                binding = Binding[cost_type](evaluator, vars)
-                vertex.AddCost(binding)
-            else:  # socp
-                # TODO(bernhardpg): Clean up this part
-                planes = self.slider_geometry.get_contact_planes(
-                    self.contact_location.idx
-                )
-                for plane in planes:
-                    for p_BP in self.variables.p_BPs:
-                        # A = [a^T; 0]
-                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
-                        NUM_DIMS = 2
-                        A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = plane.a.T * self.config.cost_terms.obj_avoidance_socp
-                        # b = [b; 1]
-                        b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b
-                        b = b * self.config.cost_terms.obj_avoidance_socp
+                new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
+                vertex.AddCost(new_binding)
+        else:
+            # euclidean distance cost
+            var_idxs, evaluator = self._get_eucl_dist_cost_term()
+            vars = vertex.x()[var_idxs]
+            binding = Binding[QuadraticCost](evaluator, vars)
+            vertex.AddCost(binding)
 
-                        # z = [a^T x + b; 1]
-                        cost = PerspectiveQuadraticCost(A, b)
-                        vars_in_vertex = vertex.x()[
-                            self.prog.FindDecisionVariableIndices(p_BP)
-                        ]
-                        vertex.AddCost(
-                            Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
-                        )
+            if self.config.avoid_object:
+                if self.config.avoidance_cost in ["quadratic", "linear"]:
+                    var_idxs, evaluator = self._get_object_avoidance_cost_term()
+                    vars = vertex.x()[var_idxs]
+                    cost_type = (
+                        LinearCost
+                        if self.config.avoidance_cost == "linear"
+                        else QuadraticCost
+                    )
+                    binding = Binding[cost_type](evaluator, vars)
+                    vertex.AddCost(binding)
+                else:  # socp
+                    # TODO(bernhardpg): Clean up this part
+                    planes = self.slider_geometry.get_contact_planes(
+                        self.contact_location.idx
+                    )
+                    for plane in planes:
+                        for p_BP in self.variables.p_BPs:
+                            # A = [a^T; 0]
+                            NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
+                            NUM_DIMS = 2
+                            A = np.zeros((NUM_VARS, NUM_DIMS))
+                            A[0, :] = (
+                                plane.a.T * self.config.cost_terms.obj_avoidance_socp
+                            )
+                            # b = [b; 1]
+                            b = np.ones((NUM_VARS, 1))
+                            b[0] = plane.b
+                            b = b * self.config.cost_terms.obj_avoidance_socp
+
+                            # z = [a^T x + b; 1]
+                            cost = PerspectiveQuadraticCost(A, b)
+                            vars_in_vertex = vertex.x()[
+                                self.prog.FindDecisionVariableIndices(p_BP)
+                            ]
+                            vertex.AddCost(
+                                Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
+                            )

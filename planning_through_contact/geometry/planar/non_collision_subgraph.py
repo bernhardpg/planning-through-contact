@@ -42,6 +42,7 @@ def gcs_add_edge_with_continuity(
     add_continuity_constraints_btwn_modes(
         outgoing.mode, incoming.mode, edge, only_continuity_on_slider
     )
+    return edge
 
 
 @dataclass

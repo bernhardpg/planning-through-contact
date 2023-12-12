@@ -6,6 +6,7 @@ import numpy as np
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -19,6 +20,10 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
+)
+from planning_through_contact.visualize.analysis import (
+    analyze_mode_result,
+    analyze_plan,
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
@@ -100,7 +105,7 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     elif traj_number == 11:
         # Rotate in place is a bit loose
         slider_initial_pose = PlanarPose(x=0.65, y=0.0, theta=0)
-        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi / 2)
+        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=np.pi - 0.1)
         pusher_initial_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=0.0, y=0.2, theta=0.0)
     elif traj_number == 12:
@@ -111,6 +116,21 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     elif traj_number == 13:
         slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0.9)
         slider_target_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi / 2)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 14:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=1.0)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 15:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=np.pi * 0.8)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 16:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=-np.pi * 0.9)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     else:
@@ -135,7 +155,7 @@ def get_plans_to_origin(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi + 0.01, np.pi - 0.01)
+        th_initial = np.random.uniform(-np.pi + 0.1, np.pi - 0.1)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(0, 0, 0)
@@ -161,6 +181,7 @@ def create_plan(
     animation_smooth: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
+    save_analysis: bool = False,
     debug: bool = False,
 ):
     if body_to_use == "box":
@@ -180,8 +201,8 @@ def create_plan(
         sq_forces=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
-        mode_transition_cost=1.0,
-        delta_vel_max=0.1,
+        mode_transition_cost=None,
+        delta_vel_max=0.05,
         delta_theta_max=0.4,
     )
 
@@ -206,7 +227,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=5,
+        num_knot_points_contact=7,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
@@ -221,7 +242,7 @@ def create_plan(
     solver_params = PlanarSolverParams(
         measure_solve_time=True,
         gcs_max_rounded_paths=20,
-        print_flows=False,
+        print_flows=True,
         print_solver_output=debug,
         save_solver_output=False,
         print_path=True,
@@ -241,6 +262,9 @@ def create_plan(
     if save_traj:
         filename = f"trajectories/{body_to_use}_pushing_{traj_name}.pkl"
         traj.save(filename)  # type: ignore
+
+    if save_analysis:
+        analyze_plan(planner.path, traj, filename=f"{traj_name}_{body_to_use}")
 
     if visualize:
         if debug:
@@ -304,6 +328,7 @@ if __name__ == "__main__":
                 time_in_contact=2.0,
                 time_in_non_collision=1.0,
                 animation_smooth=False,
+                save_analysis=True,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -320,6 +345,7 @@ if __name__ == "__main__":
                     time_in_contact=2.0,
                     time_in_non_collision=1.0,
                     animation_smooth=False,
+                    save_analysis=True,
                 )
 
     else:
@@ -333,4 +359,5 @@ if __name__ == "__main__":
             traj_name=str(traj_number),
             visualize=True,
             save_traj=True,
+            save_analysis=True,
         )
