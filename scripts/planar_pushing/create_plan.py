@@ -118,6 +118,21 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
         slider_target_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi / 2)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 14:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=1.0)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 15:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=np.pi * 0.8)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+    elif traj_number == 16:  # Rotate in place
+        slider_initial_pose = PlanarPose(x=0, y=0, theta=-np.pi * 0.9)
+        slider_target_pose = PlanarPose(x=0, y=0, theta=0.0)
+        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
