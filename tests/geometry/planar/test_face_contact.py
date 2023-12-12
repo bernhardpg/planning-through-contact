@@ -495,7 +495,7 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
         plan_config,
     )
     mode.set_slider_initial_pose(initial_pose)
-    mode.set_slider_final_pose(final_pose)
+    mode.set_slider_final_pose(final_pose, hard_constraint=False)
 
     mode.formulate_convex_relaxation()
     solver = MosekSolver()
