@@ -26,6 +26,7 @@ from planning_through_contact.visualize.analysis import (
     analyze_plan,
 )
 from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
@@ -227,7 +228,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=7,
+        num_knot_points_contact=6,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
@@ -275,6 +276,12 @@ def create_plan(
                 save=True,
                 filename=f"{traj_name}_start_and_goal_{body_to_use}",
             )
+
+        make_traj_figure(
+            traj,
+            filename=f"{traj_name}_{body_to_use}",
+            plot_lims=animation_lims,
+        )
 
         ani = visualize_planar_pushing_trajectory(
             traj,  # type: ignore
