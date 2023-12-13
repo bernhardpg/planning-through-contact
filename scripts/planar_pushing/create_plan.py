@@ -280,7 +280,6 @@ def create_plan(
         make_traj_figure(
             traj,
             filename=f"{traj_name}_{body_to_use}",
-            plot_lims=animation_lims,
         )
 
         ani = visualize_planar_pushing_trajectory(
@@ -317,7 +316,7 @@ if __name__ == "__main__":
     pusher_radius = 0.035
 
     if make_demos:
-        lims = (-0.3, 0.3, -0.3, 0.3)
+        lims = (-0.4, 0.4, -0.4, 0.4)
         animation_lims = (np.array(lims) * 1.3).tolist()
         plans = get_plans_to_origin(9, lims, pusher_radius)
 

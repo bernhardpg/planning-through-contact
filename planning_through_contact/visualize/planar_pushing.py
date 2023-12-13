@@ -42,6 +42,7 @@ from planning_through_contact.visualize.colors import (
     BLACK,
     COLORS,
     CRIMSON,
+    DARKORCHID2,
     EMERALDGREEN,
 )
 from planning_through_contact.visualize.visualizer_2d import (
@@ -69,10 +70,10 @@ def make_traj_figure(
     PUSHER_COLOR = COLORS["firebrick3"].diffuse()
     LINE_COLOR = BLACK.diffuse()
 
-    GOAL_COLOR = CRIMSON.diffuse()
+    GOAL_COLOR = EMERALDGREEN.diffuse()
     GOAL_TRANSPARENCY = 1.0
 
-    START_COLOR = EMERALDGREEN.diffuse()
+    START_COLOR = CRIMSON.diffuse()
     START_TRANSPARENCY = 1.0
 
     segment_groups = []
@@ -95,15 +96,17 @@ def make_traj_figure(
         1, len(segment_groups), figsize=(fig_height * len(segment_groups), 3)
     )
 
+    if plot_lims is not None:
+        x_min, x_max, y_min, y_max = plot_lims
+    else:
+        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
+
     for segment_idx, path_knot_points_group in enumerate(segment_groups):
         ax = axs[segment_idx]
         ax.axis("equal")  # Ensures the x and y axis are scaled equally
 
-        if plot_lims is not None:
-            x_min, x_max, y_min, y_max = plot_lims
-            ax.set_xlim(x_min, x_max)
-            ax.set_ylim(y_min, y_max)
-
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
         # Hide the axes, including the spines, ticks, labels, and title
         ax.set_axis_off()
 
@@ -119,6 +122,15 @@ def make_traj_figure(
             facecolor=PUSHER_COLOR,
             linewidth=1,
             alpha=fill_transparency,
+        )
+
+        start_transparency = 0.5
+        end_transparency = 0.9
+        get_transp_for_frame = (
+            lambda idx, num_points: (end_transparency - start_transparency)
+            * idx
+            / num_points
+            + start_transparency
         )
 
         for element_idx, knot_points in enumerate(path_knot_points_group):
@@ -140,9 +152,9 @@ def make_traj_figure(
 
                 vertices_W = get_vertices_W(p_WB, R_WB)
 
-                transparency = (1 + frame_count) / num_frames_in_group
-                line_transparency = transparency * 0.7
-                fill_transparency = transparency * 0.7
+                transparency = get_transp_for_frame(frame_count, num_frames_in_group)
+                line_transparency = transparency
+                fill_transparency = transparency
 
                 # Plot polytope
                 if (
@@ -170,6 +182,28 @@ def make_traj_figure(
                     or element_idx == len(path_knot_points_group) - 1
                 ):
                     ax.add_patch(make_circle(p_WP, fill_transparency))
+
+                # Plot forces
+                FORCE_SCALE = 1.0
+                # only N-1 inputs
+                if (idx < knot_points.num_knot_points - 1) and (
+                    isinstance(knot_points, FaceContactVariables)
+                ):
+                    f_c_W = knot_points.f_c_Ws[idx].flatten()
+                    p_Wc = knot_points.p_Wcs[idx].flatten()
+                    ax.arrow(
+                        p_Wc[0],
+                        p_Wc[1],
+                        f_c_W[0],
+                        f_c_W[1],
+                        color=LINE_COLOR,
+                        fill=True,
+                        zorder=99999,
+                        alpha=line_transparency,
+                        joinstyle="round",
+                        linewidth=0.0,
+                        width=0.008,
+                    )
 
                 frame_count += 1
 
@@ -228,7 +262,7 @@ def make_traj_figure(
         )
         ax.add_patch(circle)
 
-    # fig.tight_layout()
+    fig.tight_layout()
     fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
 
 
