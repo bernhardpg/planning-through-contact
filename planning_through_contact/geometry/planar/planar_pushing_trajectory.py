@@ -253,6 +253,10 @@ class PlanarPushingTrajectory:
             for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
         ]
 
+    @property
+    def num_knot_points(self) -> int:
+        return sum(knot_points.num_knot_points for knot_points in self.path_knot_points)
+
     def _get_curr_segment_idx(self, t: float) -> int:
         if t == self.end_time:
             # return the last element if we are at the end time

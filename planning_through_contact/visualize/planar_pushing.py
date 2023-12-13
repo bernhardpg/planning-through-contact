@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import Value
@@ -26,6 +27,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -36,13 +38,232 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingStartAndGoal,
 )
-from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.colors import (
+    BLACK,
+    COLORS,
+    CRIMSON,
+    DARKORCHID2,
+    EMERALDGREEN,
+)
 from planning_through_contact.visualize.visualizer_2d import (
     VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
     Visualizer2d,
 )
+
+
+def make_traj_figure(
+    traj: PlanarPushingTrajectory,
+    filename: str,
+    plot_lims: Optional[Tuple[float, float, float, float]] = None,
+    plot_knot_points: bool = True,
+) -> None:
+    # We need to add the first vertex again to close the polytope
+    vertices = np.hstack(
+        traj.config.slider_geometry.vertices + [traj.config.slider_geometry.vertices[0]]
+    )
+
+    get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
+
+    SLIDER_COLOR = COLORS["aquamarine4"].diffuse()
+    PUSHER_COLOR = COLORS["firebrick3"].diffuse()
+    LINE_COLOR = BLACK.diffuse()
+
+    GOAL_COLOR = EMERALDGREEN.diffuse()
+    GOAL_TRANSPARENCY = 1.0
+
+    START_COLOR = CRIMSON.diffuse()
+    START_TRANSPARENCY = 1.0
+
+    segment_groups = []
+    idx = 0
+    while idx < len(traj.path_knot_points) - 1:
+        group = []
+        no_face_contact = True
+        while no_face_contact and idx < len(traj.path_knot_points):
+            curr_segment = traj.path_knot_points[idx]
+            group.append(curr_segment)
+            idx += 1
+
+            if isinstance(curr_segment, FaceContactVariables):
+                no_face_contact = False
+
+        segment_groups.append(group)
+
+    fig_height = 3
+    fig, axs = plt.subplots(
+        1, len(segment_groups), figsize=(fig_height * len(segment_groups), 3)
+    )
+
+    if plot_lims is not None:
+        x_min, x_max, y_min, y_max = plot_lims
+    else:
+        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
+
+    for segment_idx, path_knot_points_group in enumerate(segment_groups):
+        ax = axs[segment_idx]
+        ax.axis("equal")  # Ensures the x and y axis are scaled equally
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        # Hide the axes, including the spines, ticks, labels, and title
+        ax.set_axis_off()
+
+        num_frames_in_group = sum(
+            [knot_points.num_knot_points for knot_points in path_knot_points_group]
+        )
+        frame_count = 0
+
+        make_circle = lambda p_WP, fill_transparency: plt.Circle(
+            p_WP.flatten(),
+            traj.config.pusher_radius,  # type: ignore
+            edgecolor=LINE_COLOR,
+            facecolor=PUSHER_COLOR,
+            linewidth=1,
+            alpha=fill_transparency,
+        )
+
+        start_transparency = 0.5
+        end_transparency = 0.9
+        get_transp_for_frame = (
+            lambda idx, num_points: (end_transparency - start_transparency)
+            * idx
+            / num_points
+            + start_transparency
+        )
+
+        for element_idx, knot_points in enumerate(path_knot_points_group):
+            for idx in range(knot_points.num_knot_points):
+                R_WB = knot_points.R_WBs[idx]  # type: ignore
+                p_WB = knot_points.p_WBs[idx]  # type: ignore
+                p_WP = knot_points.p_WPs[idx]  # type: ignore
+
+                # We only plot the current frame if it will change next frame
+                # (this is to avoid plotting multiple frames on top of each other)
+                if idx + 1 < knot_points.num_knot_points:
+                    next_R_WB = knot_points.R_WBs[idx + 1]  # type: ignore
+                    next_p_WB = knot_points.p_WBs[idx + 1]  # type: ignore
+                    next_p_WP = knot_points.p_WPs[idx + 1]  # type: ignore
+                else:
+                    next_R_WB = R_WB
+                    next_p_WB = p_WB
+                    next_p_WP = p_WP
+
+                vertices_W = get_vertices_W(p_WB, R_WB)
+
+                transparency = get_transp_for_frame(frame_count, num_frames_in_group)
+                line_transparency = transparency
+                fill_transparency = transparency
+
+                # Plot polytope
+                if (
+                    np.any(next_R_WB != R_WB)
+                    or np.any(next_p_WB != p_WB)
+                    or element_idx == len(path_knot_points_group) - 1
+                ):
+                    ax.plot(
+                        vertices_W[0, :],
+                        vertices_W[1, :],
+                        color=LINE_COLOR,
+                        alpha=line_transparency,
+                        linewidth=1,
+                    )
+                    ax.fill(
+                        vertices_W[0, :],
+                        vertices_W[1, :],
+                        alpha=fill_transparency,
+                        color=SLIDER_COLOR,
+                    )
+
+                # Plot pusher
+                if (
+                    np.any(next_p_WP != p_WP)
+                    or element_idx == len(path_knot_points_group) - 1
+                ):
+                    ax.add_patch(make_circle(p_WP, fill_transparency))
+
+                # Plot forces
+                FORCE_SCALE = 1.0
+                # only N-1 inputs
+                if (idx < knot_points.num_knot_points - 1) and (
+                    isinstance(knot_points, FaceContactVariables)
+                ):
+                    f_c_W = knot_points.f_c_Ws[idx].flatten()
+                    p_Wc = knot_points.p_Wcs[idx].flatten()
+                    ax.arrow(
+                        p_Wc[0],
+                        p_Wc[1],
+                        f_c_W[0],
+                        f_c_W[1],
+                        color=LINE_COLOR,
+                        fill=True,
+                        zorder=99999,
+                        alpha=line_transparency,
+                        joinstyle="round",
+                        linewidth=0.0,
+                        width=0.008,
+                    )
+
+                frame_count += 1
+
+        if not plot_knot_points:
+            raise NotImplementedError(
+                "Support for making figure of interpolated trajectory is not yet supported"
+            )
+
+        # Plot start pos
+        slider_initial_pose = traj.config.start_and_goal.slider_initial_pose  # type: ignore
+        p_WB = slider_initial_pose.pos()
+        R_WB = slider_initial_pose.two_d_rot_matrix()
+        goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        ax.plot(
+            goal_vertices_W[0, :],
+            goal_vertices_W[1, :],
+            color=START_COLOR,
+            alpha=START_TRANSPARENCY,
+            linewidth=1,
+            linestyle="--",
+        )
+        p_WP = traj.config.start_and_goal.pusher_initial_pose.pos()  # type: ignore
+        circle = plt.Circle(
+            p_WP.flatten(),
+            traj.config.pusher_radius,  # type: ignore
+            edgecolor=START_COLOR,
+            facecolor="none",
+            linewidth=1,
+            alpha=START_TRANSPARENCY,
+            linestyle="--",
+        )
+        ax.add_patch(circle)
+
+        # Plot target pos
+        slider_target_pose = traj.config.start_and_goal.slider_target_pose  # type: ignore
+        p_WB = slider_target_pose.pos()
+        R_WB = slider_target_pose.two_d_rot_matrix()
+        goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        ax.plot(
+            goal_vertices_W[0, :],
+            goal_vertices_W[1, :],
+            color=GOAL_COLOR,
+            alpha=GOAL_TRANSPARENCY,
+            linewidth=1,
+            linestyle="--",
+        )
+        p_WP = traj.config.start_and_goal.pusher_target_pose.pos()  # type: ignore
+        circle = plt.Circle(
+            p_WP.flatten(),
+            traj.config.pusher_radius,  # type: ignore
+            edgecolor=GOAL_COLOR,
+            facecolor="none",
+            linewidth=1,
+            alpha=GOAL_TRANSPARENCY,
+            linestyle="--",
+        )
+        ax.add_patch(circle)
+
+    fig.tight_layout()
+    fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
 
 
 def _add_slider_geometries(

@@ -255,14 +255,15 @@ class FaceContactVariables(AbstractModeVariables):
         assert self.theta_dots is not None
         return [skew_symmetric_so2(th_dot) for th_dot in self.theta_dots]
 
-    def _get_p_BP(self, lam: float, pusher_radius: float):
-        point_on_surface = lam * self.pv1 + (1 - lam) * self.pv2
-        radius_displacement = -self.normal_vec * pusher_radius
-        return point_on_surface + radius_displacement
+    @property
+    def p_Bcs(self):
+        points_on_surface = [lam * self.pv1 + (1 - lam) * self.pv2 for lam in self.lams]
+        return points_on_surface
 
     @property
     def p_BPs(self):
-        return [self._get_p_BP(lam, self.pusher_radius) for lam in self.lams]
+        radius_displacement = -self.normal_vec * self.pusher_radius
+        return [p_Bc + radius_displacement for p_Bc in self.p_Bcs]
 
     @property
     def v_WBs(self):
@@ -271,6 +272,13 @@ class FaceContactVariables(AbstractModeVariables):
     @property
     def v_BPs(self):
         return calc_displacements(self.p_BPs)
+
+    @property
+    def p_Wcs(self):
+        return [
+            p_WB + R_WB.dot(p_Bc)
+            for p_WB, R_WB, p_Bc in zip(self.p_WBs, self.R_WBs, self.p_Bcs)
+        ]
 
     @property
     def p_WPs(self):
