@@ -443,7 +443,7 @@ class FaceContactMode(AbstractContactMode):
                 theta_WB_dot = self.variables.delta_omega_WBs[k]
 
             f_c_B = self.variables.f_c_Bs[k]
-            p_BP = self.variables.p_BPs[k]
+            p_Bc = self.variables.p_Bcs[k]
             R_WB = self.variables.R_WBs[k]
 
             trans_vel_constraint = v_WB - R_WB @ f_c_B
@@ -459,7 +459,7 @@ class FaceContactMode(AbstractContactMode):
             self.constraints["translational_dynamics_red"].append(np.array(constraint))
 
             c = self.config.dynamics_config.limit_surface_const
-            ang_vel_constraint = theta_WB_dot - c * cross_2d(p_BP, f_c_B)
+            ang_vel_constraint = theta_WB_dot - c * cross_2d(p_Bc, f_c_B)
             constraint = self.prog.add_quadratic_constraint(
                 k, k + 1, ang_vel_constraint, 0, 0
             )
