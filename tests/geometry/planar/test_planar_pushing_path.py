@@ -149,9 +149,6 @@ def test_rounding_one_mode() -> None:
     IN_GITHUB_ACTIONS == True,
     reason="Too slow",
 )
-@pytest.mark.skip(
-    reason="This test will fail, as nonlinear rounding still is not quite figured out."
-)
 @pytest.mark.parametrize(
     "planner",
     [

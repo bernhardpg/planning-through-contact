@@ -41,7 +41,7 @@ def assemble_progs_from_contact_modes(
     prog = MathematicalProgram()
 
     for mode in modes:
-        mode_prog = mode.prog.prog  # type: ignore
+        mode_prog = mode.prog  # type: ignore
         if remove_redundant_constraints:
             if isinstance(mode, FaceContactMode):
                 for c in mode.redundant_constraints:

@@ -115,7 +115,7 @@ def test_face_contact_variables(
     reason="Stopped supported equation elimination so this test will fail"
 )
 def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> None:
-    original_prog = face_contact_mode.prog
+    original_prog = face_contact_mode.prog_wrapper
     reduced_prog, get_x = eliminate_equality_constraints(original_prog)
     vars = face_contact_mode.variables
 
@@ -133,7 +133,7 @@ def test_reduced_face_contact_variables(face_contact_mode: FaceContactMode) -> N
 def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     mode = face_contact_mode
     num_knot_points = mode.num_knot_points
-    prog = mode.prog.prog
+    prog = mode.prog_wrapper.prog
 
     # NOTE(bernhardpg): These are commented out, as we are currently not using bbox constraints
     # (they slow down the solution times a lot.
