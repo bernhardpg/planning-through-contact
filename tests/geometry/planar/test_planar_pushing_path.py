@@ -2,7 +2,14 @@ import os
 
 import numpy as np
 import pytest
-from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
+from pydrake.solvers import (
+    CommonSolverOption,
+    IpoptSolver,
+    MosekSolver,
+    SnoptSolver,
+    Solve,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -13,11 +20,18 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     assemble_progs_from_contact_modes,
 )
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
+from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactConfig,
+    ContactCostType,
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
@@ -26,6 +40,8 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
+    visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
@@ -41,62 +57,92 @@ from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
-DEBUG = False
+DEBUG = True
 
 
-@pytest.mark.skip(
-    reason="This test will fail, as nonlinear rounding still is not quite figured out."
-)
 def test_rounding_one_mode() -> None:
+    solver = "snopt"
+
+    contact_config = ContactConfig(
+        cost_type=ContactCostType.OPTIMAL_CONTROL,
+        sq_forces=5.0,
+        delta_vel_max=0.15,
+        delta_theta_max=0.4,
+    )
     config = PlanarPlanConfig(
         dynamics_config=SliderPusherSystemConfig(),
-        use_redundant_dynamic_constraints=False,
+        contact_config=contact_config,
+        num_knot_points_contact=6,
+        use_band_sparsity=True,
     )
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0.3, 0.4)
+    config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
-    face_contact_mode = FaceContactMode.create_from_plan_spec(
+    mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         config,
     )
 
-    initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0, 0.8)
-    face_contact_mode.set_slider_initial_pose(initial_pose)
-    face_contact_mode.set_slider_final_pose(final_pose)
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose)
 
-    face_contact_mode.formulate_convex_relaxation()
+    mode.formulate_convex_relaxation()
 
-    assert face_contact_mode.relaxed_prog is not None
+    assert mode.relaxed_prog is not None
 
-    relaxed_result = MosekSolver().Solve(face_contact_mode.relaxed_prog)
+    relaxed_result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     assert relaxed_result.is_success()
 
-    prog = assemble_progs_from_contact_modes([face_contact_mode])
-    initial_guess = relaxed_result.GetSolution(
-        face_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
-    )
+    if DEBUG:
+        relaxed_vars = mode.variables.eval_result(relaxed_result)
+        relaxed_traj = PlanarPushingTrajectory(mode.config, [relaxed_vars])
+        visualize_planar_pushing_trajectory(
+            relaxed_traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+        make_traj_figure(relaxed_traj, filename="debug_file")
 
-    prog.SetInitialGuess(prog.decision_variables(), initial_guess)
+    prog = assemble_progs_from_contact_modes([mode])
+    initial_guess = relaxed_result.GetSolution(prog.decision_variables())
 
     solver_options = SolverOptions()
 
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = Solve(prog, solver_options=solver_options)
+    if solver == "ipopt":  # ipopt does not work
+        ipopt = IpoptSolver()
+        solver_options.SetOption(ipopt.solver_id(), "tol", 1e-6)
+        solver_options.SetOption(  # type: ignore
+            CommonSolverOption.kPrintFileName, "debug_solver_log.txt"
+        )
+        result = ipopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
+    elif solver == "snopt":
+        snopt = SnoptSolver()
+        solver_options.SetOption(
+            snopt.solver_id(), "Print file", "debug_solver_log.txt"
+        )
+        result = snopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
+    else:
+        raise NotImplementedError
+
     assert result.is_success()
 
-    vars = face_contact_mode.variables.eval_result(result)
+    vars = mode.variables.eval_result(result)
     traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-
     assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, face_contact_mode.config.slider_geometry, 0.01
+        vars = mode.variables.eval_result(result)
+        traj = PlanarPushingTrajectory(mode.config, [vars])
+
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file_rounded"
         )
+        make_traj_figure(traj, filename="debug_file_rounded")
         # (num_knot_points, 2): first col cosines, second col sines
-        rs = np.vstack([R_WB[:, 0] for R_WB in traj.R_WB])
-        plot_cos_sine_trajs(rs)
+        rs = np.vstack([R_WB[:, 0] for R_WB in vars.R_WBs])
+        plot_cos_sine_trajs(rs, filename="debug_cos_sin_rounded")
 
 
 @pytest.mark.skipif(

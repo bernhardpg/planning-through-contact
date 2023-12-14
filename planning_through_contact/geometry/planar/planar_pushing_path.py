@@ -36,21 +36,16 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 def assemble_progs_from_contact_modes(
-    modes: List[AbstractContactMode],
+    modes: List[AbstractContactMode], remove_redundant_constraints: bool = True
 ) -> MathematicalProgram:
     prog = MathematicalProgram()
 
     for mode in modes:
-        mode_prog = mode.prog
-
-        # TODO(bernhardpg): Look at this into more detail
-        # For some reason, we need to remove the redundant dynamic constraints when rounding
-        if (
-            isinstance(mode, FaceContactMode)
-            and mode.config.use_redundant_dynamic_constraints
-        ):
-            for c in mode.quasi_static_dynamics_constraints_in_B:
-                mode_prog.RemoveConstraint(c)
+        mode_prog = mode.prog.prog  # type: ignore
+        if remove_redundant_constraints:
+            if isinstance(mode, FaceContactMode):
+                for c in mode.redundant_constraints:
+                    mode_prog.RemoveConstraint(c)
 
         vars = mode_prog.decision_variables()
         prog.AddDecisionVariables(vars)
@@ -180,6 +175,11 @@ class PlanarPushingPath:
         solver: Literal["snopt", "ipopt"] = "snopt",
         print_output: bool = False,
     ) -> MathematicalProgramResult:
+        """
+        Assembles one big nonlinear program and solves it with the SDP relaxation as the initial guess.
+
+        NOTE: Ipopt does not work because of "too few degrees of freedom". Snopt should be used.
+        """
         prog = self._construct_nonlinear_program()
 
         import time

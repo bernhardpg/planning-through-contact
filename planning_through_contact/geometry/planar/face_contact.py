@@ -350,6 +350,8 @@ class FaceContactMode(AbstractContactMode):
             "translational_dynamics": [],
             "translational_dynamics_red": [],
         }
+        # we need to keep track of redundant constraints so we can remove them during ipopt rounding
+        self.redundant_constraints = []
         if self.config.use_approx_exponential_map:
             self.constraints["exponential_map"] = []
 
@@ -455,7 +457,10 @@ class FaceContactMode(AbstractContactMode):
             trans_vel_constraint = R_WB.T @ v_WB - f_c_B
             constraint = []
             for c in trans_vel_constraint.flatten():
-                constraint.append(self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0))
+                c = self.prog.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                constraint.append(c)
+                self.redundant_constraints.append(c)
+
             self.constraints["translational_dynamics_red"].append(np.array(constraint))
 
             c = self.config.dynamics_config.limit_surface_const
