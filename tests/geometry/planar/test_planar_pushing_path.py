@@ -188,27 +188,23 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
     assert len(prog.GetAllConstraints()) == expected_num_constraints
 
 
-@pytest.mark.skip(
-    reason="This test will fail, as nonlinear rounding still is not quite figured out."
-)
 @pytest.mark.parametrize(
     "planner",
     [
         {
-            "partial": True,
             "allow_teleportation": True,
-            "use_redundant_dynamic_constraints": False,
             "boundary_conds": {
                 "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                 "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
+            "use_band_sparsity": True,
+            "contact_config": ContactConfig(cost_type=ContactCostType.OPTIMAL_CONTROL),
         },
         {
-            "partial": True,
             "allow_teleportation": True,
-            "use_redundant_dynamic_constraints": False,
+            "use_band_sparsity": True,
             "boundary_conds": {
                 "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                 "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
@@ -217,10 +213,9 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
             },
         },
         {
-            "partial": True,
             "avoid_object": True,
             "allow_teleportation": False,
-            "use_redundant_dynamic_constraints": False,
+            "use_band_sparsity": True,
             "boundary_conds": {
                 "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
                 "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
@@ -228,44 +223,67 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
             },
         },
-        # Very slow, so commented out. Should pass!
-        # {
-        #     "partial": False,
-        #     "avoid_object": True,
-        #     "allow_teleportation": False,
-        #     "use_redundant_dynamic_constraints": False,
-        #     "boundary_conds": {
-        #         "finger_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-        #         "finger_target_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-        #         "box_initial_pose": PlanarPose(x=0.2, y=0, theta=1.2),
-        #         "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=2.1),
-        #     },
-        # },
+        {
+            "avoid_object": True,
+            "allow_teleportation": False,
+            "use_band_sparsity": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
+                "finger_target_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0.2, y=0, theta=1.2),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=2.1),
+            },
+        },
     ],
     indirect=["planner"],
     ids=[
         "teleport1",
         "teleport2",
         "normal1",
-        # "normal2",
+        "normal2",
     ],
 )
 def test_path_rounding(planner: PlanarPushingPlanner) -> None:
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
-    result = planner._solve(solver_params)
-    assert result.is_success()
+    relaxed_result = planner._solve(solver_params)
+    assert relaxed_result.is_success()
 
-    path = planner.get_solution_path(result)
-    rounded_result = path._do_nonlinear_rounding(print_output=DEBUG, measure_time=DEBUG)
-    assert rounded_result.is_success()
-
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-    traj_rounded = PlanarTrajectoryBuilder(path.get_rounded_vars()).get_trajectory(
-        interpolate=False
+    traj_relaxed = PlanarPushingTrajectory.from_result(
+        planner.config,
+        relaxed_result,
+        planner.gcs,
+        planner.source.vertex,  # type: ignore
+        planner.target.vertex,  # type: ignore
+        planner._get_all_vertex_mode_pairs(),
     )
 
     if DEBUG:
-        # visualize_planar_pushing_trajectory(traj, planner.slider.geometry)
-        visualize_planar_pushing_trajectory_legacy(
-            traj_rounded, planner.slider.geometry
+        visualize_planar_pushing_trajectory(
+            traj_relaxed,
+            visualize_knot_points=True,
+            save=True,
+            filename="debug_file_relaxed",
         )
+        make_traj_figure(traj_relaxed, filename="debug_file_relaxed")
+
+    path = planner.get_solution_path(relaxed_result)
+    rounded_result = path._do_nonlinear_rounding(print_output=DEBUG, measure_time=DEBUG)
+    assert rounded_result.is_success()
+
+    traj_rounded = PlanarPushingTrajectory.from_result(
+        planner.config,
+        rounded_result,
+        planner.gcs,
+        planner.source.vertex,  # type: ignore
+        planner.target.vertex,  # type: ignore
+        planner._get_all_vertex_mode_pairs(),
+    )
+
+    if DEBUG:
+        visualize_planar_pushing_trajectory(
+            traj_rounded,
+            visualize_knot_points=True,
+            save=True,
+            filename="debug_file_rounded",
+        )
+        make_traj_figure(traj_rounded, filename="debug_file_rounded")

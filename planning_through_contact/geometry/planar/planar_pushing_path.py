@@ -200,7 +200,10 @@ class PlanarPushingPath:
             result = ipopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
         elif solver == "snopt":
             snopt = SnoptSolver()
-            solver_options.SetOption(snopt.solver_id(), "Print file", "my_output.txt")
+            if print_output:
+                solver_options.SetOption(
+                    snopt.solver_id(), "Print file", "snopt_output.txt"
+                )
             result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
         else:
             raise NotImplementedError()

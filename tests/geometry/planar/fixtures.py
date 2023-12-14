@@ -34,6 +34,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
+    ContactConfig,
     ContactCostType,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -220,6 +221,7 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
+    plan_config.contact_config = request.param.get("contact_config", ContactConfig())
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)
