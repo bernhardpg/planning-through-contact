@@ -30,6 +30,7 @@ from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCostType,
+    PlanarCostFunctionTerms,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
@@ -44,6 +45,7 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
+from scripts.planar_pushing.create_plan import get_sugar_box
 from tests.geometry.planar.fixtures import (
     box_geometry,
     dynamics_config,
@@ -57,7 +59,7 @@ from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
-DEBUG = True
+DEBUG = False
 
 
 def test_rounding_one_mode() -> None:
@@ -189,62 +191,69 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
 
 @pytest.mark.parametrize(
-    "planner",
+    "plan_spec",
     [
-        {
-            "allow_teleportation": True,
-            "boundary_conds": {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
-            },
-            "use_band_sparsity": True,
-            "contact_config": ContactConfig(cost_type=ContactCostType.OPTIMAL_CONTROL),
-        },
-        {
-            "allow_teleportation": True,
-            "use_band_sparsity": True,
-            "boundary_conds": {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
-            },
-        },
-        {
-            "avoid_object": True,
-            "allow_teleportation": False,
-            "use_band_sparsity": True,
-            "boundary_conds": {
-                "finger_initial_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "finger_target_pose": PlanarPose(x=0, y=-0.5, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=1.2),
-            },
-        },
-        {
-            "avoid_object": True,
-            "allow_teleportation": False,
-            "use_band_sparsity": True,
-            "boundary_conds": {
-                "finger_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-                "finger_target_pose": PlanarPose(x=0.2, y=0.2, theta=0.0),
-                "box_initial_pose": PlanarPose(x=0.2, y=0, theta=1.2),
-                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=2.1),
-            },
-        },
+        PlanarPushingStartAndGoal(
+            PlanarPose(x=0, y=0, theta=0.0),
+            PlanarPose(x=0.2, y=0, theta=0.0),
+            PlanarPose(x=-0.2, y=-0.2, theta=0.0),
+            PlanarPose(x=-0.2, y=-0.2, theta=0.0),
+        ),
+        PlanarPushingStartAndGoal(
+            PlanarPose(x=0.2, y=0.2, theta=1.0),
+            PlanarPose(x=0, y=0, theta=0.0),
+            PlanarPose(x=-0.2, y=-0.2, theta=0.0),
+            PlanarPose(x=-0.2, y=-0.2, theta=0.0),
+        ),
+        PlanarPushingStartAndGoal(
+            PlanarPose(x=0, y=0, theta=-1.0),
+            PlanarPose(x=-0.2, y=0.2, theta=0.0),
+            PlanarPose(x=0.2, y=0.0, theta=0.0),
+            PlanarPose(x=0.2, y=0.0, theta=0.0),
+        ),
     ],
-    indirect=["planner"],
-    ids=[
-        "teleport1",
-        "teleport2",
-        "normal1",
-        "normal2",
-    ],
+    ids=[1, 2, 3],
 )
-def test_path_rounding(planner: PlanarPushingPlanner) -> None:
-    solver_params = PlanarSolverParams(print_solver_output=DEBUG)
+def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
+    slider = get_sugar_box()
+    dynamics_config = SliderPusherSystemConfig(
+        pusher_radius=0.035, slider=slider, friction_coeff_slider_pusher=0.25
+    )
+    contact_config = ContactConfig(
+        cost_type=ContactCostType.OPTIMAL_CONTROL,
+        sq_forces=5.0,
+        mode_transition_cost=1.0,
+        delta_vel_max=0.1,
+        delta_theta_max=0.8,
+    )
+    cost_terms = PlanarCostFunctionTerms(
+        obj_avoidance_quad_weight=0.4,
+    )
+    config = PlanarPlanConfig(
+        dynamics_config=dynamics_config,
+        cost_terms=cost_terms,
+        time_in_contact=2.0,
+        time_non_collision=1.0,
+        num_knot_points_contact=3,
+        num_knot_points_non_collision=3,
+        avoid_object=True,
+        avoidance_cost="quadratic",
+        allow_teleportation=False,
+        use_band_sparsity=True,
+        use_entry_and_exit_subgraphs=True,
+        contact_config=contact_config,
+    )
+    planner = PlanarPushingPlanner(config)
+    solver_params = PlanarSolverParams(
+        measure_solve_time=DEBUG,
+        print_solver_output=DEBUG,
+        save_solver_output=DEBUG,
+        nonlinear_traj_rounding=False,
+        assert_result=False,
+    )
+    planner.config.start_and_goal = plan_spec
+    planner.formulate_problem()
+
     relaxed_result = planner._solve(solver_params)
     assert relaxed_result.is_success()
 
@@ -255,9 +264,11 @@ def test_path_rounding(planner: PlanarPushingPlanner) -> None:
         planner.source.vertex,  # type: ignore
         planner.target.vertex,  # type: ignore
         planner._get_all_vertex_mode_pairs(),
+        solver_params,
     )
 
     if DEBUG:
+        planner.create_graph_diagram(filename="debug_graph")
         visualize_planar_pushing_trajectory(
             traj_relaxed,
             visualize_knot_points=True,
@@ -267,17 +278,15 @@ def test_path_rounding(planner: PlanarPushingPlanner) -> None:
         make_traj_figure(traj_relaxed, filename="debug_file_relaxed")
 
     path = planner.get_solution_path(relaxed_result)
-    rounded_result = path._do_nonlinear_rounding(print_output=DEBUG, measure_time=DEBUG)
+
+    rounded_result = path._do_nonlinear_rounding(solver_params)
     assert rounded_result.is_success()
 
-    traj_rounded = PlanarPushingTrajectory.from_result(
-        planner.config,
-        rounded_result,
-        planner.gcs,
-        planner.source.vertex,  # type: ignore
-        planner.target.vertex,  # type: ignore
-        planner._get_all_vertex_mode_pairs(),
-    )
+    rounded_vars_on_path = [
+        pair.mode.get_variable_solutions(rounded_result) for pair in path.pairs
+    ]
+
+    traj_rounded = PlanarPushingTrajectory(planner.config, rounded_vars_on_path)
 
     if DEBUG:
         visualize_planar_pushing_trajectory(

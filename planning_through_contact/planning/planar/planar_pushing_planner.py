@@ -1,5 +1,4 @@
 from itertools import combinations
-from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
@@ -510,7 +509,7 @@ class PlanarPushingPlanner:
 
     def create_graph_diagram(
         self,
-        filepath: Optional[Path] = None,
+        filename: Optional[str] = None,
         result: Optional[MathematicalProgramResult] = None,
     ) -> pydot.Dot:
         """
@@ -521,7 +520,7 @@ class PlanarPushingPlanner:
         )
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        if filepath is not None:
-            data.write_svg(str(filepath))
+        if filename is not None:
+            data.write_png(filename + ".png")
 
         return data

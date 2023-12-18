@@ -36,7 +36,10 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.utilities import from_so2_to_so3
-from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    PlanarSolverParams,
+)
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -235,7 +238,7 @@ class PlanarPushingTrajectory:
         self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
 
-        if assert_determinants:
+        if assert_determinants:  # TODO: Remove
             for path_points in path_knot_points:
                 assert path_points.R_WBs is not None
 
@@ -248,6 +251,7 @@ class PlanarPushingTrajectory:
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
         self.start_times = start_and_end_times[:-1]
         self.end_times = start_and_end_times[1:]
+
         self.traj_segments = [
             PlanarPushingTrajSegment.from_knot_points(p, start, end)
             for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
@@ -368,25 +372,16 @@ class PlanarPushingTrajectory:
         source_vertex: GcsVertex,
         target_vertex: GcsVertex,
         pairs: Dict[str, VertexModePair],
-        round_solution: bool = False,
-        print_path: bool = False,
-        assert_determinants: bool = False,
+        solver_params: PlanarSolverParams,
     ):
         path = PlanarPushingPath.from_result(
             gcs, result, source_vertex, target_vertex, pairs
         )
-        if print_path:
+        if solver_params.print_path:
             print(f"path: {path.get_path_names()}")
 
-        if assert_determinants:
-            vars = path.get_vars()
-            dets = [np.linalg.det(R) for var in vars for R in var.R_WBs]  # type: ignore
-            if not np.allclose(dets, 1, atol=1e-2):
-                print(f"Determinants: {dets}")
-                raise ValueError("Determinants are not 1")
-
-        if round_solution:
-            return cls(config, path.get_rounded_vars())
+        if solver_params.nonlinear_traj_rounding:
+            return cls(config, path.get_rounded_vars(solver_params))
         else:
             return cls(config, path.get_vars())
 

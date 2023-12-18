@@ -104,18 +104,21 @@ class SliderPusherSystemConfig:
 
 @dataclass
 class PlanarSolverParams:
-    gcs_max_rounded_paths: int = 10
+    gcs_max_rounded_paths: int = 20
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
-    nonlinear_traj_rounding: bool = True
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
     print_cost: bool = False
     get_rounded_and_original_traj: bool = False
+    nonl_round_feas: float = 1e-2  # Feasibility treshold for nonlinear rounding
+    nonl_round_solver: Literal["snopt", "ipopt"] = "snopt"
+    nonlinear_traj_rounding: bool = True
+    assert_rounding_res: bool = True
 
 
 @dataclass

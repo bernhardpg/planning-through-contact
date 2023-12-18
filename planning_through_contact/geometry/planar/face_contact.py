@@ -753,7 +753,12 @@ class FaceContactMode(AbstractContactMode):
         friction_forces = result.GetSolution(self.variables.friction_forces)
         cos_ths = result.GetSolution(self.variables.cos_ths)  # type: ignore
         sin_ths = result.GetSolution(self.variables.sin_ths)  # type: ignore
-        theta_dots = result.GetSolution(self.variables.theta_dots)  # type: ignore
+
+        if self.config.use_approx_exponential_map:
+            theta_dots = result.GetSolution(self.variables.theta_dots)  # type: ignore
+        else:
+            theta_dots = None
+
         p_WB_xs = result.GetSolution(self.variables.p_WB_xs)  # type: ignore
         p_WB_ys = result.GetSolution(self.variables.p_WB_ys)  # type: ignore
 

@@ -1,5 +1,4 @@
 import argparse
-from pathlib import Path
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
@@ -55,7 +54,7 @@ def get_sugar_box() -> RigidBody:
 def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     if traj_number == 1:
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
-        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
+        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=0.0)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 2:
@@ -256,7 +255,7 @@ def create_plan(
     planner.formulate_problem()
 
     if debug:
-        planner.create_graph_diagram(Path("graph.svg"))
+        planner.create_graph_diagram("graph")
 
     traj = planner.plan_trajectory(solver_params)
 
