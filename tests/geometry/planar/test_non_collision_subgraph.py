@@ -20,6 +20,9 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_path import (
+    PlanarPushingPath,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
@@ -30,6 +33,7 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
+    PlanarSolverParams,
 )
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
@@ -340,9 +344,9 @@ def test_subgraph_with_contact_modes(
     pairs["source"] = source
     pairs["target"] = target
 
-    traj = PlanarPushingTrajectory.from_result(
-        subgraph.config, result, subgraph.gcs, source_vertex, target_vertex, pairs
-    )
+    traj = PlanarPushingPath.from_result(
+        subgraph.gcs, result, source_vertex, target_vertex, pairs
+    ).to_traj()
 
     assert_initial_and_final_poses(
         traj, slider_initial_pose, None, slider_final_pose, None
@@ -594,9 +598,9 @@ def test_subgraph_with_contact_modes_band_sparsity(
     pairs["source"] = source
     pairs["target"] = target
 
-    traj = PlanarPushingTrajectory.from_result(
-        subgraph.config, result, subgraph.gcs, source_vertex, target_vertex, pairs
-    )
+    traj = PlanarPushingPath.from_result(
+        subgraph.gcs, result, source_vertex, target_vertex, pairs
+    ).to_traj()
 
     assert_initial_and_final_poses(
         traj, slider_initial_pose, None, slider_final_pose, None

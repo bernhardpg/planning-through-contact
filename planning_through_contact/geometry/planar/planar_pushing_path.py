@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal
+from typing import Dict, List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -25,6 +25,13 @@ from planning_through_contact.geometry.planar.face_contact import FaceContactMod
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
+    PlanarSolverParams,
+)
 from planning_through_contact.tools.gcs_tools import (
     get_gcs_solution_path_edges,
     get_gcs_solution_path_vertices,
@@ -36,21 +43,16 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 def assemble_progs_from_contact_modes(
-    modes: List[AbstractContactMode],
+    modes: List[AbstractContactMode], remove_redundant_constraints: bool = True
 ) -> MathematicalProgram:
     prog = MathematicalProgram()
 
     for mode in modes:
-        mode_prog = mode.prog
-
-        # TODO(bernhardpg): Look at this into more detail
-        # For some reason, we need to remove the redundant dynamic constraints when rounding
-        if (
-            isinstance(mode, FaceContactMode)
-            and mode.config.use_redundant_dynamic_constraints
-        ):
-            for c in mode.quasi_static_dynamics_constraints_in_B:
-                mode_prog.RemoveConstraint(c)
+        mode_prog = mode.prog  # type: ignore
+        if remove_redundant_constraints:
+            if isinstance(mode, FaceContactMode):
+                for c in mode.redundant_constraints:
+                    mode_prog.RemoveConstraint(c)
 
         vars = mode_prog.decision_variables()
         prog.AddDecisionVariables(vars)
@@ -67,27 +69,28 @@ def assemble_progs_from_contact_modes(
 def get_mode_variables_from_constraint_variables(
     constraint_vars: NpVariableArray, pair_u: VertexModePair, pair_v: VertexModePair
 ) -> NpVariableArray:
-    num_vars_u = pair_u.mode.prog.num_vars()
-    num_vars_v = pair_v.mode.prog.num_vars()
+    def _get_corresponding_pair(var: sym.Variable) -> VertexModePair:
+        for pair in (pair_u, pair_v):
+            if any([var.EqualTo(other) for other in pair.vertex.x()]):
+                return pair
+        # This should not exit without returning
+        raise RuntimeError("Variable not found in any of the provided pairs")
 
-    # don't add variables that are not in the modes (these come from the
-    # SDP relaxation)
-    vertex_vars_stacked = np.concatenate(
-        (pair_u.vertex.x()[:num_vars_u], pair_v.vertex.x()[:num_vars_v])
-    )
+    def _get_original_variable(var: sym.Variable) -> sym.Variable:
+        pair = _get_corresponding_pair(var)
+        # find indices by constructing a new mock program
+        temp = MathematicalProgram()
+        temp.AddDecisionVariables(pair.vertex.x())
+        var_idx = temp.FindDecisionVariableIndex(var)
 
-    # find indices by constructing a new mock program
-    temp = MathematicalProgram()
-    temp.AddDecisionVariables(vertex_vars_stacked)
-    idxs = temp.FindDecisionVariableIndices(constraint_vars)
+        if isinstance(pair.mode, FaceContactMode):
+            prog = pair.mode.relaxed_prog
+        else:  # NonCollisionMode
+            prog = pair.mode.prog  # type: ignore
+        return prog.decision_variables()[var_idx]  # type: ignore
 
-    mode_vars_stacked = np.concatenate(
-        (
-            pair_u.mode.prog.decision_variables(),
-            pair_v.mode.prog.decision_variables(),
-        )
-    )
-    return mode_vars_stacked[idxs]
+    mode_vars = np.array([_get_original_variable(var) for var in constraint_vars])
+    return mode_vars
 
 
 def add_edge_constraints_to_prog(
@@ -115,6 +118,8 @@ class PlanarPushingPath:
         self.pairs = pairs_on_path
         self.edges = edges_on_path
         self.result = result
+        self.rounded_result = None
+        self.config = pairs_on_path[0].mode.config
 
     @classmethod
     def from_result(
@@ -135,6 +140,18 @@ class PlanarPushingPath:
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
+    def to_traj(
+        self,
+        do_rounding: bool = False,
+        solver_params: Optional[PlanarSolverParams] = None,
+    ) -> PlanarPushingTrajectory:
+        if do_rounding:
+            assert solver_params is not None
+            self.do_rounding(solver_params)
+            return PlanarPushingTrajectory(self.config, self.get_rounded_vars())
+        else:
+            return PlanarPushingTrajectory(self.config, self.get_vars())
+
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [
             pair.mode.get_variable_solutions_for_vertex(pair.vertex, self.result)
@@ -142,12 +159,13 @@ class PlanarPushingPath:
         ]
         return vars_on_path
 
-    def get_rounded_vars(
-        self, measure_time: bool = False
-    ) -> List[AbstractModeVariables]:
-        rounded_result = self._do_nonlinear_rounding(measure_time)
+    def do_rounding(self, solver_params: PlanarSolverParams) -> None:
+        self.rounded_result = self._do_nonlinear_rounding(solver_params)
+
+    def get_rounded_vars(self) -> List[AbstractModeVariables]:
+        assert self.rounded_result is not None
         vars_on_path = [
-            pair.mode.get_variable_solutions(rounded_result) for pair in self.pairs
+            pair.mode.get_variable_solutions(self.rounded_result) for pair in self.pairs
         ]
         return vars_on_path
 
@@ -176,10 +194,13 @@ class PlanarPushingPath:
 
     def _do_nonlinear_rounding(
         self,
-        measure_time: bool = False,
-        solver: Literal["snopt", "ipopt"] = "snopt",
-        print_output: bool = False,
+        solver_params: PlanarSolverParams,
     ) -> MathematicalProgramResult:
+        """
+        Assembles one big nonlinear program and solves it with the SDP relaxation as the initial guess.
+
+        NOTE: Ipopt does not work because of "too few degrees of freedom". Snopt must be used.
+        """
         prog = self._construct_nonlinear_program()
 
         import time
@@ -190,25 +211,65 @@ class PlanarPushingPath:
 
         solver_options = SolverOptions()
 
-        if print_output:
+        if solver_params.print_solver_output:
             # NOTE(bernhardpg): I don't think either SNOPT nor IPOPT supports this setting
             solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-        if solver == "ipopt":
-            ipopt = IpoptSolver()
-            solver_options.SetOption(ipopt.solver_id(), "tol", 1e-6)
-            result = ipopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
-        elif solver == "snopt":
-            snopt = SnoptSolver()
-            solver_options.SetOption(snopt.solver_id(), "Print file", "my_output.txt")
-            result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
-        else:
-            raise NotImplementedError()
+        snopt = SnoptSolver()
+        if solver_params.save_solver_output:
+            import os
+
+            snopt_log_path = "snopt_output.txt"
+            # Delete log file if it already exists as Snopt just keeps writing to the same file
+            if os.path.exists(snopt_log_path):
+                os.remove(snopt_log_path)
+
+            solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
+
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Feasibility Tolerance",
+            solver_params.nonl_round_major_feas_tol,
+        )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Optimality Tolerance",
+            solver_params.nonl_round_opt_tol,
+        )
+        # The performance seems to be better when these (minor step) parameters are left
+        # to their default value
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Minor Feasibility Tolerance",
+        #     solver_params.nonl_round_minor_feas_tol,
+        # )
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Minor Optimality Tolerance",
+        #     solver_params.nonl_round_opt_tol,
+        # )
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Major iterations limit",
+        #     solver_params.nonl_round_major_iter_limit,
+        # )
+
+        result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
         end = time.time()
 
-        if measure_time:
+        if solver_params.measure_solve_time:
             elapsed_time = end - start
             print(f"Total elapsed optimization time: {elapsed_time}")
+
+        if solver_params.assert_rounding_res:
+            if not result.is_success():
+                print(
+                    f"Solution was not successfull. Solution result: {result.get_solution_result()} "
+                )
+                raise RuntimeError("Rounding was not succesfull.")
+        else:
+            if not result.is_success():
+                print("Warning! Rounding was not succesfull")
 
         return result

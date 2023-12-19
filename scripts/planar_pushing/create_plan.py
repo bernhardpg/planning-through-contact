@@ -1,5 +1,4 @@
 import argparse
-from pathlib import Path
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
@@ -55,7 +54,7 @@ def get_sugar_box() -> RigidBody:
 def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     if traj_number == 1:
         slider_initial_pose = PlanarPose(x=0.55, y=0.0, theta=0.0)
-        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=-0.5)
+        slider_target_pose = PlanarPose(x=0.65, y=0.0, theta=0.0)
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 2:
@@ -177,6 +176,7 @@ def create_plan(
     visualize: bool = False,
     pusher_radius: float = 0.035,
     time_in_contact: float = 7,
+    do_rounding: bool = True,
     time_in_non_collision: float = 7,
     animation_output_dir: str = "",
     animation_smooth: bool = False,
@@ -198,13 +198,12 @@ def create_plan(
 
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        # cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS,
         sq_forces=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,
-        delta_vel_max=0.05,
-        delta_theta_max=0.4,
+        delta_vel_max=0.05 * 2,
+        delta_theta_max=0.4 * 2,
     )
 
     if animation_output_dir != "":
@@ -228,7 +227,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=6,
+        num_knot_points_contact=4,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
@@ -243,29 +242,44 @@ def create_plan(
     solver_params = PlanarSolverParams(
         measure_solve_time=True,
         gcs_max_rounded_paths=20,
-        print_flows=True,
+        print_flows=False,
         print_solver_output=debug,
-        save_solver_output=False,
-        print_path=True,
-        print_cost=True,
-        nonlinear_traj_rounding=False,
-        assert_result=False,
+        save_solver_output=debug,
+        print_path=debug,
+        print_cost=debug,
+        assert_result=True,
     )
 
     planner.config.start_and_goal = plan_spec
     planner.formulate_problem()
 
     if debug:
-        planner.create_graph_diagram(Path("graph.svg"))
+        planner.create_graph_diagram("graph")
 
-    traj = planner.plan_trajectory(solver_params)
+    plan = planner.plan_path(solver_params)
+    traj_relaxed = plan.to_traj()
+
+    if do_rounding:
+        traj_rounded = plan.to_traj(do_rounding=True, solver_params=solver_params)
+    else:
+        traj_rounded = None
 
     if save_traj:
         filename = f"trajectories/{body_to_use}_pushing_{traj_name}.pkl"
-        traj.save(filename)  # type: ignore
+        traj_relaxed.save(filename)  # type: ignore
+
+        filename = f"trajectories/{body_to_use}_pushing_{traj_name}_rounded.pkl"
+        traj_rounded.save(filename)  # type: ignore
 
     if save_analysis:
-        analyze_plan(planner.path, traj, filename=f"{traj_name}_{body_to_use}")
+        analyze_plan(planner.path, filename=f"{traj_name}_{body_to_use}")
+
+        if traj_rounded is not None:
+            analyze_plan(
+                planner.path,
+                filename=f"{traj_name}_{body_to_use}_rounded",
+                rounded=True,
+            )
 
     if visualize:
         if debug:
@@ -278,17 +292,30 @@ def create_plan(
             )
 
         make_traj_figure(
-            traj,
+            traj_relaxed,
             filename=f"{traj_name}_{body_to_use}",
         )
-
         ani = visualize_planar_pushing_trajectory(
-            traj,  # type: ignore
+            traj_relaxed,  # type: ignore
             save=True,
             filename=f"{traj_name}_{body_to_use}",
             visualize_knot_points=not animation_smooth,
             lims=animation_lims,
         )
+
+        if traj_rounded is not None:
+            make_traj_figure(
+                traj_rounded,
+                filename=f"{traj_name}_{body_to_use}_rounded",
+            )
+            ani = visualize_planar_pushing_trajectory(
+                traj_rounded,  # type: ignore
+                save=True,
+                filename=f"{traj_name}_{body_to_use}_rounded",
+                visualize_knot_points=not animation_smooth,
+                lims=animation_lims,
+            )
+
         return ani
 
 
@@ -306,12 +333,14 @@ if __name__ == "__main__":
         type=str,
         default="box",
     )
+    parser.add_argument("--round", help="Do nonlinear rounding", action="store_true")
     parser.add_argument("--demos", help="Generate demos", action="store_true")
     parser.add_argument("--debug", help="Debug mode", action="store_true")
     args = parser.parse_args()
     traj_number = args.traj
     make_demos = args.demos
     debug = args.debug
+    rounding = args.round
 
     pusher_radius = 0.035
 
@@ -335,6 +364,7 @@ if __name__ == "__main__":
                 time_in_non_collision=1.0,
                 animation_smooth=False,
                 save_analysis=True,
+                do_rounding=rounding,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -352,6 +382,7 @@ if __name__ == "__main__":
                     time_in_non_collision=1.0,
                     animation_smooth=False,
                     save_analysis=True,
+                    do_rounding=rounding,
                 )
 
     else:
@@ -366,4 +397,5 @@ if __name__ == "__main__":
             visualize=True,
             save_traj=True,
             save_analysis=True,
+            do_rounding=rounding,
         )

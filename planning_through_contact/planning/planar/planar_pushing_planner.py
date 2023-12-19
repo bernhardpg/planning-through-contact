@@ -1,5 +1,4 @@
 from itertools import combinations
-from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
@@ -93,7 +92,7 @@ class PlanarPushingPlanner:
 
         if self.config.contact_config.mode_transition_cost is not None:
             for v in self.contact_vertices:
-                v.AddCost(self.config.contact_config.mode_transition_cost)
+                v.AddCost(self.config.contact_config.mode_transition_cost)  # type: ignore
 
     @property
     def num_contact_modes(self) -> int:
@@ -427,12 +426,7 @@ class PlanarPushingPlanner:
         )
         return path
 
-    def plan_trajectory(
-        self, solver_params: PlanarSolverParams
-    ) -> (
-        PlanarPushingTrajectory
-        | Tuple[PlanarPushingTrajectory, PlanarPushingTrajectory]
-    ):
+    def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
 
@@ -456,31 +450,6 @@ class PlanarPushingPlanner:
             cost = result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        if solver_params.get_rounded_and_original_traj:
-            original_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                False,
-                solver_params.print_path,
-                solver_params.assert_determinants,
-            )
-            rounded_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                True,
-                False,  # don't need to print path twice
-                solver_params.assert_determinants,
-            )
-            return original_traj, rounded_traj
-
         self.path = PlanarPushingPath.from_result(
             self.gcs,
             result,
@@ -491,10 +460,7 @@ class PlanarPushingPlanner:
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
 
-        if solver_params.nonlinear_traj_rounding:
-            raise NotImplementedError("Not implemented yet")
-
-        return PlanarPushingTrajectory(self.config, self.path.get_vars())
+        return self.path
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """
@@ -510,7 +476,7 @@ class PlanarPushingPlanner:
 
     def create_graph_diagram(
         self,
-        filepath: Optional[Path] = None,
+        filename: Optional[str] = None,
         result: Optional[MathematicalProgramResult] = None,
     ) -> pydot.Dot:
         """
@@ -521,7 +487,7 @@ class PlanarPushingPlanner:
         )
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        if filepath is not None:
-            data.write_svg(str(filepath))
+        if filename is not None:
+            data.write_png(filename + ".png")
 
         return data

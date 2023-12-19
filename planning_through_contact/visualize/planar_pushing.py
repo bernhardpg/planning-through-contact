@@ -78,7 +78,7 @@ def make_traj_figure(
 
     segment_groups = []
     idx = 0
-    while idx < len(traj.path_knot_points) - 1:
+    while idx < len(traj.path_knot_points):
         group = []
         no_face_contact = True
         while no_face_contact and idx < len(traj.path_knot_points):
@@ -102,7 +102,11 @@ def make_traj_figure(
         x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
 
     for segment_idx, path_knot_points_group in enumerate(segment_groups):
-        ax = axs[segment_idx]
+        if len(segment_groups) == 1:  # only one subplot
+            ax = axs
+        else:
+            ax = axs[segment_idx]
+
         ax.axis("equal")  # Ensures the x and y axis are scaled equally
 
         ax.set_xlim(x_min, x_max)
@@ -225,17 +229,18 @@ def make_traj_figure(
             linewidth=1,
             linestyle="--",
         )
-        p_WP = traj.config.start_and_goal.pusher_initial_pose.pos()  # type: ignore
-        circle = plt.Circle(
-            p_WP.flatten(),
-            traj.config.pusher_radius,  # type: ignore
-            edgecolor=START_COLOR,
-            facecolor="none",
-            linewidth=1,
-            alpha=START_TRANSPARENCY,
-            linestyle="--",
-        )
-        ax.add_patch(circle)
+        if traj.config.start_and_goal.pusher_initial_pose is not None:
+            p_WP = traj.config.start_and_goal.pusher_initial_pose.pos()  # type: ignore
+            circle = plt.Circle(
+                p_WP.flatten(),
+                traj.config.pusher_radius,  # type: ignore
+                edgecolor=START_COLOR,
+                facecolor="none",
+                linewidth=1,
+                alpha=START_TRANSPARENCY,
+                linestyle="--",
+            )
+            ax.add_patch(circle)
 
         # Plot target pos
         slider_target_pose = traj.config.start_and_goal.slider_target_pose  # type: ignore
@@ -250,17 +255,18 @@ def make_traj_figure(
             linewidth=1,
             linestyle="--",
         )
-        p_WP = traj.config.start_and_goal.pusher_target_pose.pos()  # type: ignore
-        circle = plt.Circle(
-            p_WP.flatten(),
-            traj.config.pusher_radius,  # type: ignore
-            edgecolor=GOAL_COLOR,
-            facecolor="none",
-            linewidth=1,
-            alpha=GOAL_TRANSPARENCY,
-            linestyle="--",
-        )
-        ax.add_patch(circle)
+        if traj.config.start_and_goal.pusher_initial_pose is not None:
+            p_WP = traj.config.start_and_goal.pusher_target_pose.pos()  # type: ignore
+            circle = plt.Circle(
+                p_WP.flatten(),
+                traj.config.pusher_radius,  # type: ignore
+                edgecolor=GOAL_COLOR,
+                facecolor="none",
+                linewidth=1,
+                alpha=GOAL_TRANSPARENCY,
+                linestyle="--",
+            )
+            ax.add_patch(circle)
 
     fig.tight_layout()
     fig.savefig(filename + f"_trajectory.pdf")  # type: ignore

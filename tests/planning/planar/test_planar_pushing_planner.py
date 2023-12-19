@@ -7,9 +7,6 @@ import pytest
 from pydrake.solvers import LinearCost
 from pydrake.symbolic import Variables
 
-from planning_through_contact.geometry.planar.non_collision_subgraph import (
-    VertexModePair,
-)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -78,7 +75,7 @@ def test_planner_construction(
         costs = v.GetCosts()
 
         # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
-        assert len(costs) == 4 * (m.num_knot_points - 1)
+        assert len(costs) == len(m.prog.GetAllCosts())
 
         for idx, cost in enumerate(costs):
             var_idxs = m._get_cost_terms()[0][idx]
@@ -449,7 +446,7 @@ def test_make_plan(
     indirect=["planner"],
     ids=[1, 2],
 )
-def test_make_plan_band_sparsity(
+def test_make_plan_band_sparsity_box(
     planner: PlanarPushingPlanner,
 ) -> None:
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
@@ -457,16 +454,7 @@ def test_make_plan_band_sparsity(
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-
-    traj = PlanarPushingTrajectory.from_result(
-        planner.config,
-        result,
-        planner.gcs,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
+    traj = path.to_traj()
 
     assert_initial_and_final_poses(
         traj,
@@ -530,16 +518,7 @@ def test_make_plan_band_sparsity_t_pusher(
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-
-    traj = PlanarPushingTrajectory.from_result(
-        planner.config,
-        result,
-        planner.gcs,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
+    traj = path.to_traj()
 
     assert_initial_and_final_poses(
         traj,
