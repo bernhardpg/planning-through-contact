@@ -25,7 +25,11 @@ from planning_through_contact.geometry.planar.face_contact import FaceContactMod
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
     PlanarSolverParams,
 )
 from planning_through_contact.tools.gcs_tools import (
@@ -114,6 +118,7 @@ class PlanarPushingPath:
         self.pairs = pairs_on_path
         self.edges = edges_on_path
         self.result = result
+        self.rounded_result = None
 
     @classmethod
     def from_result(
@@ -134,6 +139,15 @@ class PlanarPushingPath:
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
+    def to_traj(
+        self, config: PlanarPlanConfig, solver_params: PlanarSolverParams
+    ) -> PlanarPushingTrajectory:
+        if solver_params.nonlinear_traj_rounding:
+            self.do_rounding(solver_params)
+            return PlanarPushingTrajectory(config, self.get_rounded_vars())
+        else:
+            return PlanarPushingTrajectory(config, self.get_vars())
+
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [
             pair.mode.get_variable_solutions_for_vertex(pair.vertex, self.result)
@@ -141,13 +155,13 @@ class PlanarPushingPath:
         ]
         return vars_on_path
 
-    def get_rounded_vars(
-        self, solver_params: PlanarSolverParams
-    ) -> List[AbstractModeVariables]:
-        rounded_result = self._do_nonlinear_rounding(solver_params)
+    def do_rounding(self, solver_params: PlanarSolverParams) -> None:
+        self.rounded_result = self._do_nonlinear_rounding(solver_params)
 
+    def get_rounded_vars(self) -> List[AbstractModeVariables]:
+        assert self.rounded_result is not None
         vars_on_path = [
-            pair.mode.get_variable_solutions(rounded_result) for pair in self.pairs
+            pair.mode.get_variable_solutions(self.rounded_result) for pair in self.pairs
         ]
         return vars_on_path
 

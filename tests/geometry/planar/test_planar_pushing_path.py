@@ -39,7 +39,10 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
-from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
+from planning_through_contact.visualize.analysis import (
+    analyze_plan,
+    plot_cos_sine_trajs,
+)
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
@@ -59,7 +62,7 @@ from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
-DEBUG = False
+DEBUG = True
 
 
 def test_rounding_one_mode() -> None:
@@ -170,7 +173,7 @@ def test_rounding_one_mode() -> None:
     ],
     indirect=["planner"],
 )
-def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
+def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> None:
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
     result = planner._solve(solver_params)
     assert result.is_success()
@@ -181,11 +184,11 @@ def test_path_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
     prog = path._construct_nonlinear_program()
 
-    expected_num_vars = sum([p.mode.prog.num_vars() for p in path.pairs])
+    expected_num_vars = sum([p.mode.prog.num_vars() for p in path.pairs])  # type: ignore
     assert prog.num_vars() == expected_num_vars
 
     expected_num_constraints = sum(
-        [len(p.mode.prog.GetAllConstraints()) for p in path.pairs]
+        [len(p.mode.prog.GetAllConstraints()) for p in path.pairs]  # type: ignore
     ) + sum([len(edge.GetConstraints()) for edge in path.edges])
     assert len(prog.GetAllConstraints()) == expected_num_constraints
 
@@ -257,15 +260,8 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     relaxed_result = planner._solve(solver_params)
     assert relaxed_result.is_success()
 
-    traj_relaxed = PlanarPushingTrajectory.from_result(
-        planner.config,
-        relaxed_result,
-        planner.gcs,
-        planner.source.vertex,  # type: ignore
-        planner.target.vertex,  # type: ignore
-        planner._get_all_vertex_mode_pairs(),
-        solver_params,
-    )
+    path = planner.get_solution_path(relaxed_result)
+    traj_relaxed = path.to_traj(config, solver_params)
 
     if DEBUG:
         planner.create_graph_diagram(filename="debug_graph")
@@ -276,17 +272,13 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
             filename="debug_file_relaxed",
         )
         make_traj_figure(traj_relaxed, filename="debug_file_relaxed")
+        analyze_plan(path, filename="debug_analysis_relaxed", rounded=False)
 
-    path = planner.get_solution_path(relaxed_result)
+    path.do_rounding(solver_params)
+    assert path.rounded_result is not None
+    assert path.rounded_result.is_success()
 
-    rounded_result = path._do_nonlinear_rounding(solver_params)
-    assert rounded_result.is_success()
-
-    rounded_vars_on_path = [
-        pair.mode.get_variable_solutions(rounded_result) for pair in path.pairs
-    ]
-
-    traj_rounded = PlanarPushingTrajectory(planner.config, rounded_vars_on_path)
+    traj_rounded = PlanarPushingTrajectory(planner.config, path.get_rounded_vars())
 
     if DEBUG:
         visualize_planar_pushing_trajectory(
@@ -296,3 +288,4 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
             filename="debug_file_rounded",
         )
         make_traj_figure(traj_rounded, filename="debug_file_rounded")
+        analyze_plan(path, filename="debug_analysis_rounded", rounded=True)

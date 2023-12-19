@@ -23,6 +23,9 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarSolverParams,
+)
 
 
 def save_gcs_graph_diagram(
@@ -595,16 +598,20 @@ def plot_constraint_violation(
         plt.show()
 
 
-def analyze_plan(
-    path: PlanarPushingPath, traj: PlanarPushingTrajectory, filename: str
-) -> None:
+def analyze_plan(path: PlanarPushingPath, filename: str, rounded: bool = False) -> None:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
     face_vertices = [
         pair.vertex for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
-    result = path.result
+    if rounded:
+        assert path.rounded_result is not None
+        result = path.rounded_result
+        path_knot_points = path.get_rounded_vars()
+    else:
+        result = path.result
+        path_knot_points = path.get_vars()
 
     keys = face_modes[0].constraints.keys()
     constraint_violations = {key: [] for key in keys}
@@ -614,29 +621,40 @@ def analyze_plan(
                 if not isinstance(
                     constraints, type(np.array([]))
                 ):  # only one constraint
-                    constraint_violations[key].append(
-                        mode.eval_binding_with_vertex_vars(constraints, vertex, result)
-                    )
+                    if rounded:
+                        violation = mode.eval_binding(constraints, result)
+                    else:
+                        violation = mode.eval_binding_with_vertex_vars(
+                            constraints, vertex, result
+                        )
+
+                    constraint_violations[key].append(violation)
                 else:
-                    constraint_violations[key].append(
-                        [
+                    if rounded:
+                        violations = [
+                            mode.eval_binding(constraint, result)
+                            for constraint in constraints
+                        ]
+                    else:
+                        violations = [
                             mode.eval_binding_with_vertex_vars(
                                 constraint, vertex, result
                             )
                             for constraint in constraints
                         ]
-                    )
+
+                    constraint_violations[key].append(violations)
 
     # NOTE: This is super hacky
     for key, item in constraint_violations.items():
-        constraint_violations[key] = np.array(item)
+        constraint_violations[key] = np.array(item)  # type: ignore
 
     num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
     ref_theta_vel = np.mean(
         np.concatenate(
             [
                 points.delta_omega_WBs
-                for points in traj.path_knot_points
+                for points in path_knot_points
                 if isinstance(points, FaceContactVariables)
             ]
         )
@@ -645,7 +663,7 @@ def analyze_plan(
         np.concatenate(
             [
                 [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
-                for points in traj.path_knot_points
+                for points in path_knot_points
                 if isinstance(points, FaceContactVariables)
             ]
         )
@@ -663,8 +681,8 @@ def analyze_plan(
     rs = np.vstack(
         [
             R_WB[:, 0]
-            for idx in range(len(traj.path_knot_points))
-            for R_WB in traj.path_knot_points[idx].R_WBs
+            for idx in range(len(path_knot_points))
+            for R_WB in path_knot_points[idx].R_WBs
         ]
     )
     plot_cos_sine_trajs(rs, filename=filename)

@@ -2,15 +2,12 @@ import pickle
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
-from pydrake.common.value import Value
 from pydrake.math import RotationMatrix
-from pydrake.solvers import MathematicalProgramResult
-from pydrake.systems.framework import BasicVector, Context, LeafSystem, OutputPort
 from pydrake.trajectories import (
     PiecewisePolynomial,
     PiecewiseQuaternionSlerp,
@@ -22,25 +19,10 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
-from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
-from planning_through_contact.geometry.planar.non_collision_subgraph import (
-    VertexModePair,
-)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.planar_pushing_path import (
-    PlanarPushingPath,
-)
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    OldPlanarPushingTrajectory,
-    PlanarTrajectoryBuilder,
-)
 from planning_through_contact.geometry.utilities import from_so2_to_so3
-from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarPlanConfig,
-    PlanarSolverParams,
-)
-from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -212,7 +194,7 @@ class PlanarPushingTrajSegment:
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         # Start and target vertices may only have one knot point, hence num_inputs = num_knot_points - 1 = 0
-        if len(knot_points.f_c_Ws) == 0:
+        if len(knot_points.f_c_Ws) == 0:  # type: ignore
             f_c_W = LinTrajSegment.from_knot_points(np.zeros((2, 1)), start_time, end_time)  # type: ignore
         else:
             f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
@@ -242,7 +224,7 @@ class PlanarPushingTrajectory:
             for path_points in path_knot_points:
                 assert path_points.R_WBs is not None
 
-                dets = [np.linalg.det(R) for R in path_points.R_WBs]
+                dets = [np.linalg.det(R) for R in path_points.R_WBs]  # type: ignore
                 if not np.allclose(dets, 1):
                     print(dets)
                     raise ValueError("Determinants not 1.")
@@ -363,28 +345,6 @@ class PlanarPushingTrajectory:
         planar_pose = PlanarPose(p_WP[0, 0], p_WP[1, 0], theta)
         return planar_pose
 
-    @classmethod
-    def from_result(
-        cls,
-        config: PlanarPlanConfig,
-        result: MathematicalProgramResult,
-        gcs: opt.GraphOfConvexSets,
-        source_vertex: GcsVertex,
-        target_vertex: GcsVertex,
-        pairs: Dict[str, VertexModePair],
-        solver_params: PlanarSolverParams,
-    ):
-        path = PlanarPushingPath.from_result(
-            gcs, result, source_vertex, target_vertex, pairs
-        )
-        if solver_params.print_path:
-            print(f"path: {path.get_path_names()}")
-
-        if solver_params.nonlinear_traj_rounding:
-            return cls(config, path.get_rounded_vars(solver_params))
-        else:
-            return cls(config, path.get_vars())
-
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
             # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
@@ -396,12 +356,6 @@ class PlanarPushingTrajectory:
             config, var_path = pickle.load(file)
 
             return cls(config, var_path)
-
-    # TODO(bernhardpg): Remove
-    def to_old_format(self) -> OldPlanarPushingTrajectory:
-        return PlanarTrajectoryBuilder(self.path_knot_points).get_trajectory(
-            interpolate=True
-        )
 
     @property
     def start_time(self) -> float:
