@@ -176,7 +176,7 @@ def create_plan(
     visualize: bool = False,
     pusher_radius: float = 0.035,
     time_in_contact: float = 7,
-    do_rounding: bool = True,
+    do_rounding: bool = False,
     time_in_non_collision: float = 7,
     animation_output_dir: str = "",
     animation_smooth: bool = False,
