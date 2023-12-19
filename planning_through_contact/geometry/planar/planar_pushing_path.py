@@ -196,7 +196,7 @@ class PlanarPushingPath:
         """
         Assembles one big nonlinear program and solves it with the SDP relaxation as the initial guess.
 
-        NOTE: Ipopt does not work because of "too few degrees of freedom". Snopt should be used.
+        NOTE: Ipopt does not work because of "too few degrees of freedom". Snopt must be used.
         """
         prog = self._construct_nonlinear_program()
 
@@ -212,32 +212,40 @@ class PlanarPushingPath:
             # NOTE(bernhardpg): I don't think either SNOPT nor IPOPT supports this setting
             solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-        if solver_params.nonl_round_solver == "ipopt":
-            raise NotImplementedError("Ipopt is not supported")
-            ipopt = IpoptSolver()
-            solver_options.SetOption(ipopt.solver_id(), "tol", 1e-6)
-            result = ipopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
-        elif solver_params.nonl_round_solver == "snopt":
-            snopt = SnoptSolver()
-            if solver_params.save_solver_output:
-                solver_options.SetOption(
-                    snopt.solver_id(), "Print file", "snopt_output.txt"
-                )
-
+        snopt = SnoptSolver()
+        if solver_params.save_solver_output:
             solver_options.SetOption(
-                snopt.solver_id(),
-                "Major feasibility tolerance",
-                solver_params.nonl_round_feas,
-            )
-            solver_options.SetOption(
-                snopt.solver_id(),
-                "Minor feasibility tolerance",
-                solver_params.nonl_round_feas,
+                snopt.solver_id(), "Print file", "snopt_output.txt"
             )
 
-            result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
-        else:
-            raise NotImplementedError()
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Feasibility Tolerance",
+            solver_params.nonl_round_feas_tol,
+        )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Minor Feasibility Tolerance",
+            solver_params.nonl_round_feas_tol,
+        )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Optimality Tolerance",
+            solver_params.nonl_round_opt_tol,
+        )
+        # The performance seems to be better when this parameter is left to its default value
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Minor Optimality Tolerance",
+        #     solver_params.nonl_round_opt_tol,
+        # )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major iterations limit",
+            solver_params.nonl_round_major_iter_limit,
+        )
+
+        result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
         end = time.time()
 
@@ -246,7 +254,11 @@ class PlanarPushingPath:
             print(f"Total elapsed optimization time: {elapsed_time}")
 
         if solver_params.assert_rounding_res:
-            assert result.is_success()
+            if not result.is_success():
+                print(
+                    f"Solution was not successfull. Solution result: {result.get_solution_result()} "
+                )
+                raise RuntimeError("Rounding was not succesfull.")
         else:
             if not result.is_success():
                 print("Warning! Rounding was not succesfull")

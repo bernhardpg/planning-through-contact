@@ -115,8 +115,9 @@ class PlanarSolverParams:
     print_path: bool = False
     print_cost: bool = False
     get_rounded_and_original_traj: bool = False
-    nonl_round_feas: float = 1e-2  # Feasibility treshold for nonlinear rounding
-    nonl_round_solver: Literal["snopt", "ipopt"] = "snopt"
+    nonl_round_feas_tol: float = 1e-2  # Feasibility treshold for nonlinear rounding
+    nonl_round_opt_tol: float = 1e-3  # Optimality treshold for nonlinear rounding
+    nonl_round_major_iter_limit: int = 2000  # Max number of major iterations of snopt
     nonlinear_traj_rounding: bool = True
     assert_rounding_res: bool = True
 

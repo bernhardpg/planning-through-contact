@@ -66,8 +66,6 @@ DEBUG = False
 
 
 def test_rounding_one_mode() -> None:
-    solver = "snopt"
-
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         sq_forces=5.0,
@@ -115,21 +113,9 @@ def test_rounding_one_mode() -> None:
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    if solver == "ipopt":  # ipopt does not work
-        ipopt = IpoptSolver()
-        solver_options.SetOption(ipopt.solver_id(), "tol", 1e-6)
-        solver_options.SetOption(  # type: ignore
-            CommonSolverOption.kPrintFileName, "debug_solver_log.txt"
-        )
-        result = ipopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
-    elif solver == "snopt":
-        snopt = SnoptSolver()
-        solver_options.SetOption(
-            snopt.solver_id(), "Print file", "debug_solver_log.txt"
-        )
-        result = snopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
-    else:
-        raise NotImplementedError
+    snopt = SnoptSolver()
+    solver_options.SetOption(snopt.solver_id(), "Print file", "debug_solver_log.txt")
+    result = snopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
 
     assert result.is_success()
 
@@ -209,7 +195,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
             PlanarPose(x=-0.2, y=-0.2, theta=0.0),
         ),
         PlanarPushingStartAndGoal(
-            PlanarPose(x=0, y=0, theta=-1.0),
+            PlanarPose(x=0, y=0, theta=-2.0),
             PlanarPose(x=-0.2, y=0.2, theta=0.0),
             PlanarPose(x=0.2, y=0.0, theta=0.0),
             PlanarPose(x=0.2, y=0.0, theta=0.0),
