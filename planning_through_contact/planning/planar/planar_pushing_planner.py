@@ -455,31 +455,6 @@ class PlanarPushingPlanner:
             cost = result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        if solver_params.get_rounded_and_original_traj:
-            original_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                False,
-                solver_params.print_path,
-                solver_params.assert_determinants,
-            )
-            rounded_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                True,
-                False,  # don't need to print path twice
-                solver_params.assert_determinants,
-            )
-            return original_traj, rounded_traj
-
         self.path = PlanarPushingPath.from_result(
             self.gcs,
             result,

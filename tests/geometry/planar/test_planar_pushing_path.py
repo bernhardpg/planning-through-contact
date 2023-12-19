@@ -62,7 +62,7 @@ from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
-DEBUG = True
+DEBUG = False
 
 
 def test_rounding_one_mode() -> None:
