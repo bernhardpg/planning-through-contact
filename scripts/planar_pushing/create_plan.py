@@ -176,7 +176,7 @@ def create_plan(
     visualize: bool = False,
     pusher_radius: float = 0.035,
     time_in_contact: float = 7,
-    do_rounding: bool = False,
+    do_rounding: bool = True,
     time_in_non_collision: float = 7,
     animation_output_dir: str = "",
     animation_smooth: bool = False,
@@ -227,7 +227,7 @@ def create_plan(
         cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
-        num_knot_points_contact=3,
+        num_knot_points_contact=4,
         num_knot_points_non_collision=3,
         avoid_object=True,
         avoidance_cost="quadratic",
@@ -333,12 +333,14 @@ if __name__ == "__main__":
         type=str,
         default="box",
     )
+    parser.add_argument("--round", help="Do nonlinear rounding", action="store_true")
     parser.add_argument("--demos", help="Generate demos", action="store_true")
     parser.add_argument("--debug", help="Debug mode", action="store_true")
     args = parser.parse_args()
     traj_number = args.traj
     make_demos = args.demos
     debug = args.debug
+    rounding = args.round
 
     pusher_radius = 0.035
 
@@ -362,6 +364,7 @@ if __name__ == "__main__":
                 time_in_non_collision=1.0,
                 animation_smooth=False,
                 save_analysis=True,
+                do_rounding=rounding,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -379,6 +382,7 @@ if __name__ == "__main__":
                     time_in_non_collision=1.0,
                     animation_smooth=False,
                     save_analysis=True,
+                    do_rounding=rounding,
                 )
 
     else:
@@ -393,4 +397,5 @@ if __name__ == "__main__":
             visualize=True,
             save_traj=True,
             save_analysis=True,
+            do_rounding=rounding,
         )

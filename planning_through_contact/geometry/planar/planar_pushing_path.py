@@ -217,36 +217,42 @@ class PlanarPushingPath:
 
         snopt = SnoptSolver()
         if solver_params.save_solver_output:
-            solver_options.SetOption(
-                snopt.solver_id(), "Print file", "snopt_output.txt"
-            )
+            import os
+
+            snopt_log_path = "snopt_output.txt"
+            # Delete log file if it already exists as Snopt just keeps writing to the same file
+            if os.path.exists(snopt_log_path):
+                os.remove(snopt_log_path)
+
+            solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
 
         solver_options.SetOption(
             snopt.solver_id(),
             "Major Feasibility Tolerance",
-            solver_params.nonl_round_feas_tol,
-        )
-        solver_options.SetOption(
-            snopt.solver_id(),
-            "Minor Feasibility Tolerance",
-            solver_params.nonl_round_feas_tol,
+            solver_params.nonl_round_major_feas_tol,
         )
         solver_options.SetOption(
             snopt.solver_id(),
             "Major Optimality Tolerance",
             solver_params.nonl_round_opt_tol,
         )
-        # The performance seems to be better when this parameter is left to its default value
+        # The performance seems to be better when these (minor step) parameters are left
+        # to their default value
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Minor Feasibility Tolerance",
+        #     solver_params.nonl_round_minor_feas_tol,
+        # )
         # solver_options.SetOption(
         #     snopt.solver_id(),
         #     "Minor Optimality Tolerance",
         #     solver_params.nonl_round_opt_tol,
         # )
-        solver_options.SetOption(
-            snopt.solver_id(),
-            "Major iterations limit",
-            solver_params.nonl_round_major_iter_limit,
-        )
+        # solver_options.SetOption(
+        #     snopt.solver_id(),
+        #     "Major iterations limit",
+        #     solver_params.nonl_round_major_iter_limit,
+        # )
 
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
