@@ -141,9 +141,12 @@ class PlanarPushingPath:
         return cls(pairs_on_path, edge_path, result)
 
     def to_traj(
-        self, solver_params: Optional[PlanarSolverParams] = None
+        self,
+        do_rounding: bool = False,
+        solver_params: Optional[PlanarSolverParams] = None,
     ) -> PlanarPushingTrajectory:
-        if solver_params is not None and solver_params.nonlinear_traj_rounding:
+        if do_rounding:
+            assert solver_params is not None
             self.do_rounding(solver_params)
             return PlanarPushingTrajectory(self.config, self.get_rounded_vars())
         else:

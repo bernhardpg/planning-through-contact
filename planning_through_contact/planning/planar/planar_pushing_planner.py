@@ -426,12 +426,7 @@ class PlanarPushingPlanner:
         )
         return path
 
-    def plan_trajectory(
-        self, solver_params: PlanarSolverParams
-    ) -> (
-        PlanarPushingTrajectory
-        | Tuple[PlanarPushingTrajectory, PlanarPushingTrajectory]
-    ):
+    def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
 
@@ -465,10 +460,7 @@ class PlanarPushingPlanner:
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
 
-        if solver_params.nonlinear_traj_rounding:
-            raise NotImplementedError("Not implemented yet")
-
-        return PlanarPushingTrajectory(self.config, self.path.get_vars())
+        return self.path
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """
