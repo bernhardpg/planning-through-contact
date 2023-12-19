@@ -261,7 +261,7 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     assert relaxed_result.is_success()
 
     path = planner.get_solution_path(relaxed_result)
-    traj_relaxed = path.to_traj(config, solver_params)
+    traj_relaxed = path.to_traj()
 
     if DEBUG:
         planner.create_graph_diagram(filename="debug_graph")

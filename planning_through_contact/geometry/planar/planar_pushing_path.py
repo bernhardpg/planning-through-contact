@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -119,6 +119,7 @@ class PlanarPushingPath:
         self.edges = edges_on_path
         self.result = result
         self.rounded_result = None
+        self.config = pairs_on_path[0].mode.config
 
     @classmethod
     def from_result(
@@ -140,13 +141,13 @@ class PlanarPushingPath:
         return cls(pairs_on_path, edge_path, result)
 
     def to_traj(
-        self, config: PlanarPlanConfig, solver_params: PlanarSolverParams
+        self, solver_params: Optional[PlanarSolverParams] = None
     ) -> PlanarPushingTrajectory:
-        if solver_params.nonlinear_traj_rounding:
+        if solver_params is not None and solver_params.nonlinear_traj_rounding:
             self.do_rounding(solver_params)
-            return PlanarPushingTrajectory(config, self.get_rounded_vars())
+            return PlanarPushingTrajectory(self.config, self.get_rounded_vars())
         else:
-            return PlanarPushingTrajectory(config, self.get_vars())
+            return PlanarPushingTrajectory(self.config, self.get_vars())
 
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [
