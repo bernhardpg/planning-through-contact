@@ -221,7 +221,14 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
-    plan_config.contact_config = request.param.get("contact_config", ContactConfig())
+    contact_config = ContactConfig(
+        cost_type=ContactCostType.OPTIMAL_CONTROL,
+        sq_forces=5.0,
+        mode_transition_cost=None,
+        delta_vel_max=0.1,
+        delta_theta_max=0.8,
+    )
+    plan_config.contact_config = request.param.get("contact_config", contact_config)
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)

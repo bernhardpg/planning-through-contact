@@ -92,7 +92,7 @@ class PlanarPushingPlanner:
 
         if self.config.contact_config.mode_transition_cost is not None:
             for v in self.contact_vertices:
-                v.AddCost(self.config.contact_config.mode_transition_cost)
+                v.AddCost(self.config.contact_config.mode_transition_cost)  # type: ignore
 
     @property
     def num_contact_modes(self) -> int:
