@@ -198,12 +198,10 @@ def create_plan(
 
     contact_config = ContactConfig(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
-        ang_displacements=1.0,
-        lin_displacements=1.0,
+        velocity_regularization=1.0,
+        goal_displacement=1.0,
+        sq_forces=0.0,
         mode_transition_cost=None,
-        delta_vel_max=0.05 * 2,
-        delta_theta_max=0.4 * 2,
     )
 
     if animation_output_dir != "":
@@ -220,7 +218,7 @@ def create_plan(
         )
 
     cost_terms = PlanarCostFunctionTerms(
-        obj_avoidance_quad_weight=0.4,
+        obj_avoidance_quad_weight=1.0,
     )
 
     config = PlanarPlanConfig(

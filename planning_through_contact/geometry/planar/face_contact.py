@@ -420,6 +420,7 @@ class FaceContactMode(AbstractContactMode):
             self.prog_wrapper.add_bounding_box_constraint(idx, -1, 1, cos_th)
             self.prog_wrapper.add_bounding_box_constraint(idx, -1, 1, sin_th)
 
+        # TODO: Remove
         delta_th_max = self.config.contact_config.delta_theta_max
         if delta_th_max is not None:
             for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -430,6 +431,7 @@ class FaceContactMode(AbstractContactMode):
                     k, k + 1, approx_delta_theta, 0, delta_th_max**2
                 )
 
+        # TODO: Remove
         delta_v_WB_max = self.config.contact_config.delta_vel_max
         if delta_v_WB_max is not None:
             for k, v_WB in enumerate(self.variables.v_WBs):
@@ -482,6 +484,7 @@ class FaceContactMode(AbstractContactMode):
             )
 
     def _define_costs(self) -> None:
+        # TODO: Remove
         if self.config.contact_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
             for idx, term in enumerate(sq_linear_vels):
@@ -505,11 +508,10 @@ class FaceContactMode(AbstractContactMode):
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 
-        elif (
-            self.config.contact_config.cost_type
-            == ContactCostType.KEYPOINT_DISPLACEMENTS
-        ):
+        elif self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             slider = self.config.dynamics_config.slider.geometry
+
+            # Compute slider vertex positions at each knot point
             p_Wv_is = [
                 [
                     slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
@@ -517,28 +519,55 @@ class FaceContactMode(AbstractContactMode):
                 ]
                 for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
             ]
+            num_vertices = len(slider.vertices)
+
+            # Regularization on slider velocities
             for k in range(self.num_knot_points - 1):
                 for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     disp = vertex_k_next - vertex_k
                     sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
+                    self.prog_wrapper.add_quadratic_cost(
+                        k,
+                        k + 1,
+                        (1 / num_vertices)
+                        * self.config.contact_config.velocity_regularization
+                        * sq_disp,
+                    )
 
-        elif self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             assert self.config.start_and_goal is not None
             target_pose = self.config.start_and_goal.slider_target_pose
 
-            cos_th_target = np.cos(target_pose.theta)
-            sin_th_target = np.sin(target_pose.theta)
-            for k, (cos_th, sin_th) in enumerate(
-                zip(self.variables.cos_ths, self.variables.sin_ths)
-            ):
-                cost = (cos_th - cos_th_target) ** 2 + (sin_th - sin_th_target) ** 2
-                self.prog_wrapper.add_quadratic_cost(k, k, cost)
-
+            # Penalty for deviation from target vertex positions
             p_WB_target = target_pose.pos()
-            for k, p_WB in enumerate(self.variables.p_WBs):
-                cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
-                self.prog_wrapper.add_quadratic_cost(k, k, cost)
+            R_WB_target = target_pose.two_d_rot_matrix()
+            p_Wv_target = [
+                slider.get_p_Wv_i(vertex_idx, R_WB_target, p_WB_target)
+                for vertex_idx in range(len(slider.vertices))
+            ]
+            for k in range(self.num_knot_points):
+                for vertex_k, target_vertex_k in zip(p_Wv_is[k], p_Wv_target):
+                    disp = target_vertex_k - vertex_k
+                    sq_disp = (disp.T @ disp).item()
+                    self.prog_wrapper.add_quadratic_cost(
+                        k,
+                        k,
+                        (1 / num_vertices)
+                        * self.config.contact_config.goal_displacement
+                        * sq_disp,
+                    )
+
+            # cos_th_target = np.cos(target_pose.theta)
+            # sin_th_target = np.sin(target_pose.theta)
+            # for k, (cos_th, sin_th) in enumerate(
+            #     zip(self.variables.cos_ths, self.variables.sin_ths)
+            # ):
+            #     cost = (cos_th - cos_th_target) ** 2 + (sin_th - sin_th_target) ** 2
+            #     self.prog_wrapper.add_quadratic_cost(k, k, cost)
+            #
+            # p_WB_target = target_pose.pos()
+            # for k, p_WB in enumerate(self.variables.p_WBs):
+            #     cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
+            #     self.prog_wrapper.add_quadratic_cost(k, k, cost)
 
         if self.config.contact_config.sq_forces is not None:
             for k, c_n in enumerate(self.variables.normal_forces):

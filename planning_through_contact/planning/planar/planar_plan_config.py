@@ -146,13 +146,15 @@ class ContactCostType(Enum):
 @dataclass
 class ContactConfig:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
-    lin_displacements: Optional[float] = 1.0
-    ang_displacements: Optional[float] = 1.0
+    goal_displacement: float = 1.0
+    velocity_regularization: float = 1.0
     sq_forces: Optional[float] = 1.0
+    lin_displacements: Optional[float] = 1.0  # TODO: Remove
+    ang_displacements: Optional[float] = 1.0  # TODO: Remove
     mode_transition_cost: Optional[float] = None
 
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
+    delta_theta_max: Optional[float] = None  # TODO: Remove
+    delta_vel_max: Optional[float] = None  # TODO: Remove
 
     def __post_init__(self) -> None:
         if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
