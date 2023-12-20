@@ -129,34 +129,10 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 513:
-        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi/2)
-        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=np.pi/2)
-        pusher_initial_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-        pusher_target_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-    elif traj_number == 514: # Fails
-        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0.9)
-        slider_target_pose = PlanarPose(x=0.35, y=0.1, theta=np.pi/2)
-        pusher_initial_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-        pusher_target_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-    elif traj_number == 515: # Fails
-        slider_initial_pose = PlanarPose(x=0.50, y=-0.1, theta=np.pi/2)
-        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=1.1)
-        pusher_initial_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-        pusher_target_pose = PlanarPose(x=-0.2, y=0, theta=0.0)
-    elif traj_number == 516: # Fails
-        slider_initial_pose = PlanarPose(x=0.45, y=0.1, theta=1.1)
-        slider_target_pose = PlanarPose(x=0.50, y=-0.1, theta=np.pi/2)
-        pusher_initial_pose = PlanarPose(x=0.2, y=0, theta=0.0)
-        pusher_target_pose = PlanarPose(x=0.2, y=0, theta=0.0)
-    elif traj_number == 517:
-        slider_initial_pose = PlanarPose(x=0.45, y=0.1, theta=1.2)
-        slider_target_pose = PlanarPose(x=0.60, y=0.0, theta=np.pi/2)
-        pusher_initial_pose = PlanarPose(x=0.2, y=0, theta=0.0)
-        pusher_target_pose = PlanarPose(x=0.2, y=0, theta=0.0)
-    elif traj_number == 518:
-        slider_target_pose = PlanarPose(x=0.45, y=-0.1, theta=np.pi / 2)
-        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0)
+        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=0)
+        pusher_initial_pose = PlanarPose(x=0.4, y=-0.3, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.4, y=-0.1, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -238,6 +214,7 @@ def create_plan(
             slider.geometry,
             pusher_radius,
             plan_spec,
+            # show=True,
             save=True,
             filename=f"{traj_name}_start_and_goal_{body_to_use}",
         )
@@ -292,8 +269,9 @@ def create_plan(
         filename = f"trajectories/{body_to_use}_pushing_{traj_name}.pkl"
         traj_relaxed.save(filename)  # type: ignore
 
-        filename = f"trajectories/{body_to_use}_pushing_{traj_name}_rounded.pkl"
-        traj_rounded.save(filename)  # type: ignore
+        if traj_rounded is not None:
+            filename = f"trajectories/{body_to_use}_pushing_{traj_name}_rounded.pkl"
+            traj_rounded.save(filename)  # type: ignore
 
     if save_analysis:
         analyze_plan(planner.path, filename=f"{traj_name}_{body_to_use}")
@@ -312,6 +290,7 @@ def create_plan(
                 config.pusher_radius,
                 planner.config.start_and_goal,
                 save=True,
+                # show=True,
                 filename=f"{traj_name}_start_and_goal_{body_to_use}",
             )
 
@@ -322,6 +301,7 @@ def create_plan(
         ani = visualize_planar_pushing_trajectory(
             traj_relaxed,  # type: ignore
             save=True,
+            # show=True,
             filename=f"{traj_name}_{body_to_use}",
             visualize_knot_points=not animation_smooth,
             lims=animation_lims,

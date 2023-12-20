@@ -240,7 +240,6 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         u_next = control_sol[:, 0]
-        # print(f"lowest cost: {costs[best_idx]:.4f}, mode: {HybridModes(best_idx).name} horizon: {len(x_traj)}, u_next: {u_next}")
         return x_dot_curr, u_next
 
 # Not used in pusher pose controller

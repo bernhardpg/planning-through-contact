@@ -188,23 +188,10 @@ class PlanarPushingTrajSegment:
     def from_knot_points(
         cls, knot_points: AbstractModeVariables, start_time: float, end_time: float
     ) -> "PlanarPushingTrajSegment":
-        knot_pts_p_WBs = knot_points.p_WBs
-        knot_pts_p_WPs = knot_points.p_WPs
-        knot_pts_R_WBs = knot_points.R_WBs
-        if isinstance(knot_points, NonCollisionVariables):
-            mode = PlanarPushingContactMode.NO_CONTACT
-        else:  # FaceContactVariables
-            mode = PlanarPushingContactMode.from_contact_location(
-                knot_points.contact_location
-            )
-            # Repeat last knot point for contact modes to add padding for the hybrid mpc
-            # knot_pts_p_WBs = knot_points.p_WBs + [knot_points.p_WBs[-1]]
-            # knot_pts_p_WPs = knot_points.p_WPs + [knot_points.p_WPs[-1]]
-            # knot_pts_R_WBs = knot_points.R_WBs + [knot_points.R_WBs[-1]]
+        p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
 
-        p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_pts_p_WBs), start_time, end_time)  # type: ignore
-        p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_pts_p_WPs), start_time, end_time)  # type: ignore
-        R_WB = So3TrajSegment.from_knot_points(knot_pts_R_WBs, start_time, end_time)  # type: ignore
+        p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
+        R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         # Start and target vertices may only have one knot point, hence num_inputs = num_knot_points - 1 = 0
         if len(knot_points.f_c_Ws) == 0:  # type: ignore
@@ -212,7 +199,12 @@ class PlanarPushingTrajSegment:
         else:
             f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
 
-        
+        if isinstance(knot_points, NonCollisionVariables):
+            mode = PlanarPushingContactMode.NO_CONTACT
+        else:  # FaceContactVariables
+            mode = PlanarPushingContactMode.from_contact_location(
+                knot_points.contact_location
+            )
 
         return cls(start_time, end_time, p_WB, R_WB, p_WP, f_c_W, mode)
 

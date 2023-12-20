@@ -207,9 +207,6 @@ class PusherPoseController(LeafSystem):
         )
 
         h = 1 / self.mpc_config.rate_Hz
-        # Without Accumulation
-        # x_at_next_mpc_step = x_curr + h * x_dot_curr
-        # With Accumulation
         x_acc = system.get_state_from_planar_poses(slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value())
         x_at_next_mpc_step = x_acc + h * x_dot_curr
         next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
@@ -256,6 +253,5 @@ class PusherPoseController(LeafSystem):
                 pusher_pose_cmd_state=pusher_pose_cmd_state,
                 slider_pose_cmd_state=slider_pose_cmd_state,
             )
-            # print(f"t: {context.get_time():.4f}, y_ref: {pusher_planar_pose_traj[0].y:.4f}, acc_pose: {acc_pose.pos()}, pusher_vel: {pusher_vel}")
             pusher_pose_command = next_pusher_pose.to_pose(z_value=self.z_dist)
             output.set_value(pusher_pose_command)
