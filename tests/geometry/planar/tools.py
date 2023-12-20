@@ -50,10 +50,7 @@ def _assert_traj_finger_pos(
     else:  # end
         p_WP = traj.path_knot_points[-1].p_WPs[-1]  # type: ignore
 
-    p_c_W_target = target_pose_slider.pos() + target_pose_slider.two_d_rot_matrix().dot(
-        target_pose_finger.pos()
-    )
-    assert np.allclose(p_WP, p_c_W_target, atol=atol)
+    assert np.allclose(p_WP, target_pose_finger.pos(), atol=atol)
 
 
 def assert_initial_and_final_poses(
@@ -96,10 +93,15 @@ def _assert_traj_finger_pos_legacy(
     target_pose_finger: PlanarPose,
     start_or_end: Literal["start", "end"],
     atol: float = 1e-3,
+    relative_to_W: bool = False,
 ):
-    p_c_W_target = target_pose_slider.pos() + target_pose_slider.two_d_rot_matrix().dot(
-        target_pose_finger.pos()
-    )
+    if relative_to_W:
+        p_c_W_target = target_pose_finger.pos()
+    else:
+        p_c_W_target = (
+            target_pose_slider.pos()
+            + target_pose_slider.two_d_rot_matrix().dot(target_pose_finger.pos())
+        )
     if start_or_end == "start":
         assert np.allclose(traj.p_WP[:, 0:1], p_c_W_target, atol=atol)
     else:  # end
@@ -112,13 +114,14 @@ def assert_initial_and_final_poses_LEGACY(
     initial_finger_pose: Optional[PlanarPose],
     target_slider_pose: Optional[PlanarPose],
     target_finger_pose: Optional[PlanarPose],
+    relative_to_W: bool = False,
 ) -> None:
     if initial_slider_pose:
         _assert_traj_slider_pose_legacy(traj, initial_slider_pose, "start")
 
     if initial_finger_pose and initial_slider_pose:
         _assert_traj_finger_pos_legacy(
-            traj, initial_slider_pose, initial_finger_pose, "start"
+            traj, initial_slider_pose, initial_finger_pose, "start", relative_to_W
         )
 
     if target_slider_pose:
@@ -126,7 +129,7 @@ def assert_initial_and_final_poses_LEGACY(
 
     if target_finger_pose and target_slider_pose:
         _assert_traj_finger_pos_legacy(
-            traj, target_slider_pose, target_finger_pose, "end"
+            traj, target_slider_pose, target_finger_pose, "end", relative_to_W
         )
 
 

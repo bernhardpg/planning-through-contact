@@ -34,6 +34,9 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
+    ContactConfig,
+    ContactCostType,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
@@ -67,6 +70,7 @@ def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
         use_band_sparsity=False,
         avoidance_cost="quadratic",  # TODO: Tests should be updated to use socp cost
     )
+    cfg.contact_config.cost_type = ContactCostType.SQ_VELOCITIES
     return cfg
 
 
@@ -130,8 +134,8 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
-    plan_config.minimize_keypoint_displacement = request.param.get(
-        "minimize_keypoint_displacement", False
+    plan_config.contact_config.cost_type = request.param.get(
+        "contact_cost", ContactCostType.SQ_VELOCITIES
     )
 
     face_idx = request.param.get("face_idx", 3)
@@ -185,6 +189,9 @@ def subgraph(
 
         subgraph.set_initial_poses(finger_initial_pose, slider_pose)
         subgraph.set_final_poses(finger_final_pose, slider_pose)
+        subgraph.config.start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_final_pose
+        )
 
     return subgraph
 
@@ -214,6 +221,14 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
+    contact_config = ContactConfig(
+        cost_type=ContactCostType.OPTIMAL_CONTROL,
+        sq_forces=5.0,
+        mode_transition_cost=None,
+        delta_vel_max=0.1,
+        delta_theta_max=0.8,
+    )
+    plan_config.contact_config = request.param.get("contact_config", contact_config)
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)
@@ -231,14 +246,11 @@ def planner(
 
     if request.param.get("boundary_conds"):
         boundary_conds = request.param.get("boundary_conds")
-
-        planner.set_initial_poses(
-            boundary_conds["finger_initial_pose"],
+        planner.config.start_and_goal = PlanarPushingStartAndGoal(
             boundary_conds["box_initial_pose"],
-        )
-        planner.set_target_poses(
-            boundary_conds["finger_target_pose"],
             boundary_conds["box_target_pose"],
+            boundary_conds["finger_initial_pose"],
+            boundary_conds["finger_target_pose"],
         )
 
     planner.formulate_problem()

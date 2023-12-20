@@ -41,7 +41,7 @@ for i in range(NUM_CTRL_POINTS - 1):
 
 # Initial conditions
 th_initial = 0
-th_final = np.pi
+th_final = np.pi / 2
 
 create_r_vec_from_angle = lambda th: np.array([np.cos(th), np.sin(th)])
 
@@ -61,6 +61,12 @@ for c in final_cond:
 # for k in range(NUM_CTRL_POINTS - 1):
 #     prog.AddLinearConstraint(s[k] >= th_dots[k])
 #     prog.AddLinearConstraint(s[k] >= -th_dots[k])
+
+for i in range(NUM_CTRL_POINTS - 1):
+    r_i = r[:, i]
+    r_next = r[:, i + 1]
+    r_disp_i = r_next - r_i
+    prog.AddQuadraticConstraint(r_disp_i.T @ r_disp_i, 0, 0.055)
 
 
 # Solve SDP relaxation

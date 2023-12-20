@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import cached_property
-from typing import Literal, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -10,6 +11,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 
 
@@ -102,55 +104,93 @@ class SliderPusherSystemConfig:
 
 @dataclass
 class PlanarSolverParams:
-    gcs_max_rounded_paths: int = 10
+    gcs_max_rounded_paths: int = 20
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
-    nonlinear_traj_rounding: bool = True
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
     print_cost: bool = False
     get_rounded_and_original_traj: bool = False
+    nonl_round_major_feas_tol: float = (
+        1e-3  # Feasibility treshold for nonlinear rounding
+    )
+    nonl_round_minor_feas_tol: float = (
+        1e-4  # Feasibility treshold for nonlinear rounding
+    )
+    nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    nonl_round_major_iter_limit: int = 10000  # Max number of major iterations of snopt
+    assert_rounding_res: bool = False  # We don't run rounding to optimality
 
 
 @dataclass
 class PlanarCostFunctionTerms:
+    # TODO: Refactor this into NonCollisionCost similar to face contaacts
     # Non-collision
     obj_avoidance_lin: float = 0.1  # TODO: Remove
     obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
     obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
     obj_avoidance_socp: float = 0.001
     sq_eucl_dist: float = 1.0
-    # Face contact
-    lin_displacements: float = 1.0
-    ang_displacements: float = 1.0
-    sq_forces: float = 1.0
-    mode_transition_cost: float = (
-        0.5  # not used unless 'penalize_mode_transitions' is true
-    )
+
+
+class ContactCostType(Enum):
+    SQ_VELOCITIES = 0
+    KEYPOINT_DISPLACEMENTS = 1
+    OPTIMAL_CONTROL = 2
+
+
+@dataclass
+class ContactConfig:
+    cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    lin_displacements: Optional[float] = 1.0
+    ang_displacements: Optional[float] = 1.0
+    sq_forces: Optional[float] = 1.0
+    mode_transition_cost: Optional[float] = None
+
+    delta_theta_max: Optional[float] = None
+    delta_vel_max: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
+            assert self.lin_displacements is not None
+            assert self.ang_displacements is not None
+
+
+@dataclass
+class PlanarPushingStartAndGoal:
+    slider_initial_pose: PlanarPose
+    slider_target_pose: PlanarPose
+    pusher_initial_pose: Optional[PlanarPose] = None
+    pusher_target_pose: Optional[PlanarPose] = None
+
+    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
+        new_slider_init = self.slider_initial_pose.rotate(theta)
+        new_slider_target = self.slider_target_pose.rotate(theta)
+
+        # NOTE: Pusher poses are already relative to slider frame, not world frame
+        return PlanarPushingStartAndGoal(
+            new_slider_init,
+            new_slider_target,
+            self.pusher_initial_pose,
+            self.pusher_target_pose,
+        )
 
 
 @dataclass
 class PlanarPlanConfig:
+    # TODO: Add initial and target configuration to this config
+    start_and_goal: Optional[PlanarPushingStartAndGoal] = None
     num_knot_points_contact: int = 4
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2  # TODO: remove, no time
     time_non_collision: float = 0.5  # TODO: remove, there is no time
     avoid_object: bool = False
     allow_teleportation: bool = False
-    avoidance_cost: Literal[
-        "linear",
-        "quadratic",
-        "socp",
-        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
-    ] = "socp"
-    minimize_squared_eucl_dist: bool = True
-    minimize_keypoint_displacement: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
-    penalize_mode_transitions: bool = False
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False  # TODO: remove, not used
     workspace: PlanarPushingWorkspace = field(
@@ -159,13 +199,21 @@ class PlanarPlanConfig:
     dynamics_config: SliderPusherSystemConfig = field(
         default_factory=lambda: SliderPusherSystemConfig()
     )
+    use_band_sparsity: bool = True
+    # TODO(bernhardpg): Refactor these cost terms into a struct
     cost_terms: PlanarCostFunctionTerms = field(
         default_factory=lambda: PlanarCostFunctionTerms()
     )
+    contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
-    minimize_sq_forces: bool = True
+    minimize_squared_eucl_dist: bool = True
     minimize_trace: bool = False
-    use_band_sparsity: bool = True
+    avoidance_cost: Literal[
+        "linear",
+        "quadratic",
+        "socp",
+        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
+    ] = "socp"
 
     @property
     def slider_geometry(self) -> CollisionGeometry:

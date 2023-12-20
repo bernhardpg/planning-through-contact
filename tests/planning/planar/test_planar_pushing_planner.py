@@ -7,9 +7,6 @@ import pytest
 from pydrake.solvers import LinearCost
 from pydrake.symbolic import Variables
 
-from planning_through_contact.geometry.planar.non_collision_subgraph import (
-    VertexModePair,
-)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -78,7 +75,7 @@ def test_planner_construction(
         costs = v.GetCosts()
 
         # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
-        assert len(costs) == 4 * (m.num_knot_points - 1)
+        assert len(costs) == len(m.prog.GetAllCosts())
 
         for idx, cost in enumerate(costs):
             var_idxs = m._get_cost_terms()[0][idx]
@@ -226,9 +223,10 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
+        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
@@ -236,8 +234,16 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, planner.slider.geometry, planner.config.pusher_radius
+        traj = PlanarPushingTrajectory.from_result(
+            planner.config,
+            result,
+            planner.gcs,
+            planner.source.vertex,
+            planner.target.vertex,
+            planner._get_all_vertex_mode_pairs(),
+        )
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -268,7 +274,6 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
                 "FACE_0_to_FACE_1_NON_COLL_0",
                 "FACE_0",
                 "EXIT_NON_COLL_0",
-                "EXIT_NON_COLL_3",
                 "target",
             ],
         ),
@@ -398,9 +403,10 @@ def test_make_plan(
     assert_initial_and_final_poses_LEGACY(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
+        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
@@ -440,7 +446,7 @@ def test_make_plan(
     indirect=["planner"],
     ids=[1, 2],
 )
-def test_make_plan_band_sparsity(
+def test_make_plan_band_sparsity_box(
     planner: PlanarPushingPlanner,
 ) -> None:
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
@@ -448,23 +454,14 @@ def test_make_plan_band_sparsity(
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-
-    traj = PlanarPushingTrajectory.from_result(
-        planner.config,
-        result,
-        planner.gcs,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
+    traj = path.to_traj()
 
     assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object
@@ -521,23 +518,14 @@ def test_make_plan_band_sparsity_t_pusher(
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-
-    traj = PlanarPushingTrajectory.from_result(
-        planner.config,
-        result,
-        planner.gcs,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
+    traj = path.to_traj()
 
     assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
-        planner.finger_pose_initial,
+        planner.pusher_pose_initial,
         planner.slider_pose_target,
-        planner.finger_pose_target,
+        planner.pusher_pose_target,
     )
 
     # Make sure we are not leaving the object

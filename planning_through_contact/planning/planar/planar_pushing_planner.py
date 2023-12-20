@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from itertools import combinations
-from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 import pydot
 import pydrake.geometry.optimization as opt
+from pydrake.geometry.optimization import Point
 from pydrake.solvers import (
     CommonSolverOption,
     MathematicalProgramResult,
@@ -34,6 +33,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
+    ContactCostType,
     PlanarPlanConfig,
     PlanarSolverParams,
 )
@@ -41,26 +41,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
 BidirGcsEdge = Tuple[GcsEdge, GcsEdge]
-
-
-@dataclass
-class PlanarPushingStartAndGoal:
-    slider_initial_pose: PlanarPose
-    slider_target_pose: PlanarPose
-    pusher_initial_pose: PlanarPose
-    pusher_target_pose: PlanarPose
-
-    def rotate(self, theta: float) -> "PlanarPushingStartAndGoal":
-        new_slider_init = self.slider_initial_pose.rotate(theta)
-        new_slider_target = self.slider_target_pose.rotate(theta)
-
-        # NOTE: Pusher poses are already relative to slider frame, not world frame
-        return PlanarPushingStartAndGoal(
-            new_slider_init,
-            new_slider_target,
-            self.pusher_initial_pose,
-            self.pusher_target_pose,
-        )
 
 
 class PlanarPushingPlanner:
@@ -96,10 +76,11 @@ class PlanarPushingPlanner:
             self.contact_locations = self.slider.geometry.contact_locations
 
     def formulate_problem(self) -> None:
-        assert self.slider_pose_initial is not None
-        assert self.slider_pose_target is not None
-        assert self.finger_pose_target is not None
-        assert self.finger_pose_initial is not None
+        assert self.config.start_and_goal is not None
+        self.slider_pose_initial = self.config.start_and_goal.slider_initial_pose
+        self.slider_pose_target = self.config.start_and_goal.slider_target_pose
+        self.pusher_pose_initial = self.config.start_and_goal.pusher_initial_pose
+        self.pusher_pose_target = self.config.start_and_goal.pusher_target_pose
 
         self.gcs = opt.GraphOfConvexSets()
         self._formulate_contact_modes()
@@ -109,9 +90,9 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.config.penalize_mode_transitions:
+        if self.config.contact_config.mode_transition_cost is not None:
             for v in self.contact_vertices:
-                v.AddCost(self.config.cost_terms.mode_transition_cost)
+                v.AddCost(self.config.contact_config.mode_transition_cost)  # type: ignore
 
     @property
     def num_contact_modes(self) -> int:
@@ -142,15 +123,20 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
+        self.edges = {}
         if self.config.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (self.contact_modes[i].name, self.contact_modes[j].name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
                     VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
                     only_continuity_on_slider=True,
                 )
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (self.contact_modes[j].name, self.contact_modes[i].name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
                     VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
@@ -171,8 +157,8 @@ class PlanarPushingPlanner:
                 self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
                 self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
 
-        self._set_initial_poses(self.finger_pose_initial, self.slider_pose_initial)
-        self._set_target_poses(self.finger_pose_target, self.slider_pose_target)
+        self._set_initial_poses(self.pusher_pose_initial, self.slider_pose_initial)
+        self._set_target_poses(self.pusher_pose_target, self.slider_pose_target)
 
     def _build_subgraph_between_contact_modes(
         self,
@@ -275,17 +261,9 @@ class PlanarPushingPlanner:
             )
         return subgraph
 
-    def set_initial_poses(
-        self,
-        finger_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.finger_pose_initial = finger_pose
-        self.slider_pose_initial = slider_pose
-
     def _set_initial_poses(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
         if (
@@ -293,23 +271,15 @@ class PlanarPushingPlanner:
             or not self.config.use_entry_and_exit_subgraphs
         ):
             self.source = self._add_single_source_or_target(
-                finger_pose, slider_pose, "initial"
+                pusher_pose, slider_pose, "initial"
             )
         else:
-            self.source_subgraph.set_initial_poses(finger_pose, slider_pose)
+            self.source_subgraph.set_initial_poses(pusher_pose, slider_pose)
             self.source = self.source_subgraph.source
-
-    def set_target_poses(
-        self,
-        finger_pose: PlanarPose,
-        slider_pose: PlanarPose,
-    ) -> None:
-        self.finger_pose_target = finger_pose
-        self.slider_pose_target = slider_pose
 
     def _set_target_poses(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
     ) -> None:
         if (
@@ -317,23 +287,43 @@ class PlanarPushingPlanner:
             or not self.config.use_entry_and_exit_subgraphs
         ):
             self.target = self._add_single_source_or_target(
-                finger_pose, slider_pose, "final"
+                pusher_pose, slider_pose, "final"
             )
         else:
-            self.target_subgraph.set_final_poses(finger_pose, slider_pose)
+            self.target_subgraph.set_final_poses(pusher_pose, slider_pose)
             self.target = self.target_subgraph.target
 
     def _add_single_source_or_target(
         self,
-        finger_pose: PlanarPose,
+        pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
+        if (
+            initial_or_final == "final"
+            and self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL
+        ):  # we don't enforce target position for slider with this cost
+            # set_slider_pose = False
+            # terminal_cost = True
+            set_slider_pose = True
+            terminal_cost = False
+        else:
+            set_slider_pose = True
+            terminal_cost = False
+
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, finger_pose, initial_or_final
+            self.config,
+            slider_pose,
+            pusher_pose,
+            initial_or_final,
+            set_slider_pose=set_slider_pose,
+            terminal_cost=terminal_cost,
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
         pair = VertexModePair(vertex, mode)
+
+        if terminal_cost:  # add cost on target vertex
+            mode.add_cost_to_vertex(vertex)
 
         # connect source or target to all contact modes
         if initial_or_final == "initial":
@@ -341,7 +331,9 @@ class PlanarPushingPlanner:
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    ("source", contact_mode.name)
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     pair,
                     VertexModePair(contact_vertex, contact_mode),
@@ -351,7 +343,9 @@ class PlanarPushingPlanner:
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                gcs_add_edge_with_continuity(
+                self.edges[
+                    (contact_mode.name, "target")
+                ] = gcs_add_edge_with_continuity(
                     self.gcs,
                     VertexModePair(contact_vertex, contact_mode),
                     pair,
@@ -391,6 +385,14 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
+        # TODO: The following commented out code allows you to pick which path to choose
+        # active_vertices = ["source", "FACE_2", "FACE_0", "target"]
+        # active_edges = [
+        #     self.edges[(active_vertices[i], active_vertices[i + 1])]
+        #     for i in range(len(active_vertices) - 1)
+        # ]
+        # result = self.gcs.SolveConvexRestriction(active_edges, options)
+
         result = self.gcs.SolveShortestPath(
             self.source.vertex, self.target.vertex, options
         )
@@ -424,12 +426,7 @@ class PlanarPushingPlanner:
         )
         return path
 
-    def plan_trajectory(
-        self, solver_params: PlanarSolverParams
-    ) -> (
-        PlanarPushingTrajectory
-        | Tuple[PlanarPushingTrajectory, PlanarPushingTrajectory]
-    ):
+    def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
 
@@ -453,44 +450,17 @@ class PlanarPushingPlanner:
             cost = result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        if solver_params.get_rounded_and_original_traj:
-            original_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                False,
-                solver_params.print_path,
-                solver_params.assert_determinants,
-            )
-            rounded_traj = PlanarPushingTrajectory.from_result(
-                self.config,
-                result,
-                self.gcs,
-                self.source.vertex,
-                self.target.vertex,
-                self._get_all_vertex_mode_pairs(),
-                True,
-                False,  # don't need to print path twice
-                solver_params.assert_determinants,
-            )
-            return original_traj, rounded_traj
-
-        traj = PlanarPushingTrajectory.from_result(
-            self.config,
-            result,
+        self.path = PlanarPushingPath.from_result(
             self.gcs,
+            result,
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
-            solver_params.nonlinear_traj_rounding,
-            solver_params.print_path,
-            solver_params.assert_determinants,
         )
+        if solver_params.print_path:
+            print(f"path: {self.path.get_path_names()}")
 
-        return traj
+        return self.path
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """
@@ -506,7 +476,7 @@ class PlanarPushingPlanner:
 
     def create_graph_diagram(
         self,
-        filepath: Optional[Path] = None,
+        filename: Optional[str] = None,
         result: Optional[MathematicalProgramResult] = None,
     ) -> pydot.Dot:
         """
@@ -517,7 +487,7 @@ class PlanarPushingPlanner:
         )
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        if filepath is not None:
-            data.write_svg(str(filepath))
+        if filename is not None:
+            data.write_png(filename + ".png")
 
         return data

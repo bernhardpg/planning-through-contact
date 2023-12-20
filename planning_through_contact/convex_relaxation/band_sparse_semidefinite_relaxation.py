@@ -315,7 +315,10 @@ class BandSparseSemidefiniteRelaxation:
                 Q_idxs = list(zip(*np.where(Q != 0)))
 
                 # get the idxs of these variables in our variable groups
-                if i + 1 == j:
+                if i == self.num_groups - 1:  # Last group
+                    assert i == j  # for the last group, we can not have j bigger than i
+                    x = np.concatenate((self.xs[i - 1], self.xs[i]))
+                elif i + 1 == j:
                     x = np.concatenate((self.xs[i], self.xs[j]))
                     # TODO(bernhardpg): Why is the lower and upper bound changing when we only have quadratic terms?
                     # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
@@ -334,9 +337,13 @@ class BandSparseSemidefiniteRelaxation:
                 }
                 var_idxs = [(idxs_map[i], idxs_map[j]) for i, j in Q_idxs]
 
-                if i == self.num_groups - 1:  # TODO: fix
-                    continue
-                X = self.Xs[i]
+                if i == self.num_groups - 1:  # Last group
+                    assert i == j  # for the last group, we can not have j bigger than i
+                    X = self.Xs[
+                        i - 1
+                    ]  # for the last group we need to pick the last part of the previous X
+                else:
+                    X = self.Xs[i]
                 X_vars = np.array([X[k, l] for (k, l) in var_idxs])
                 coeffs = np.array([Q[k, l] for (k, l) in Q_idxs])
 
@@ -350,6 +357,9 @@ class BandSparseSemidefiniteRelaxation:
 
         # Quadratic costs
         for (i, j), costs in self.quadratic_costs.items():
+            if len(costs) == 0:
+                continue
+
             # Only constraint coupling subsequent groups is supported
             assert i == i or i + 1 == j
 
@@ -365,7 +375,10 @@ class BandSparseSemidefiniteRelaxation:
                 Q_idxs = list(zip(*np.where(Q != 0)))
 
                 # get the idxs of these variables in our variable groups
-                if i + 1 == j:
+                if i == self.num_groups - 1:  # Last group
+                    assert i == j  # for the last group, we can not have j bigger than i
+                    x = np.concatenate((self.xs[i - 1], self.xs[i]))
+                elif i + 1 == j:
                     x = np.concatenate((self.xs[i], self.xs[j]))
                 elif i == j:  # only squared terms
                     x = self.xs[i]
@@ -378,9 +391,14 @@ class BandSparseSemidefiniteRelaxation:
                 }
                 var_idxs = [(idxs_map[i], idxs_map[j]) for i, j in Q_idxs]
 
-                if i == self.num_groups - 1:  # TODO: fix
-                    continue
-                X = self.Xs[i]
+                if i == self.num_groups - 1:  # Last group
+                    assert i == j  # for the last group, we can not have j bigger than i
+                    X = self.Xs[
+                        i - 1
+                    ]  # for the last group we need to pick the last part of the previous X
+                else:
+                    X = self.Xs[i]
+
                 X_vars = np.array([X[k, l] for (k, l) in var_idxs])
                 coeffs = np.array([Q[k, l] for (k, l) in Q_idxs])
 
