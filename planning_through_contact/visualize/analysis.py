@@ -166,6 +166,46 @@ def plot_planar_pushing_trajectory(
     plt.tight_layout()
     plt.savefig(f"planar_pushing_states{suffix}.pdf")
 
+    # State Error plot
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
+    MIN_AXIS_SIZE = 0.1
+
+    x_error = actual.x - desired.x
+    y_error = actual.y - desired.y
+    pos = np.vstack((x_error, y_error))
+    max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
+
+    axes[0].plot(actual.t, x_error, label="Error")
+    axes[0].set_title("x")
+    axes[0].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
+    axes[0].legend()
+    axes[0].set_ylim(-max_pos_change, max_pos_change)
+
+    axes[1].plot(actual.t, y_error, label="Error")
+    axes[1].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
+    axes[1].set_title("y")
+    axes[1].legend()
+    axes[1].set_ylim(-max_pos_change, max_pos_change)
+
+    theta_error = actual.theta - desired.theta
+    th_change = max(np.ptp(theta_error), MIN_AXIS_SIZE) * 2.0  # type: ignore
+
+    axes[2].plot(actual.t, theta_error, label="Error")
+    axes[2].set_title("theta")
+    axes[2].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
+    axes[2].legend()
+    axes[2].set_ylim(-th_change, th_change)
+
+    lam_error = actual.lam - desired.lam
+    axes[3].plot(actual.t, lam_error, label="Error")
+    axes[3].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
+    axes[3].set_title("lam")
+    axes[3].legend()
+    axes[3].set_ylim(0, 1)
+
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_states_error{suffix}.pdf")
+
     # Control input
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 8))
 

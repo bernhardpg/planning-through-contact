@@ -109,11 +109,7 @@ class PlanarPushingSimulation:
             slider_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
             builder.Connect(self.station.GetOutputPort("slider_pose"), slider_pose_to_vector.get_input_port())
             slider_pose_logger = LogVectorOutput(slider_pose_to_vector.get_output_port(), builder)
-            zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")
-            pusher_cmd_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
-            builder.Connect(zero_order_hold.get_output_port(), pusher_cmd_to_vector.get_input_port())
-            pusher_pose_desired_logger = LogVectorOutput(pusher_cmd_to_vector.get_output_port(), builder)
-            # pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
+            pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
             slider_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"), builder)
             
             self._pusher_pose_logger=pusher_pose_logger
@@ -133,12 +129,14 @@ class PlanarPushingSimulation:
         self.config = sim_config
         self.set_slider_planar_pose(sim_config.slider_start_pose)
 
+        desired_pusher_pose = sim_config.pusher_start_pose.to_pose(self.TABLE_BUFFER_DIST)
+        desired_slider_pose = sim_config.slider_start_pose.to_pose(self.station.get_slider_min_height())
         start_joint_positions = solve_ik(
             self.diagram,
             self.station,
-            sim_config.pusher_start_pose.to_pose(self.TABLE_BUFFER_DIST),
-            sim_config.slider_start_pose.to_pose(self.station.get_slider_min_height()),
-            sim_config.default_joint_positions,
+            pose=desired_pusher_pose,
+            current_slider_pose=desired_slider_pose,
+            default_joint_positions=sim_config.default_joint_positions,
         )
         self._set_joint_positions(start_joint_positions)
 
