@@ -299,20 +299,21 @@ class NonCollisionMode(AbstractContactMode):
 
     def _define_cost(self) -> None:
         if self.config.minimize_squared_eucl_dist:
-            if self.num_knot_points > 1:
-                position_diffs = [
-                    p_next - p_curr
-                    for p_next, p_curr in zip(
-                        self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
+            if self.config.cost_terms.sq_eucl_dist > 0:
+                if self.num_knot_points > 1:
+                    position_diffs = [
+                        p_next - p_curr
+                        for p_next, p_curr in zip(
+                            self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
+                        )
+                    ]
+                    position_diffs = np.vstack(position_diffs)
+                    # position_diffs is now one long vector with diffs in each entry
+                    squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+                    self.prog.AddQuadraticCost(
+                        self.config.cost_terms.sq_eucl_dist * squared_eucl_dist,
+                        is_convex=True,
                     )
-                ]
-                position_diffs = np.vstack(position_diffs)
-                # position_diffs is now one long vector with diffs in each entry
-                squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-                self.prog.AddQuadraticCost(
-                    self.config.cost_terms.sq_eucl_dist * squared_eucl_dist,
-                    is_convex=True,
-                )
 
         else:  # Minimize total Euclidean distance
             position_diffs = [
@@ -347,13 +348,14 @@ class NonCollisionMode(AbstractContactMode):
                 )  # maximize distances
 
             elif self.config.avoidance_cost == "quadratic":
-                squared_dists = [
-                    self.config.cost_terms.obj_avoidance_quad_weight
-                    * (d - self.config.cost_terms.obj_avoidance_quad_dist) ** 2
-                    for dist in dists_for_each_plane
-                    for d in dist
-                ]
-                self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
+                if self.config.cost_terms.obj_avoidance_quad_weight > 0:
+                    squared_dists = [
+                        self.config.cost_terms.obj_avoidance_quad_weight
+                        * (d - self.config.cost_terms.obj_avoidance_quad_dist) ** 2
+                        for dist in dists_for_each_plane
+                        for d in dist
+                    ]
+                    self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
 
             elif (
                 self.config.avoidance_cost == "socp_single_mode"
@@ -580,22 +582,24 @@ class NonCollisionMode(AbstractContactMode):
                 vertex.AddCost(new_binding)
         else:
             # euclidean distance cost
-            var_idxs, evaluator = self._get_eucl_dist_cost_term()
-            vars = vertex.x()[var_idxs]
-            binding = Binding[QuadraticCost](evaluator, vars)
-            vertex.AddCost(binding)
+            if len(self.prog.quadratic_costs()) > 0:
+                var_idxs, evaluator = self._get_eucl_dist_cost_term()
+                vars = vertex.x()[var_idxs]
+                binding = Binding[QuadraticCost](evaluator, vars)
+                vertex.AddCost(binding)
 
             if self.config.avoid_object:
                 if self.config.avoidance_cost in ["quadratic", "linear"]:
-                    var_idxs, evaluator = self._get_object_avoidance_cost_term()
-                    vars = vertex.x()[var_idxs]
-                    cost_type = (
-                        LinearCost
-                        if self.config.avoidance_cost == "linear"
-                        else QuadraticCost
-                    )
-                    binding = Binding[cost_type](evaluator, vars)
-                    vertex.AddCost(binding)
+                    if len(self.prog.quadratic_costs()) > 0:
+                        var_idxs, evaluator = self._get_object_avoidance_cost_term()
+                        vars = vertex.x()[var_idxs]
+                        cost_type = (
+                            LinearCost
+                            if self.config.avoidance_cost == "linear"
+                            else QuadraticCost
+                        )
+                        binding = Binding[cost_type](evaluator, vars)
+                        vertex.AddCost(binding)
                 else:  # socp
                     # TODO(bernhardpg): Clean up this part
                     planes = self.slider_geometry.get_contact_planes(

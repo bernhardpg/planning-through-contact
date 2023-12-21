@@ -522,39 +522,59 @@ class FaceContactMode(AbstractContactMode):
             num_vertices = len(slider.vertices)
 
             # Regularization on slider velocities
-            for k in range(self.num_knot_points - 1):
-                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                    disp = vertex_k_next - vertex_k
-                    sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k + 1,
-                        (1 / num_vertices)
-                        * self.config.contact_config.velocity_regularization
-                        * sq_disp,
-                    )
+            # if self.config.contact_config.velocity_regularization > 0:
+            #     for k in range(self.num_knot_points - 1):
+            #         for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+            #             disp = vertex_k_next - vertex_k
+            #             sq_disp = (disp.T @ disp).item()
+            #             self.prog_wrapper.add_quadratic_cost(
+            #                 k,
+            #                 k + 1,
+            #                 (1 / num_vertices)
+            #                 * self.config.contact_config.velocity_regularization
+            #                 * sq_disp,
+            #             )
 
-            assert self.config.start_and_goal is not None
-            target_pose = self.config.start_and_goal.slider_target_pose
+            # sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
+            # for idx, term in enumerate(sq_linear_vels):
+            #     self.prog_wrapper.add_quadratic_cost(
+            #         idx,
+            #         idx + 1,
+            #         self.config.contact_config.velocity_regularization * term,
+            #     )
+
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+            ):
+                self.prog_wrapper.add_quadratic_cost(
+                    k,
+                    k + 1,
+                    self.config.contact_config.velocity_regularization
+                    * (delta_sin_th**2 + delta_cos_th**2),
+                )
 
             # Penalty for deviation from target vertex positions
-            p_WB_target = target_pose.pos()
-            R_WB_target = target_pose.two_d_rot_matrix()
-            p_Wv_target = [
-                slider.get_p_Wv_i(vertex_idx, R_WB_target, p_WB_target)
-                for vertex_idx in range(len(slider.vertices))
-            ]
-            for k in range(self.num_knot_points):
-                for vertex_k, target_vertex_k in zip(p_Wv_is[k], p_Wv_target):
-                    disp = target_vertex_k - vertex_k
-                    sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k,
-                        (1 / num_vertices)
-                        * self.config.contact_config.goal_displacement
-                        * sq_disp,
-                    )
+            if self.config.contact_config.goal_displacement > 0:
+                assert self.config.start_and_goal is not None
+                target_pose = self.config.start_and_goal.slider_target_pose
+
+                p_WB_target = target_pose.pos()
+                R_WB_target = target_pose.two_d_rot_matrix()
+                p_Wv_target = [
+                    slider.get_p_Wv_i(vertex_idx, R_WB_target, p_WB_target)
+                    for vertex_idx in range(len(slider.vertices))
+                ]
+                for k in range(self.num_knot_points):
+                    for vertex_k, target_vertex_k in zip(p_Wv_is[k], p_Wv_target):
+                        disp = target_vertex_k - vertex_k
+                        sq_disp = (disp.T @ disp).item()
+                        self.prog_wrapper.add_quadratic_cost(
+                            k,
+                            k,
+                            (1 / num_vertices)
+                            * self.config.contact_config.goal_displacement
+                            * sq_disp,
+                        )
 
             # cos_th_target = np.cos(target_pose.theta)
             # sin_th_target = np.sin(target_pose.theta)
