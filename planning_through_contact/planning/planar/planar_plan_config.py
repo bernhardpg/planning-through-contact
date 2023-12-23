@@ -33,11 +33,11 @@ class BoxWorkspace:
 
     @property
     def y_min(self) -> float:
-        return self.center[0] - self.height / 2
+        return self.center[1] - self.height / 2
 
     @property
     def y_max(self) -> float:
-        return self.center[0] + self.height / 2
+        return self.center[1] + self.height / 2
 
     @property
     def bounds(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
