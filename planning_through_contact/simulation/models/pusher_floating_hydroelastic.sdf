@@ -17,12 +17,12 @@
         <mass>0.1</mass>
 
         <inertia>
-          <ixx>1e-2</ixx>
+          <ixx>0.00016895833333333335</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>1e-2</iyy>
+          <iyy>0.00016895833333333335</iyy>
           <iyz>0</iyz>
-          <izz>1e-2</izz>
+          <izz>1.125e-05</izz>
         </inertia>
       </inertial>
       <pose>0 0 0 0 0 0</pose>
@@ -30,7 +30,7 @@
       <visual name="visual">
         <geometry>
           <cylinder>
-            <radius> 0.03 </radius>
+            <radius> 0.015 </radius>
             <length> 0.14 </length>
           </cylinder>
         </geometry>
@@ -42,7 +42,7 @@
       <collision name="collision">
         <geometry>
           <cylinder>
-            <radius> 0.03 </radius>
+            <radius> 0.015 </radius>
             <length> 0.14 </length>
           </cylinder>        
         </geometry>
@@ -50,8 +50,8 @@
           <drake:compliant_hydroelastic/>
           <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
           <drake:mesh_resolution_hint>0.005</drake:mesh_resolution_hint>
-          <drake:mu_dynamic>0.7</drake:mu_dynamic>
-          <drake:mu_static>0.7</drake:mu_static>
+          <drake:mu_dynamic>0.25</drake:mu_dynamic>
+          <drake:mu_static>0.25</drake:mu_static>
         </drake:proximity_properties>
       </collision>
     </link>

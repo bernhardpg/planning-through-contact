@@ -33,7 +33,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=False,
         delay_before_execution=1,
         use_diff_ik=True,
-        closed_loop= True,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -44,9 +44,10 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
-    recording_name = plan.split(".")[0] + ".html" if save_recording else None
+    recording_name = plan.split(".")[0]+f"_cl{sim_config.closed_loop}" + ".html" if save_recording else None
     sim.run(traj.end_time + 1, save_recording_as=recording_name)
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_9.pkl", save_recording=True, debug=True)
+    # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

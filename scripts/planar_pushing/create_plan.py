@@ -33,7 +33,7 @@ from planning_through_contact.visualize.planar_pushing import (
 
 def get_slider_box() -> RigidBody:
     mass = 0.1
-    box_geometry = Box2d(width=0.15, height=0.15)
+    box_geometry = Box2d(width=0.07, height=0.07)
     slider = RigidBody("box", box_geometry, mass)
     return slider
 
@@ -124,15 +124,15 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
         pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
         pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
     elif traj_number == 512:
-        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0.9)
-        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=0.9)
-        pusher_initial_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
-        pusher_target_pose = PlanarPose(x=-0.2, y=-0.2, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.55, y=-0.1, theta=0.9)
+        slider_target_pose = PlanarPose(x=0.55, y=0.1, theta=0.9)
+        pusher_initial_pose = PlanarPose(x=0.45, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.45, y=-0.2, theta=0.0)
     elif traj_number == 513:
-        slider_initial_pose = PlanarPose(x=0.45, y=-0.1, theta=0)
-        slider_target_pose = PlanarPose(x=0.45, y=0.1, theta=0)
-        pusher_initial_pose = PlanarPose(x=0.4, y=-0.3, theta=0.0)
-        pusher_target_pose = PlanarPose(x=0.4, y=-0.1, theta=0.0)
+        slider_initial_pose = PlanarPose(x=0.6, y=-0.05, theta=0)
+        slider_target_pose = PlanarPose(x=0.6, y=0.15, theta=0)
+        pusher_initial_pose = PlanarPose(x=0.45, y=-0.2, theta=0.0)
+        pusher_target_pose = PlanarPose(x=0.45, y=-0.2, theta=0.0)
     else:
         raise NotImplementedError()
 
@@ -140,16 +140,15 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
         slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
     )
 
-
-def get_plans_to_origin(
-    num_plans: int, lims: Tuple[float, float, float, float], pusher_radius: float
+def get_plans_to_point(num_plans: int, lims: Tuple[float, float, float, float], pusher_radius: float, 
+                       point: Tuple[float, float]=(0,0) # Default is origin
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
 
     x_min, x_max, y_min, y_max = lims
     EPS = 0.01
-    pusher_pose = PlanarPose(0, y_max + pusher_radius + EPS, 0)
+    pusher_pose = PlanarPose(x_max + pusher_radius + EPS, y_max + pusher_radius + EPS, 0)
 
     plans = []
     for _ in range(num_plans):
@@ -158,7 +157,7 @@ def get_plans_to_origin(
         th_initial = np.random.uniform(-np.pi + 0.1, np.pi - 0.1)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
-        slider_target_pose = PlanarPose(0, 0, 0)
+        slider_target_pose = PlanarPose(point[0], point[1], 0)
 
         plans.append(
             PlanarPushingStartAndGoal(
@@ -167,7 +166,6 @@ def get_plans_to_origin(
         )
 
     return plans
-
 
 def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
@@ -214,7 +212,7 @@ def create_plan(
             slider.geometry,
             pusher_radius,
             plan_spec,
-            # show=True,
+            show=True,
             save=True,
             filename=f"{traj_name}_start_and_goal_{body_to_use}",
         )
@@ -283,6 +281,16 @@ def create_plan(
                 rounded=True,
             )
 
+    make_traj_figure(
+            traj_relaxed,
+            filename=f"{traj_name}_{body_to_use}",
+        )
+    if traj_rounded is not None:
+            make_traj_figure(
+                traj_rounded,
+                filename=f"{traj_name}_{body_to_use}_rounded",
+            )
+
     if visualize:
         if debug:
             visualize_planar_pushing_start_and_goal(
@@ -293,11 +301,6 @@ def create_plan(
                 # show=True,
                 filename=f"{traj_name}_start_and_goal_{body_to_use}",
             )
-
-        make_traj_figure(
-            traj_relaxed,
-            filename=f"{traj_name}_{body_to_use}",
-        )
         ani = visualize_planar_pushing_trajectory(
             traj_relaxed,  # type: ignore
             save=True,
@@ -308,13 +311,10 @@ def create_plan(
         )
 
         if traj_rounded is not None:
-            make_traj_figure(
-                traj_rounded,
-                filename=f"{traj_name}_{body_to_use}_rounded",
-            )
             ani = visualize_planar_pushing_trajectory(
                 traj_rounded,  # type: ignore
                 save=True,
+                # show=True,
                 filename=f"{traj_name}_{body_to_use}_rounded",
                 visualize_knot_points=not animation_smooth,
                 lims=animation_lims,
@@ -339,19 +339,21 @@ if __name__ == "__main__":
     )
     parser.add_argument("--round", help="Do nonlinear rounding", action="store_true")
     parser.add_argument("--demos", help="Generate demos", action="store_true")
+    parser.add_argument("--hardware_demos", help="Generate demos", action="store_true")
     parser.add_argument("--debug", help="Debug mode", action="store_true")
     args = parser.parse_args()
     traj_number = args.traj
     make_demos = args.demos
+    hardware_demos = args.hardware_demos
     debug = args.debug
     rounding = args.round
 
-    pusher_radius = 0.035
+    pusher_radius = 0.015
 
     if make_demos:
         lims = (-0.4, 0.4, -0.4, 0.4)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_origin(9, lims, pusher_radius)
+        plans = get_plans_to_point(9, lims, pusher_radius)
 
         if traj_number is not None:
             create_plan(
@@ -388,7 +390,45 @@ if __name__ == "__main__":
                     save_analysis=True,
                     do_rounding=rounding,
                 )
-
+    elif hardware_demos:
+        lims = (0.5, 0.6, -0.15, 0.15)
+        animation_lims = (np.array(lims) * 1.3).tolist()
+        plans = get_plans_to_point(20, lims, pusher_radius, (0.575, 0))
+        if traj_number is not None:
+            create_plan(
+                plans[traj_number],
+                debug=debug,
+                body_to_use=args.body,
+                traj_name=f"hw_demo_{traj_number}",
+                visualize=False,
+                pusher_radius=pusher_radius,
+                save_traj=True,
+                animation_output_dir="demos",
+                animation_lims=animation_lims,
+                time_in_contact=7.0,
+                time_in_non_collision=5.0,
+                animation_smooth=False,
+                save_analysis=True,
+                do_rounding=rounding,
+            )
+        else:
+            for idx, plan in enumerate(plans):
+                create_plan(
+                    plan,
+                    debug=debug,
+                    body_to_use=args.body,
+                    traj_name=f"hw_demo_{idx}",
+                    visualize=False,
+                    pusher_radius=pusher_radius,
+                    save_traj=True,
+                    animation_output_dir="demos",
+                    animation_lims=animation_lims,
+                    time_in_contact=7.0,
+                    time_in_non_collision=5.0,
+                    animation_smooth=False,
+                    save_analysis=True,
+                    do_rounding=rounding,
+                )
     else:
         plan_spec = get_predefined_plan(traj_number)
 
