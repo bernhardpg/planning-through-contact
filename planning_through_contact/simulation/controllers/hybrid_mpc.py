@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -37,6 +37,9 @@ class HybridMpcConfig:
     num_sliding_steps: int = 5
     rate_Hz: int = 200
     enforce_hard_end_constraint: bool = False
+    Q: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 10)
+    Q_N: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000)
+    R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
 
 
 class HybridModes(Enum):
@@ -196,10 +199,13 @@ class HybridMpc:
             prog.AddLinearConstraint(lam <= 1)
 
         # Cost
-        Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
-        Q = Q_base * 100
-        R = np.diag([1, 1, 0]) * 0.5
-        Q_N = Q_base * 2000
+        # Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
+        # Q = Q_base * 100
+        # R = np.diag([1, 1, 0]) * 0.5
+        # Q_N = Q_base * 2000
+        Q = self.config.Q
+        R = self.config.R
+        Q_N = self.config.Q_N
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
