@@ -1,3 +1,4 @@
+import numpy as np
 from pydrake.multibody.plant import ContactModel
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -21,7 +22,15 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
     slider = traj.config.dynamics_config.slider
 
-    mpc_config = HybridMpcConfig(rate_Hz=20, horizon=20, step_size=0.05)
+    mpc_config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=30,
+        Q=np.diag([3, 3, 0.5, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -49,5 +58,5 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_demos/hw_demo_9.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_7_rounded.pkl", save_recording=True, debug=True)
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

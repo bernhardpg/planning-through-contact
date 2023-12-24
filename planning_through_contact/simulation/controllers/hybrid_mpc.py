@@ -64,6 +64,8 @@ class HybridMpc:
 
         self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
+        self.control_log: List[npt.NDArray[np.float64]] = []
+
     def _calculate_symbolic_system(
         self,
     ) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
@@ -172,6 +174,10 @@ class HybridMpc:
 
         # Control constraints
         mu = self.dynamics_config.friction_coeff_slider_pusher
+        # Control limits:
+        MAX_MAGNITUDE = 0.1 #0.3
+        lb = np.array([0, -MAX_MAGNITUDE, -MAX_MAGNITUDE])
+        ub = np.array([MAX_MAGNITUDE, MAX_MAGNITUDE, MAX_MAGNITUDE])
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -192,17 +198,19 @@ class HybridMpc:
                 prog.AddLinearConstraint(c_f == -mu * c_n)
                 prog.AddLinearConstraint(lam_dot >= 0)
 
+            # Control Limits:
+            prog.AddLinearConstraint(c_n <= ub[0])
+            prog.AddLinearConstraint(c_f >= lb[1])
+            prog.AddLinearConstraint(c_f <= ub[1])
+            prog.AddLinearConstraint(lam_dot >= lb[2])
+            prog.AddLinearConstraint(lam_dot <= ub[2])
+
         # State constraints
         for state in x.T:
             lam = state[3]
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        # Cost
-        # Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
-        # Q = Q_base * 100
-        # R = np.diag([1, 1, 0]) * 0.5
-        # Q_N = Q_base * 2000
         Q = self.config.Q
         R = self.config.R
         Q_N = self.config.Q_N
@@ -245,6 +253,8 @@ class HybridMpc:
         x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
+        
+        self.control_log.append(control_sol.T)
         u_next = control_sol[:, 0]
         return x_dot_curr, u_next
 

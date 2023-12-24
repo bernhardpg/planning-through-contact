@@ -49,6 +49,7 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 )
 from planning_through_contact.visualize.analysis import (
     PlanarPushingLog,
+    plot_control_sols_vs_time,
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
 )
@@ -416,7 +417,7 @@ def execute_hybrid_mpc_controller(
 
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.AdvanceTo(one_contact_mode.time_in_mode + 2)
+    simulator.AdvanceTo(one_contact_mode.time_in_mode + 1)
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_pdf("hybrid_mpc_diagram.pdf")  # type: ignore
@@ -434,6 +435,8 @@ def execute_hybrid_mpc_controller(
         plot_planar_pushing_logs(
             state_log, desired_state_log, control_log, desired_control_log
         )
+        plot_control_sols_vs_time(mpc_controller.mpc.control_log)
+
 
 def test_hybrid_mpc_controller(
     one_contact_mode: FaceContactMode,
@@ -452,25 +455,25 @@ Francois Robert Hogan and Alberto Rodriguez, 2016, https://arxiv.org/abs/1611.08
 @pytest.fixture
 def hogan_sim_mpc_config() -> HybridMpcConfig:
     # For weights, see page 12 of the paper
-    # These weights do not seem to be working
+    # config = HybridMpcConfig(
+    #     step_size=0.03,
+    #     horizon=35,
+    #     num_sliding_steps=1,
+    #     rate_Hz=30,
+    #     Q=np.diag([1, 3, 0.1, 0]) * 10,
+    #     Q_N=np.diag([1, 3, 0.1, 0]) * 200,
+    #     R=np.diag([1, 1, 0]) * 0.5,
+    # )
+    # The best performing weights I found
     config = HybridMpcConfig(
         step_size=0.03,
         horizon=35,
         num_sliding_steps=1,
-        rate_Hz=20,
-        Q=np.diag([1, 3, 0.1, 0]) * 10,
-        Q_N=np.diag([1, 3, 0.1, 0]) * 200,
+        rate_Hz=30,
+        Q=np.diag([3, 3, 0.5, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
     )
-    # config = HybridMpcConfig(
-    #     step_size=0.05,
-    #     horizon=35,
-    #     num_sliding_steps=5,
-    #     rate_Hz=50,
-    #     Q=np.diag([3, 3, 0.1, 0]) * 100,
-    #     Q_N=np.diag([3, 3, 0.1, 0]) * 2000,
-    #     R=np.diag([1, 1, 0]) * 0.5,
-    # )
     return config
 
 @pytest.fixture
