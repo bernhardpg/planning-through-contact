@@ -212,7 +212,7 @@ def create_plan(
             slider.geometry,
             pusher_radius,
             plan_spec,
-            # show=True,
+            show=True,
             save=True,
             filename=f"{traj_name}_start_and_goal_{body_to_use}",
         )
