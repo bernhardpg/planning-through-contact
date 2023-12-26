@@ -254,7 +254,15 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
         
-        self.control_log.append(control_sol.T)
+        if len(control_sol.T) == self.config.horizon:
+            self.control_log.append(control_sol.T)
+        else:
+            # Padding because the solution length gets smaller as the prediction horizon decreases
+            # towards the end of the trajectory segment
+            padding = self.config.horizon - control_sol.shape[1]
+            padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode='constant')
+            self.control_log.append(padded_array.T)
+        
         u_next = control_sol[:, 0]
         return x_dot_curr, u_next
 

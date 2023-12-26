@@ -59,11 +59,20 @@ DEBUG = False
 
 @pytest.fixture
 def mpc_config() -> HybridMpcConfig:
+    # config = HybridMpcConfig(
+    #     step_size=0.1,
+    #     horizon=10,
+    #     num_sliding_steps=5,
+    #     rate_Hz=20,
+    # )
     config = HybridMpcConfig(
-        step_size=0.1,
-        horizon=10,
-        num_sliding_steps=5,
-        rate_Hz=20,
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=30,
+        Q=np.diag([3, 3, 0.5, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
     )
     return config
 
@@ -438,7 +447,7 @@ def execute_hybrid_mpc_controller(
         plot_control_sols_vs_time(mpc_controller.mpc.control_log)
 
 
-def test_hybrid_mpc_controller(
+def test_hybrid_mpc_controller_curve_tracking(
     one_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
