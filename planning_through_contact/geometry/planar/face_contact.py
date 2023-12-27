@@ -364,7 +364,7 @@ class FaceContactMode(AbstractContactMode):
 
     def _define_constraints(self) -> None:
         for idx, lam in enumerate(self.variables.lams):
-            self.prog_wrapper.add_bounding_box_constraint(idx, 0.4, 0.6, lam)
+            self.prog_wrapper.add_bounding_box_constraint(idx, 0.47, 0.53, lam)
 
         # SO(2) constraints
         for idx, (c, s) in enumerate(

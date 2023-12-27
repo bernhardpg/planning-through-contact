@@ -393,20 +393,20 @@ if __name__ == "__main__":
     elif hardware_demos:
         lims = (0.5, 0.6, -0.15, 0.15)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, 0))
+        plans = get_plans_to_point(5, lims, pusher_radius, (0.575, 0))
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
                 debug=debug,
                 body_to_use=args.body,
-                traj_name=f"hw_demo_B_{traj_number}",
+                traj_name=f"hw_demo_C_{traj_number}",
                 visualize=False,
                 pusher_radius=pusher_radius,
                 save_traj=True,
                 animation_output_dir="demos",
                 animation_lims=animation_lims,
-                time_in_contact=6.0,
-                time_in_non_collision=4.0,
+                time_in_contact=4.0,
+                time_in_non_collision=1.0,
                 animation_smooth=False,
                 save_analysis=True,
                 do_rounding=rounding,
@@ -417,14 +417,14 @@ if __name__ == "__main__":
                     plan,
                     debug=debug,
                     body_to_use=args.body,
-                    traj_name=f"hw_demo_B_{idx}",
+                    traj_name=f"hw_demo_C_{idx}",
                     visualize=False,
                     pusher_radius=pusher_radius,
                     save_traj=True,
                     animation_output_dir="demos",
                     animation_lims=animation_lims,
-                    time_in_contact=6.0,
-                    time_in_non_collision=4.0,
+                    time_in_contact=4.0,
+                    time_in_non_collision=1.0,
                     animation_smooth=False,
                     save_analysis=True,
                     do_rounding=rounding,
