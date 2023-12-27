@@ -10,6 +10,7 @@ from planning_through_contact.simulation.controllers.desired_position_source_bas
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import PlanarPoseTrajPublisher
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PlanarPushingSimConfig
 from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import PusherPoseController
+from planning_through_contact.simulation.systems.contact_detection_system import ContactDetectionSystem
 
 
 class MPCPositionSource(DesiredPositionSourceBase):
@@ -35,6 +36,12 @@ class MPCPositionSource(DesiredPositionSourceBase):
             ),
         )
 
+        # Contact Detection System
+        self._contact_detector = builder.AddNamedSystem(
+            "ContactDetectionSystem",
+            ContactDetectionSystem("pusher::collision", "box::box_collision")
+        )
+
         # MPC controllers
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
             builder=builder,
@@ -48,6 +55,16 @@ class MPCPositionSource(DesiredPositionSourceBase):
             closed_loop=self._sim_config.closed_loop,
             pusher_planar_pose_measured=state_estimator.GetOutputPort("pusher_pose"),
             slider_pose_measured=state_estimator.GetOutputPort("slider_pose"),
+        )
+
+        # Connect contact detection system
+        builder.Connect(
+            state_estimator.GetOutputPort("query_object"),
+            self._contact_detector.GetInputPort("query_object"),
+        )
+        builder.Connect(
+            self._contact_detector.GetOutputPort("contact_detected"),
+            self.pusher_pose_controller.GetInputPort("pusher_slider_contact"),
         )
         # Last system of the PusherPoseController, it's output is not connected
         zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")

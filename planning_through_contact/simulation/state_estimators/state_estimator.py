@@ -14,6 +14,7 @@ from pydrake.all import (
     Box as DrakeBox,
     GeometryInstance,
     MakePhongIllustrationProperties,
+    Rgba,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PusherSliderPoseSelector, PlanarPushingSimConfig
@@ -34,7 +35,7 @@ class StateEstimator(Diagram):
         add_visualizer: bool = False,
     ):
         super().__init__()
-
+        self._goal_geometries = []
         builder = DiagramBuilder()
 
         # Create the multibody plant and scene graph
@@ -136,7 +137,7 @@ class StateEstimator(Diagram):
         return self._scene_graph
     
     def _visualize_desired_slider_pose(self, desired_planar_pose: PlanarPose) -> None:
-        source_id = self._scene_graph.RegisterSource()
+        
         shapes = self.get_slider_shapes()
         poses = self.get_slider_shape_poses()
 
@@ -145,23 +146,31 @@ class StateEstimator(Diagram):
         desired_pose = desired_planar_pose.to_pose(
             min_height / 2, z_axis_is_positive=True
         )
-
-        BOX_COLOR = COLORS["emeraldgreen"]
-        DESIRED_POSE_ALPHA = 0.4
-        for idx, (shape, pose) in enumerate(zip(shapes, poses)):
-            curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
-                source_id,
-                GeometryInstance(
-                    desired_pose.multiply(pose),
-                    shape,
-                    f"shape_{idx}",
-                ),
-            )
-            self._scene_graph.AssignRole(
-                source_id,
-                curr_shape_geometry_id,
-                MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
-            )
+        if len(self._goal_geometries) == 0:
+            source_id = self._scene_graph.RegisterSource()
+            BOX_COLOR = COLORS["emeraldgreen"]
+            DESIRED_POSE_ALPHA = 0.4
+            for idx, (shape, pose) in enumerate(zip(shapes, poses)):
+                geom_instance = GeometryInstance(
+                        desired_pose.multiply(pose),
+                        shape,
+                        f"shape_{idx}",
+                    )
+                curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
+                    source_id,
+                    geom_instance,
+                )
+                self._scene_graph.AssignRole(
+                    source_id,
+                    curr_shape_geometry_id,
+                    MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
+                )
+                geom_name = f"goal_shape_{idx}"
+                self._goal_geometries.append(geom_name)
+                self.meshcat.SetObject(geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)))
+        else:
+            for pose, geom_name in zip(poses, self._goal_geometries):
+                self.meshcat.SetTransform(geom_name, desired_pose.multiply(pose))
 
     def get_slider_body(self) -> DrakeRigidBody:
         slider_body = self._plant.GetUniqueFreeBaseBodyOrThrow(self.slider)

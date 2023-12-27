@@ -185,8 +185,16 @@ class TableEnvironment():
         """
         if save_recording_as:
             self._state_estimator.meshcat.StartRecording()
-        
-        self._simulator.AdvanceTo(timeout)
+        time_step = self._sim_config.time_step * 100
+        for t in np.append(
+            np.arange(0, timeout,
+                      time_step), timeout):
+            self._simulator.AdvanceTo(t)
+            # Hacky way of visualizing the desired slider pose
+            context = self._desired_position_source.planar_pose_pub.GetMyContextFromRoot(self.context)
+            slider_desired_pose_vec = self._desired_position_source.planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector").Eval(context)
+            self._state_estimator._visualize_desired_slider_pose(PlanarPose(*slider_desired_pose_vec))
+        # self._simulator.AdvanceTo(timeout)
         if save_recording_as:
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty("/drake/contact_forces", "visible", False)

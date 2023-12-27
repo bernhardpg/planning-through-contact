@@ -1,5 +1,6 @@
 import numpy as np
 from pydrake.multibody.plant import ContactModel
+import logging
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -23,6 +24,9 @@ from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("planning_through_contact.simulation.planar_pushing.pusher_pose_controller").setLevel(logging.DEBUG)
+
     traj = PlanarPushingTrajectory.load(plan)
 
     slider = traj.config.dynamics_config.slider
@@ -36,12 +40,13 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         Q_N=np.diag([3, 3, 1, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
     )
-    disturbance = PlanarPose(x=0.01, y=0, theta=15* np.pi/180)
+    # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
+    disturbance = PlanarPose(x=0.0, y=0, theta=0)
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
         pusher_start_pose=traj.initial_pusher_planar_pose,
-        slider_start_pose=traj.initial_slider_planar_pose,
+        slider_start_pose=traj.initial_slider_planar_pose+disturbance,
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
@@ -66,7 +71,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     environment = TableEnvironment(desired_position_source=position_source, 
                                    position_controller=position_controller,
                                    sim_config=sim_config)
-    recording_name = plan.split(".")[0]+f"actuated_cylinder_cl{sim_config.closed_loop}" + ".html" if save_recording else None
+    recording_name = plan.split(".")[0]+f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html" if save_recording else None
     environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
 
     if debug:
@@ -76,5 +81,5 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     
 
 if __name__ == "__main__":
-    # run_sim(plan="trajectories/box_pushing_demos/hw_demo_0_rounded.pkl", save_recording=True, debug=True)
+    # run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_3.pkl", save_recording=True, debug=True)
     run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
