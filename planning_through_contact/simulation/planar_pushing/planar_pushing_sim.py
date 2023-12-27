@@ -15,6 +15,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
+from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import PlanarTranslationToRigidTransformSystem
 from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import RigidTransformToPlanarPoseVectorSystem
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
@@ -75,6 +76,13 @@ class PlanarPushingSimulation:
                 time_step=sim_config.time_step,
                 use_diff_ik_feedback=False,
             )
+            planar_translation_to_rigid_tranform = builder.AddSystem(
+                PlanarTranslationToRigidTransformSystem()
+            )
+            builder.Connect(
+                planar_translation_to_rigid_tranform.get_output_port(),
+                self.pusher_pose_to_joint_pos.get_pose_input_port(),
+            )
         else:
             # TODO: outdated, fix
             ik = PusherPoseInverseKinematics.AddTobuilder(
@@ -94,7 +102,7 @@ class PlanarPushingSimulation:
             self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
             self.planar_pose_pub.GetOutputPort("contact_force_traj"),
-            self.pusher_pose_to_joint_pos.get_pose_input_port(),
+            planar_translation_to_rigid_tranform.get_input_port(),
             closed_loop=sim_config.closed_loop,
             pusher_planar_pose_measured=self.station.GetOutputPort("pusher_pose"),
             slider_pose_measured=self.station.GetOutputPort("slider_pose"),

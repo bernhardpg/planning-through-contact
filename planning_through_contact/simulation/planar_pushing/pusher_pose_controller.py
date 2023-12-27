@@ -37,11 +37,9 @@ class PusherPoseController(LeafSystem):
         self,
         dynamics_config: SliderPusherSystemConfig,
         mpc_config: HybridMpcConfig,
-        z_dist_to_table: float = 0.5,
         closed_loop: bool = True,
     ):
         super().__init__()
-        self.z_dist = z_dist_to_table
         self.object_geometry = dynamics_config.slider.geometry
         self.dynamics_config = dynamics_config
         self.mpc_config = mpc_config
@@ -74,9 +72,7 @@ class PusherPoseController(LeafSystem):
             "contact_mode_traj",
             AbstractValue.Make([PlanarPushingContactMode(0)]),
         )
-        self.output = self.DeclareAbstractOutputPort(
-            "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
-        )
+        self.output = self.DeclareVectorOutputPort("translation", 2,  self.DoCalcOutput)
 
         self.closed_loop = closed_loop
         if self.closed_loop:
@@ -99,7 +95,7 @@ class PusherPoseController(LeafSystem):
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
         contact_force_traj: OutputPort,
-        pose_cmd: InputPort,
+        pose_cmd: Optional[InputPort]=None,
         closed_loop: bool = True,
         pusher_planar_pose_measured: Optional[OutputPort] = None,
         slider_pose_measured: Optional[OutputPort] = None,
@@ -109,7 +105,6 @@ class PusherPoseController(LeafSystem):
             cls(
                 dynamics_config,
                 mpc_config,
-                z_dist_to_table=0.02,
                 closed_loop=closed_loop,
             ),
         )
@@ -146,12 +141,14 @@ class PusherPoseController(LeafSystem):
 
         period = 1 / mpc_config.rate_Hz
         zero_order_hold = builder.AddNamedSystem(
-            "ZeroOrderHold", ZeroOrderHold(period, AbstractValue.Make(RigidTransform()))
+            "ZeroOrderHold", ZeroOrderHold(period, vector_size=2) # Just the x and y positions
         )
         builder.Connect(
             pusher_pose_controller.get_output_port(), zero_order_hold.get_input_port()
         )
-        builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
+        if pose_cmd is not None:
+            builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
+            # Otherwise connect the output somewhere else
         return pusher_pose_controller
 
     def _get_mpc_for_mode(self, mode: PlanarPushingContactMode) -> HybridMpc:
@@ -232,8 +229,7 @@ class PusherPoseController(LeafSystem):
             or curr_mode_desired == PlanarPushingContactMode.NO_CONTACT
         ):
             curr_planar_pose = pusher_planar_pose_traj[0]
-            pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
-            output.set_value(pusher_pose_desired)
+            output.set_value(curr_planar_pose.pos())
             if self.closed_loop:
                 # Reset the MPC controller integrator (set commanded position to current position)
                 pusher_pose_cmd_state.set_value(pusher_planar_pose)
@@ -253,5 +249,4 @@ class PusherPoseController(LeafSystem):
                 pusher_pose_cmd_state=pusher_pose_cmd_state,
                 slider_pose_cmd_state=slider_pose_cmd_state,
             )
-            pusher_pose_command = next_pusher_pose.to_pose(z_value=self.z_dist)
-            output.set_value(pusher_pose_command)
+            output.set_value(next_pusher_pose.pos())

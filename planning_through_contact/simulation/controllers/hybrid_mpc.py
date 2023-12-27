@@ -175,7 +175,7 @@ class HybridMpc:
         # Control constraints
         mu = self.dynamics_config.friction_coeff_slider_pusher
         # Control limits:
-        MAX_MAGNITUDE = 0.1 #0.3
+        MAX_MAGNITUDE = 0.3
         lb = np.array([0, -MAX_MAGNITUDE, -MAX_MAGNITUDE])
         ub = np.array([MAX_MAGNITUDE, MAX_MAGNITUDE, MAX_MAGNITUDE])
         for i, u_i in enumerate(u.T):

@@ -1,14 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import List
 
-from pydrake.all import DiagramBuilder, MultibodyPlant, Meshcat, System
+from pydrake.all import DiagramBuilder, Meshcat, OutputPort
 
 
 class DesiredPositionSourceBase(ABC):
     """The desired position source base class."""
 
     @abstractmethod
-    def setup(self, builder: DiagramBuilder, plant: MultibodyPlant, **kwargs) -> System:
+    def setup(self, builder: DiagramBuilder, **kwargs) -> OutputPort:
         """Setup the desired position source system."""
         raise NotImplementedError
 

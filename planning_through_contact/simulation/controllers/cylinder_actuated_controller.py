@@ -5,9 +5,9 @@ from pydrake.all import (
     DiagramBuilder,
     MultibodyPlant,
     InverseDynamicsController,
-    Multiplexer,
     StateInterpolatorWithDiscreteDerivative,
     System,
+    Diagram
 )
 
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PlanarPushingSimConfig
@@ -25,18 +25,17 @@ class CylinderActuatedController(PositionControllerBase):
     ):
         self._sim_config = sim_config
         self._meshcat = None
-        self._pid_gains = dict(kp=100, ki=1, kd=20)
+        self._pid_gains = dict(kp=800, ki=100, kd=50)
         self._num_positions = 2 # Number of dimensions for robot position
 
-    def setup(self, builder: DiagramBuilder, plant: MultibodyPlant, **kwargs) -> System:
-        """Note: could bundle everything up into a single leaf system, but for now actually
+    def setup(self, builder: DiagramBuilder, state_estimator: Diagram, station_plant: MultibodyPlant) -> System:
+        """Note: could bundle everything up into a diagram, but for now actually
         returning the desired_state_source with its inputs unconnected."""
         if self._meshcat is None:
             raise RuntimeError(
                 "Need to call `add_meshcat` before calling `setup` of the teleop controller."
             )
         
-        robot_model_instance = plant.GetModelInstanceByName("pusher")
         robot_controller_plant = MultibodyPlant(time_step=self._sim_config.time_step)
         parser = GetParser(robot_controller_plant)
         parser.AddModelsFromUrl(
@@ -55,13 +54,16 @@ class CylinderActuatedController(PositionControllerBase):
             )
         )
         robot_controller.set_name("robot_controller")
+
+        robot_model_instance_name = "pusher"
+        robot_model_instance = station_plant.GetModelInstanceByName(robot_model_instance_name)
         builder.Connect(
-            plant.get_state_output_port(robot_model_instance),
+            state_estimator.GetOutputPort(f"{robot_model_instance_name}_state"),
             robot_controller.get_input_port_estimated_state(),
         )
         builder.Connect(
             robot_controller.get_output_port_control(),
-            plant.get_actuation_input_port(robot_model_instance),
+            station_plant.get_actuation_input_port(robot_model_instance),
         )
 
         # Add discrete derivative to command velocities.
