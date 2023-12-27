@@ -74,6 +74,15 @@ def mpc_config() -> HybridMpcConfig:
         Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
     )
+    # config = HybridMpcConfig(
+    #     step_size=0.03,
+    #     horizon=50,
+    #     num_sliding_steps=1,
+    #     rate_Hz=200,
+    #     Q=np.diag([3, 3, 0.01, 0]) * 100,
+    #     Q_N=np.diag([3, 3, 1, 0]) * 2000,
+    #     R=np.diag([1, 1, 0]) * 0.5,
+    # )
     return config
 
 
@@ -284,13 +293,8 @@ def one_contact_mode(
     )
     return mode
 
-
-@pytest.fixture
-def one_contact_mode_vars(
-    one_contact_mode: FaceContactMode,
-) -> List[FaceContactVariables]:
+def generate_path(one_contact_mode: FaceContactMode, final_pose: PlanarPose) -> List[FaceContactVariables]:
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.1, 0.4)
 
     one_contact_mode.set_slider_initial_pose(initial_pose)
     one_contact_mode.set_slider_final_pose(final_pose)
@@ -317,6 +321,14 @@ def one_contact_mode_vars(
 
     vars = one_contact_mode.variables.eval_result(relaxed_result)
     return [vars]
+
+@pytest.fixture
+def one_contact_mode_vars(
+    one_contact_mode: FaceContactMode,
+) -> List[FaceContactVariables]:
+    final_pose = PlanarPose(0.3, 0.2, 2.5)
+    return generate_path(one_contact_mode, final_pose)
+
 
 def execute_hybrid_mpc_controller(
     one_contact_mode: FaceContactMode,
@@ -457,6 +469,16 @@ def test_hybrid_mpc_controller_curve_tracking(
                                   hybrid_mpc_controller_system,
                                   np.array([-0.02, 0.02, 0.1, 0]))
 
+def test_hybrid_mpc_controller_curve_tracking_2(
+    one_contact_mode: FaceContactMode,
+    hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
+) -> None:  # type: ignore
+    path = generate_path(one_contact_mode, PlanarPose(0.3, -0.2, -2.5))
+    execute_hybrid_mpc_controller(one_contact_mode,
+                                  path,
+                                  hybrid_mpc_controller_system,
+                                  np.array([0.0, 0.02, 0.1, 0]))
+    
 """ The following fixtures and test replicate the straight line tracking simulation experiment from
 "Feedback Control of the Pusher-Slider System: A Story of Hybrid and Underactuated Contact Dynamics"
 Francois Robert Hogan and Alberto Rodriguez, 2016, https://arxiv.org/abs/1611.08268
