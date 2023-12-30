@@ -191,7 +191,10 @@ def create_plan(
         slider = get_sugar_box()
 
     dynamics_config = SliderPusherSystemConfig(
-        pusher_radius=pusher_radius, slider=slider, friction_coeff_slider_pusher=0.25
+        pusher_radius=pusher_radius, slider=slider, 
+        friction_coeff_slider_pusher=0.25,
+        friction_coeff_table_slider=0.5,
+        integration_constant=0.02,
     )
 
     contact_config = ContactConfig(

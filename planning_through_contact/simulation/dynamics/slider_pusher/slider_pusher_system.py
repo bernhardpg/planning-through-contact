@@ -142,13 +142,14 @@ def SliderPusherSystem_(T):
         def get_pusher_planar_pose_from_state(
             self,
             state: npt.NDArray[np.float64],
+            buffer: float = 0.0,
         ) -> PlanarPose:
             x, y, theta, lam = state
             R_WB = two_d_rotation_matrix_from_angle(theta)
             slider_planar_pose = PlanarPose(x, y, theta)
             p_WB = slider_planar_pose.pos()
             p_BP = self.slider_geometry.get_p_BP_from_lam(
-                lam, self.contact_location, radius=self.pusher_radius
+                lam, self.contact_location, radius=self.pusher_radius+buffer
             )
 
             p_W_c = p_WB + R_WB.dot(p_BP)

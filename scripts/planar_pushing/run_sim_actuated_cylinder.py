@@ -30,14 +30,13 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     traj = PlanarPushingTrajectory.load(plan)
 
     slider = traj.config.dynamics_config.slider
-
     mpc_config = HybridMpcConfig(
         step_size=0.03,
         horizon=35,
         num_sliding_steps=1,
         rate_Hz=50,
         Q=np.diag([3, 3, 0.01, 0]) * 100,
-        Q_N=np.diag([3, 3, 1, 0]) * 2000,
+        Q_N=np.diag([3, 3, 0.01, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
@@ -59,6 +58,11 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         save_plots=True,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml"
     )
+    # Commented out code for generating values for hybrid MPC tests
+    # for t in [4, 8]:
+    #     print(traj.get_slider_planar_pose(t))
+    #     print(traj.get_mode(t))
+
     # Choose position source
     # Option 1: Use teleop
     # teleop = dict(input_limit= 1.0, step_size=0.01, start_translation=[0.0,0.0])
@@ -81,5 +85,5 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     
 
 if __name__ == "__main__":
-    # run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_3.pkl", save_recording=True, debug=True)
-    run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_1_rounded.pkl", save_recording=True, debug=True)
+    # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

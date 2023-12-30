@@ -9,7 +9,7 @@ class ContactDetectionSystem(LeafSystem):
         self.DeclareVectorOutputPort("contact_detected", 1, self.DoCalcOutput)
     
     def DoCalcOutput(self, context, output):
-        EPS = 1e-4
+        EPS = 1e-3
         query_object = self._query_object.Eval(context)
         inspector = query_object.inspector()
         for geometry_id in inspector.GetAllGeometryIds():
