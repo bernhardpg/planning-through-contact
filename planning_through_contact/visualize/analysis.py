@@ -149,7 +149,33 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -
 
     # Show plot
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_control_sols{suffix}.pdf")
+    plt.savefig(f"planar_pushing_control_sols{suffix}.png")
+
+def plot_cost(cost_log: List[float], suffix: str = "") -> None:
+    plt.figure()
+    plt.plot(cost_log)
+    plt.title("Cost vs. timestep")
+    plt.xlabel("timestep")
+    plt.ylabel("Cost")
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_cost{suffix}.png")
+
+def plot_velocities(desired_vel_log: List[npt.NDArray], commanded_vel_log: List[npt.NDArray], suffix: str = "") -> None:
+    plt.figure()
+    # velocity has x and y dimensions
+    desired_vel_log_array = np.array(desired_vel_log)
+    commanded_vel_log_array = np.array(commanded_vel_log)
+    timesteps = np.arange(desired_vel_log_array.shape[0])
+    plt.plot(timesteps, desired_vel_log_array[:, 0], label="desired x vel")
+    plt.plot(timesteps, desired_vel_log_array[:, 1], label="desired y vel")
+    # plt.plot(timesteps, commanded_vel_log_array[:, 0], label="commanded x vel")
+    # plt.plot(timesteps, commanded_vel_log_array[:, 1], label="commanded y vel")
+    plt.legend()
+    plt.title("Desired and commanded velocities vs. timestep")
+    plt.xlabel("timestep")
+    plt.ylabel("Velocity")
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_velocities{suffix}.png")
 
 
 def plot_planar_pushing_logs_from_pose_vectors(

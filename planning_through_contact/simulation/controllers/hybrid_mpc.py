@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-
+import logging
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
@@ -29,6 +29,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.tools.types import NpVariableArray
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class HybridMpcConfig:
@@ -65,6 +66,9 @@ class HybridMpc:
         self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
         self.control_log: List[npt.NDArray[np.float64]] = []
+        self.cost_log: List[float] = []
+        self.desired_velocity_log: List[npt.NDArray[np.float64]] = []
+        self.commanded_velocity_log: List[npt.NDArray[np.float64]] = []
 
     def _calculate_symbolic_system(
         self,
@@ -247,10 +251,14 @@ class HybridMpc:
         state = states[best_idx]
         control = controls[best_idx]
         result = results[best_idx]
-
+        lowest_cost = costs[best_idx]
+        self.cost_log.append(lowest_cost)
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]
+
+        # Finite difference method to get x_dot_curr
+        # Uses the linear approximation of the dynamics
         x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
@@ -264,8 +272,23 @@ class HybridMpc:
             padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode='constant')
             self.control_log.append(padded_array.T)
         
+        if lowest_cost == np.inf:
+            logger.debug(f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} ")
         u_next = control_sol[:, 0]
-        return x_dot_curr, u_next
+        
+        # Use non-linear dynamics to get x_dot_curr
+        x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
+        # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")
+        # print(f"x_dot_curr  : {x_dot_curr[:3]}")
+        # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
+        # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
+        v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
+        self.desired_velocity_log.append(v_BP_W_desired.flatten())
+        # self.commanded_velocity_log.append(v_BP_W.flatten())
+
+        return x_dot_curr.flatten(), u_next
+        # return v_BP_W
+
 
 # Not used in pusher pose controller
 class HybridModelPredictiveControlSystem(LeafSystem):
@@ -297,7 +320,11 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
         if len(u_traj) > 1:
+            # Closed loop control
             _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+
+            # Open loop control
+            # control_next = u_traj[0]
         else:
             control_next = np.array([0, 0, 0])
         output.SetFromVector(control_next)  # type: ignore

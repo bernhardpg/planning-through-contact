@@ -19,16 +19,16 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram i
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
     PlanarPushingSimulation,
 )
-from planning_through_contact.visualize.analysis import plot_control_sols_vs_time
+from planning_through_contact.visualize.analysis import plot_control_sols_vs_time, plot_cost, plot_velocities
 from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("planning_through_contact.simulation.planar_pushing.pusher_pose_controller").setLevel(logging.DEBUG)
-
+    logging.getLogger("planning_through_contact.simulation.controllers.hybrid_mpc").setLevel(logging.DEBUG)
     traj = PlanarPushingTrajectory.load(plan)
-
+    print(traj.config.dynamics_config)
     slider = traj.config.dynamics_config.slider
     mpc_config = HybridMpcConfig(
         step_size=0.03,
@@ -76,14 +76,19 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
                                    position_controller=position_controller,
                                    sim_config=sim_config)
     recording_name = plan.split(".")[0]+f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html" if save_recording else None
-    environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
+    # environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
+    environment.simulate(10, save_recording_as=recording_name)
 
     if debug:
         for contact_loc, mpc in position_source.pusher_pose_controller.mpc_controllers.items():
             if len(mpc.control_log) >  0:
+                plot_cost(mpc.cost_log, suffix=f"_{contact_loc}")
                 plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
+                plot_velocities(mpc.desired_velocity_log, 
+                                mpc.commanded_velocity_log,
+                                suffix=f"_{contact_loc}")
     
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_1_rounded.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_4.pkl", save_recording=True, debug=True)
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

@@ -396,7 +396,7 @@ if __name__ == "__main__":
     elif hardware_demos:
         lims = (0.5, 0.6, -0.15, 0.15)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_point(5, lims, pusher_radius, (0.575, 0))
+        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, 0))
         if traj_number is not None:
             create_plan(
                 plans[traj_number],

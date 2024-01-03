@@ -5,13 +5,11 @@ from pydrake.systems.framework import Context, ContinuousState, LeafSystem_
 from pydrake.systems.scalar_conversion import TemplateSystem
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarPlanConfig,
     SliderPusherSystemConfig,
 )
 
@@ -96,6 +94,11 @@ def SliderPusherSystem_(T):
             p_Bc = self._get_p_Bc(lam).flatten()
             J_c = np.array([[1.0, 0.0, -p_Bc[1]], [0.0, 1.0, p_Bc[0]]])  # type: ignore
             return J_c
+        
+        def _get_pusher_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
+            p_BP = self._get_p_BP(lam).flatten()
+            J_p = np.array([[1.0, 0.0, -p_BP[1]], [0.0, 1.0, p_BP[0]]])
+            return J_p
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
             return self.normal_vec * c_n + self.tangent_vec * c_f
@@ -194,6 +197,30 @@ def SliderPusherSystem_(T):
             u = self.input.Eval(context)
             x_dot = self.calc_dynamics(x, u)  # type: ignore
             derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
+        
+        def get_pusher_velocity(self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+            """Equations 12-14 of the 2020 paper but modified to get pusher velocity in the world frame
+            instead of contact point velocity in the body frame."""
+            x, y, theta, lam = state
+            c_n, c_f, lam_dot = control
+
+            J_p = self._get_pusher_jacobian(lam)
+            t = self._get_twist(lam, c_n, c_f)
+            unnormalized_tangent_vec = self.pv2 - self.pv1
+            v_BP_B = J_p.dot(t) + lam_dot * unnormalized_tangent_vec
+
+            # Rotate into world frame
+            R_WB = self._get_R(theta)
+            # Get 2x2 upper left block of R_WB
+            R_WB = R_WB[:2, :2]
+            v_BP_W = R_WB.dot(v_BP_B)
+
+            # print(f"J_p {J_p}")
+            print(f"t {t.flatten()}")
+            # print(f"J_p.dot(t) {J_p.dot(t).flatten()}")
+            # print(f"lam_dot * unnormalized_tangent_vec {lam_dot * unnormalized_tangent_vec.flatten()}")
+
+            return v_BP_W
 
     return Impl
 

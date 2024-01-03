@@ -4,6 +4,7 @@ import numpy as np
 import pydot
 import pydrake.symbolic as sym
 import pytest
+import logging
 from pydrake.geometry import SceneGraph
 from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.systems.all import ZeroOrderHold
@@ -52,10 +53,11 @@ from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
+    plot_velocities,
 )
 
-DEBUG = False
-
+DEBUG = True
+logging.getLogger("planning_through_contact.simulation.controllers.hybrid_mpc").setLevel(logging.DEBUG)
 
 @pytest.fixture
 def mpc_config() -> HybridMpcConfig:
@@ -438,7 +440,7 @@ def execute_hybrid_mpc_controller(
 
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.AdvanceTo(one_contact_mode.time_in_mode + 1)
+    simulator.AdvanceTo(one_contact_mode.time_in_mode + 0.3)
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_pdf("hybrid_mpc_diagram.pdf")  # type: ignore
@@ -457,6 +459,7 @@ def execute_hybrid_mpc_controller(
             state_log, desired_state_log, control_log, desired_control_log
         )
         plot_control_sols_vs_time(mpc_controller.mpc.control_log)
+        plot_velocities(mpc_controller.mpc.desired_velocity_log, mpc_controller.mpc.commanded_velocity_log)
 
 
 def test_hybrid_mpc_controller_curve_tracking(
@@ -483,7 +486,7 @@ def test_hybrid_mpc_controller_curve_tracking_B_2(
     mpc_config: HybridMpcConfig,
 ) -> None:  # type: ignore
     mass = 0.1
-    box_geometry = Box2d(width=0.15, height=0.15)
+    box_geometry = Box2d(width=0.07, height=0.07)
     box = RigidBody("box", box_geometry, mass)
 
     config = SliderPusherSystemConfig(slider=box, friction_coeff_slider_pusher=0.5)
@@ -495,7 +498,9 @@ def test_hybrid_mpc_controller_curve_tracking_B_2(
         config=config,
     )
     mpc_sys = HybridModelPredictiveControlSystem(sys, mpc_config)
-    plan_config = PlanarPlanConfig(dynamics_config=sys.config)
+    plan_config = PlanarPlanConfig(
+        dynamics_config=sys.config,
+        time_in_contact=4)
     mode = FaceContactMode.create_from_plan_spec(
         sys.contact_location, plan_config
     )
@@ -506,6 +511,49 @@ def test_hybrid_mpc_controller_curve_tracking_B_2(
                                   path,
                                   mpc_sys,
                                   np.array([0.0, 0.0, 0.0, 0.0]))
+
+def test_hybrid_mpc_controller_curve_tracking_C_4() -> None:  # type: ignore
+    mass = 0.1
+    box_geometry = Box2d(width=0.07, height=0.07)
+    box = RigidBody("box", box_geometry, mass)
+
+    config = SliderPusherSystemConfig(slider=box,
+                                      friction_coeff_table_slider=0.5,
+                                      friction_coeff_slider_pusher=0.25,
+                                      integration_constant=0.02)
+
+    contact_idx = 2
+
+    sys = SliderPusherSystem(
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, contact_idx),
+        config=config,
+    )
+    mpc_config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=50,
+        Q=np.diag([3, 3, 0.01, 0]) * 100,
+        Q_N=np.diag([3, 3, 1, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
+    mpc_sys = HybridModelPredictiveControlSystem(sys, mpc_config)
+    plan_config = PlanarPlanConfig(
+        dynamics_config=sys.config,
+        time_in_contact=2)
+    mode = FaceContactMode.create_from_plan_spec(
+        sys.contact_location, plan_config
+    )
+    # path = generate_path(mode,
+    #                      PlanarPose(x=0, y=0.04524750758737649, theta=-2.2577135799479247),
+    #                      PlanarPose(x=0.0434940293380711, y=-0.00039604693591686023, theta=-0.4058877726442287))
+    path = generate_path(mode,
+                         PlanarPose(x=0.5378211006117899, y=0.04524750758737649, theta=-2.2577135799479247),
+                         PlanarPose(x=0.6130126810603981, y=-0.00039604693591686023, theta=-0.4058877726442287))
+    execute_hybrid_mpc_controller(mode,
+                                  path,
+                                  mpc_sys,
+                                  np.array([0.0, 0.0, 0.0, 0.0]))        
     
 """ The following fixtures and test replicate the straight line tracking simulation experiment from
 "Feedback Control of the Pusher-Slider System: A Story of Hybrid and Underactuated Contact Dynamics"
