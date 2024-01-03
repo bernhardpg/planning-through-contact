@@ -39,10 +39,9 @@
           </box>
         </geometry>
         <drake:proximity_properties>
-          <drake:rigid_hydroelastic/>
-          <!-- <drake:compliant_hydroelastic/> -->
-          <drake:hunt_crossley_dissipation>3.0</drake:hunt_crossley_dissipation>
-          <!-- <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus> -->
+          <drake:compliant_hydroelastic/>
+          <drake:hunt_crossley_dissipation>1.25</drake:hunt_crossley_dissipation>
+          <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
           <!-- geometry/box does not take mesh_resolution_hint into account
             because it always uses the coarsest mesh. We place it here in
             case you want to change the box to something else like capsules,

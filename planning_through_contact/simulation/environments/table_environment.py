@@ -11,7 +11,7 @@ from pydrake.all import (
     ContactModel,
     LoadModelDirectives,
     ProcessModelDirectives,
-    DiscreteContactSolver,
+    DiscreteContactApproximation,
     AddDefaultVisualization,
     Meshcat,
     RollPitchYaw,
@@ -60,8 +60,8 @@ class TableEnvironment():
         self._meshcat.SetTransform(
             path="/Cameras/default",
             matrix=RigidTransform(
-                RollPitchYaw([-np.pi / 8, 0.0, np.pi]),  # type: ignore
-                np.array([-1, -1.0, -1]),
+                RollPitchYaw([0.0, 0.0, np.pi/2]),  # type: ignore
+                np.array([1, 0, 0]),
             ).GetAsMatrix4(),
         )
         AddDefaultVisualization(builder, self._meshcat)
@@ -167,7 +167,7 @@ class TableEnvironment():
 
         if use_hydroelastic:
             plant.set_contact_model(ContactModel.kHydroelastic)
-            plant.set_discrete_contact_solver(DiscreteContactSolver.kSap)
+            plant.set_discrete_contact_approximation(DiscreteContactApproximation.kLagged)
 
         plant.Finalize()
         return body_name, slider
@@ -185,6 +185,7 @@ class TableEnvironment():
         """
         if save_recording_as:
             self._state_estimator.meshcat.StartRecording()
+            self._meshcat.StartRecording()
         time_step = self._sim_config.time_step * 100
         for t in np.append(
             np.arange(0, timeout,
@@ -196,6 +197,10 @@ class TableEnvironment():
             self._state_estimator._visualize_desired_slider_pose(PlanarPose(*slider_desired_pose_vec))
         # self._simulator.AdvanceTo(timeout)
         if save_recording_as:
+            self._meshcat.StopRecording()
+            self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
+            self._meshcat.PublishRecording()
+
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty("/drake/contact_forces", "visible", False)
             self._state_estimator.meshcat.PublishRecording()
