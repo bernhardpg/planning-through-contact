@@ -215,8 +215,11 @@ def SliderPusherSystem_(T):
             R_WB = R_WB[:2, :2]
             v_BP_W = R_WB.dot(v_BP_B)
 
+            # print(f"state: {state.flatten()}, control: {control.flatten()}")
+            
+            # print(f"limit_surface_const: {self.config.limit_surface_const}")
             # print(f"J_p {J_p}")
-            print(f"t {t.flatten()}")
+            # print(f"t {t.flatten()}")
             # print(f"J_p.dot(t) {J_p.dot(t).flatten()}")
             # print(f"lam_dot * unnormalized_tangent_vec {lam_dot * unnormalized_tangent_vec.flatten()}")
 

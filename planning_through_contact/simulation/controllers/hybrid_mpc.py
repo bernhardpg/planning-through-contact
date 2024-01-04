@@ -29,6 +29,9 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.tools.types import NpVariableArray
 
+# Set the print precision to 4 decimal places
+np.set_printoptions(precision=4, suppress=True)
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -282,9 +285,15 @@ class HybridMpc:
         # print(f"x_dot_curr  : {x_dot_curr[:3]}")
         # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
         # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
-        v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
-        self.desired_velocity_log.append(v_BP_W_desired.flatten())
+
+        
+        # v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
+        # self.desired_velocity_log.append(v_BP_W_desired.flatten())
         # self.commanded_velocity_log.append(v_BP_W.flatten())
+        # print(f"v_BP_W_desired: {v_BP_W_desired.flatten()}")
+        # print(f"x_traj: {np.array(x_traj).flatten()}")
+        # print(f"u_traj: {np.array(u_traj).flatten()}")
+        # quit()
 
         return x_dot_curr.flatten(), u_next
         # return v_BP_W
