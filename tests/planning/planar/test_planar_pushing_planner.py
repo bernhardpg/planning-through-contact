@@ -8,6 +8,9 @@ from pydrake.solvers import LinearCost
 from pydrake.symbolic import Variables
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_path import (
+    PlanarPushingPath,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
@@ -217,31 +220,26 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     assert result.is_success()
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(
-        interpolate=False, assert_determinants=False
-    )
-    assert_initial_and_final_poses_LEGACY(
+    traj = path.to_traj()
+    assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
         planner.pusher_pose_initial,
         planner.slider_pose_target,
         planner.pusher_pose_target,
-        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_WP) <= 1.0)
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
-        traj = PlanarPushingTrajectory.from_result(
-            planner.config,
-            result,
-            planner.gcs,
-            planner.source.vertex,
-            planner.target.vertex,
-            planner._get_all_vertex_mode_pairs(),
-        )
         visualize_planar_pushing_trajectory(
             traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
@@ -398,24 +396,28 @@ def test_make_plan(
         assert_planning_path_matches_target(planner, result, target_path)
 
     path = planner.get_solution_path(result)
-    traj = PlanarTrajectoryBuilder(path.get_vars()).get_trajectory(interpolate=False)
-
-    assert_initial_and_final_poses_LEGACY(
+    traj = path.to_traj()
+    assert_initial_and_final_poses(
         traj,
         planner.slider_pose_initial,
         planner.pusher_pose_initial,
         planner.slider_pose_target,
         planner.pusher_pose_target,
-        relative_to_W=True,
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_WP) <= 1.5)
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, planner.slider.geometry, planner.config.pusher_radius
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 

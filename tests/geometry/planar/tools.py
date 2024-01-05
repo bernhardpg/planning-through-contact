@@ -55,7 +55,6 @@ def _assert_traj_finger_pos(
     target_pose_slider: PlanarPose,
     target_pose_finger: PlanarPose,
     start_or_end: Literal["start", "end"],
-    atol: float = 1e-3,
     body_frame: bool = False,
 ):
     if start_or_end == "start":
@@ -68,7 +67,7 @@ def _assert_traj_finger_pos(
     else:  # world frame
         finger_pos = traj.get_value(t, "p_WP")
 
-    assert np.allclose(finger_pos, target_pose_finger.pos(), atol=atol)
+    assert np.allclose(finger_pos, target_pose_finger.pos())
 
 
 def assert_initial_and_final_poses(
