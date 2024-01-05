@@ -718,12 +718,13 @@ def analyze_plan(path: PlanarPushingPath, filename: str, rounded: bool = False) 
 
     # (num_knot_points, 2): first col cosines, second col sines
 
+    face_contact_vars = [
+        knot_points
+        for knot_points in path_knot_points
+        if isinstance(knot_points, FaceContactVariables)
+    ]
     rs = np.vstack(
-        [
-            R_WB[:, 0]
-            for idx in range(len(path_knot_points))
-            for R_WB in path_knot_points[idx].R_WBs
-        ]
+        [R_WB[:, 0] for knot_points in face_contact_vars for R_WB in knot_points.R_WBs]
     )
     plot_cos_sine_trajs(rs, filename=filename)
 

@@ -56,8 +56,6 @@ from tests.geometry.planar.tools import (
 )
 
 DEBUG = False
-# TODO(bernhardpg): Old visualizer is no longer working after an update to the integration scheme, replace all old visualizer instances
-# with the new visualizer!
 
 
 @pytest.mark.parametrize(
@@ -207,22 +205,26 @@ def test_subgraph_planning(
     pairs = subgraph.get_all_vertex_mode_pairs()
     pairs["source"] = subgraph.source
     pairs["target"] = subgraph.target
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
-    ).get_trajectory(interpolate=False)
+
+    traj = PlanarPushingPath.from_result(
+        subgraph.gcs, result, subgraph.source.vertex, subgraph.target.vertex, pairs
+    ).to_traj()
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses_LEGACY(
+
+    assert subgraph.config.start_and_goal is not None
+    assert_initial_and_final_poses(
         traj,
-        subgraph.source.mode.slider_pose,
-        subgraph.source.mode.finger_initial_pose,
-        subgraph.target.mode.slider_pose,
-        subgraph.target.mode.finger_final_pose,
+        subgraph.config.start_and_goal.slider_initial_pose,
+        subgraph.config.start_and_goal.pusher_initial_pose,
+        subgraph.config.start_and_goal.slider_target_pose,
+        subgraph.config.start_and_goal.pusher_target_pose,
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_BP) <= 1.0)
+    for knot_points in traj.path_knot_points:
+        assert np.all(np.abs(np.hstack(knot_points.p_BPs)) <= 1.0)
 
     # Make sure we always take the shortest path
     vertex_names = [
@@ -251,9 +253,16 @@ def test_subgraph_planning(
 
     if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
+        finger_traj = np.hstack(
+            [
+                p_BP
+                for knot_points in traj.path_knot_points
+                for p_BP in knot_points.p_BPs
+            ]
+        )
         assert_object_is_avoided(
             subgraph.slider.geometry,
-            traj.p_BP,
+            finger_traj,
             min_distance=0.001,
             start_idx=2,
             end_idx=-2,
@@ -262,15 +271,6 @@ def test_subgraph_planning(
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-
-        traj = PlanarPushingTrajectory.from_result(
-            subgraph.config,
-            result,
-            subgraph.gcs,
-            subgraph.source.vertex,
-            subgraph.target.vertex,
-            subgraph.get_all_vertex_mode_pairs(),
-        )
         visualize_planar_pushing_trajectory(
             traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
@@ -420,13 +420,15 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     pairs = subgraph.get_all_vertex_mode_pairs()
     pairs["source"] = subgraph.source
     pairs["target"] = subgraph.target
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, subgraph.source.vertex, subgraph.target.vertex, pairs
-    ).get_trajectory(interpolate=False)
+
+    path = PlanarPushingPath.from_result(
+        subgraph.gcs, result, subgraph.source.vertex, subgraph.target.vertex, pairs
+    )
+    traj = path.to_traj()
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
-    assert_initial_and_final_poses_LEGACY(
+    assert_initial_and_final_poses(
         traj,
         subgraph.source.mode.slider_pose,
         subgraph.source.mode.finger_initial_pose,
@@ -435,13 +437,26 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     )
 
     # Make sure we are not leaving the object
-    assert np.all(np.abs(traj.p_BP) <= 1.0)
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
 
     if subgraph.config.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
+        finger_traj = np.hstack(
+            [
+                p_BP
+                for knot_points in traj.path_knot_points
+                for p_BP in knot_points.p_BPs
+            ]
+        )
         assert_object_is_avoided(
             subgraph.slider.geometry,
-            traj.p_BP,
+            finger_traj,
             min_distance=0.001,
             start_idx=2,
             end_idx=-2,
@@ -450,7 +465,13 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
-        visualize_planar_pushing_trajectory_legacy(traj, subgraph.slider.geometry, 0.01)
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, initial, target
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
 
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
@@ -517,18 +538,22 @@ def test_subgraph_contact_modes_t_pusher(
     pairs["FACE_1"] = source
     pairs["FACE_4"] = target
 
-    traj = PlanarTrajectoryBuilder.from_result(
-        result, subgraph.gcs, source_vertex, target_vertex, pairs
-    ).get_trajectory(interpolate=False)
+    traj = PlanarPushingPath.from_result(
+        subgraph.gcs, result, source_vertex, target_vertex, pairs
+    ).to_traj()
 
-    assert_initial_and_final_poses_LEGACY(
+    assert_initial_and_final_poses(
         traj, slider_initial_pose, None, slider_final_pose, None
     )
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact_t_pusher.svg"))
-        visualize_planar_pushing_trajectory_legacy(
-            traj, subgraph.slider.geometry, plan_config.pusher_radius
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_initial_pose, slider_final_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -635,6 +660,10 @@ def test_subgraph_with_contact_modes_band_sparsity(
 
     if DEBUG:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_w_contact.svg"))
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_initial_pose, slider_final_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
         visualize_planar_pushing_trajectory(
             traj, visualize_knot_points=True, save=True, filename="debug_file"
         )

@@ -143,37 +143,9 @@ class NonCollisionVariables(AbstractModeVariables):
         return np.expand_dims(np.array([self.p_WB_x, self.p_WB_y]), 1)  # (2, 1)
 
     @property
-    def R_WBs(self):
-        Rs = [
-            np.array([[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]])
-        ] * self.num_knot_points
-        return Rs
-
-    @property
-    def p_WBs(self):
-        return [self.p_WB] * self.num_knot_points
-
-    @property
-    def v_WBs(self):
-        NUM_DIMS = 2
-        return [np.zeros((NUM_DIMS, 1))] * (self.num_knot_points - 1)
-
-    @property
-    def omega_WBs(self):
-        return [0.0] * (self.num_knot_points - 1)
-
-    @property
-    def p_WPs(self):
-        return [
-            p_WB + R_WB.dot(p_BP)
-            for p_WB, R_WB, p_BP in zip(self.p_WBs, self.R_WBs, self.p_BPs)
-        ]
-
-    @property
-    def f_c_Ws(self):
-        NUM_DIMS = 2
-        # Input has length 1 less than the state
-        return [np.zeros((NUM_DIMS, 1))] * (self.num_knot_points - 1)
+    def R_WB(self):
+        R = np.array([[self.cos_th, -self.sin_th], [self.sin_th, self.cos_th]])
+        return R
 
 
 @dataclass
