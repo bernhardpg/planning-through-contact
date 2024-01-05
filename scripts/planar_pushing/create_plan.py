@@ -211,6 +211,8 @@ def create_plan(
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,
+        lam_min=0.47,
+        lam_max=0.53,
         delta_vel_max=0.05 * 2,
         delta_theta_max=0.4 * 2,
     )
