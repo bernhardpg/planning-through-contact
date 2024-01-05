@@ -286,11 +286,12 @@ def test_linearize_slider_pusher(
 def test_slider_pusher_get_state(
     slider_pusher_system: SliderPusherSystem,  # type: ignore
 ) -> None:
-    sys = slider_pusher_system
+    sys = slider_pusher_system  # contact with left face
     w = sys.slider_geometry.width
     h = sys.slider_geometry.height
     r = sys.pusher_radius
 
+    # Test poses that are exactly in contact
     slider_pose = PlanarPose(0, 0, 0)
     pusher_pose = PlanarPose(-w / 2 - r, 0, 0)
 
@@ -300,11 +301,15 @@ def test_slider_pusher_get_state(
     pusher_pose_returned = sys.get_pusher_planar_pose_from_state(x)
     assert pusher_pose == pusher_pose_returned
 
+    # Test poses that are exactly in contact
     slider_pose = PlanarPose(0, 0, 0)
     pusher_pose = PlanarPose(-w / 2 - r, h / 4, 0)
 
     x = sys.get_state_from_planar_poses(slider_pose, pusher_pose)
     assert np.allclose(x, np.array([0, 0, 0, 0.25]))
+    # note: lam = 0.25 corresponds to p_BP = 0.75 * v1 + 0.25 * v2
+    # (i.e. lam = 0 corresponds to second vertex, and lam = 1 corresponds to first)
 
     pusher_pose_returned = sys.get_pusher_planar_pose_from_state(x)
-    assert pusher_pose == pusher_pose_returned
+    # Should match when the starting poses are exactly in contact
+    assert np.allclose(pusher_pose.pos(), pusher_pose_returned.pos())
