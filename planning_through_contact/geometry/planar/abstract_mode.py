@@ -109,38 +109,8 @@ class AbstractModeVariables(ABC):
     def eval_result(self, result: MathematicalProgramResult) -> "AbstractModeVariables":
         pass
 
-    @property
-    @abstractmethod
-    def R_WBs(self):
-        pass
-
-    @property
-    @abstractmethod
-    def p_WBs(self):
-        pass
-
-    @property
-    @abstractmethod
-    def v_WBs(self):
-        pass
-
-    @property
-    @abstractmethod
-    def p_WPs(self):
-        pass
-
-    @property
-    @abstractmethod
-    def f_c_Ws(self):
-        pass
-
-    @property
-    @abstractmethod
-    def p_BPs(self):
-        pass
-
     def __len__(self) -> int:
-        return len(self.R_WBs)
+        return self.num_knot_points
 
 
 @dataclass

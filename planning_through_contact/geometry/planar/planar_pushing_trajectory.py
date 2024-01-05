@@ -1,4 +1,5 @@
 import pickle
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -24,6 +25,9 @@ from planning_through_contact.geometry.planar.non_collision import NonCollisionV
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.utilities import from_so2_to_so3
 from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
+from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_system import (
+    SliderPusherSystem,
+)
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -73,6 +77,9 @@ class So3TrajSegment:
         return omega[Z_AXIS]
 
     def eval(self, t: float) -> npt.NDArray[np.float64]:
+        """
+        Returns the 3x3 rotation matrix associated with this trajectory segment at time t
+        """
         R = self.traj.orientation(t).rotation()
         return R
 
@@ -170,8 +177,26 @@ class PlanarPushingContactMode(Enum):
         return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
 
 
+class AbstractTrajSegment(ABC):
+    @abstractmethod
+    def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+    @abstractmethod
+    def get_p_WP(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+    @abstractmethod
+    def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+    @abstractmethod
+    def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+
 @dataclass
-class SliderPusherTrajSegment:
+class FaceContactTrajSegment(AbstractTrajSegment):
     """
     A single trajectory segment for a FaceContact mode
     for the slider pusher planar pushing system, which
@@ -179,6 +204,7 @@ class SliderPusherTrajSegment:
     and the input u = [c_n, c_f, lam_dot]^T
     """
 
+    sys: SliderPusherSystem
     start_time: float
     end_time: float
     p_WB_x: LinTrajSegment
@@ -192,7 +218,7 @@ class SliderPusherTrajSegment:
     @classmethod
     def from_knot_points(
         cls, knot_points: FaceContactVariables, start_time: float, end_time: float
-    ) -> "SliderPusherTrajSegment":
+    ) -> "FaceContactTrajSegment":
         p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time)  # type: ignore
         p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time)  # type: ignore
         lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time)  # type: ignore
@@ -220,9 +246,21 @@ class SliderPusherTrajSegment:
         else:
             return np.array([0, 0, 0])
 
+    def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
+        return np.array([self.p_WB_x.eval(t), self.p_WB_y.eval(t)]).reshape((2, 1))
+
+    def get_p_WP(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+    def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
+    def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
+        pass
+
 
 @dataclass
-class PlanarPushingTrajSegment:
+class NonCollisionTrajSegment(AbstractTrajSegment):
     """
     A single trajectory segment for either a NonCollision of FaceContact mode
     for the general planar pushing system.
@@ -231,55 +269,63 @@ class PlanarPushingTrajSegment:
     start_time: float
     end_time: float
     p_WB: LinTrajSegment
+    p_BP: LinTrajSegment
     R_WB: So3TrajSegment
-    p_WP: LinTrajSegment
-    f_c_W: LinTrajSegment
     mode: PlanarPushingContactMode
 
     @classmethod
     def from_knot_points(
-        cls, knot_points: AbstractModeVariables, start_time: float, end_time: float
-    ) -> "PlanarPushingTrajSegment":
-        p_WB = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WBs), start_time, end_time)  # type: ignore
+        cls, knot_points: NonCollisionVariables, start_time: float, end_time: float
+    ) -> "NonCollisionTrajSegment":
+        p_WB = LinTrajSegment.from_knot_points(
+            np.vstack([knot_points.p_WB]),  # just one value
+            start_time,
+            end_time,
+        )
+        p_BP = LinTrajSegment.from_knot_points(
+            np.hstack(knot_points.p_BPs), start_time, end_time
+        )
+        R_WB = So3TrajSegment.from_knot_points(
+            [knot_points.R_WB],  # just one value
+            start_time,
+            end_time,
+        )
+        mode = PlanarPushingContactMode.NO_CONTACT
 
-        p_WP = LinTrajSegment.from_knot_points(np.hstack(knot_points.p_WPs), start_time, end_time)  # type: ignore
-        R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
+        return cls(start_time, end_time, p_WB, p_BP, R_WB, mode)
 
-        # Start and target vertices may only have one knot point, hence num_inputs = num_knot_points - 1 = 0
-        if len(knot_points.f_c_Ws) == 0:  # type: ignore
-            f_c_W = LinTrajSegment.from_knot_points(np.zeros((2, 1)), start_time, end_time)  # type: ignore
-        else:
-            f_c_W = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Ws), start_time, end_time)  # type: ignore
+    def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
+        p_WB = self.p_WB.eval(t)
+        assert isinstance(p_WB, type(np.array([])))  # get rid of typing errors
+        return p_WB
 
-        if isinstance(knot_points, NonCollisionVariables):
-            mode = PlanarPushingContactMode.NO_CONTACT
-        else:  # FaceContactVariables
-            mode = PlanarPushingContactMode.from_contact_location(
-                knot_points.contact_location
-            )
+    def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
+        R_WB = self.R_WB.eval(t)
+        assert isinstance(R_WB, type(np.array([])))  # get rid of typing errors
+        return R_WB
 
-        return cls(start_time, end_time, p_WB, R_WB, p_WP, f_c_W, mode)
+    def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
+        p_BP = self.p_BP.eval(t)
+        assert isinstance(p_BP, type(np.array([])))  # get rid of typing errors
+        return p_BP
+
+    def get_p_WP(self, t: float) -> npt.NDArray[np.float64]:
+        p_WB = self.get_p_WB(t)
+        p_BP = self.get_p_BP(t)
+        R_WB = self.get_R_WB(t)[:2, :2]  # 2x2 matrix
+
+        return p_WB + R_WB @ p_BP
 
 
 class PlanarPushingTrajectory:
     def __init__(
         self,
         config: PlanarPlanConfig,
-        path_knot_points: List[AbstractModeVariables],
-        assert_determinants: bool = False,
+        path_knot_points: List[FaceContactVariables | NonCollisionVariables],
     ) -> None:
         self.config = config
         self.pusher_radius = config.pusher_radius
         self.path_knot_points = path_knot_points
-
-        if assert_determinants:  # TODO: Remove
-            for path_points in path_knot_points:
-                assert path_points.R_WBs is not None
-
-                dets = [np.linalg.det(R) for R in path_points.R_WBs]  # type: ignore
-                if not np.allclose(dets, 1):
-                    print(dets)
-                    raise ValueError("Determinants not 1.")
 
         time_in_modes = [knot_points.time_in_mode for knot_points in path_knot_points]
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
@@ -288,16 +334,9 @@ class PlanarPushingTrajectory:
 
         # Trajectory segments that only contain "global" states
         self.traj_segments = [
-            PlanarPushingTrajSegment.from_knot_points(p, start, end)
-            for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
-        ]
-
-        # Also store trajectory segments for the slider-pusher dynamical system
-        # so we can retrieve state variables
-        self.slider_pusher_traj_segments = [
-            SliderPusherTrajSegment.from_knot_points(p, start, end)
-            if isinstance(p, FaceContactVariables)
-            else None
+            NonCollisionTrajSegment.from_knot_points(p, start, end)
+            if isinstance(p, NonCollisionVariables)
+            else FaceContactTrajSegment.from_knot_points(p, start, end)
             for p, start, end in zip(path_knot_points, self.start_times, self.end_times)
         ]
 
@@ -313,7 +352,9 @@ class PlanarPushingTrajectory:
         idx_of_curr_segment = np.where(t < self.end_times)[0][0]
         return idx_of_curr_segment
 
-    def get_traj_segment_for_time(self, t: float) -> PlanarPushingTrajSegment:
+    def get_traj_segment_for_time(
+        self, t: float
+    ) -> NonCollisionTrajSegment | FaceContactTrajSegment:
         return self.traj_segments[self._get_curr_segment_idx(t)]
 
     def _t_or_end_time(self, t: float) -> float:
@@ -326,37 +367,26 @@ class PlanarPushingTrajectory:
         else:
             return t
 
+    def _get_knot_point_idx_from_time(self, t: float) -> int:
+        if t == self.end_time:
+            return len(self.path_knot_points)
+
+        idx_of_curr_segment = np.where(t < self.end_times)[0][0]
+        return idx_of_curr_segment
+
     def get_knot_point_value(
         self,
         t: float,
         traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
-        knot_point_idx = self._get_curr_segment_idx(t)
-        knot_points = self.path_knot_points[knot_point_idx]
+        if t < self.end_time:
+            idx = self._get_curr_segment_idx(t)
+            t_at_knot_point = self.start_times[idx]
+        else:  # t == self.end_time
+            t_at_knot_point = self.end_time
 
-        time_elapsed = self.start_times[knot_point_idx]
-        t_rel = t - time_elapsed
-
-        idx = int(np.floor(t_rel / knot_points.dt))
-
-        # For t == self.end_time we return the last knot point again
-        # (This is just a non-important simulation detail)
-        if t == self.end_time:
-            idx = idx - 1
-
-        if traj_to_get == "p_WB":
-            val = knot_points.p_WBs[idx]  # type: ignore
-        elif traj_to_get == "R_WB":
-            val = np.eye(3)  # We expect R_WB to be 3x3
-            val[:2, :2] = knot_points.R_WBs[idx]  # type: ignore
-        elif traj_to_get == "p_WP":
-            val = knot_points.p_WPs[idx]  # type: ignore
-        elif traj_to_get == "f_c_W":
-            val = knot_points.f_c_Ws[idx]  # type: ignore
-        else:
-            raise NotImplementedError("Not implemented")
-
+        val = self.get_value(t_at_knot_point, traj_to_get)
         return val
 
     def get_value(
@@ -365,19 +395,22 @@ class PlanarPushingTrajectory:
         traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot"],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
-        traj = self.get_traj_segment_for_time(t)
+        seg = self.get_traj_segment_for_time(t)
+
         if traj_to_get == "p_WB":
-            val = traj.p_WB.eval(t)
+            val = seg.get_p_WB(t)
         elif traj_to_get == "R_WB":
-            val = traj.R_WB.eval(t)
+            val = seg.R_WB.eval(t)
         elif traj_to_get == "p_WP":
-            val = traj.p_WP.eval(t)
+            val = seg.get_p_WP(t)
         elif traj_to_get == "f_c_W":
-            val = traj.f_c_W.eval(t)
+            val = seg.f_c_W.eval(t)
         elif traj_to_get == "theta":
-            val = traj.R_WB.eval_theta(t)
+            val = seg.R_WB.eval_theta(t)
         elif traj_to_get == "theta_dot":
-            val = traj.R_WB.eval_theta_dot(t)
+            val = seg.R_WB.eval_theta_dot(t)
+        elif traj_to_get == "p_BP":
+            val = seg.get_p_BP(t)
 
         return val
 

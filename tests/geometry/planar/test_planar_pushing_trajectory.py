@@ -27,9 +27,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_system import (
     SliderPusherSystem,
 )
-from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder import (
-    SliderPusherTrajSegment,
-)
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,

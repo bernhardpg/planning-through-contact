@@ -15,7 +15,7 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    SliderPusherTrajSegment,
+    FaceContactTrajSegment,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
@@ -58,11 +58,11 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         self.start_times = temp[:-1]
         self.end_times = temp[1:]
         self.traj_segments = [
-            SliderPusherTrajSegment.from_knot_points(p, start, end)
+            FaceContactTrajSegment.from_knot_points(p, start, end)
             for p, start, end in zip(path, self.start_times, self.end_times)
         ]
 
-    def _get_traj_segment_for_time(self, t: float) -> SliderPusherTrajSegment:
+    def _get_traj_segment_for_time(self, t: float) -> FaceContactTrajSegment:
         idx_of_curr_segment = np.where(t <= self.end_times)[0][0]
         return self.traj_segments[idx_of_curr_segment]
 
