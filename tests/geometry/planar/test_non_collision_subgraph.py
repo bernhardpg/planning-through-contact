@@ -213,13 +213,13 @@ def test_subgraph_planning(
     assert isinstance(subgraph.source.mode, NonCollisionMode)
     assert isinstance(subgraph.target.mode, NonCollisionMode)
 
+    assert subgraph.config.start_and_goal is not None
     assert_initial_and_final_poses(
         traj,
-        subgraph.source.mode.slider_pose,
-        subgraph.source.mode.finger_initial_pose,
-        subgraph.target.mode.slider_pose,
-        subgraph.target.mode.finger_final_pose,
-        body_frame=True,
+        subgraph.config.start_and_goal.slider_initial_pose,
+        subgraph.config.start_and_goal.pusher_initial_pose,
+        subgraph.config.start_and_goal.slider_target_pose,
+        subgraph.config.start_and_goal.pusher_target_pose,
     )
 
     # Make sure we are not leaving the object
@@ -434,7 +434,6 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
         subgraph.source.mode.finger_initial_pose,
         subgraph.target.mode.slider_pose,
         subgraph.target.mode.finger_final_pose,
-        body_frame=True,
     )
 
     # Make sure we are not leaving the object
@@ -544,7 +543,7 @@ def test_subgraph_contact_modes_t_pusher(
     ).to_traj()
 
     assert_initial_and_final_poses(
-        traj, slider_initial_pose, None, slider_final_pose, None, body_frame=True
+        traj, slider_initial_pose, None, slider_final_pose, None
     )
 
     if DEBUG:
@@ -629,7 +628,7 @@ def test_subgraph_with_contact_modes_band_sparsity(
     ).to_traj()
 
     assert_initial_and_final_poses(
-        traj, slider_initial_pose, None, slider_final_pose, None, body_frame=True
+        traj, slider_initial_pose, None, slider_final_pose, None
     )
 
     # Make sure we are not leaving the object
