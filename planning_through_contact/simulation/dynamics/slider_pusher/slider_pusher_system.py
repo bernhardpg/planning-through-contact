@@ -123,7 +123,7 @@ def SliderPusherSystem_(T):
             )
             return R
 
-        def get_state_from_planar_poses(
+        def get_state_from_planar_poses_by_projection(
             self,
             slider_pose: PlanarPose,
             pusher_pose: PlanarPose,
@@ -152,6 +152,12 @@ def SliderPusherSystem_(T):
             self,
             state: npt.NDArray[np.float64],
         ) -> PlanarPose:
+            """
+            Returns the pusher planar pose in the world frame, i.e. p_WP.
+
+            As the state only describes contact, the p_WP will always be such that the pusher
+            is exactly in contact with the slider.
+            """
             x, y, theta, lam = state
             R_WB = two_d_rotation_matrix_from_angle(theta)
             slider_planar_pose = PlanarPose(x, y, theta)
