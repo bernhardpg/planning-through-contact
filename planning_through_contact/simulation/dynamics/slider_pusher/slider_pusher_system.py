@@ -128,15 +128,24 @@ def SliderPusherSystem_(T):
             slider_pose: PlanarPose,
             pusher_pose: PlanarPose,
         ) -> npt.NDArray[np.float64]:
+            """
+            Gets the system state [x, y, theta, lambda] from the provided poses.
+            NOTE: lambda is found by projecting the pusher pose onto the contact face.
+
+            slider_pose: Slider pose in world frame
+            pusher_pose: Pusher pose in world frame
+            """
             R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
-            p_W_c = pusher_pose.pos()
+            p_WP = pusher_pose.pos()
             p_WB = slider_pose.pos()
-            p_BP = R_WB.T.dot(p_W_c - p_WB)
-            lam = self.slider_geometry.get_lam_from_p_BP(
+            p_BP = R_WB.T.dot(p_WP - p_WB)
+            projected_lam = self.slider_geometry.get_lam_from_p_BP_by_projection(
                 p_BP, self.contact_location, radius=self.pusher_radius
             )
 
-            state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
+            state = np.array(
+                [slider_pose.x, slider_pose.y, slider_pose.theta, projected_lam]
+            )
             return state
 
         def get_pusher_planar_pose_from_state(

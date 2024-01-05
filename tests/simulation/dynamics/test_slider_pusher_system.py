@@ -16,6 +16,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
@@ -280,3 +281,30 @@ def test_linearize_slider_pusher(
 
     assert lin_system.A().shape == (4, 4)
     assert lin_system.B().shape == (4, 3)
+
+
+def test_slider_pusher_get_state(
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+) -> None:
+    sys = slider_pusher_system
+    w = sys.slider_geometry.width
+    h = sys.slider_geometry.height
+    r = sys.pusher_radius
+
+    slider_pose = PlanarPose(0, 0, 0)
+    pusher_pose = PlanarPose(-w / 2 - r, 0, 0)
+
+    x = sys.get_state_from_planar_poses(slider_pose, pusher_pose)
+    assert np.allclose(x, np.array([0, 0, 0, 0.5]))
+
+    pusher_pose_returned = sys.get_pusher_planar_pose_from_state(x)
+    assert pusher_pose == pusher_pose_returned
+
+    slider_pose = PlanarPose(0, 0, 0)
+    pusher_pose = PlanarPose(-w / 2 - r, h / 4, 0)
+
+    x = sys.get_state_from_planar_poses(slider_pose, pusher_pose)
+    assert np.allclose(x, np.array([0, 0, 0, 0.25]))
+
+    pusher_pose_returned = sys.get_pusher_planar_pose_from_state(x)
+    assert pusher_pose == pusher_pose_returned
