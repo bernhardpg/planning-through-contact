@@ -140,7 +140,7 @@ def SliderPusherSystem_(T):
             p_WB = slider_pose.pos()
             p_BP = R_WB.T.dot(p_WP - p_WB)
             projected_lam = self.slider_geometry.get_lam_from_p_BP_by_projection(
-                p_BP, self.contact_location, radius=self.pusher_radius
+                p_BP, self.contact_location
             )
 
             state = np.array(
