@@ -392,7 +392,8 @@ class PlanarPushingTrajectory:
 
         start_time = self.start_times[segment_idx]
         end_time = self.end_times[segment_idx]
-        num_knot_points = self.path_knot_points[segment_idx].num_knot_points
+        # We always want at least 2 knot points
+        num_knot_points = max(self.path_knot_points[segment_idx].num_knot_points, 2)
 
         # Get the time that is exactly at the knot point
         ts = np.linspace(start_time, end_time, num_knot_points)
