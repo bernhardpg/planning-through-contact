@@ -62,6 +62,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     # for t in [4, 8]:
     #     print(traj.get_slider_planar_pose(t))
     #     print(traj.get_mode(t))
+    # for seg in traj.traj_segments:
+    #     print(f"Segment with mode {seg.mode}, from {seg.start_time} to {seg.end_time}")
 
     # Choose position source
     # Option 1: Use teleop
@@ -77,7 +79,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
                                    sim_config=sim_config)
     recording_name = plan.split(".")[0]+f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html" if save_recording else None
     # environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
-    environment.simulate(10, save_recording_as=recording_name)
+    environment.simulate(8, save_recording_as=recording_name)
 
     if debug:
         for contact_loc, mpc in position_source.pusher_pose_controller.mpc_controllers.items():
@@ -90,5 +92,5 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_4.pkl", save_recording=True, debug=True)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_1.pkl", save_recording=True, debug=True)
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
