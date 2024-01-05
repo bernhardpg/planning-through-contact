@@ -440,7 +440,7 @@ class PlanarPushingTrajectory:
         self,
         t: float,
         traj_to_get: Literal[
-            "p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot", "p_BP", "state"
+            "p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot", "p_BP", "state", "control"
         ],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
@@ -461,6 +461,9 @@ class PlanarPushingTrajectory:
         elif traj_to_get == "state":
             assert isinstance(seg, FaceContactTrajSegment)
             val = seg.eval_state(t)
+        elif traj_to_get == "control":
+            assert isinstance(seg, FaceContactTrajSegment)
+            val = seg.eval_control(t)
         elif traj_to_get == "f_c_W":
             if isinstance(seg, FaceContactTrajSegment):
                 val = seg.get_f_W(t)

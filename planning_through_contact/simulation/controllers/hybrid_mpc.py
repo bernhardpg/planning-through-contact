@@ -1,13 +1,12 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 import logging
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.common.value import Value
-from pydrake.math import ContinuousAlgebraicRiccatiEquation, eq
-from pydrake.planning import MultipleShooting
+from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.systems.framework import (
     BasicVector,
@@ -19,9 +18,6 @@ from pydrake.systems.framework import (
 )
 from pydrake.systems.primitives import (
     AffineSystem,
-    FirstOrderTaylorApproximation,
-    Linearize,
-    LinearSystem,
 )
 
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -284,12 +280,10 @@ class HybridMpc:
         # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")
         # print(f"x_dot_curr  : {x_dot_curr[:3]}")
         # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
-        # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
-
-        
-        # v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
-        # self.desired_velocity_log.append(v_BP_W_desired.flatten())
-        # self.commanded_velocity_log.append(v_BP_W.flatten())
+        v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
+        v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
+        self.desired_velocity_log.append(v_BP_W_desired.flatten())
+        self.commanded_velocity_log.append(v_BP_W.flatten())
         # print(f"v_BP_W_desired: {v_BP_W_desired.flatten()}")
         # print(f"x_traj: {np.array(x_traj).flatten()}")
         # print(f"u_traj: {np.array(u_traj).flatten()}")

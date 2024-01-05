@@ -28,6 +28,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     logging.getLogger("planning_through_contact.simulation.planar_pushing.pusher_pose_controller").setLevel(logging.DEBUG)
     logging.getLogger("planning_through_contact.simulation.controllers.hybrid_mpc").setLevel(logging.DEBUG)
     traj = PlanarPushingTrajectory.load(plan)
+    print(f"running plan:{plan}")
     print(traj.config.dynamics_config)
     slider = traj.config.dynamics_config.slider
     mpc_config = HybridMpcConfig(
@@ -63,7 +64,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     #     print(traj.get_slider_planar_pose(t))
     #     print(traj.get_mode(t))
     # for seg in traj.traj_segments:
-    #     print(f"Segment with mode {seg.mode}, from {seg.start_time} to {seg.end_time}")
+    #     print(f"Segment with mode {seg.mode}, {type(seg)}, from {seg.start_time} to {seg.end_time}")
 
     # Choose position source
     # Option 1: Use teleop
@@ -78,8 +79,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
                                    position_controller=position_controller,
                                    sim_config=sim_config)
     recording_name = plan.split(".")[0]+f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html" if save_recording else None
-    # environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
-    environment.simulate(8, save_recording_as=recording_name)
+    environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
+    # environment.simulate(8, save_recording_as=recording_name)
 
     if debug:
         for contact_loc, mpc in position_source.pusher_pose_controller.mpc_controllers.items():
@@ -89,8 +90,16 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
                 plot_velocities(mpc.desired_velocity_log, 
                                 mpc.commanded_velocity_log,
                                 suffix=f"_{contact_loc}")
-    
+
+def run_multiple(start: int, end: int):
+    plans = [f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl" for i in range(start, end+1)] + \
+            [f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl" for i in range(start, end+1)]
+    print(f"Running {len(plans)} plans\n{plans}")
+    for plan in plans:
+        
+        run_sim(plan, save_recording=True, debug=False)
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_1.pkl", save_recording=True, debug=True)
+    # run_multiple(3, 9)
+    run_sim(plan="trajectories/box_pushing_demos/hw_demo_C_1_rounded.pkl", save_recording=True, debug=True)
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

@@ -285,28 +285,26 @@ class PusherPoseController(LeafSystem):
         else:
             N = len(x_traj)
 
+        # Period between MPC steps
         h = 1 / self.mpc_config.rate_Hz
 
-        # Finite difference method
+        # Finite difference method based on state
         x_dot_curr, u_input = controller.compute_control(
             x_curr, x_traj[: N + 1], u_traj[:N]
         )
-
-        h = 1 / self.mpc_config.rate_Hz
-        x_acc = system.get_state_from_planar_poses_by_projection(
-            slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value()
-        )
+        x_acc = x_acc_state.get_value()
         x_at_next_mpc_step = x_acc + h * x_dot_curr
-        # For now this is used in _call_return_to_contact_controller, we just want to save the last lambda.
         x_acc_state.set_value(x_at_next_mpc_step)
-        next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
         next_pusher_pos = system.get_p_WP_from_state(x_at_next_mpc_step).flatten()
         next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
-        pusher_pose_cmd_state.set_value(next_pusher_pose)
-        slider_pose_cmd_state.set_value(next_slider_pose)
 
-        # Open loop control based on 
-        # This completely does not work
+        # Closed loop control
+        # This does not work
+        # pusher_vel = system.get_pusher_velocity(x_curr, u_input).flatten()
+        # next_pusher_pose = curr_pusher_pose + PlanarPose(*(h*pusher_vel), 0)
+
+        # Open loop control based on desired velocities in plan
+        # This also completely does not work
         # v_BP_W_desired = system.get_pusher_velocity(x_traj[0], u_traj[0])
         # translation = PlanarPose(*(h*v_BP_W_desired.flatten()), 0)
         # next_pusher_pose = curr_pusher_pose + translation
@@ -323,9 +321,10 @@ class PusherPoseController(LeafSystem):
     ) -> PlanarPose:
         mode = mode_traj[0]
         system = self._get_system_for_mode(mode)
-        x_desired = x_acc_state.get_value() # The only value we want is the last lambda
-        x_desired[0:3] = curr_slider_pose.vector() # Set the rest of the values to the current slider pose
-        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_desired, buffer=-1e-3)
+        x_desired = system.get_state_from_planar_poses_by_projection(slider_pose=curr_slider_pose,
+                                                                     pusher_pose=curr_pusher_pose)
+        next_pusher_pos = system.get_p_WP_from_state(x_desired, buffer=-1e-3)
+        next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
         return next_pusher_pose
     
     def _clamp_next_pusher_pose(self, curr_pusher_pose: PlanarPose, next_pusher_pose: PlanarPose,
@@ -366,20 +365,21 @@ class PusherPoseController(LeafSystem):
         if state == PusherPoseControllerState.CFREE_MPC:
             curr_planar_pose = pusher_planar_pose_traj[0]
             output.set_value(curr_planar_pose.pos())
-            # Reset the MPC controller integrator (set commanded position to current position)
-            pusher_pose_cmd_state.set_value(pusher_planar_pose)
-            slider_pose_cmd_state.set_value(slider_planar_pose)
             
-        elif state == PusherPoseControllerState.HYBRID_MPC:
-            # Reset accumulator after every 0.2s:
-            if self._hybrid_mpc_count % int(self.mpc_config.rate_Hz/5) == 0 or self._clamped_last_step:
-                logger.debug(f"Resetting accumulator at time {context.get_time()}, clamped_last_step: {self._clamped_last_step}")
-                pusher_pose_cmd_state.set_value(pusher_planar_pose)
-                slider_pose_cmd_state.set_value(slider_planar_pose)
-            self._hybrid_mpc_count += 1
+        elif state == PusherPoseControllerState.HYBRID_MPC or state == PusherPoseControllerState.RETURN_TO_CONTACT:
             mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
             slider_planar_pose_traj: List[PlanarPose] = self.slider_planar_pose_traj.Eval(context)  # type: ignore
             contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
+
+            # Reset accumulator after every 0.2s:
+            if self._hybrid_mpc_count % int(self.mpc_config.rate_Hz/5) == 0 or self._clamped_last_step:
+                logger.debug(f"Resetting accumulator at time {context.get_time()}, clamped_last_step: {self._clamped_last_step}")
+                sys = self._get_system_for_mode(mode_traj[0])
+                x_acc_state.set_value(sys.get_state_from_planar_poses_by_projection(slider_planar_pose, pusher_planar_pose))
+                pusher_pose_cmd_state.set_value(pusher_planar_pose)
+                slider_pose_cmd_state.set_value(slider_planar_pose)
+            self._hybrid_mpc_count += 1
+            
             next_pusher_pose = self._call_mpc(
                 slider_planar_pose,
                 pusher_planar_pose,
@@ -391,7 +391,7 @@ class PusherPoseController(LeafSystem):
                 slider_pose_cmd_state=slider_pose_cmd_state,
                 x_acc_state=x_acc_state,
             )
-            next_pusher_pose = self._clamp_next_pusher_pose(pusher_planar_pose, next_pusher_pose)
+            # next_pusher_pose = self._clamp_next_pusher_pose(pusher_planar_pose, next_pusher_pose)
             output.set_value(next_pusher_pose.pos())
         
         elif state == PusherPoseControllerState.RETURN_TO_CONTACT:
