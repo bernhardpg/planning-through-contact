@@ -7,6 +7,7 @@ import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
 from pydrake.systems.framework import (
+    AbstractStateIndex,
     Context,
     DiagramBuilder,
     InputPort,
@@ -32,10 +33,10 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
     SliderPusherSystem,
 )
 
+logger = logging.getLogger(__name__)
+
 # Set the print precision to 4 decimal places
 np.set_printoptions(precision=4)
-
-logger = logging.getLogger(__name__)
 
 class PusherPoseControllerState(Enum):
     """FSM states for the PusherPoseController"""
@@ -80,9 +81,15 @@ class PusherPoseController(LeafSystem):
             loc: HybridMpc(system, mpc_config, dynamics_config)
             for loc, system in self.systems.items()
         }
-        self.pusher_pose_cmd_index = self.DeclareAbstractState(AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)))
-        self.slider_pose_cmd_index = self.DeclareAbstractState(AbstractValue.Make(PlanarPose(x=0, y=0, theta=0)))
-        self.x_acc_index = self.DeclareAbstractState(AbstractValue.Make(np.zeros(4))) # state: x = [x, y, theta, lam]
+        self.pusher_pose_cmd_index = self.DeclareAbstractState(
+            AbstractValue.Make(PlanarPose(x=0, y=0, theta=0))
+        )
+        self.slider_pose_cmd_index = self.DeclareAbstractState(
+            AbstractValue.Make(PlanarPose(x=0, y=0, theta=0))
+        )
+        self.x_acc_index = self.DeclareAbstractState(
+            AbstractValue.Make(np.zeros(4))
+        ) # state: x = [x, y, theta, lam]
 
         self.pusher_planar_pose_traj = self.DeclareAbstractInputPort(
             "pusher_planar_pose_traj",
@@ -254,14 +261,16 @@ class PusherPoseController(LeafSystem):
         system = self._get_system_for_mode(mode)
 
         x_traj = [
-            system.get_state_from_planar_poses(slider_pose, pusher_pose)
+            system.get_state_from_planar_poses_by_projection(slider_pose, pusher_pose)
             for slider_pose, pusher_pose in zip(slider_pose_traj, pusher_pose_traj)
         ]
         u_traj = [
             system.get_control_from_contact_force(force, slider_pose)
             for force, slider_pose in zip(contact_force_traj, slider_pose_traj)
         ][:-1]
-        x_curr = system.get_state_from_planar_poses(curr_slider_pose, curr_pusher_pose)
+        x_curr = system.get_state_from_planar_poses_by_projection(
+            curr_slider_pose, curr_pusher_pose
+        )
 
         modes_eq_to_curr = [m == mode for m in mode_traj]
         if not all(modes_eq_to_curr):
@@ -282,20 +291,17 @@ class PusherPoseController(LeafSystem):
         x_dot_curr, u_input = controller.compute_control(
             x_curr, x_traj[: N + 1], u_traj[:N]
         )
-        x_acc = system.get_state_from_planar_poses(slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value())
+
+        h = 1 / self.mpc_config.rate_Hz
+        x_acc = system.get_state_from_planar_poses_by_projection(
+            slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value()
+        )
         x_at_next_mpc_step = x_acc + h * x_dot_curr
         # For now this is used in _call_return_to_contact_controller, we just want to save the last lambda.
         x_acc_state.set_value(x_at_next_mpc_step)
         next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
-        
-        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_at_next_mpc_step)
-
-        # pusher_pose_v = (next_pusher_pose.pos()-curr_pusher_pose.pos())/h
-        # v_BP_W = system.get_pusher_velocity(x_curr, u_input)
-        # logger.debug(f"pusher_pose_v: {pusher_pose_v.flatten()}")
-        # logger.debug(f"v_BP_W: {v_BP_W.flatten()}")
-        # logger.debug(f"norm diff: {np.linalg.norm(pusher_pose_v-v_BP_W)}")
-
+        next_pusher_pos = system.get_p_WP_from_state(x_at_next_mpc_step).flatten()
+        next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
         pusher_pose_cmd_state.set_value(next_pusher_pose)
         slider_pose_cmd_state.set_value(next_slider_pose)
 
@@ -350,8 +356,12 @@ class PusherPoseController(LeafSystem):
             pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
             slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
             slider_planar_pose = PlanarPose.from_pose(slider_pose)
-            pusher_pose_cmd_state = context.get_mutable_abstract_state(self.pusher_pose_cmd_index)
-            slider_pose_cmd_state = context.get_mutable_abstract_state(self.slider_pose_cmd_index)
+            pusher_pose_cmd_state = context.get_mutable_abstract_state(
+                self.pusher_pose_cmd_index
+            )
+            slider_pose_cmd_state = context.get_mutable_abstract_state(
+                self.slider_pose_cmd_index
+            )
             x_acc_state = context.get_mutable_abstract_state(self.x_acc_index)
         if state == PusherPoseControllerState.CFREE_MPC:
             curr_planar_pose = pusher_planar_pose_traj[0]

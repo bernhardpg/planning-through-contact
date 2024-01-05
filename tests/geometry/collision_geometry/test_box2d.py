@@ -75,13 +75,110 @@ def test_tangent_vecs(box_geometry: Box2d) -> None:
         assert np.allclose(n, t)
 
 
-def test_get_p_BP(box_geometry: Box2d) -> None:
-    loc = PolytopeContactLocation(ContactLocation.FACE, idx=0)
+# NOTE: These test general functionality in AbstractCollisionGeometry and do
+# not need to be implemented for all geometries
+def test_get_lam_from_p_BP_by_projection() -> None:
+    l = 1.0
+    box = Box2d(width=l, height=l)  # square box
+    loc = PolytopeContactLocation(ContactLocation.FACE, 0)  # top face
+
+    p_BP = np.array([0, l / 2]).reshape((2, 1))
+    lam_target = 0.5
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    p_BP = np.array([l / 2, l / 2]).reshape((2, 1))
+    lam_target = 0.0
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    p_BP = np.array([-l / 2, l / 2]).reshape((2, 1))
+    lam_target = 1.0
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    r = 0.1
+    p_BP = np.array([l / 2, l / 2 + r]).reshape((2, 1))
+    lam_target = 0.0
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    p_BP = np.array([-l / 2, l / 2 + r]).reshape((2, 1))
+    lam_target = 1.0
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    # Should project the right value at any height
+    p_BP = np.array([-l / 2, 99]).reshape((2, 1))
+    lam_target = 1.0
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    # Should project the right value at any height
+    p_BP = np.array([0, 99]).reshape((2, 1))
+    lam_target = 0.5
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+    # Should project the right value at any height
+    p_BP = np.array([0, 0]).reshape((2, 1))
+    lam_target = 0.5
+    lam = box.get_lam_from_p_BP_by_projection(p_BP, loc)
+    assert lam == lam_target
+
+
+def test_get_p_Bc_from_lam() -> None:
+    l = 1.0
+    box = Box2d(width=l, height=l)  # square box
+    loc = PolytopeContactLocation(ContactLocation.FACE, 0)  # top face
+
     lam = 0.5
-    p_BP = box_geometry.get_p_BP_from_lam(lam, loc, radius=0)
+    p_BP = box.get_p_Bc_from_lam(lam, loc)
     assert p_BP.shape == (2, 1)
-    assert p_BP[0, 0] == 0
-    assert p_BP[1, 0] == box_geometry.height / 2
+    p_BP_target = np.array([0, l / 2])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+    # confusingly, lam = 0 gives the second vertex and
+    # lam = 1 gives the first vertex on the contact face
+    lam = 0.0
+    p_BP = box.get_p_Bc_from_lam(lam, loc)
+    p_BP_target = np.array([l / 2, l / 2])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+    lam = 1.0
+    p_BP = box.get_p_Bc_from_lam(lam, loc)
+    p_BP_target = np.array([-l / 2, l / 2])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+
+def test_get_p_BP_from_lam() -> None:
+    l = 1.0
+    box = Box2d(width=l, height=l)  # square box
+    r = 0.1
+    loc = PolytopeContactLocation(ContactLocation.FACE, 0)  # top face
+
+    lam = 0.5
+    p_BP = box.get_p_BP_from_lam(lam, loc, radius=0)
+    assert p_BP.shape == (2, 1)
+    p_BP_target = np.array([0, l / 2])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+    lam = 0.5
+    p_BP = box.get_p_BP_from_lam(lam, loc, r)
+    p_BP_target = np.array([0, l / 2 + r])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+    # confusingly, lam = 0 gives the second vertex and
+    # lam = 1 gives the first vertex on the contact face
+    lam = 0.0
+    p_BP = box.get_p_BP_from_lam(lam, loc, r)
+    p_BP_target = np.array([l / 2, l / 2 + r])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
+
+    lam = 1.0
+    p_BP = box.get_p_BP_from_lam(lam, loc, r)
+    p_BP_target = np.array([-l / 2, l / 2 + r])
+    assert np.allclose(p_BP.flatten(), p_BP_target)
 
 
 # TODO: Complete test coverage

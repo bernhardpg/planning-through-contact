@@ -45,7 +45,10 @@ from tests.geometry.planar.fixtures import (
     rigid_body_box,
     t_pusher,
 )
-from tests.geometry.planar.tools import assert_initial_and_final_poses_LEGACY
+from tests.geometry.planar.tools import (
+    assert_initial_and_final_poses,
+    assert_initial_and_final_poses_LEGACY,
+)
 
 DEBUG = False
 
@@ -101,14 +104,6 @@ def test_face_contact_variables(
     assert len(face_contact_vars.delta_omega_WBs) == num_knot_points - 1
     for o in face_contact_vars.delta_omega_WBs:
         assert isinstance(o, Expression)
-
-    assert len(face_contact_vars.p_WPs) == num_knot_points
-    for p in face_contact_vars.p_WPs:
-        assert p.shape == (2, 1)
-
-    assert len(face_contact_vars.f_c_Ws) == num_knot_points - 1
-    for f in face_contact_vars.f_c_Ws:
-        assert f.shape == (2, 1)
 
 
 @pytest.mark.skip(
@@ -215,9 +210,9 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
     assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
+    assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
@@ -256,9 +251,9 @@ def test_one_contact_mode_minimize_keypoints(
     assert result.is_success()
 
     vars = face_contact_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(traj, initial_pose, None, final_pose, None)
+    assert_initial_and_final_poses(traj, initial_pose, None, final_pose, None)
 
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
@@ -297,7 +292,7 @@ def test_planning_for_t_pusher(face_contact_mode: FaceContactMode) -> None:
     assert result.is_success()  # should fail when the relaxation is tight!
 
     vars = face_contact_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
 
     if DEBUG:
         visualize_planar_pushing_trajectory_legacy(
@@ -336,7 +331,7 @@ def test_one_contact_mode_infeasible(face_contact_mode: FaceContactMode) -> None
 
     if DEBUG:
         vars = face_contact_mode.variables.eval_result(result)
-        traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+        traj = PlanarPushingTrajectory(face_contact_mode.config, [vars])
         visualize_planar_pushing_trajectory_legacy(
             traj, face_contact_mode.dynamics_config.slider.geometry, 0.01
         )
@@ -503,7 +498,7 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
     assert result.is_success()
 
     vars = mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(mode.config, [vars])
 
     if DEBUG:
         vars = mode.variables.eval_result(result)

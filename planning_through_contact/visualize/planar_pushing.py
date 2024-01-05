@@ -82,11 +82,12 @@ def make_traj_figure(
         group = []
         no_face_contact = True
         while no_face_contact and idx < len(traj.path_knot_points):
-            curr_segment = traj.path_knot_points[idx]
-            group.append(curr_segment)
+            curr_segment = traj.traj_segments[idx]
+            curr_knot_points = traj.path_knot_points[idx]
+            group.append((curr_segment, curr_knot_points))
             idx += 1
 
-            if isinstance(curr_segment, FaceContactVariables):
+            if isinstance(curr_knot_points, FaceContactVariables):
                 no_face_contact = False
 
         segment_groups.append(group)
@@ -101,7 +102,7 @@ def make_traj_figure(
     else:
         x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
 
-    for segment_idx, path_knot_points_group in enumerate(segment_groups):
+    for segment_idx, segment_group in enumerate(segment_groups):
         if len(segment_groups) == 1:  # only one subplot
             ax = axs
         else:
@@ -115,7 +116,7 @@ def make_traj_figure(
         ax.set_axis_off()
 
         num_frames_in_group = sum(
-            [knot_points.num_knot_points for knot_points in path_knot_points_group]
+            [knot_points.num_knot_points for _, knot_points in segment_group]
         )
         frame_count = 0
 
@@ -142,18 +143,29 @@ def make_traj_figure(
                      linewidth=1, edgecolor='grey', facecolor='none', linestyle='--')
         ax.add_patch(ws_rect)
 
-        for element_idx, knot_points in enumerate(path_knot_points_group):
+        # Plot workspace
+        ws_rect = plt.Rectangle((0.4, -0.25), 0.35, 0.5, 
+                     linewidth=1, edgecolor='grey', facecolor='none', linestyle='--')
+        ax.add_patch(ws_rect)
+
+        for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
+            ts = np.linspace(
+                traj_segment.start_time,
+                traj_segment.end_time,
+                knot_points.num_knot_points,
+            )
+            
             for idx in range(knot_points.num_knot_points):
-                R_WB = knot_points.R_WBs[idx]  # type: ignore
-                p_WB = knot_points.p_WBs[idx]  # type: ignore
-                p_WP = knot_points.p_WPs[idx]  # type: ignore
+                R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
+                p_WB = traj_segment.get_p_WB(ts[idx])
+                p_WP = traj_segment.get_p_WP(ts[idx])
 
                 # We only plot the current frame if it will change next frame
                 # (this is to avoid plotting multiple frames on top of each other)
                 if idx + 1 < knot_points.num_knot_points:
-                    next_R_WB = knot_points.R_WBs[idx + 1]  # type: ignore
-                    next_p_WB = knot_points.p_WBs[idx + 1]  # type: ignore
-                    next_p_WP = knot_points.p_WPs[idx + 1]  # type: ignore
+                    next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[:2, :2]  # 2x2 matrix
+                    next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
+                    next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
                 else:
                     next_R_WB = R_WB
                     next_p_WB = p_WB
@@ -169,7 +181,7 @@ def make_traj_figure(
                 if (
                     np.any(next_R_WB != R_WB)
                     or np.any(next_p_WB != p_WB)
-                    or element_idx == len(path_knot_points_group) - 1
+                    or element_idx == len(segment_group) - 1
                 ):
                     ax.plot(
                         vertices_W[0, :],
@@ -186,10 +198,7 @@ def make_traj_figure(
                     )
 
                 # Plot pusher
-                if (
-                    np.any(next_p_WP != p_WP)
-                    or element_idx == len(path_knot_points_group) - 1
-                ):
+                if np.any(next_p_WP != p_WP) or element_idx == len(segment_group) - 1:
                     ax.add_patch(make_circle(p_WP, fill_transparency))
 
                 # Plot forces
@@ -198,13 +207,13 @@ def make_traj_figure(
                 if (idx < knot_points.num_knot_points - 1) and (
                     isinstance(knot_points, FaceContactVariables)
                 ):
-                    f_c_W = knot_points.f_c_Ws[idx].flatten()
-                    p_Wc = knot_points.p_Wcs[idx].flatten()
+                    f_W = traj_segment.get_f_W(ts[idx]).flatten()
+                    p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
                     ax.arrow(
                         p_Wc[0],
                         p_Wc[1],
-                        f_c_W[0],
-                        f_c_W[1],
+                        f_W[0],
+                        f_W[1],
                         color=LINE_COLOR,
                         fill=True,
                         zorder=99999,

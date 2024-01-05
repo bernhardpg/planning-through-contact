@@ -126,37 +126,70 @@ def SliderPusherSystem_(T):
             )
             return R
 
-        def get_state_from_planar_poses(
+        def get_state_from_planar_poses_by_projection(
             self,
             slider_pose: PlanarPose,
             pusher_pose: PlanarPose,
         ) -> npt.NDArray[np.float64]:
+            """
+            Gets the system state [x, y, theta, lambda] from the provided poses.
+            NOTE: lambda is found by projecting the pusher pose onto the contact face.
+
+            slider_pose: Slider pose in world frame
+            pusher_pose: Pusher pose in world frame
+            """
             R_WB = two_d_rotation_matrix_from_angle(slider_pose.theta)
-            p_W_c = pusher_pose.pos()
+            p_WP = pusher_pose.pos()
             p_WB = slider_pose.pos()
-            p_BP = R_WB.T.dot(p_W_c - p_WB)
-            lam = self.slider_geometry.get_lam_from_p_BP(
-                p_BP, self.contact_location, radius=self.pusher_radius
+            p_BP = R_WB.T.dot(p_WP - p_WB)
+            projected_lam = self.slider_geometry.get_lam_from_p_BP_by_projection(
+                p_BP, self.contact_location
             )
 
-            state = np.array([slider_pose.x, slider_pose.y, slider_pose.theta, lam])
+            state = np.array(
+                [slider_pose.x, slider_pose.y, slider_pose.theta, projected_lam]
+            )
             return state
 
-        def get_pusher_planar_pose_from_state(
+        def get_p_WP_from_state(
             self,
             state: npt.NDArray[np.float64],
             buffer: float = 0.0,
-        ) -> PlanarPose:
+        ) -> npt.NDArray[np.float64]:
+            """
+            Returns the pusher planar pose in the world frame, i.e. p_WP.
+
+            As the state only describes contact, the p_WP will always be such that the pusher
+            is exactly in contact with the slider.
+            """
             x, y, theta, lam = state
-            R_WB = two_d_rotation_matrix_from_angle(theta)
-            slider_planar_pose = PlanarPose(x, y, theta)
-            p_WB = slider_planar_pose.pos()
+
             p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius+buffer
             )
 
-            p_W_c = p_WB + R_WB.dot(p_BP)
-            return PlanarPose(p_W_c[0, 0], p_W_c[1, 0], theta=0)
+            R_WB = two_d_rotation_matrix_from_angle(theta)
+            p_WB = np.array([x, y]).reshape((2, 1))
+
+            p_WP = p_WB + R_WB.dot(p_BP)
+            return p_WP
+
+        def get_p_Wc_from_state(
+            self,
+            state: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
+            """
+            Returns the contact point the world frame, i.e. p_Wc
+            """
+            x, y, theta, lam = state
+
+            p_Bc = self.slider_geometry.get_p_Bc_from_lam(lam, self.contact_location)
+
+            R_WB = two_d_rotation_matrix_from_angle(theta)
+            p_WB = np.array([x, y]).reshape((2, 1))
+
+            p_Wc = p_WB + R_WB.dot(p_Bc)
+            return p_Wc
 
         def get_control_from_contact_force(
             self, f_c_W: npt.NDArray[np.float64], slider_pose: PlanarPose

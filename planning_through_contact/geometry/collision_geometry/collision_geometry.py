@@ -117,22 +117,23 @@ class CollisionGeometry(ABC):
         Return the contact plane(s) that define the current collision-free region
         """
 
-    def get_lam_from_p_BP(
+    def get_lam_from_p_BP_by_projection(
         self,
         p_BP: npt.NDArray[np.float64],
         loc: PolytopeContactLocation,
-        radius: float,
     ) -> npt.NDArray[np.float64]:
+        """
+        Projects p_BP onto the contact face to find relative contact location (lam).
+
+        NOTE: This function will not throw an error if p_BP is penetrating or not
+        making contact with the geometry.
+        """
         assert loc.pos == ContactLocation.FACE
         assert p_BP.shape == (2, 1)
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
 
-        n, t = self.get_norm_and_tang_vecs_from_location(loc)
-        radius_offset = -n * radius
-        point_on_surface = p_BP - radius_offset
-
         # project p_BP onto vector from v1 to v2 to find lam
-        u1 = point_on_surface - pv2
+        u1 = p_BP - pv2
         u2 = pv1 - pv2
         lam = u1.T.dot(u2).item() / np.linalg.norm(u2) ** 2
         return lam
@@ -142,6 +143,9 @@ class CollisionGeometry(ABC):
     ) -> npt.NDArray[np.float64]:
         """
         Get the position of the contact point in the body frame.
+
+        lam = 0 corresponds to the second vertex, and lam = 1
+        corresponds to the first vertex on the contact face.
         """
         assert loc.pos == ContactLocation.FACE
         pv1, pv2 = self.get_proximate_vertices_from_location(loc)
@@ -154,7 +158,12 @@ class CollisionGeometry(ABC):
         """
         Get the position of the pusher in the body frame (note: requires the
         radius to compute the position!)
+
+        lam = 0 corresponds to the second vertex, and lam = 1
+        corresponds to the first vertex on the contact face.
         """
+        assert loc.pos == ContactLocation.FACE
+
         p_Bc = self.get_p_Bc_from_lam(lam, loc)
         n, _ = self.get_norm_and_tang_vecs_from_location(loc)
         radius_offset = -n * radius
