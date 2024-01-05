@@ -33,7 +33,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=False,
         delay_before_execution=1,
         use_diff_ik=True,
-        closed_loop= True,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,

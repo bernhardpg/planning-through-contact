@@ -219,7 +219,8 @@ class PusherPoseController(LeafSystem):
         )
         x_at_next_mpc_step = x_acc + h * x_dot_curr
         next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
-        next_pusher_pose = system.get_pusher_planar_pose_from_state(x_at_next_mpc_step)
+        next_pusher_pos = system.get_p_WP_from_state(x_at_next_mpc_step).flatten()
+        next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
         pusher_pose_cmd_state.set_value(next_pusher_pose)
         slider_pose_cmd_state.set_value(next_slider_pose)
         return next_pusher_pose

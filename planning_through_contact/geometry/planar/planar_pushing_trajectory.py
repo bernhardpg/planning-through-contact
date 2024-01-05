@@ -462,8 +462,10 @@ class PlanarPushingTrajectory:
             assert isinstance(seg, FaceContactTrajSegment)
             val = seg.eval_state(t)
         elif traj_to_get == "f_c_W":
-            assert isinstance(seg, FaceContactTrajSegment)
-            val = seg.get_f_c_W(t)
+            if isinstance(seg, FaceContactTrajSegment):
+                val = seg.get_f_W(t)
+            else:  # NonCollisionTrajSegment
+                val = np.zeros((2, 1))  # return 0 input force if we are not in contact
         else:
             raise NotImplementedError
 
