@@ -56,15 +56,19 @@ def _assert_traj_finger_pos(
     target_pose_finger: PlanarPose,
     start_or_end: Literal["start", "end"],
     atol: float = 1e-3,
+    body_frame: bool = False,
 ):
     if start_or_end == "start":
         t = traj.start_time
     else:  # end
         t = traj.end_time
 
-    p_WP = traj.get_value(t, "p_WP")
+    if body_frame:
+        finger_pos = traj.get_value(t, "p_BP")
+    else:  # world frame
+        finger_pos = traj.get_value(t, "p_WP")
 
-    assert np.allclose(p_WP, target_pose_finger.pos(), atol=atol)
+    assert np.allclose(finger_pos, target_pose_finger.pos(), atol=atol)
 
 
 def assert_initial_and_final_poses(
@@ -73,18 +77,23 @@ def assert_initial_and_final_poses(
     initial_finger_pose: Optional[PlanarPose],
     target_slider_pose: Optional[PlanarPose],
     target_finger_pose: Optional[PlanarPose],
+    body_frame: bool = False,
 ) -> None:
     if initial_slider_pose:
         _assert_traj_slider_pose(traj, initial_slider_pose, "start")
 
     if initial_finger_pose and initial_slider_pose:
-        _assert_traj_finger_pos(traj, initial_slider_pose, initial_finger_pose, "start")
+        _assert_traj_finger_pos(
+            traj, initial_slider_pose, initial_finger_pose, "start", body_frame
+        )
 
     if target_slider_pose:
         _assert_traj_slider_pose(traj, target_slider_pose, "end")
 
     if target_finger_pose and target_slider_pose:
-        _assert_traj_finger_pos(traj, target_slider_pose, target_finger_pose, "end")
+        _assert_traj_finger_pos(
+            traj, target_slider_pose, target_finger_pose, "end", body_frame
+        )
 
 
 def _assert_traj_slider_pose_legacy(

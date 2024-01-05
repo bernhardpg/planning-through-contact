@@ -17,15 +17,20 @@ from planning_through_contact.geometry.planar.non_collision import (
     check_finger_pose_in_contact_location,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.visualize.planar_pushing import (
+    visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
@@ -37,11 +42,11 @@ from tests.geometry.planar.fixtures import (
     rigid_body_box,
 )
 from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses_LEGACY,
+    assert_initial_and_final_poses,
     assert_object_is_avoided,
 )
 
-DEBUG = False
+DEBUG = True
 
 
 def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
@@ -62,35 +67,13 @@ def test_non_collision_vars(non_collision_vars: NonCollisionVariables) -> None:
     assert non_collision_vars.p_BP_xs.shape == (num_knot_points,)
     assert non_collision_vars.p_BP_ys.shape == (num_knot_points,)
 
-    assert len(non_collision_vars.R_WBs) == num_knot_points
-    for R in non_collision_vars.R_WBs:
-        assert R.shape == (2, 2)
+    assert non_collision_vars.R_WB.shape == (2, 2)
 
-    assert len(non_collision_vars.p_WBs) == num_knot_points
-    for p in non_collision_vars.p_WBs:
-        assert p.shape == (2, 1)
+    assert non_collision_vars.p_WB.shape == (2, 1)
 
     assert len(non_collision_vars.p_BPs) == num_knot_points
     for p_BF in non_collision_vars.p_BPs:
         assert p_BF.shape == (2, 1)
-
-    assert len(non_collision_vars.v_WBs) == num_knot_points - 1
-    for v in non_collision_vars.v_WBs:
-        assert v.shape == (2, 1)
-
-    assert len(non_collision_vars.omega_WBs) == num_knot_points - 1
-    for o in non_collision_vars.omega_WBs:
-        assert isinstance(o, float)
-
-    assert len(non_collision_vars.p_WPs) == num_knot_points
-    for p in non_collision_vars.p_WPs:
-        assert p.shape == (2, 1)
-        assert isinstance(p[0, 0], sym.Expression)
-
-    assert len(non_collision_vars.f_c_Ws) == num_knot_points - 1
-    for f in non_collision_vars.f_c_Ws:
-        assert f.shape == (2, 1)
-        assert np.all(f == 0)
 
 
 def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
@@ -134,24 +117,31 @@ def test_one_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
     non_collision_mode.set_finger_initial_pose(finger_initial_pose)
-    finger_final_pose = PlanarPose(-0.18, 0, 0)
-    non_collision_mode.set_finger_final_pose(finger_final_pose)
+    finger_target_pose = PlanarPose(-0.18, 0, 0)
+    non_collision_mode.set_finger_final_pose(finger_target_pose)
 
     result = Solve(non_collision_mode.prog)
     assert result.is_success()
 
     vars = non_collision_mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(non_collision_mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(
-        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+    assert_initial_and_final_poses(
+        traj,
+        slider_pose,
+        finger_initial_pose,
+        slider_pose,
+        finger_target_pose,
+        body_frame=True,
     )
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj,
-            non_collision_mode.object.geometry,
-            pusher_radius=non_collision_mode.pusher_radius,
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -218,31 +208,31 @@ def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
     mode.set_finger_initial_pose(finger_initial_pose)
-    finger_final_pose = PlanarPose(-0.4, -0.2, 0)
-    mode.set_finger_final_pose(finger_final_pose)
+    finger_target_pose = PlanarPose(-0.4, -0.2, 0)
+    mode.set_finger_final_pose(finger_target_pose)
 
     result = Solve(mode.prog)
     assert result.is_success()
 
     vars = mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(
-        traj, slider_pose, finger_initial_pose, slider_pose, finger_final_pose
+    assert_initial_and_final_poses(
+        traj,
+        slider_pose,
+        finger_initial_pose,
+        slider_pose,
+        finger_target_pose,
+        body_frame=True,
     )
 
-    target_pos = [
-        v.squeeze()
-        for v in np.linspace(
-            finger_initial_pose.pos(), finger_final_pose.pos(), num=NUM_KNOT_POINTS
-        )
-    ]  # t.shape = (2,)
-    for p, t in zip(traj.p_BP.T, target_pos):  # p.shape = (2,)
-        assert np.allclose(p, t)
-
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -263,31 +253,36 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
     mode.set_finger_initial_pose(finger_initial_pose)
-    finger_final_pose = PlanarPose(-0.2, -0.2, 0)
-    mode.set_finger_final_pose(finger_final_pose)
+    finger_target_pose = PlanarPose(-0.2, -0.2, 0)
+    mode.set_finger_final_pose(finger_target_pose)
 
     result = Solve(mode.prog)
     assert result.is_success()
 
     vars = mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(
+    assert_initial_and_final_poses(
         traj,
         slider_pose,
         finger_initial_pose,
         slider_pose,
-        finger_final_pose,
+        finger_target_pose,
+        body_frame=True,
     )
 
-    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, np.vstack(vars.p_BPs))
 
     # Pusher should move away from object
     assert vars.p_BP_xs[2] <= -0.27
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, plan_config.slider_geometry, pusher_radius=plan_config.pusher_radius
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -306,31 +301,36 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
 
     finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
     mode.set_finger_initial_pose(finger_initial_pose)
-    finger_final_pose = PlanarPose(-0.2, -0.2, 0)
-    mode.set_finger_final_pose(finger_final_pose)
+    finger_target_pose = PlanarPose(-0.2, -0.2, 0)
+    mode.set_finger_final_pose(finger_target_pose)
 
     result = Solve(mode.prog)
     assert result.is_success()
 
     vars = mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
+    traj = PlanarPushingTrajectory(mode.config, [vars])
 
-    assert_initial_and_final_poses_LEGACY(
+    assert_initial_and_final_poses(
         traj,
         slider_pose,
         finger_initial_pose,
         slider_pose,
-        finger_final_pose,
+        finger_target_pose,
+        body_frame=True,
     )
 
-    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, np.vstack(vars.p_BPs))
 
     # Pusher should move away from object
     assert vars.p_BP_xs[2] <= -0.25
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, plan_config.slider_geometry, plan_config.pusher_radius
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
 
 
@@ -384,19 +384,23 @@ def test_avoid_object_t_pusher(
     assert result.is_success()
 
     vars = mode.variables.eval_result(result)
-    traj = PlanarTrajectoryBuilder([vars]).get_trajectory(interpolate=False)
-
-    assert_initial_and_final_poses_LEGACY(
+    traj = PlanarPushingTrajectory(mode.config, [vars])
+    assert_initial_and_final_poses(
         traj,
         slider_pose,
         initial,
         slider_pose,
         target,
+        body_frame=True,
     )
 
-    assert_object_is_avoided(plan_config.slider_geometry, traj.p_BP)
+    assert_object_is_avoided(plan_config.slider_geometry, np.vstack(vars.p_BPs))
 
     if DEBUG:
-        visualize_planar_pushing_trajectory_legacy(
-            traj, plan_config.slider_geometry, plan_config.pusher_radius
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, initial, target
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
