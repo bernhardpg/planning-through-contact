@@ -159,15 +159,16 @@ def SliderPusherSystem_(T):
             is exactly in contact with the slider.
             """
             x, y, theta, lam = state
-            R_WB = two_d_rotation_matrix_from_angle(theta)
-            slider_planar_pose = PlanarPose(x, y, theta)
-            p_WB = slider_planar_pose.pos()
+
             p_BP = self.slider_geometry.get_p_BP_from_lam(
                 lam, self.contact_location, radius=self.pusher_radius
             )
 
-            p_W_c = p_WB + R_WB.dot(p_BP)
-            return PlanarPose(p_W_c[0, 0], p_W_c[1, 0], theta=0)
+            R_WB = two_d_rotation_matrix_from_angle(theta)
+            p_WB = np.array([x, y]).reshape((2, 1))
+
+            p_WP = p_WB + R_WB.dot(p_BP)
+            return PlanarPose(p_WP[0, 0], p_WP[1, 0], theta=0)
 
         def get_control_from_contact_force(
             self, f_c_W: npt.NDArray[np.float64], slider_pose: PlanarPose
