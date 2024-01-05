@@ -33,8 +33,8 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
     def __init__(
         self,
         path: List[FaceContactVariables],
-        config: Optional[HybridMpcConfig],
         dynamics_config: SliderPusherSystemConfig,
+        config: Optional[HybridMpcConfig] = None,
     ) -> None:
         super().__init__()
 

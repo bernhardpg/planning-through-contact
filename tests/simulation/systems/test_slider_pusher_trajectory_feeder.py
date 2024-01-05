@@ -106,8 +106,11 @@ def one_contact_mode_vars(
 
 def test_feeder_get_state(
     one_contact_mode_vars: List[FaceContactVariables],
+    contact_mode_example: FaceContactMode,
 ) -> None:
-    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+    feeder = SliderPusherTrajectoryFeeder(
+        one_contact_mode_vars, contact_mode_example.config.dynamics_config
+    )
 
     assert feeder.get_state(0).shape == (4,)
 
@@ -122,7 +125,10 @@ def test_feeder_state_feedforward_visualization(
     builder = DiagramBuilder()
 
     feeder = builder.AddNamedSystem(
-        "feedforward", SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+        "feedforward",
+        SliderPusherTrajectoryFeeder(
+            one_contact_mode_vars, face_contact_mode.config.dynamics_config
+        ),
     )
     pusher_radius = face_contact_mode.config.pusher_radius
 
@@ -186,7 +192,10 @@ def test_visualize_both_desired_and_actual_traj(
     builder = DiagramBuilder()
 
     feeder = builder.AddNamedSystem(
-        "feedforward", SliderPusherTrajectoryFeeder(one_contact_mode_vars)
+        "feedforward",
+        SliderPusherTrajectoryFeeder(
+            one_contact_mode_vars, face_contact_mode.config.dynamics_config
+        ),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(

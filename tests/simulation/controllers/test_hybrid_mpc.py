@@ -182,7 +182,7 @@ def test_get_control_with_plan(
     """
 
     feeder = SliderPusherTrajectoryFeeder(
-        one_contact_mode_vars, hybrid_mpc.config, hybrid_mpc.dynamics_config
+        one_contact_mode_vars, hybrid_mpc.dynamics_config, hybrid_mpc.config
     )
     context = feeder.CreateDefaultContext()
 
@@ -232,7 +232,7 @@ def test_get_control_with_disturbance(
     hybrid_mpc: HybridMpc,
 ) -> None:
     feeder = SliderPusherTrajectoryFeeder(
-        one_contact_mode_vars, hybrid_mpc.config, hybrid_mpc.dynamics_config
+        one_contact_mode_vars, hybrid_mpc.dynamics_config, hybrid_mpc.config
     )
     context = feeder.CreateDefaultContext()
 
@@ -331,8 +331,8 @@ def test_hybrid_mpc_controller(
         "feedforward",
         SliderPusherTrajectoryFeeder(
             one_contact_mode_vars,
-            mpc_controller.config,
             one_contact_mode.config.dynamics_config,
+            mpc_controller.config,
         ),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
