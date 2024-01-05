@@ -7,8 +7,12 @@ from pydrake.all import (
 )
 from manipulation.meshcat_utils import MeshcatSliders
 
-from planning_through_contact.simulation.controllers.desired_position_source_base import DesiredPositionSourceBase
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PlanarPushingSimConfig
+from planning_through_contact.simulation.controllers.desired_position_source_base import (
+    DesiredPositionSourceBase,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+    PlanarPushingSimConfig,
+)
 
 
 class TeleopPositionSource(DesiredPositionSourceBase):

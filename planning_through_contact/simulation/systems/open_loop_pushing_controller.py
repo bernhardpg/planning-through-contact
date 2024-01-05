@@ -45,8 +45,12 @@ class OpenLoopPushingController(Diagram):
             dynamics_config=config.dynamics_config,
             mpc_config=config.mpc_config,
             contact_mode_traj=self.planar_pose_pub.GetOutputPort("contact_mode_traj"),
-            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
-            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
+                "slider_planar_pose_traj"
+            ),
+            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
+                "pusher_planar_pose_traj"
+            ),
             contact_force_traj=self.planar_pose_pub.GetOutputPort("contact_force_traj"),
             pose_cmd=self.pusher_pose_to_joint_pos.get_pose_input_port(),
             closed_loop=False,

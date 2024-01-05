@@ -140,15 +140,21 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
         slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
     )
 
-def get_plans_to_point(num_plans: int, lims: Tuple[float, float, float, float], pusher_radius: float, 
-                       point: Tuple[float, float]=(0,0) # Default is origin
+
+def get_plans_to_point(
+    num_plans: int,
+    lims: Tuple[float, float, float, float],
+    pusher_radius: float,
+    point: Tuple[float, float] = (0, 0),  # Default is origin
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
 
     x_min, x_max, y_min, y_max = lims
     EPS = 0.01
-    pusher_pose = PlanarPose(x_max + pusher_radius + EPS, y_max + pusher_radius + EPS, 0)
+    pusher_pose = PlanarPose(
+        x_max + pusher_radius + EPS, y_max + pusher_radius + EPS, 0
+    )
 
     plans = []
     for _ in range(num_plans):
@@ -166,6 +172,7 @@ def get_plans_to_point(num_plans: int, lims: Tuple[float, float, float, float], 
         )
 
     return plans
+
 
 def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
@@ -191,7 +198,8 @@ def create_plan(
         slider = get_sugar_box()
 
     dynamics_config = SliderPusherSystemConfig(
-        pusher_radius=pusher_radius, slider=slider, 
+        pusher_radius=pusher_radius,
+        slider=slider,
         friction_coeff_slider_pusher=0.25,
         friction_coeff_table_slider=0.5,
         integration_constant=0.02,
@@ -215,7 +223,7 @@ def create_plan(
             slider.geometry,
             pusher_radius,
             plan_spec,
-            show=True,
+            # show=True,
             save=True,
             filename=f"{traj_name}_start_and_goal_{body_to_use}",
         )
@@ -285,14 +293,14 @@ def create_plan(
             )
 
     make_traj_figure(
-            traj_relaxed,
-            filename=f"{traj_name}_{body_to_use}",
-        )
+        traj_relaxed,
+        filename=f"{traj_name}_{body_to_use}",
+    )
     if traj_rounded is not None:
-            make_traj_figure(
-                traj_rounded,
-                filename=f"{traj_name}_{body_to_use}_rounded",
-            )
+        make_traj_figure(
+            traj_rounded,
+            filename=f"{traj_name}_{body_to_use}_rounded",
+        )
 
     if visualize:
         if debug:

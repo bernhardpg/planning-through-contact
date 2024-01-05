@@ -17,9 +17,15 @@ from pydrake.all import (
     Rgba,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PusherSliderPoseSelector, PlanarPushingSimConfig
-from planning_through_contact.simulation.state_estimators.plant_updater import PlantUpdater
+from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+    PusherSliderPoseSelector,
+    PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.state_estimators.plant_updater import (
+    PlantUpdater,
+)
 from planning_through_contact.visualize.colors import COLORS
+
 
 class StateEstimator(Diagram):
     """
@@ -31,7 +37,7 @@ class StateEstimator(Diagram):
     def __init__(
         self,
         sim_config: PlanarPushingSimConfig,
-        environment, # TODO: Fix circular import issue
+        environment,  # TODO: Fix circular import issue
         add_visualizer: bool = False,
     ):
         super().__init__()
@@ -44,11 +50,18 @@ class StateEstimator(Diagram):
         self._scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
         self._plant.RegisterAsSourceForSceneGraph(self._scene_graph)
 
-        slider_name, self.slider = environment.add_all_directives(plant=self._plant, scene_graph=self._scene_graph)
-        robot_model_name = "pusher" # TODO fix this, this will break when we transition to using the iiwa as the robot
+        slider_name, self.slider = environment.add_all_directives(
+            plant=self._plant, scene_graph=self._scene_graph
+        )
+        robot_model_name = "pusher"  # TODO fix this, this will break when we transition to using the iiwa as the robot
         # Add system for updating the plant
         self._plant_updater: PlantUpdater = builder.AddNamedSystem(
-            "plant_updater", PlantUpdater(plant=self._plant, robot_model_name=robot_model_name, object_model_name=slider_name)
+            "plant_updater",
+            PlantUpdater(
+                plant=self._plant,
+                robot_model_name=robot_model_name,
+                object_model_name=slider_name,
+            ),
         )
 
         # Connect the plant to the scene graph
@@ -81,7 +94,8 @@ class StateEstimator(Diagram):
 
         # Export planar pose and velocity output ports
         builder.ExportOutput(
-            self._pusher_slider_pose_selector.GetOutputPort("slider_pose"), "slider_pose"
+            self._pusher_slider_pose_selector.GetOutputPort("slider_pose"),
+            "slider_pose",
         )
         builder.ExportOutput(
             self._pusher_slider_pose_selector.GetOutputPort("slider_spatial_velocity"),
@@ -119,7 +133,7 @@ class StateEstimator(Diagram):
         if add_visualizer:
             self.meshcat = StartMeshcat()  # type: ignore
             visualizer = MeshcatVisualizer.AddToBuilder(
-                    builder, self._scene_graph.get_query_output_port(), self.meshcat
+                builder, self._scene_graph.get_query_output_port(), self.meshcat
             )
             if sim_config.visualize_desired:
                 assert sim_config.slider_goal_pose is not None
@@ -135,9 +149,8 @@ class StateEstimator(Diagram):
 
     def get_scene_graph(self) -> SceneGraph:
         return self._scene_graph
-    
+
     def _visualize_desired_slider_pose(self, desired_planar_pose: PlanarPose) -> None:
-        
         shapes = self.get_slider_shapes()
         poses = self.get_slider_shape_poses()
 
@@ -152,10 +165,10 @@ class StateEstimator(Diagram):
             DESIRED_POSE_ALPHA = 0.4
             for idx, (shape, pose) in enumerate(zip(shapes, poses)):
                 geom_instance = GeometryInstance(
-                        desired_pose.multiply(pose),
-                        shape,
-                        f"shape_{idx}",
-                    )
+                    desired_pose.multiply(pose),
+                    shape,
+                    f"shape_{idx}",
+                )
                 curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
                     source_id,
                     geom_instance,
@@ -163,11 +176,15 @@ class StateEstimator(Diagram):
                 self._scene_graph.AssignRole(
                     source_id,
                     curr_shape_geometry_id,
-                    MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
+                    MakePhongIllustrationProperties(
+                        BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)
+                    ),
                 )
                 geom_name = f"goal_shape_{idx}"
                 self._goal_geometries.append(geom_name)
-                self.meshcat.SetObject(geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)))
+                self.meshcat.SetObject(
+                    geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA))
+                )
         else:
             for pose, geom_name in zip(poses, self._goal_geometries):
                 self.meshcat.SetTransform(geom_name, desired_pose.multiply(pose))
@@ -178,7 +195,9 @@ class StateEstimator(Diagram):
 
     def get_slider_shapes(self) -> List[DrakeBox]:
         slider_body = self.get_slider_body()
-        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(slider_body)
+        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
+            slider_body
+        )
 
         inspector = self._scene_graph.model_inspector()
         shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
@@ -187,10 +206,12 @@ class StateEstimator(Diagram):
         assert all([isinstance(shape, DrakeBox) for shape in shapes])
 
         return shapes
-      
+
     def get_slider_shape_poses(self) -> List[DrakeBox]:
         slider_body = self.get_slider_body()
-        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(slider_body)
+        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
+            slider_body
+        )
 
         inspector = self._scene_graph.model_inspector()
         poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]

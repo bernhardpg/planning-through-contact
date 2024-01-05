@@ -53,13 +53,15 @@ class PlanarPoseTrajPublisher(LeafSystem):
         )
 
         self.DeclareVectorOutputPort(
-            "desired_pusher_planar_pose_vector", 3,
-            self.DoCalcDesiredPusherPlanarPoseVectorOutput
+            "desired_pusher_planar_pose_vector",
+            3,
+            self.DoCalcDesiredPusherPlanarPoseVectorOutput,
         )
 
         self.DeclareVectorOutputPort(
-            "desired_slider_planar_pose_vector", 3,
-            self.DoCalcDesiredSliderPlanarPoseVectorOutput
+            "desired_slider_planar_pose_vector",
+            3,
+            self.DoCalcDesiredSliderPlanarPoseVectorOutput,
         )
 
     def _get_rel_t(self, t: float) -> float:
@@ -120,12 +122,12 @@ class PlanarPoseTrajPublisher(LeafSystem):
             self._get_rel_t(curr_t), lambda t: self.traj.get_mode(t)
         )
         output.set_value(mode_traj)
-    
+
     def DoCalcDesiredPusherPlanarPoseVectorOutput(self, context: Context, output):
         curr_t = context.get_time()
         pusher_pose = self._calc_pusher_pose(self._get_rel_t(curr_t))
         output.SetFromVector(pusher_pose.vector())
-    
+
     def DoCalcDesiredSliderPlanarPoseVectorOutput(self, context: Context, output):
         curr_t = context.get_time()
         slider_pose = self._calc_slider_pose(self._get_rel_t(curr_t))

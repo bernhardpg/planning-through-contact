@@ -94,7 +94,7 @@ def SliderPusherSystem_(T):
             p_Bc = self._get_p_Bc(lam).flatten()
             J_c = np.array([[1.0, 0.0, -p_Bc[1]], [0.0, 1.0, p_Bc[0]]])  # type: ignore
             return J_c
-        
+
         def _get_pusher_jacobian(self, lam: float) -> npt.NDArray[np.float64]:
             p_BP = self._get_p_BP(lam).flatten()
             J_p = np.array([[1.0, 0.0, -p_BP[1]], [0.0, 1.0, p_BP[0]]])
@@ -165,7 +165,7 @@ def SliderPusherSystem_(T):
             x, y, theta, lam = state
 
             p_BP = self.slider_geometry.get_p_BP_from_lam(
-                lam, self.contact_location, radius=self.pusher_radius+buffer
+                lam, self.contact_location, radius=self.pusher_radius + buffer
             )
 
             R_WB = two_d_rotation_matrix_from_angle(theta)
@@ -230,8 +230,10 @@ def SliderPusherSystem_(T):
             u = self.input.Eval(context)
             x_dot = self.calc_dynamics(x, u)  # type: ignore
             derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
-        
-        def get_pusher_velocity(self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+
+        def get_pusher_velocity(
+            self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+        ) -> npt.NDArray[np.float64]:
             """Equations 12-14 of the 2020 paper but modified to get pusher velocity in the world frame
             instead of contact point velocity in the body frame."""
             x, y, theta, lam = state
@@ -247,15 +249,6 @@ def SliderPusherSystem_(T):
             # Get 2x2 upper left block of R_WB
             R_WB = R_WB[:2, :2]
             v_BP_W = R_WB.dot(v_BP_B)
-
-            # print(f"state: {state.flatten()}, control: {control.flatten()}")
-            
-            # print(f"limit_surface_const: {self.config.limit_surface_const}")
-            # print(f"J_p {J_p}")
-            # print(f"t {t.flatten()}")
-            # print(f"J_p.dot(t) {J_p.dot(t).flatten()}")
-            # print(f"lam_dot * unnormalized_tangent_vec {lam_dot * unnormalized_tangent_vec.flatten()}")
-
             return v_BP_W
 
     return Impl

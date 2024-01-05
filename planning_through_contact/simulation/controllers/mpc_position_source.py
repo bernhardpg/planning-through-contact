@@ -1,16 +1,27 @@
-
 from pydrake.all import (
     DiagramBuilder,
     OutputPort,
     Diagram,
 )
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import PlanarPushingTrajectory
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 
-from planning_through_contact.simulation.controllers.desired_position_source_base import DesiredPositionSourceBase
-from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import PlanarPoseTrajPublisher
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import PlanarPushingSimConfig
-from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import PusherPoseController
-from planning_through_contact.simulation.systems.contact_detection_system import ContactDetectionSystem
+from planning_through_contact.simulation.controllers.desired_position_source_base import (
+    DesiredPositionSourceBase,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
+    PlanarPoseTrajPublisher,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+    PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import (
+    PusherPoseController,
+)
+from planning_through_contact.simulation.systems.contact_detection_system import (
+    ContactDetectionSystem,
+)
 
 
 class MPCPositionSource(DesiredPositionSourceBase):
@@ -32,14 +43,16 @@ class MPCPositionSource(DesiredPositionSourceBase):
         self.planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
             PlanarPoseTrajPublisher(
-                self._traj, self._sim_config.mpc_config, self._sim_config.delay_before_execution
+                self._traj,
+                self._sim_config.mpc_config,
+                self._sim_config.delay_before_execution,
             ),
         )
 
         # Contact Detection System
         self._contact_detector = builder.AddNamedSystem(
             "ContactDetectionSystem",
-            ContactDetectionSystem("pusher::collision", "box::box_collision")
+            ContactDetectionSystem("pusher::collision", "box::box_collision"),
         )
 
         # MPC controllers
@@ -48,10 +61,14 @@ class MPCPositionSource(DesiredPositionSourceBase):
             dynamics_config=self._sim_config.dynamics_config,
             mpc_config=self._sim_config.mpc_config,
             contact_mode_traj=self.planar_pose_pub.GetOutputPort("contact_mode_traj"),
-            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
-            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
+                "slider_planar_pose_traj"
+            ),
+            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
+                "pusher_planar_pose_traj"
+            ),
             contact_force_traj=self.planar_pose_pub.GetOutputPort("contact_force_traj"),
-            pose_cmd=None, # Connect this in environment
+            pose_cmd=None,  # Connect this in environment
             closed_loop=self._sim_config.closed_loop,
             pusher_planar_pose_measured=state_estimator.GetOutputPort("pusher_pose"),
             slider_pose_measured=state_estimator.GetOutputPort("slider_pose"),

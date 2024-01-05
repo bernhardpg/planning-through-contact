@@ -30,6 +30,7 @@ np.set_printoptions(precision=4, suppress=True)
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class HybridMpcConfig:
     horizon: int = 10
@@ -37,8 +38,12 @@ class HybridMpcConfig:
     num_sliding_steps: int = 5
     rate_Hz: int = 200
     enforce_hard_end_constraint: bool = False
-    Q: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 10)
-    Q_N: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000)
+    Q: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 10
+    )
+    Q_N: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000
+    )
     R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
 
 
@@ -261,20 +266,22 @@ class HybridMpc:
         x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
-        
+
         if len(control_sol.T) == self.config.horizon:
             self.control_log.append(control_sol.T)
         else:
             # Padding because the solution length gets smaller as the prediction horizon decreases
             # towards the end of the trajectory segment
             padding = self.config.horizon - control_sol.shape[1]
-            padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode='constant')
+            padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode="constant")
             self.control_log.append(padded_array.T)
-        
+
         if lowest_cost == np.inf:
-            logger.debug(f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} ")
+            logger.debug(
+                f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
+            )
         u_next = control_sol[:, 0]
-        
+
         # Use non-linear dynamics to get x_dot_curr
         x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
         # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")

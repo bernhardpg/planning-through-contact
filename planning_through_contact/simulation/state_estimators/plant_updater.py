@@ -19,14 +19,20 @@ class PlantUpdater(LeafSystem):
     the plant (adding it to the diagram).
     """
 
-    def __init__(self, plant: MultibodyPlant, robot_model_name: str, object_model_name: str):
+    def __init__(
+        self, plant: MultibodyPlant, robot_model_name: str, object_model_name: str
+    ):
         super().__init__()
 
         self._plant = plant
 
         self._plant_context = None
-        self._robot_model_instance_index = plant.GetModelInstanceByName(robot_model_name)
-        self._object_model_instance_index = plant.GetModelInstanceByName(object_model_name)
+        self._robot_model_instance_index = plant.GetModelInstanceByName(
+            robot_model_name
+        )
+        self._object_model_instance_index = plant.GetModelInstanceByName(
+            object_model_name
+        )
         # Input ports
         self._robot_state_input_port = self.DeclareVectorInputPort(
             "robot_state",
@@ -49,9 +55,7 @@ class PlantUpdater(LeafSystem):
         )
         self._body_poses_output_port = self.DeclareAbstractOutputPort(
             "body_poses",
-            lambda: AbstractValue.Make(
-                [RigidTransform()]
-            ),
+            lambda: AbstractValue.Make([RigidTransform()]),
             self._get_body_poses,
         )
         for i in range(self._plant.num_model_instances()):
@@ -65,7 +69,6 @@ class PlantUpdater(LeafSystem):
             )
 
         self.DeclarePerStepUnrestrictedUpdateEvent(self._update_plant)
-
 
     def _update_plant(self, context: Context, state: State) -> None:
         if self._plant_context is None:

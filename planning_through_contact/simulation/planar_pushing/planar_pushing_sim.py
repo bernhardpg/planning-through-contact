@@ -7,16 +7,20 @@ from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.solvers import Solve
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
-from pydrake.systems.primitives import (ConstantVectorSource)
-from pydrake.all import (LogVectorOutput)
+from pydrake.systems.primitives import ConstantVectorSource
+from pydrake.all import LogVectorOutput
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import PlanarTranslationToRigidTransformSystem
-from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import RigidTransformToPlanarPoseVectorSystem
+from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
+    PlanarTranslationToRigidTransformSystem,
+)
+from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import (
+    RigidTransformToPlanarPoseVectorSystem,
+)
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
 )
@@ -34,7 +38,7 @@ from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos
 )
 
 from planning_through_contact.visualize.analysis import (
-    plot_planar_pushing_logs_from_pose_vectors
+    plot_planar_pushing_logs_from_pose_vectors,
 )
 
 
@@ -110,20 +114,40 @@ class PlanarPushingSimulation:
 
         if sim_config.save_plots:
             # state logger
-            pusher_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
-            builder.Connect(self.station.GetOutputPort("pusher_pose"), pusher_pose_to_vector.get_input_port())
-            pusher_pose_logger = LogVectorOutput(pusher_pose_to_vector.get_output_port(), builder)
+            pusher_pose_to_vector = builder.AddSystem(
+                RigidTransformToPlanarPoseVectorSystem()
+            )
+            builder.Connect(
+                self.station.GetOutputPort("pusher_pose"),
+                pusher_pose_to_vector.get_input_port(),
+            )
+            pusher_pose_logger = LogVectorOutput(
+                pusher_pose_to_vector.get_output_port(), builder
+            )
 
-            slider_pose_to_vector = builder.AddSystem(RigidTransformToPlanarPoseVectorSystem())
-            builder.Connect(self.station.GetOutputPort("slider_pose"), slider_pose_to_vector.get_input_port())
-            slider_pose_logger = LogVectorOutput(slider_pose_to_vector.get_output_port(), builder)
-            pusher_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"), builder)
-            slider_pose_desired_logger = LogVectorOutput(self.planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"), builder)
-            
-            self._pusher_pose_logger=pusher_pose_logger
-            self._slider_pose_logger=slider_pose_logger
-            self._pusher_pose_desired_logger=pusher_pose_desired_logger
-            self._slider_pose_desired_logger=slider_pose_desired_logger
+            slider_pose_to_vector = builder.AddSystem(
+                RigidTransformToPlanarPoseVectorSystem()
+            )
+            builder.Connect(
+                self.station.GetOutputPort("slider_pose"),
+                slider_pose_to_vector.get_input_port(),
+            )
+            slider_pose_logger = LogVectorOutput(
+                slider_pose_to_vector.get_output_port(), builder
+            )
+            pusher_pose_desired_logger = LogVectorOutput(
+                self.planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"),
+                builder,
+            )
+            slider_pose_desired_logger = LogVectorOutput(
+                self.planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"),
+                builder,
+            )
+
+            self._pusher_pose_logger = pusher_pose_logger
+            self._slider_pose_logger = slider_pose_logger
+            self._pusher_pose_desired_logger = pusher_pose_desired_logger
+            self._slider_pose_desired_logger = slider_pose_desired_logger
 
         self.diagram = builder.Build()
 
@@ -137,8 +161,12 @@ class PlanarPushingSimulation:
         self.config = sim_config
         self.set_slider_planar_pose(sim_config.slider_start_pose)
 
-        desired_pusher_pose = sim_config.pusher_start_pose.to_pose(self.TABLE_BUFFER_DIST)
-        desired_slider_pose = sim_config.slider_start_pose.to_pose(self.station.get_slider_min_height())
+        desired_pusher_pose = sim_config.pusher_start_pose.to_pose(
+            self.TABLE_BUFFER_DIST
+        )
+        desired_slider_pose = sim_config.slider_start_pose.to_pose(
+            self.station.get_slider_min_height()
+        )
         start_joint_positions = solve_ik(
             self.diagram,
             self.station,
@@ -176,10 +204,18 @@ class PlanarPushingSimulation:
         if self.config.save_plots:
             pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
             slider_pose_log = self._slider_pose_logger.FindLog(self.context)
-            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(self.context)
-            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(self.context)
-            plot_planar_pushing_logs_from_pose_vectors(pusher_pose_log, slider_pose_log, pusher_pose_desired_log, slider_pose_desired_log)
-
+            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
+                self.context
+            )
+            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
+                self.context
+            )
+            plot_planar_pushing_logs_from_pose_vectors(
+                pusher_pose_log,
+                slider_pose_log,
+                pusher_pose_desired_log,
+                slider_pose_desired_log,
+            )
 
     def set_slider_planar_pose(self, pose: PlanarPose):
         min_height = min([shape.height() for shape in self.station.get_slider_shapes()])

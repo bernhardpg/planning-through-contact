@@ -56,7 +56,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 def make_traj_figure(
     traj: PlanarPushingTrajectory,
     filename: str,
-    plot_lims: Optional[Tuple[float, float, float, float]] = (0.3,0.85,-0.35,0.35),
+    plot_lims: Optional[Tuple[float, float, float, float]] = (0.3, 0.85, -0.35, 0.35),
     plot_knot_points: bool = True,
 ) -> None:
     # We need to add the first vertex again to close the polytope
@@ -139,13 +139,15 @@ def make_traj_figure(
         )
 
         # Plot workspace
-        ws_rect = plt.Rectangle((0.4, -0.25), 0.35, 0.5, 
-                     linewidth=1, edgecolor='grey', facecolor='none', linestyle='--')
-        ax.add_patch(ws_rect)
-
-        # Plot workspace
-        ws_rect = plt.Rectangle((0.4, -0.25), 0.35, 0.5, 
-                     linewidth=1, edgecolor='grey', facecolor='none', linestyle='--')
+        ws_rect = plt.Rectangle(
+            (0.4, -0.25),
+            0.35,
+            0.5,
+            linewidth=1,
+            edgecolor="grey",
+            facecolor="none",
+            linestyle="--",
+        )
         ax.add_patch(ws_rect)
 
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
@@ -154,7 +156,7 @@ def make_traj_figure(
                 traj_segment.end_time,
                 knot_points.num_knot_points,
             )
-            
+
             for idx in range(knot_points.num_knot_points):
                 R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
                 p_WB = traj_segment.get_p_WB(ts[idx])
@@ -280,7 +282,7 @@ def make_traj_figure(
                 alpha=GOAL_TRANSPARENCY,
                 linestyle="--",
             )
-            ax.add_patch(circle)        
+            ax.add_patch(circle)
 
     fig.tight_layout()
     fig.savefig(filename + f"_trajectory.pdf")  # type: ignore

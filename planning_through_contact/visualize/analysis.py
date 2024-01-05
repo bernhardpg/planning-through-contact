@@ -106,6 +106,7 @@ def plot_planar_pushing_logs(
 
     plot_planar_pushing_trajectory(actual, desired)
 
+
 def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -> None:
     # Convert the list to a numpy array for easier manipulation
     control_log_array = np.array(control_log)
@@ -115,14 +116,14 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -
     prediction_horizons = np.arange(control_log_array.shape[1])
 
     # Create a meshgrid for timesteps and prediction_horizons
-    T, P = np.meshgrid(prediction_horizons, timesteps) # Note the change in the order
+    T, P = np.meshgrid(prediction_horizons, timesteps)  # Note the change in the order
 
     # Initialize a 3D plot
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     # Plot each control input
-    for i, label in enumerate(['c_n', 'c_f', 'lam_dot']):
+    for i, label in enumerate(["c_n", "c_f", "lam_dot"]):
         # Extract the control data for plotting
         Z = control_log_array[:, :, i]
 
@@ -133,23 +134,27 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -
         ax.plot_surface(T, P, Z, label=label, alpha=0.7)
 
     # Adding labels
-    ax.set_xlabel('Prediction Horizon')
-    ax.set_ylabel('Timestep')
-    ax.set_zlabel('Control Inputs')
+    ax.set_xlabel("Prediction Horizon")
+    ax.set_ylabel("Timestep")
+    ax.set_zlabel("Control Inputs")
 
     # Adding title
-    ax.set_title('3D Control Inputs Plot')
+    ax.set_title("3D Control Inputs Plot")
 
     # Workaround for legend in 3D plot
     from matplotlib.lines import Line2D
-    custom_lines = [Line2D([0], [0], linestyle="none", marker='_', color="blue", markersize=10),
-                    Line2D([0], [0], linestyle="none", marker='_', color="orange", markersize=10),
-                    Line2D([0], [0], linestyle="none", marker='_', color="green", markersize=10)]
-    ax.legend(custom_lines, ['c_n', 'c_f', 'lam_dot'])
+
+    custom_lines = [
+        Line2D([0], [0], linestyle="none", marker="_", color="blue", markersize=10),
+        Line2D([0], [0], linestyle="none", marker="_", color="orange", markersize=10),
+        Line2D([0], [0], linestyle="none", marker="_", color="green", markersize=10),
+    ]
+    ax.legend(custom_lines, ["c_n", "c_f", "lam_dot"])
 
     # Show plot
     plt.tight_layout()
     plt.savefig(f"planar_pushing_control_sols{suffix}.png")
+
 
 def plot_cost(cost_log: List[float], suffix: str = "") -> None:
     plt.figure()
@@ -160,7 +165,12 @@ def plot_cost(cost_log: List[float], suffix: str = "") -> None:
     plt.tight_layout()
     plt.savefig(f"planar_pushing_cost{suffix}.png")
 
-def plot_velocities(desired_vel_log: List[npt.NDArray], commanded_vel_log: List[npt.NDArray], suffix: str = "") -> None:
+
+def plot_velocities(
+    desired_vel_log: List[npt.NDArray],
+    commanded_vel_log: List[npt.NDArray],
+    suffix: str = "",
+) -> None:
     plt.figure()
     # velocity has x and y dimensions
     desired_vel_log_array = np.array(desired_vel_log)

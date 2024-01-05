@@ -76,6 +76,7 @@ class PlanarPushingSimConfig:
     mpc_config: HybridMpcConfig = field(default_factory=lambda: HybridMpcConfig())
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
 
+
 class PusherSliderPoseSelector(LeafSystem):
     """
     Select the slider pose and spatial velocity and output these.
