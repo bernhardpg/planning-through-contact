@@ -101,9 +101,6 @@ def test_planar_pushing_trajectory_values(
     dets = [np.linalg.det(R) for R in vars.R_WBs]
     assert np.allclose(dets, 1)
 
-    slider_pusher_seg = traj.slider_pusher_traj_segments[0]
-    assert slider_pusher_seg is not None
-
     sys = SliderPusherSystem(contact_location, cfg)
 
     # Make sure the slider boundary position is correct

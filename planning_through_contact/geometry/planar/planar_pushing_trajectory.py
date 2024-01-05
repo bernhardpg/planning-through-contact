@@ -266,10 +266,11 @@ class FaceContactTrajSegment(AbstractTrajSegment):
         return p_WP
 
     def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
-        breakpoint()
+        state = self.eval_state(t)
+        return self.sys._get_p_BP(state)
 
     def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
-        breakpoint()
+        return self.R_WB.eval(t)
 
 
 @dataclass

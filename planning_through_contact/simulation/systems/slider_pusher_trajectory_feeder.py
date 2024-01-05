@@ -17,6 +17,9 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     FaceContactTrajSegment,
 )
+from planning_through_contact.planning.planar.planar_plan_config import (
+    SliderPusherSystemConfig,
+)
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -30,7 +33,8 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
     def __init__(
         self,
         path: List[FaceContactVariables],
-        config: Optional[HybridMpcConfig] = None,
+        config: Optional[HybridMpcConfig],
+        dynamics_config: SliderPusherSystemConfig,
     ) -> None:
         super().__init__()
 
@@ -58,7 +62,7 @@ class SliderPusherTrajectoryFeeder(LeafSystem):
         self.start_times = temp[:-1]
         self.end_times = temp[1:]
         self.traj_segments = [
-            FaceContactTrajSegment.from_knot_points(p, start, end)
+            FaceContactTrajSegment.from_knot_points(p, start, end, dynamics_config)
             for p, start, end in zip(path, self.start_times, self.end_times)
         ]
 
