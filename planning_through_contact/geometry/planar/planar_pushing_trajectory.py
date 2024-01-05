@@ -208,6 +208,7 @@ class FaceContactTrajSegment(AbstractTrajSegment):
     """
 
     sys: SliderPusherSystem  # need a local copy of this so that we can compute system values
+    mode: PlanarPushingContactMode
     start_time: float
     end_time: float
     p_WB_x: LinTrajSegment
@@ -217,6 +218,7 @@ class FaceContactTrajSegment(AbstractTrajSegment):
     c_n: LinTrajSegment
     c_f: LinTrajSegment
     lam_dot: LinTrajSegment
+    f_B: LinTrajSegment
 
     @classmethod
     def from_knot_points(
@@ -233,12 +235,28 @@ class FaceContactTrajSegment(AbstractTrajSegment):
 
         c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time)  # type: ignore
         c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time)  # type: ignore
+        f_B = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Bs), start_time, end_time)  # type: ignore
         lam_dot = lam.make_derivative()
 
         sys = SliderPusherSystem(knot_points.contact_location, config)
 
+        mode = PlanarPushingContactMode.from_contact_location(
+            knot_points.contact_location
+        )
+
         return cls(
-            sys, start_time, end_time, p_WB_x, p_WB_y, R_WB, lam, c_n, c_f, lam_dot
+            sys,
+            mode,
+            start_time,
+            end_time,
+            p_WB_x,
+            p_WB_y,
+            R_WB,
+            lam,
+            c_n,
+            c_f,
+            lam_dot,
+            f_B,
         )
 
     def eval_state(self, t: float) -> npt.NDArray[np.float64]:
@@ -260,6 +278,11 @@ class FaceContactTrajSegment(AbstractTrajSegment):
     def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
         return np.array([self.p_WB_x.eval(t), self.p_WB_y.eval(t)]).reshape((2, 1))
 
+    def get_p_Wc(self, t: float) -> npt.NDArray[np.float64]:
+        state = self.eval_state(t)
+        p_Wc = self.sys.get_p_Wc_from_state(state)
+        return p_Wc
+
     def get_p_WP(self, t: float) -> npt.NDArray[np.float64]:
         state = self.eval_state(t)
         p_WP = self.sys.get_p_WP_from_state(state)
@@ -271,6 +294,16 @@ class FaceContactTrajSegment(AbstractTrajSegment):
 
     def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
         return self.R_WB.eval(t)
+
+    def get_f_B(self, t: float) -> npt.NDArray[np.float64]:
+        f_B = self.f_B.eval(t)
+        assert isinstance(f_B, type(np.array([])))
+        return f_B
+
+    def get_f_W(self, t: float) -> npt.NDArray[np.float64]:
+        f_B = self.get_f_B(t)
+        R_WB = self.get_R_WB(t)[:2, :2]  # 2x2 matrix
+        return R_WB @ f_B
 
 
 @dataclass
@@ -407,7 +440,7 @@ class PlanarPushingTrajectory:
         self,
         t: float,
         traj_to_get: Literal[
-            "p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot", "p_BP"
+            "p_WB", "R_WB", "p_WP", "f_c_W", "theta", "theta_dot", "p_BP", "state"
         ],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
@@ -416,17 +449,23 @@ class PlanarPushingTrajectory:
         if traj_to_get == "p_WB":
             val = seg.get_p_WB(t)
         elif traj_to_get == "R_WB":
-            val = seg.R_WB.eval(t)
+            val = seg.get_R_WB(t)
         elif traj_to_get == "p_WP":
             val = seg.get_p_WP(t)
-        elif traj_to_get == "f_c_W":
-            val = seg.f_c_W.eval(t)
         elif traj_to_get == "theta":
             val = seg.R_WB.eval_theta(t)
         elif traj_to_get == "theta_dot":
             val = seg.R_WB.eval_theta_dot(t)
         elif traj_to_get == "p_BP":
             val = seg.get_p_BP(t)
+        elif traj_to_get == "state":
+            assert isinstance(seg, FaceContactTrajSegment)
+            val = seg.eval_state(t)
+        elif traj_to_get == "f_c_W":
+            assert isinstance(seg, FaceContactTrajSegment)
+            val = seg.get_f_c_W(t)
+        else:
+            raise NotImplementedError
 
         return val
 
@@ -448,12 +487,11 @@ class PlanarPushingTrajectory:
 
     def get_pusher_planar_pose(self, t) -> PlanarPose:
         p_WP = self.get_value(t, "p_WP")
-        theta = 0
 
         # avoid typing errors
         assert isinstance(p_WP, type(np.array([])))
 
-        planar_pose = PlanarPose(p_WP[0, 0], p_WP[1, 0], theta)
+        planar_pose = PlanarPose(p_WP[0, 0], p_WP[1, 0], theta=0)
         return planar_pose
 
     def save(self, filename: str) -> None:

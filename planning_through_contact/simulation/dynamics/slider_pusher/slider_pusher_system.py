@@ -170,6 +170,23 @@ def SliderPusherSystem_(T):
             p_WP = p_WB + R_WB.dot(p_BP)
             return p_WP
 
+        def get_p_Wc_from_state(
+            self,
+            state: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
+            """
+            Returns the contact point the world frame, i.e. p_Wc
+            """
+            x, y, theta, lam = state
+
+            p_Bc = self.slider_geometry.get_p_Bc_from_lam(lam, self.contact_location)
+
+            R_WB = two_d_rotation_matrix_from_angle(theta)
+            p_WB = np.array([x, y]).reshape((2, 1))
+
+            p_Wc = p_WB + R_WB.dot(p_Bc)
+            return p_Wc
+
         def get_control_from_contact_force(
             self, f_c_W: npt.NDArray[np.float64], slider_pose: PlanarPose
         ) -> npt.NDArray[np.float64]:

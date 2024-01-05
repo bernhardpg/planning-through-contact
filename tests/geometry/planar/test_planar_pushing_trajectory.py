@@ -110,15 +110,18 @@ def test_planar_pushing_trajectory_values(
     def _assert_values_match(t: float) -> None:
         pusher_pose_from_traj = traj.get_pusher_planar_pose(t)
         slider_pose_from_traj = traj.get_slider_planar_pose(t)
-        state = slider_pusher_seg.eval_state(t)
+        state = traj.get_value(t, "state")
+        assert isinstance(state, type(np.array([])))
 
         # Check that slider pose matches the state
         assert np.isclose(slider_pose_from_traj.x, state[0])
         assert np.isclose(slider_pose_from_traj.y, state[1])
         assert np.isclose(slider_pose_from_traj.theta, state[2], atol=1e-6)
 
-        pusher_pose_from_state = sys.get_pusher_planar_pose_from_state(state)
-        assert _pose_is_close(pusher_pose_from_traj, pusher_pose_from_state)
+        pusher_pos_from_state = sys.get_p_WP_from_state(state)
+        assert np.allclose(pusher_pose_from_traj.pos(), pusher_pos_from_state)
+
+        # TODO: control too!
 
     # Check values at times
     times = np.linspace(traj.start_time, traj.end_time, 10)
