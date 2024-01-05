@@ -274,24 +274,6 @@ class FaceContactVariables(AbstractModeVariables):
         return calc_displacements(self.p_BPs)
 
     @property
-    def p_Wcs(self):
-        return [
-            p_WB + R_WB.dot(p_Bc)
-            for p_WB, R_WB, p_Bc in zip(self.p_WBs, self.R_WBs, self.p_Bcs)
-        ]
-
-    @property
-    def p_WPs(self):
-        return [
-            p_WB + R_WB.dot(p_BP)
-            for p_WB, R_WB, p_BP in zip(self.p_WBs, self.R_WBs, self.p_BPs)
-        ]
-
-    @property
-    def f_c_Ws(self):
-        return [R_WB.dot(f_c_B) for f_c_B, R_WB in zip(self.f_c_Bs, self.R_WBs)]
-
-    @property
     def delta_cos_ths(self):
         return np.array(calc_displacements(self.cos_ths))
 

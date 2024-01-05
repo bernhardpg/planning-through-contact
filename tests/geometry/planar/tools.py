@@ -9,6 +9,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.hyperplane import Hyperplane
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -21,6 +22,18 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 
 
+def _get_p_and_R(traj: PlanarPushingTrajectory, idx: int):
+    knot_points = traj.path_knot_points[idx]
+    if isinstance(knot_points, NonCollisionVariables):
+        R_WB = knot_points.R_WB
+        p_WB = knot_points.p_WB
+    else:
+        R_WB = knot_points.R_WBs[idx]
+        p_WB = knot_points.p_WBs[idx]
+
+    return p_WB, R_WB
+
+
 def _assert_traj_slider_pose(
     traj: PlanarPushingTrajectory,
     target_pose: PlanarPose,
@@ -28,11 +41,10 @@ def _assert_traj_slider_pose(
     atol: float = 1e-3,
 ):
     if start_or_end == "start":
-        R_WB = traj.path_knot_points[0].R_WBs[0]  # type: ignore
-        p_WB = traj.path_knot_points[0].p_WBs[0]  # type: ignore
+        idx = 0
     else:  # end
-        R_WB = traj.path_knot_points[-1].R_WBs[-1]  # type: ignore
-        p_WB = traj.path_knot_points[-1].p_WBs[-1]  # type: ignore
+        idx = -1
+    p_WB, R_WB = _get_p_and_R(traj, idx)
 
     assert np.allclose(R_WB, target_pose.two_d_rot_matrix(), atol=atol)
     assert np.allclose(p_WB, target_pose.pos(), atol=atol)
@@ -43,14 +55,19 @@ def _assert_traj_finger_pos(
     target_pose_slider: PlanarPose,
     target_pose_finger: PlanarPose,
     start_or_end: Literal["start", "end"],
-    atol: float = 1e-3,
+    body_frame: bool = False,
 ):
     if start_or_end == "start":
-        p_WP = traj.path_knot_points[0].p_WPs[0]  # type: ignore
+        t = traj.start_time
     else:  # end
-        p_WP = traj.path_knot_points[-1].p_WPs[-1]  # type: ignore
+        t = traj.end_time
 
-    assert np.allclose(p_WP, target_pose_finger.pos(), atol=atol)
+    if body_frame:
+        finger_pos = traj.get_value(t, "p_BP")
+    else:  # world frame
+        finger_pos = traj.get_value(t, "p_WP")
+
+    assert np.allclose(finger_pos, target_pose_finger.pos())
 
 
 def assert_initial_and_final_poses(
@@ -59,18 +76,23 @@ def assert_initial_and_final_poses(
     initial_finger_pose: Optional[PlanarPose],
     target_slider_pose: Optional[PlanarPose],
     target_finger_pose: Optional[PlanarPose],
+    body_frame: bool = False,
 ) -> None:
     if initial_slider_pose:
         _assert_traj_slider_pose(traj, initial_slider_pose, "start")
 
     if initial_finger_pose and initial_slider_pose:
-        _assert_traj_finger_pos(traj, initial_slider_pose, initial_finger_pose, "start")
+        _assert_traj_finger_pos(
+            traj, initial_slider_pose, initial_finger_pose, "start", body_frame
+        )
 
     if target_slider_pose:
         _assert_traj_slider_pose(traj, target_slider_pose, "end")
 
     if target_finger_pose and target_slider_pose:
-        _assert_traj_finger_pos(traj, target_slider_pose, target_finger_pose, "end")
+        _assert_traj_finger_pos(
+            traj, target_slider_pose, target_finger_pose, "end", body_frame
+        )
 
 
 def _assert_traj_slider_pose_legacy(

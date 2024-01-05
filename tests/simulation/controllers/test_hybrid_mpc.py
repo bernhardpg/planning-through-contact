@@ -200,7 +200,9 @@ def test_get_control_with_plan(
     The plan should follow the desired trajectory exactly.
     """
 
-    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
+    feeder = SliderPusherTrajectoryFeeder(
+        one_contact_mode_vars, hybrid_mpc.dynamics_config, hybrid_mpc.config
+    )
     context = feeder.CreateDefaultContext()
 
     desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
@@ -248,7 +250,9 @@ def test_get_control_with_disturbance(
     one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc: HybridMpc,
 ) -> None:
-    feeder = SliderPusherTrajectoryFeeder(one_contact_mode_vars, hybrid_mpc.config)
+    feeder = SliderPusherTrajectoryFeeder(
+        one_contact_mode_vars, hybrid_mpc.dynamics_config, hybrid_mpc.config
+    )
     context = feeder.CreateDefaultContext()
 
     desired_state_traj = feeder.get_state_traj_feedforward_port().Eval(context)
@@ -346,7 +350,11 @@ def execute_hybrid_mpc_controller(
 
     feeder = builder.AddNamedSystem(
         "feedforward",
-        SliderPusherTrajectoryFeeder(one_contact_mode_vars, mpc_controller.config),
+        SliderPusherTrajectoryFeeder(
+            one_contact_mode_vars,
+            one_contact_mode.config.dynamics_config,
+            mpc_controller.config,
+        ),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
