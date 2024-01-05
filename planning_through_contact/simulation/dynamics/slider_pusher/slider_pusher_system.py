@@ -148,10 +148,10 @@ def SliderPusherSystem_(T):
             )
             return state
 
-        def get_pusher_planar_pose_from_state(
+        def get_p_WP_from_state(
             self,
             state: npt.NDArray[np.float64],
-        ) -> PlanarPose:
+        ) -> npt.NDArray[np.float64]:
             """
             Returns the pusher planar pose in the world frame, i.e. p_WP.
 
@@ -168,7 +168,7 @@ def SliderPusherSystem_(T):
             p_WB = np.array([x, y]).reshape((2, 1))
 
             p_WP = p_WB + R_WB.dot(p_BP)
-            return PlanarPose(p_WP[0, 0], p_WP[1, 0], theta=0)
+            return p_WP
 
         def get_control_from_contact_force(
             self, f_c_W: npt.NDArray[np.float64], slider_pose: PlanarPose
