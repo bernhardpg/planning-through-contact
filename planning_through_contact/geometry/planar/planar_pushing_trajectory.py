@@ -213,6 +213,8 @@ class FaceContactTrajSegment(AbstractTrajSegment):
     end_time: float
     p_WB_x: LinTrajSegment
     p_WB_y: LinTrajSegment
+    v_WB_x: LinTrajSegment
+    v_WB_y: LinTrajSegment
     R_WB: So3TrajSegment
     lam: LinTrajSegment
     c_n: LinTrajSegment
@@ -233,6 +235,9 @@ class FaceContactTrajSegment(AbstractTrajSegment):
         lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
+        v_WB_x = p_WB_x.make_derivative()
+        v_WB_y = p_WB_y.make_derivative()
+
         c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time)  # type: ignore
         c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time)  # type: ignore
         f_B = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Bs), start_time, end_time)  # type: ignore
@@ -251,6 +256,8 @@ class FaceContactTrajSegment(AbstractTrajSegment):
             end_time,
             p_WB_x,
             p_WB_y,
+            v_WB_x,
+            v_WB_y,
             R_WB,
             lam,
             c_n,
@@ -277,6 +284,9 @@ class FaceContactTrajSegment(AbstractTrajSegment):
 
     def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
         return np.array([self.p_WB_x.eval(t), self.p_WB_y.eval(t)]).reshape((2, 1))
+    
+    def get_v_WB(self, t: float) -> npt.NDArray[np.float64]:
+        return np.array([self.v_WB_x.eval(t), self.v_WB_y.eval(t)]).reshape((2, 1))
 
     def get_p_Wc(self, t: float) -> npt.NDArray[np.float64]:
         state = self.eval_state(t)
@@ -441,9 +451,12 @@ class PlanarPushingTrajectory:
         t: float,
         traj_to_get: Literal[
             "p_WB",
+            "v_WB",
             "R_WB",
             "p_WP",
+            "p_Wc",
             "f_c_W",
+            "f_B",
             "theta",
             "theta_dot",
             "p_BP",
@@ -456,10 +469,15 @@ class PlanarPushingTrajectory:
 
         if traj_to_get == "p_WB":
             val = seg.get_p_WB(t)
+        elif traj_to_get == "v_WB":
+            assert isinstance(seg, FaceContactTrajSegment)
+            val = seg.get_v_WB(t)
         elif traj_to_get == "R_WB":
             val = seg.get_R_WB(t)
         elif traj_to_get == "p_WP":
             val = seg.get_p_WP(t)
+        elif traj_to_get == "p_Wc":
+            val = seg.get_p_Wc(t)
         elif traj_to_get == "theta":
             val = seg.R_WB.eval_theta(t)
         elif traj_to_get == "theta_dot":
@@ -475,6 +493,11 @@ class PlanarPushingTrajectory:
         elif traj_to_get == "f_c_W":
             if isinstance(seg, FaceContactTrajSegment):
                 val = seg.get_f_W(t)
+            else:  # NonCollisionTrajSegment
+                val = np.zeros((2, 1))  # return 0 input force if we are not in contact
+        elif traj_to_get == "f_B":
+            if isinstance(seg, FaceContactTrajSegment):
+                val = seg.get_f_B(t)
             else:  # NonCollisionTrajSegment
                 val = np.zeros((2, 1))  # return 0 input force if we are not in contact
         else:

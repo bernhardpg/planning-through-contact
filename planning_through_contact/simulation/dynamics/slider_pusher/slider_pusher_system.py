@@ -231,8 +231,23 @@ def SliderPusherSystem_(T):
             x_dot = self.calc_dynamics(x, u)  # type: ignore
             derivatives.get_mutable_vector().set_value(x_dot)  # type: ignore
 
+        def get_slider_velocity(self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+        ) -> npt.NDArray[np.float64]:
+            x, y, theta, lam = state
+            c_n, c_f, lam_dot = control
+
+            # twist = v_WB_B, w_WB_B
+            t = self._get_twist(lam, c_n, c_f)[:2]
+
+            # Rotate into world frame
+            R_WB = self._get_R(theta)
+            # Get 2x2 upper left block of R_WB
+            R_WB = R_WB[:2, :2]
+            v_WB = R_WB @ t
+            return v_WB
+
         def get_pusher_velocity(
-            self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64]
+            self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64], v_WB_W: npt.NDArray[np.float64]
         ) -> npt.NDArray[np.float64]:
             """Equations 12-14 of the 2020 paper but modified to get pusher velocity in the world frame
             instead of contact point velocity in the body frame."""
@@ -249,8 +264,37 @@ def SliderPusherSystem_(T):
             # Get 2x2 upper left block of R_WB
             R_WB = R_WB[:2, :2]
             v_BP_W = R_WB.dot(v_BP_B)
-            return v_BP_W
 
+            w_WB_W = np.array([0, 0, t[2,0]])
+            p_BP_B = self.slider_geometry.get_p_BP_from_lam(lam, self.contact_location, self.pusher_radius)
+            p_BP_W = R_WB.dot(p_BP_B)
+            v_WP_W = v_WB_W + v_BP_W + np.cross(w_WB_W, p_BP_W.flatten())[:2].reshape((2,1))
+
+            return v_WP_W
+
+        def get_v_Wc(
+            self, state: npt.NDArray[np.float64], control: npt.NDArray[np.float64], v_WB_W: npt.NDArray[np.float64]
+        ) -> npt.NDArray[np.float64]:
+            """Gets the contact point velocity in the world frame."""
+            x, y, theta, lam = state
+            c_n, c_f, lam_dot = control
+
+            J_c = self._get_contact_jacobian(lam)
+            t = self._get_twist(lam, c_n, c_f)
+            unnormalized_tangent_vec = self.pv2 - self.pv1
+            v_Bc_B = lam_dot * unnormalized_tangent_vec
+            v_Bc_B = J_c.dot(t) + lam_dot * unnormalized_tangent_vec
+
+            # Rotate into world frame
+            R_WB = self._get_R(theta)
+            # Get 2x2 upper left block of R_WB
+            R_WB = R_WB[:2, :2]
+            v_Bc_W = R_WB.dot(v_Bc_B)
+            w_WB_W = np.array([0, 0, t[2,0]])
+            p_Bc_B = self.slider_geometry.get_p_Bc_from_lam(lam, self.contact_location)
+            p_Bc_W = R_WB.dot(p_Bc_B)
+            v_Wc = v_WB_W + v_Bc_W + np.cross(w_WB_W,p_Bc_W.flatten())[:2].reshape((2,1))
+            return v_Wc
     return Impl
 
 
