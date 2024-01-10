@@ -55,6 +55,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         Q=np.diag([3, 3, 0.01, 0]) * 100,
         Q_N=np.diag([3, 3, 0.01, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
+        u_max_magnitude=[0.3, 0.3, 0.05],
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -112,11 +113,11 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
             if len(mpc.control_log) > 0:
                 plot_cost(mpc.cost_log, suffix=f"_{contact_loc}")
                 plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
-                plot_velocities(
-                    mpc.desired_velocity_log,
-                    mpc.commanded_velocity_log,
-                    suffix=f"_{contact_loc}",
-                )
+                # plot_velocities(
+                #     mpc.desired_velocity_log,
+                #     mpc.commanded_velocity_log,
+                #     suffix=f"_{contact_loc}",
+                # )
 
 
 def run_multiple(start: int, end: int):

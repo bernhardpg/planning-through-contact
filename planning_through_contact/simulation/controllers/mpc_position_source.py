@@ -36,7 +36,9 @@ class MPCPositionSource(DesiredPositionSourceBase):
         self._sim_config = sim_config
         self._traj = traj
 
-    def setup(self, builder: DiagramBuilder, state_estimator: Diagram) -> OutputPort:
+    def AddToBuilder(
+        self, builder: DiagramBuilder, state_estimator: Diagram
+    ) -> OutputPort:
         """Setup the desired position source (MPC)."""
 
         # Desired trajectory sources for pusher and slider

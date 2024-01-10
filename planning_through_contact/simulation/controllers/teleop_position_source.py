@@ -26,7 +26,7 @@ class TeleopPositionSource(DesiredPositionSourceBase):
         self._sim_config = sim_config
         self._teleop_config = teleop_config
 
-    def setup(self, builder: DiagramBuilder, **kwargs) -> OutputPort:
+    def AddToBuilder(self, builder: DiagramBuilder, **kwargs) -> OutputPort:
         """Setup the desired position source (teleop)."""
 
         input_limit = self._teleop_config["input_limit"]

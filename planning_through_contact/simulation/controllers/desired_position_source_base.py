@@ -7,7 +7,7 @@ class DesiredPositionSourceBase(ABC):
     """The desired position source base class."""
 
     @abstractmethod
-    def setup(self, builder: DiagramBuilder, **kwargs) -> OutputPort:
+    def AddToBuilder(self, builder: DiagramBuilder, **kwargs) -> OutputPort:
         """Setup the desired position source system."""
         raise NotImplementedError
 

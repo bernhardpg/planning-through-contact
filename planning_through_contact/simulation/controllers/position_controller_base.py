@@ -8,7 +8,7 @@ class PositionControllerBase(ABC):
     """The position controller base class."""
 
     @abstractmethod
-    def setup(
+    def AddToBuilder(
         self,
         builder: DiagramBuilder,
         state_estimator: Diagram,

@@ -30,7 +30,7 @@ class CylinderActuatedController(PositionControllerBase):
         self._pid_gains = dict(kp=800, ki=100, kd=50)
         self._num_positions = 2  # Number of dimensions for robot position
 
-    def setup(
+    def AddToBuilder(
         self,
         builder: DiagramBuilder,
         state_estimator: Diagram,

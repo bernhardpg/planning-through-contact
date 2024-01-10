@@ -93,7 +93,7 @@ class TableEnvironment:
 
         # Set up position controller
         self._position_controller.add_meshcat(self._meshcat)
-        desired_state_source = self._position_controller.setup(
+        desired_state_source = self._position_controller.AddToBuilder(
             builder=builder,
             state_estimator=self._state_estimator,
             station_plant=self._plant,
@@ -101,8 +101,10 @@ class TableEnvironment:
 
         # Set up desired position source
         self._desired_position_source.add_meshcat(self._meshcat)
-        desired_position_source_output_port = self._desired_position_source.setup(
-            builder, state_estimator=self._state_estimator
+        desired_position_source_output_port = (
+            self._desired_position_source.AddToBuilder(
+                builder, state_estimator=self._state_estimator
+            )
         )
 
         # This is only when not using hardware (fully simulated)

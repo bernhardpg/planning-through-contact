@@ -45,6 +45,10 @@ class HybridMpcConfig:
         default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000
     )
     R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
+    # Max magnitude of control input [c_n, c_f, lam_dot]
+    u_max_magnitude: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.array([0.3, 0.3, 0.05])
+    )
 
 
 class HybridModes(Enum):
@@ -183,10 +187,10 @@ class HybridMpc:
         # Control constraints
         mu = self.dynamics_config.friction_coeff_slider_pusher
         # Control limits:
-        MAX_MAGNITUDE = 0.3
-        LAM_DOT_MAX_MAGNITUDE = 0.05
-        lb = np.array([0, -MAX_MAGNITUDE, -LAM_DOT_MAX_MAGNITUDE])
-        ub = np.array([MAX_MAGNITUDE, MAX_MAGNITUDE, LAM_DOT_MAX_MAGNITUDE])
+        lb = np.array(
+            [0, -self.config.u_max_magnitude[1], -self.config.u_max_magnitude[2]]
+        )
+        ub = self.config.u_max_magnitude
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -283,21 +287,19 @@ class HybridMpc:
         u_next = control_sol[:, 0]
 
         # Use non-linear dynamics to get x_dot_curr
-        x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
+        # x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
         # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")
         # print(f"x_dot_curr  : {x_dot_curr[:3]}")
         # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
-        v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
-        v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
-        self.desired_velocity_log.append(v_BP_W_desired.flatten())
-        self.commanded_velocity_log.append(v_BP_W.flatten())
+        # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
+        # v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
+        # self.desired_velocity_log.append(v_BP_W_desired.flatten())
+        # self.commanded_velocity_log.append(v_BP_W.flatten())
         # print(f"v_BP_W_desired: {v_BP_W_desired.flatten()}")
         # print(f"x_traj: {np.array(x_traj).flatten()}")
         # print(f"u_traj: {np.array(u_traj).flatten()}")
-        # quit()
 
         return x_dot_curr.flatten(), u_next
-        # return v_BP_W
 
 
 # Not used in pusher pose controller

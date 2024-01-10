@@ -284,7 +284,7 @@ class FaceContactTrajSegment(AbstractTrajSegment):
 
     def get_p_WB(self, t: float) -> npt.NDArray[np.float64]:
         return np.array([self.p_WB_x.eval(t), self.p_WB_y.eval(t)]).reshape((2, 1))
-    
+
     def get_v_WB(self, t: float) -> npt.NDArray[np.float64]:
         return np.array([self.v_WB_x.eval(t), self.v_WB_y.eval(t)]).reshape((2, 1))
 
