@@ -1,4 +1,6 @@
-from typing import List, Optional
+from enum import Enum
+from typing import List, Optional, Tuple
+import logging
 
 import numpy as np
 import numpy.typing as npt
@@ -11,6 +13,8 @@ from pydrake.systems.framework import (
     InputPort,
     LeafSystem,
     OutputPort,
+    AbstractStateIndex,
+    State,
 )
 from pydrake.systems.primitives import ZeroOrderHold
 
@@ -29,8 +33,19 @@ from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_sy
     SliderPusherSystem,
 )
 
+logger = logging.getLogger(__name__)
+
 # Set the print precision to 4 decimal places
 np.set_printoptions(precision=4)
+
+
+class PusherPoseControllerState(Enum):
+    """FSM states for the PusherPoseController"""
+
+    OPEN_LOOP = 0
+    CFREE_MPC = 1
+    HYBRID_MPC = 2
+    RETURN_TO_CONTACT = 3
 
 
 class PusherPoseController(LeafSystem):
@@ -38,14 +53,30 @@ class PusherPoseController(LeafSystem):
         self,
         dynamics_config: SliderPusherSystemConfig,
         mpc_config: HybridMpcConfig,
-        z_dist_to_table: float = 0.5,
         closed_loop: bool = True,
     ):
         super().__init__()
-        self.z_dist = z_dist_to_table
         self.object_geometry = dynamics_config.slider.geometry
         self.dynamics_config = dynamics_config
         self.mpc_config = mpc_config
+
+        self._clamped_last_step = False
+
+        # Internal state
+        self._fsm_state_idx = int(
+            self.DeclareAbstractState(
+                AbstractValue.Make(
+                    PusherPoseControllerState.CFREE_MPC
+                    if closed_loop
+                    else PusherPoseControllerState.OPEN_LOOP
+                )
+            )
+        )
+
+        self._pusher_slider_contact = self.DeclareVectorInputPort(
+            "pusher_slider_contact",
+            1,
+        )
 
         self.systems = {
             loc: SliderPusherSystem(loc, dynamics_config)
@@ -62,6 +93,9 @@ class PusherPoseController(LeafSystem):
         self.slider_pose_cmd_index = self.DeclareAbstractState(
             AbstractValue.Make(PlanarPose(x=0, y=0, theta=0))
         )
+        self.x_acc_index = self.DeclareAbstractState(
+            AbstractValue.Make(np.zeros(4))
+        )  # state: x = [x, y, theta, lam]
 
         self.pusher_planar_pose_traj = self.DeclareAbstractInputPort(
             "pusher_planar_pose_traj",
@@ -79,9 +113,7 @@ class PusherPoseController(LeafSystem):
             "contact_mode_traj",
             AbstractValue.Make([PlanarPushingContactMode(0)]),
         )
-        self.output = self.DeclareAbstractOutputPort(
-            "pose", lambda: AbstractValue.Make(RigidTransform()), self.DoCalcOutput
-        )
+        self.output = self.DeclareVectorOutputPort("translation", 2, self.DoCalcOutput)
 
         self.closed_loop = closed_loop
         if self.closed_loop:
@@ -94,6 +126,9 @@ class PusherPoseController(LeafSystem):
                 AbstractValue.Make(RigidTransform()),
             )
 
+        # Run FSM logic before every trajectory-advancing step
+        self.DeclarePerStepUnrestrictedUpdateEvent(self._run_fsm_logic)
+
     @classmethod
     def AddToBuilder(
         cls,
@@ -104,7 +139,7 @@ class PusherPoseController(LeafSystem):
         slider_planar_pose_traj: OutputPort,
         pusher_planar_pose_traj: OutputPort,
         contact_force_traj: OutputPort,
-        pose_cmd: InputPort,
+        pose_cmd: Optional[InputPort] = None,
         closed_loop: bool = True,
         pusher_planar_pose_measured: Optional[OutputPort] = None,
         slider_pose_measured: Optional[OutputPort] = None,
@@ -114,7 +149,6 @@ class PusherPoseController(LeafSystem):
             cls(
                 dynamics_config,
                 mpc_config,
-                z_dist_to_table=0.02,
                 closed_loop=closed_loop,
             ),
         )
@@ -151,13 +185,60 @@ class PusherPoseController(LeafSystem):
 
         period = 1 / mpc_config.rate_Hz
         zero_order_hold = builder.AddNamedSystem(
-            "ZeroOrderHold", ZeroOrderHold(period, AbstractValue.Make(RigidTransform()))
+            "ZeroOrderHold",
+            ZeroOrderHold(period, vector_size=2),  # Just the x and y positions
         )
         builder.Connect(
             pusher_pose_controller.get_output_port(), zero_order_hold.get_input_port()
         )
-        builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
+        if pose_cmd is not None:
+            builder.Connect(zero_order_hold.get_output_port(), pose_cmd)
+            # Otherwise connect the output somewhere else
         return pusher_pose_controller
+
+    def _run_fsm_logic(self, context: Context, state: State) -> None:
+        """FSM state transition logic."""
+
+        time = context.get_time()
+
+        mutable_fsm_state = state.get_mutable_abstract_state(self._fsm_state_idx)
+        fsm_state_value: PlanarPushingContactMode = context.get_abstract_state(
+            self._fsm_state_idx
+        ).get_value()
+
+        mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
+        curr_mode_desired = mode_traj[0]
+
+        if fsm_state_value == PusherPoseControllerState.CFREE_MPC:
+            if curr_mode_desired != PlanarPushingContactMode.NO_CONTACT:
+                mutable_fsm_state.set_value(PusherPoseControllerState.HYBRID_MPC)
+                self._hybrid_mpc_count = 0
+                logger.debug(f"Transitioning to HYBRID_MPC state at time {time}")
+
+        elif fsm_state_value == PusherPoseControllerState.HYBRID_MPC:
+            if curr_mode_desired == PlanarPushingContactMode.NO_CONTACT:
+                mutable_fsm_state.set_value(PusherPoseControllerState.CFREE_MPC)
+                logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
+                return
+
+            in_contact = self._pusher_slider_contact.Eval(context)
+            if not in_contact:
+                mutable_fsm_state.set_value(PusherPoseControllerState.RETURN_TO_CONTACT)
+                logger.debug(f"Transitioning to RETURN_TO_CONTACT state at time {time}")
+                return
+
+        elif fsm_state_value == PusherPoseControllerState.RETURN_TO_CONTACT:
+            if curr_mode_desired == PlanarPushingContactMode.NO_CONTACT:
+                mutable_fsm_state.set_value(PusherPoseControllerState.CFREE_MPC)
+                logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
+                return
+
+            in_contact = self._pusher_slider_contact.Eval(context)
+            if in_contact:
+                mutable_fsm_state.set_value(PusherPoseControllerState.HYBRID_MPC)
+                self._hybrid_mpc_count = 0
+                logger.debug(f"Transitioning to HYBRID_MPC state at time {time}")
+                return
 
     def _get_mpc_for_mode(self, mode: PlanarPushingContactMode) -> HybridMpc:
         loc = mode.to_contact_location()
@@ -179,6 +260,7 @@ class PusherPoseController(LeafSystem):
         mode_traj: List[PlanarPushingContactMode],
         pusher_pose_cmd_state: Optional[AbstractStateIndex] = None,
         slider_pose_cmd_state: Optional[AbstractStateIndex] = None,
+        x_acc_state: Optional[AbstractStateIndex] = None,
     ) -> PlanarPose:
         mode = mode_traj[0]
         controller = self._get_mpc_for_mode(mode)
@@ -209,28 +291,77 @@ class PusherPoseController(LeafSystem):
         else:
             N = len(x_traj)
 
+        # Period between MPC steps
+        h = 1 / self.mpc_config.rate_Hz
+
+        # Finite difference method based on state
         x_dot_curr, u_input = controller.compute_control(
             x_curr, x_traj[: N + 1], u_traj[:N]
         )
-
-        h = 1 / self.mpc_config.rate_Hz
-        x_acc = system.get_state_from_planar_poses_by_projection(
-            slider_pose_cmd_state.get_value(), pusher_pose_cmd_state.get_value()
-        )
+        x_acc = x_acc_state.get_value()
         x_at_next_mpc_step = x_acc + h * x_dot_curr
-        next_slider_pose = PlanarPose(*(x_at_next_mpc_step[0:3]))
+        x_acc_state.set_value(x_at_next_mpc_step)
         next_pusher_pos = system.get_p_WP_from_state(x_at_next_mpc_step).flatten()
         next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
-        pusher_pose_cmd_state.set_value(next_pusher_pose)
-        slider_pose_cmd_state.set_value(next_slider_pose)
+
+        # Closed loop control
+        # This does not work
+        # pusher_vel = system.get_pusher_velocity(x_curr, u_input).flatten()
+        # next_pusher_pose = curr_pusher_pose + PlanarPose(*(h*pusher_vel), 0)
+
+        # Open loop control based on desired velocities in plan
+        # This also completely does not work
+        # v_BP_W_desired = system.get_pusher_velocity(x_traj[0], u_traj[0])
+        # translation = PlanarPose(*(h*v_BP_W_desired.flatten()), 0)
+        # next_pusher_pose = curr_pusher_pose + translation
+        return next_pusher_pose
+
+    def _call_return_to_contact_controller(
+        self,
+        curr_slider_pose: PlanarPose,
+        curr_pusher_pose: PlanarPose,
+        x_acc_state: AbstractStateIndex,
+        slider_pose_traj: List[PlanarPose],
+        pusher_pose_traj: List[PlanarPose],
+        mode_traj: List[PlanarPushingContactMode],
+    ) -> PlanarPose:
+        mode = mode_traj[0]
+        system = self._get_system_for_mode(mode)
+        x_desired = system.get_state_from_planar_poses_by_projection(
+            slider_pose=curr_slider_pose, pusher_pose=curr_pusher_pose
+        )
+        next_pusher_pos = system.get_p_WP_from_state(x_desired, buffer=-1e-3)
+        next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
+        return next_pusher_pose
+
+    def _clamp_next_pusher_pose(
+        self,
+        curr_pusher_pose: PlanarPose,
+        next_pusher_pose: PlanarPose,
+    ) -> Tuple[PlanarPose, bool]:
+        MAX_MAGNITUDE = 0.02
+        did_clamp = False
+        diff = next_pusher_pose.pos() - curr_pusher_pose.pos()
+        magnitude = np.linalg.norm(diff)
+        if magnitude > MAX_MAGNITUDE:
+            logger.warn(f"magnitude of pusher pose change: {magnitude}, clamping")
+            next_pusher_pose = curr_pusher_pose + PlanarPose(
+                *(diff / magnitude * MAX_MAGNITUDE), 0
+            )
+            did_clamp = True
+        self._clamped_last_step = did_clamp
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
-        mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
-        curr_mode_desired = mode_traj[0]
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
+        state = context.get_abstract_state(int(self._fsm_state_idx)).get_value()
 
-        if self.closed_loop:
+        if state == PusherPoseControllerState.OPEN_LOOP:
+            curr_planar_pose = pusher_planar_pose_traj[0]
+            output.set_value(curr_planar_pose.pos())
+            return
+        else:
+            # Reset the MPC controller integrator (set commanded position to current position)
             pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
             pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
             slider_pose: RigidTransform = self.slider_pose.Eval(context)  # type: ignore
@@ -241,22 +372,37 @@ class PusherPoseController(LeafSystem):
             slider_pose_cmd_state = context.get_mutable_abstract_state(
                 self.slider_pose_cmd_index
             )
-        if (
-            not self.closed_loop
-            or curr_mode_desired == PlanarPushingContactMode.NO_CONTACT
-        ):
+            x_acc_state = context.get_mutable_abstract_state(self.x_acc_index)
+        if state == PusherPoseControllerState.CFREE_MPC:
             curr_planar_pose = pusher_planar_pose_traj[0]
-            pusher_pose_desired = curr_planar_pose.to_pose(z_value=self.z_dist)
-            output.set_value(pusher_pose_desired)
-            if self.closed_loop:
-                # Reset the MPC controller integrator (set commanded position to current position)
-                pusher_pose_cmd_state.set_value(pusher_planar_pose)
-                slider_pose_cmd_state.set_value(slider_planar_pose)
+            output.set_value(curr_planar_pose.pos())
 
-        else:  # do control of angle
-            slider_planar_pose = PlanarPose.from_pose(slider_pose)
+        elif (
+            state == PusherPoseControllerState.HYBRID_MPC
+            or state == PusherPoseControllerState.RETURN_TO_CONTACT
+        ):
+            mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
             slider_planar_pose_traj: List[PlanarPose] = self.slider_planar_pose_traj.Eval(context)  # type: ignore
             contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
+
+            # Reset accumulator after every 0.2s:
+            if (
+                self._hybrid_mpc_count % int(self.mpc_config.rate_Hz / 5) == 0
+                or self._clamped_last_step
+            ):
+                logger.debug(
+                    f"Resetting accumulator at time {context.get_time()}, clamped_last_step: {self._clamped_last_step}"
+                )
+                sys = self._get_system_for_mode(mode_traj[0])
+                x_acc_state.set_value(
+                    sys.get_state_from_planar_poses_by_projection(
+                        slider_planar_pose, pusher_planar_pose
+                    )
+                )
+                pusher_pose_cmd_state.set_value(pusher_planar_pose)
+                slider_pose_cmd_state.set_value(slider_planar_pose)
+            self._hybrid_mpc_count += 1
+
             next_pusher_pose = self._call_mpc(
                 slider_planar_pose,
                 pusher_planar_pose,
@@ -266,6 +412,39 @@ class PusherPoseController(LeafSystem):
                 mode_traj,
                 pusher_pose_cmd_state=pusher_pose_cmd_state,
                 slider_pose_cmd_state=slider_pose_cmd_state,
+                x_acc_state=x_acc_state,
             )
-            pusher_pose_command = next_pusher_pose.to_pose(z_value=self.z_dist)
-            output.set_value(pusher_pose_command)
+            # next_pusher_pose = self._clamp_next_pusher_pose(pusher_planar_pose, next_pusher_pose)
+            output.set_value(next_pusher_pose.pos())
+
+        elif state == PusherPoseControllerState.RETURN_TO_CONTACT:
+            pusher_pose_cmd_state.set_value(pusher_planar_pose)
+            slider_pose_cmd_state.set_value(slider_planar_pose)
+
+            mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
+            slider_planar_pose_traj: List[PlanarPose] = self.slider_planar_pose_traj.Eval(context)  # type: ignore
+            contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
+            # next_pusher_pose = self._call_mpc(
+            #     slider_planar_pose,
+            #     pusher_planar_pose,
+            #     slider_planar_pose_traj,
+            #     pusher_planar_pose_traj,
+            #     contact_force_traj,
+            #     mode_traj,
+            #     pusher_pose_cmd_state=pusher_pose_cmd_state,
+            #     slider_pose_cmd_state=slider_pose_cmd_state,
+            #     x_acc_state=x_acc_state,
+            # )
+            # Does not work well
+            next_pusher_pose = self._call_return_to_contact_controller(
+                slider_planar_pose,
+                pusher_planar_pose,
+                x_acc_state,
+                slider_planar_pose_traj,
+                pusher_planar_pose_traj,
+                mode_traj,
+            )
+            next_pusher_pose = self._clamp_next_pusher_pose(
+                pusher_planar_pose, next_pusher_pose
+            )
+            output.set_value(next_pusher_pose.pos())

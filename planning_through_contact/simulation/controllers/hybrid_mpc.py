@@ -1,13 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
-
+import logging
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.common.value import Value
-from pydrake.math import ContinuousAlgebraicRiccatiEquation, eq
-from pydrake.planning import MultipleShooting
+from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.systems.framework import (
     BasicVector,
@@ -19,15 +18,17 @@ from pydrake.systems.framework import (
 )
 from pydrake.systems.primitives import (
     AffineSystem,
-    FirstOrderTaylorApproximation,
-    Linearize,
-    LinearSystem,
 )
 
 from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
 )
 from planning_through_contact.tools.types import NpVariableArray
+
+# Set the print precision to 4 decimal places
+np.set_printoptions(precision=4, suppress=True)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,6 +38,17 @@ class HybridMpcConfig:
     num_sliding_steps: int = 5
     rate_Hz: int = 200
     enforce_hard_end_constraint: bool = False
+    Q: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 10
+    )
+    Q_N: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000
+    )
+    R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
+    # Max magnitude of control input [c_n, c_f, lam_dot]
+    u_max_magnitude: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.array([0.3, 0.3, 0.05])
+    )
 
 
 class HybridModes(Enum):
@@ -60,6 +72,11 @@ class HybridMpc:
         self.num_inputs = model.get_input_port().size()
 
         self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
+
+        self.control_log: List[npt.NDArray[np.float64]] = []
+        self.cost_log: List[float] = []
+        self.desired_velocity_log: List[npt.NDArray[np.float64]] = []
+        self.commanded_velocity_log: List[npt.NDArray[np.float64]] = []
 
     def _calculate_symbolic_system(
         self,
@@ -169,6 +186,11 @@ class HybridMpc:
 
         # Control constraints
         mu = self.dynamics_config.friction_coeff_slider_pusher
+        # Control limits:
+        lb = np.array(
+            [0, -self.config.u_max_magnitude[1], -self.config.u_max_magnitude[2]]
+        )
+        ub = self.config.u_max_magnitude
         for i, u_i in enumerate(u.T):
             c_n = u_i[0]
             c_f = u_i[1]
@@ -189,17 +211,22 @@ class HybridMpc:
                 prog.AddLinearConstraint(c_f == -mu * c_n)
                 prog.AddLinearConstraint(lam_dot >= 0)
 
+            # Control Limits:
+            prog.AddLinearConstraint(c_n <= ub[0])
+            prog.AddLinearConstraint(c_f >= lb[1])
+            prog.AddLinearConstraint(c_f <= ub[1])
+            prog.AddLinearConstraint(lam_dot >= lb[2])
+            prog.AddLinearConstraint(lam_dot <= ub[2])
+
         # State constraints
         for state in x.T:
             lam = state[3]
             prog.AddLinearConstraint(lam >= 0)
             prog.AddLinearConstraint(lam <= 1)
 
-        # Cost
-        Q_base = np.diag([3, 3, 0.1, 0]) # np.diag([3, 3, 0.1, 0])
-        Q = Q_base * 100
-        R = np.diag([1, 1, 0]) * 0.5
-        Q_N = Q_base * 2000
+        Q = self.config.Q
+        R = self.config.R
+        Q_N = self.config.Q_N
 
         state_running_cost = sum(
             [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
@@ -232,15 +259,48 @@ class HybridMpc:
         state = states[best_idx]
         control = controls[best_idx]
         result = results[best_idx]
-
+        lowest_cost = costs[best_idx]
+        self.cost_log.append(lowest_cost)
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]
+
+        # Finite difference method to get x_dot_curr
+        # Uses the linear approximation of the dynamics
         x_dot_curr = (x_next - x_curr) / self.config.step_size
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
+
+        if len(control_sol.T) == self.config.horizon:
+            self.control_log.append(control_sol.T)
+        else:
+            # Padding because the solution length gets smaller as the prediction horizon decreases
+            # towards the end of the trajectory segment
+            padding = self.config.horizon - control_sol.shape[1]
+            padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode="constant")
+            self.control_log.append(padded_array.T)
+
+        if lowest_cost == np.inf:
+            logger.debug(
+                f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
+            )
         u_next = control_sol[:, 0]
-        return x_dot_curr, u_next
+
+        # Use non-linear dynamics to get x_dot_curr
+        # x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
+        # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")
+        # print(f"x_dot_curr  : {x_dot_curr[:3]}")
+        # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
+        # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
+        # v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
+        # self.desired_velocity_log.append(v_BP_W_desired.flatten())
+        # self.commanded_velocity_log.append(v_BP_W.flatten())
+        # print(f"v_BP_W_desired: {v_BP_W_desired.flatten()}")
+        # print(f"x_traj: {np.array(x_traj).flatten()}")
+        # print(f"u_traj: {np.array(u_traj).flatten()}")
+
+        return x_dot_curr.flatten(), u_next
+
 
 # Not used in pusher pose controller
 class HybridModelPredictiveControlSystem(LeafSystem):
@@ -272,7 +332,11 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         x_traj: List[npt.NDArray[np.float64]] = self.desired_state_port.Eval(context)  # type: ignore
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
         if len(u_traj) > 1:
+            # Closed loop control
             _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+
+            # Open loop control
+            # control_next = u_traj[0]
         else:
             control_next = np.array([0, 0, 0])
         output.SetFromVector(control_next)  # type: ignore

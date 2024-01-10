@@ -1,3 +1,4 @@
+import numpy as np
 from pydrake.multibody.plant import ContactModel
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -13,6 +14,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram i
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
     PlanarPushingSimulation,
 )
+from planning_through_contact.visualize.analysis import plot_control_sols_vs_time
 from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
@@ -21,7 +23,15 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
     slider = traj.config.dynamics_config.slider
 
-    mpc_config = HybridMpcConfig(rate_Hz=20, horizon=20, step_size=0.05)
+    mpc_config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=5,
+        rate_Hz=50,
+        Q=np.diag([3, 3, 0.1, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.1, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -44,9 +54,23 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         sim.export_diagram("simulation_diagram.pdf")
 
     sim.reset()
-    recording_name = plan.split(".")[0] + ".html" if save_recording else None
+    recording_name = (
+        plan.split(".")[0] + f"_cl{sim_config.closed_loop}" + ".html"
+        if save_recording
+        else None
+    )
     sim.run(traj.end_time + 1, save_recording_as=recording_name)
+
+    if debug:
+        for contact_loc, mpc in sim.pusher_pose_controller.mpc_controllers.items():
+            if len(mpc.control_log) > 0:
+                plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
+    run_sim(
+        plan="trajectories/box_pushing_demos/hw_demo_0_rounded.pkl",
+        save_recording=True,
+        debug=True,
+    )
+    # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

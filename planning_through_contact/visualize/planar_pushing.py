@@ -56,7 +56,7 @@ from planning_through_contact.visualize.visualizer_2d import (
 def make_traj_figure(
     traj: PlanarPushingTrajectory,
     filename: str,
-    plot_lims: Optional[Tuple[float, float, float, float]] = None,
+    plot_lims: Optional[Tuple[float, float, float, float]] = (0.3, 0.85, -0.35, 0.35),
     plot_knot_points: bool = True,
 ) -> None:
     # We need to add the first vertex again to close the polytope
@@ -137,6 +137,18 @@ def make_traj_figure(
             / num_points
             + start_transparency
         )
+
+        # Plot workspace
+        ws_rect = plt.Rectangle(
+            (0.4, -0.25),
+            0.35,
+            0.5,
+            linewidth=1,
+            edgecolor="grey",
+            facecolor="none",
+            linestyle="--",
+        )
+        ax.add_patch(ws_rect)
 
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
             ts = np.linspace(

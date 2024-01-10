@@ -33,11 +33,11 @@ class BoxWorkspace:
 
     @property
     def y_min(self) -> float:
-        return self.center[0] - self.height / 2
+        return self.center[1] - self.height / 2
 
     @property
     def y_max(self) -> float:
-        return self.center[0] + self.height / 2
+        return self.center[1] + self.height / 2
 
     @property
     def bounds(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -150,7 +150,9 @@ class ContactConfig:
     ang_displacements: Optional[float] = 1.0
     sq_forces: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
-
+    # Min and max values for the scaled position of the finger on the face of the slider
+    lam_min: Optional[float] = 0.0
+    lam_max: Optional[float] = 1.0
     delta_theta_max: Optional[float] = None
     delta_vel_max: Optional[float] = None
 

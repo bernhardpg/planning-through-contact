@@ -33,10 +33,8 @@
       </geometry>
       <material name="Brown"/>
       <drake:proximity_properties>
-        <drake:compliant_hydroelastic/>
-        <drake:mesh_resolution_hint value="0.005"/>
-        <drake:hydroelastic_modulus value="1e5"/>
-        <drake:hunt_crossley_dissipation value="1.0"/>
+        <drake:rigid_hydroelastic/>
+        <drake:hunt_crossley_dissipation value="1.25"/>
         <drake:mesh_resolution_hint value="0.005"/>
         <!-- Both mu_dynamic and mu_static are used in Continuous system.
           Only mu_dynamic is used in Discrete system.

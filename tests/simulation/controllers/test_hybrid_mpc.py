@@ -1,9 +1,10 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pydot
 import pydrake.symbolic as sym
 import pytest
+import logging
 from pydrake.geometry import SceneGraph
 from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.systems.all import ZeroOrderHold
@@ -27,9 +28,14 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     assemble_progs_from_contact_modes,
 )
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingContactMode,
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import (
@@ -49,21 +55,51 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 )
 from planning_through_contact.visualize.analysis import (
     PlanarPushingLog,
+    analyze_mode_result,
+    plot_control_sols_vs_time,
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
+    plot_velocities,
+)
+
+from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
+    visualize_planar_pushing_start_and_goal,
+    visualize_planar_pushing_trajectory,
 )
 
 DEBUG = False
+logging.getLogger(
+    "planning_through_contact.simulation.controllers.hybrid_mpc"
+).setLevel(logging.DEBUG)
 
 
 @pytest.fixture
 def mpc_config() -> HybridMpcConfig:
+    # config = HybridMpcConfig(
+    #     step_size=0.1,
+    #     horizon=10,
+    #     num_sliding_steps=5,
+    #     rate_Hz=20,
+    # )
     config = HybridMpcConfig(
-        step_size=0.1,
-        horizon=10,
-        num_sliding_steps=5,
-        rate_Hz=20,
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=30,
+        Q=np.diag([3, 3, 0.5, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
     )
+    # config = HybridMpcConfig(
+    #     step_size=0.03,
+    #     horizon=50,
+    #     num_sliding_steps=1,
+    #     rate_Hz=200,
+    #     Q=np.diag([3, 3, 0.01, 0]) * 100,
+    #     Q_N=np.diag([3, 3, 1, 0]) * 2000,
+    #     R=np.diag([1, 1, 0]) * 0.5,
+    # )
     return config
 
 
@@ -73,7 +109,7 @@ def slider_pusher_system() -> SliderPusherSystem:  # type: ignore
     box_geometry = Box2d(width=0.15, height=0.15)
     box = RigidBody("box", box_geometry, mass)
 
-    config = SliderPusherSystemConfig(slider=box, friction_coeff_slider_pusher=0.1)
+    config = SliderPusherSystemConfig(slider=box, friction_coeff_slider_pusher=0.5)
 
     contact_idx = 3
 
@@ -279,13 +315,9 @@ def one_contact_mode(
     return mode
 
 
-@pytest.fixture
-def one_contact_mode_vars(
-    one_contact_mode: FaceContactMode,
+def generate_path(
+    one_contact_mode: FaceContactMode, initial_pose: PlanarPose, final_pose: PlanarPose
 ) -> List[FaceContactVariables]:
-    initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.1, 0.4)
-
     one_contact_mode.set_slider_initial_pose(initial_pose)
     one_contact_mode.set_slider_final_pose(final_pose)
 
@@ -313,11 +345,22 @@ def one_contact_mode_vars(
     return [vars]
 
 
-def test_hybrid_mpc_controller(
+@pytest.fixture
+def one_contact_mode_vars(
+    one_contact_mode: FaceContactMode,
+) -> List[FaceContactVariables]:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.3, 0.2, 2.5)
+    return generate_path(one_contact_mode, initial_pose, final_pose)
+
+
+def execute_hybrid_mpc_controller(
     one_contact_mode: FaceContactMode,
     one_contact_mode_vars: List[FaceContactVariables],
     hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
-) -> None:  # type: ignore
+    initial_disturbance: np.ndarray,
+    traj: Optional[PlanarPushingTrajectory] = None,
+) -> None:
     mpc_controller = hybrid_mpc_controller_system
 
     slider_geometry = one_contact_mode.config.slider_geometry
@@ -395,7 +438,7 @@ def test_hybrid_mpc_controller(
             T_VW=T_VW,
             xlim=[-LIM, LIM],
             ylim=[-LIM, LIM],
-            show=False,
+            show=True,
         )
 
     builder.Connect(slider_pusher.get_output_port(), mpc_controller.get_state_port())
@@ -417,8 +460,7 @@ def test_hybrid_mpc_controller(
     diagram.set_name("diagram")
 
     context = diagram.CreateDefaultContext()
-    disturbance = np.array([-0.02, 0.02, 0.1, 0])
-    x_initial = feeder.get_state(0) + disturbance
+    x_initial = feeder.get_state(0) + initial_disturbance
     context.SetContinuousState(x_initial)
 
     if DEBUG:
@@ -426,7 +468,7 @@ def test_hybrid_mpc_controller(
 
     simulator = Simulator(diagram, context)
     simulator.Initialize()
-    simulator.AdvanceTo(one_contact_mode.time_in_mode + 2)
+    simulator.AdvanceTo(one_contact_mode.time_in_mode + 0.3)
 
     if DEBUG:
         pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_pdf("hybrid_mpc_diagram.pdf")  # type: ignore
@@ -444,3 +486,234 @@ def test_hybrid_mpc_controller(
         plot_planar_pushing_logs(
             state_log, desired_state_log, control_log, desired_control_log
         )
+        plot_control_sols_vs_time(mpc_controller.mpc.control_log)
+        plot_velocities(
+            mpc_controller.mpc.desired_velocity_log,
+            mpc_controller.mpc.commanded_velocity_log,
+        )
+
+
+def test_hybrid_mpc_controller_curve_tracking(
+    one_contact_mode: FaceContactMode,
+    one_contact_mode_vars: List[FaceContactVariables],
+    hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
+) -> None:  # type: ignore
+    execute_hybrid_mpc_controller(
+        one_contact_mode,
+        one_contact_mode_vars,
+        hybrid_mpc_controller_system,
+        np.array([-0.02, 0.02, 0.1, 0]),
+    )
+
+
+def test_hybrid_mpc_controller_curve_tracking_2(
+    one_contact_mode: FaceContactMode,
+    hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
+) -> None:  # type: ignore
+    path = generate_path(
+        one_contact_mode, PlanarPose(0, 0, 0), PlanarPose(0.3, -0.2, -2.5)
+    )
+    execute_hybrid_mpc_controller(
+        one_contact_mode,
+        path,
+        hybrid_mpc_controller_system,
+        np.array([0.0, 0.02, 0.1, 0]),
+    )
+
+
+def test_hybrid_mpc_controller_curve_tracking_B_2(
+    mpc_config: HybridMpcConfig,
+) -> None:  # type: ignore
+    mass = 0.1
+    box_geometry = Box2d(width=0.07, height=0.07)
+    box = RigidBody("box", box_geometry, mass)
+
+    config = SliderPusherSystemConfig(slider=box, friction_coeff_slider_pusher=0.5)
+
+    contact_idx = 2
+
+    sys = SliderPusherSystem(
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, contact_idx),
+        config=config,
+    )
+    mpc_sys = HybridModelPredictiveControlSystem(sys, mpc_config)
+    plan_config = PlanarPlanConfig(dynamics_config=sys.config, time_in_contact=4)
+    mode = FaceContactMode.create_from_plan_spec(sys.contact_location, plan_config)
+    path = generate_path(
+        mode, PlanarPose(-0.0564, -0.0463, -0.6279825839830266), PlanarPose(0.0, 0, 0)
+    )
+    execute_hybrid_mpc_controller(mode, path, mpc_sys, np.array([0.0, 0.0, 0.0, 0.0]))
+
+
+def test_hybrid_mpc_controller_curve_tracking_C_4() -> None:  # type: ignore
+    mass = 0.1
+    box_geometry = Box2d(width=0.07, height=0.07)
+    box = RigidBody("box", box_geometry, mass)
+
+    config = SliderPusherSystemConfig(
+        slider=box,
+        friction_coeff_table_slider=0.5,
+        friction_coeff_slider_pusher=0.25,
+        integration_constant=0.02,
+    )
+
+    contact_idx = 2
+
+    sys = SliderPusherSystem(
+        contact_location=PolytopeContactLocation(ContactLocation.FACE, contact_idx),
+        config=config,
+    )
+    mpc_config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=50,
+        Q=np.diag([3, 3, 0.01, 0]) * 100,
+        Q_N=np.diag([3, 3, 1, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
+    mpc_sys = HybridModelPredictiveControlSystem(sys, mpc_config)
+    start_and_goal = PlanarPushingStartAndGoal(
+        slider_initial_pose=PlanarPose(
+            x=0.5378211006117899, y=0.04524750758737649, theta=-2.2577135799479247
+        ),
+        slider_target_pose=PlanarPose(
+            x=0.6130126810603981, y=-0.00039604693591686023, theta=-0.4058877726442287
+        ),
+        pusher_initial_pose=PlanarPose(x=0.0, y=0.0, theta=0.0),
+        pusher_target_pose=PlanarPose(x=0.0, y=0.1, theta=0.0),
+    )
+    plan_config = PlanarPlanConfig(
+        dynamics_config=sys.config,
+        time_in_contact=2,
+        start_and_goal=start_and_goal,
+    )
+    mode = FaceContactMode.create_from_plan_spec(sys.contact_location, plan_config)
+
+    path = generate_path(
+        mode, start_and_goal.slider_initial_pose, start_and_goal.slider_target_pose
+    )
+    execute_hybrid_mpc_controller(mode, path, mpc_sys, np.array([0.0, 0.0, 0.0, 0.0]))
+
+
+@pytest.mark.skip(reason="Requires saved plan file")
+def test_hybrid_mpc_controller_curve_tracking_C_1() -> None:  # type: ignore
+    traj = PlanarPushingTrajectory.load(
+        "trajectories/box_pushing_demos/hw_demo_C_1.pkl"
+    )
+    print("start test_C_1")
+    for idx, seg in enumerate(traj.traj_segments):
+        if seg.mode != PlanarPushingContactMode.NO_CONTACT:
+            first_contact_seg = seg
+            first_contact_seg_idx = idx
+            break
+
+    sys = SliderPusherSystem(
+        contact_location=first_contact_seg.mode.to_contact_location(),
+        config=traj.config.dynamics_config,
+    )
+    mpc_config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=50,
+        Q=np.diag([3, 3, 0.01, 0]) * 100,
+        Q_N=np.diag([3, 3, 1, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
+    mpc_sys = HybridModelPredictiveControlSystem(sys, mpc_config)
+
+    face_contact_mode = FaceContactMode.create_from_plan_spec(
+        sys.contact_location, traj.config
+    )
+
+    make_traj_figure(traj, filename="test_C_1_traj.png")
+    execute_hybrid_mpc_controller(
+        face_contact_mode,
+        [traj.path_knot_points[first_contact_seg_idx]],
+        mpc_sys,
+        np.array([0.0, 0.0, 0.0, 0.0]),
+    )
+
+
+""" The following fixtures and test replicate the straight line tracking simulation experiment from
+"Feedback Control of the Pusher-Slider System: A Story of Hybrid and Underactuated Contact Dynamics"
+Francois Robert Hogan and Alberto Rodriguez, 2016, https://arxiv.org/abs/1611.08268
+"""
+
+
+@pytest.fixture
+def hogan_sim_mpc_config() -> HybridMpcConfig:
+    # For weights, see page 12 of the paper
+    # config = HybridMpcConfig(
+    #     step_size=0.03,
+    #     horizon=35,
+    #     num_sliding_steps=1,
+    #     rate_Hz=30,
+    #     Q=np.diag([1, 3, 0.1, 0]) * 10,
+    #     Q_N=np.diag([1, 3, 0.1, 0]) * 200,
+    #     R=np.diag([1, 1, 0]) * 0.5,
+    # )
+    # The best performing weights I found
+    config = HybridMpcConfig(
+        step_size=0.03,
+        horizon=35,
+        num_sliding_steps=1,
+        rate_Hz=30,
+        Q=np.diag([3, 3, 0.5, 0]) * 10,
+        Q_N=np.diag([3, 3, 0.5, 0]) * 2000,
+        R=np.diag([1, 1, 0]) * 0.5,
+    )
+    return config
+
+
+@pytest.fixture
+def hogan_sim_hybrid_mpc(
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+    hogan_sim_mpc_config: HybridMpcConfig,
+) -> HybridMpc:
+    mpc = HybridMpc(
+        slider_pusher_system, hogan_sim_mpc_config, slider_pusher_system.config
+    )
+    return mpc
+
+
+@pytest.fixture
+def hogan_sim_hybrid_mpc_controller_system(
+    slider_pusher_system: SliderPusherSystem,  # type: ignore
+    hogan_sim_mpc_config: HybridMpcConfig,
+) -> HybridModelPredictiveControlSystem:
+    mpc = HybridModelPredictiveControlSystem(slider_pusher_system, hogan_sim_mpc_config)
+    return mpc
+
+
+@pytest.fixture
+def straight_line_path(
+    one_contact_mode: FaceContactMode,
+) -> List[FaceContactVariables]:
+    initial_pose = PlanarPose(0, 0, 0)
+    final_pose = PlanarPose(0.45, 0, 0)
+
+    one_contact_mode.set_slider_initial_pose(initial_pose)
+    one_contact_mode.set_slider_final_pose(final_pose)
+
+    one_contact_mode.formulate_convex_relaxation()
+    assert one_contact_mode.relaxed_prog is not None
+    relaxed_result = Solve(one_contact_mode.relaxed_prog)
+    assert relaxed_result.is_success()
+
+    vars = one_contact_mode.variables.eval_result(relaxed_result)
+    return [vars]
+
+
+def test_hybrid_mpc_controller_straight_line_tracking(
+    one_contact_mode: FaceContactMode,
+    straight_line_path: List[FaceContactVariables],
+    hogan_sim_hybrid_mpc_controller_system: HybridModelPredictiveControlSystem,
+) -> None:  # type: ignore
+    execute_hybrid_mpc_controller(
+        one_contact_mode,
+        straight_line_path,
+        hogan_sim_hybrid_mpc_controller_system,
+        np.array([0, 0.01, 15 * np.pi / 180, 0]),
+    )

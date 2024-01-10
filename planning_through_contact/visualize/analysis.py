@@ -107,6 +107,87 @@ def plot_planar_pushing_logs(
     plot_planar_pushing_trajectory(actual, desired)
 
 
+def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -> None:
+    # Convert the list to a numpy array for easier manipulation
+    control_log_array = np.array(control_log)
+
+    # Prepare data for plotting
+    timesteps = np.arange(control_log_array.shape[0])
+    prediction_horizons = np.arange(control_log_array.shape[1])
+
+    # Create a meshgrid for timesteps and prediction_horizons
+    T, P = np.meshgrid(prediction_horizons, timesteps)  # Note the change in the order
+
+    # Initialize a 3D plot
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    # Plot each control input
+    for i, label in enumerate(["c_n", "c_f", "lam_dot"]):
+        # Extract the control data for plotting
+        Z = control_log_array[:, :, i]
+
+        # Ensure Z has the same shape as T and P
+        # Z might need to be transposed depending on how control_log_array is structured
+        Z = Z.T if Z.shape != T.shape else Z
+
+        ax.plot_surface(T, P, Z, label=label, alpha=0.7)
+
+    # Adding labels
+    ax.set_xlabel("Prediction Horizon")
+    ax.set_ylabel("Timestep")
+    ax.set_zlabel("Control Inputs")
+
+    # Adding title
+    ax.set_title("3D Control Inputs Plot")
+
+    # Workaround for legend in 3D plot
+    from matplotlib.lines import Line2D
+
+    custom_lines = [
+        Line2D([0], [0], linestyle="none", marker="_", color="blue", markersize=10),
+        Line2D([0], [0], linestyle="none", marker="_", color="orange", markersize=10),
+        Line2D([0], [0], linestyle="none", marker="_", color="green", markersize=10),
+    ]
+    ax.legend(custom_lines, ["c_n", "c_f", "lam_dot"])
+
+    # Show plot
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_control_sols{suffix}.png")
+
+
+def plot_cost(cost_log: List[float], suffix: str = "") -> None:
+    plt.figure()
+    plt.plot(cost_log)
+    plt.title("Cost vs. timestep")
+    plt.xlabel("timestep")
+    plt.ylabel("Cost")
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_cost{suffix}.png")
+
+
+def plot_velocities(
+    desired_vel_log: List[npt.NDArray],
+    commanded_vel_log: List[npt.NDArray],
+    suffix: str = "",
+) -> None:
+    plt.figure()
+    # velocity has x and y dimensions
+    desired_vel_log_array = np.array(desired_vel_log)
+    commanded_vel_log_array = np.array(commanded_vel_log)
+    timesteps = np.arange(desired_vel_log_array.shape[0])
+    plt.plot(timesteps, desired_vel_log_array[:, 0], label="desired x vel")
+    plt.plot(timesteps, desired_vel_log_array[:, 1], label="desired y vel")
+    plt.plot(timesteps, commanded_vel_log_array[:, 0], label="commanded x vel")
+    plt.plot(timesteps, commanded_vel_log_array[:, 1], label="commanded y vel")
+    plt.legend()
+    plt.title("Desired and commanded velocities vs. timestep")
+    plt.xlabel("timestep")
+    plt.ylabel("Velocity")
+    plt.tight_layout()
+    plt.savefig(f"planar_pushing_velocities{suffix}.png")
+
+
 def plot_planar_pushing_logs_from_pose_vectors(
     pusher_pose_vector_log: VectorLog,
     slider_pose_vector_log: VectorLog,
