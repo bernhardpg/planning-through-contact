@@ -55,7 +55,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         Q=np.diag([3, 3, 0.01, 0]) * 100,
         Q_N=np.diag([3, 3, 0.01, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
-        u_max_magnitude=[0.3, 0.3, 0.05],
+        u_max_magnitude=[0.3, 0.3, 0.1],
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -102,7 +102,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         if save_recording
         else None
     )
-    environment.simulate(traj.end_time + 1, save_recording_as=recording_name)
+    environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
     # environment.simulate(8, save_recording_as=recording_name)
 
     if debug:
@@ -134,9 +134,9 @@ def run_multiple(start: int, end: int):
 
 
 if __name__ == "__main__":
-    # run_multiple(3, 9)
+    # run_multiple(0, 9)
     run_sim(
-        plan="trajectories/box_pushing_demos/hw_demo_C_1_rounded.pkl",
+        plan="trajectories/box_pushing_demos/hw_demo_C_9_rounded.pkl",
         save_recording=True,
         debug=True,
     )

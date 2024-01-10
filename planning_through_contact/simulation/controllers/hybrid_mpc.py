@@ -286,20 +286,12 @@ class HybridMpc:
             )
         u_next = control_sol[:, 0]
 
-        # Use non-linear dynamics to get x_dot_curr
-        # x_dot_curr_nl = self.model.calc_dynamics(x_curr, u_next)
-        # print(f"\nx_dot_curr_nl: {x_dot_curr_nl[:3].flatten()}")
-        # print(f"x_dot_curr  : {x_dot_curr[:3]}")
-        # print(f"difference norm: {np.linalg.norm(x_dot_curr_nl[:3].flatten() - x_dot_curr[:3])}")
-        # v_BP_W = self.model.get_pusher_velocity(x_curr, u_next)
-        # v_BP_W_desired = self.model.get_pusher_velocity(x_traj[0], u_traj[0])
-        # self.desired_velocity_log.append(v_BP_W_desired.flatten())
-        # self.commanded_velocity_log.append(v_BP_W.flatten())
-        # print(f"v_BP_W_desired: {v_BP_W_desired.flatten()}")
-        # print(f"x_traj: {np.array(x_traj).flatten()}")
-        # print(f"u_traj: {np.array(u_traj).flatten()}")
 
-        return x_dot_curr.flatten(), u_next
+        # Finite difference method to get velocity of pusher
+        v_WP_W = (self.model.get_p_WP_from_state(x_next) - self.model.get_p_WP_from_state(x_curr))/self.config.step_size
+
+
+        return x_dot_curr.flatten(), u_next, v_WP_W
 
 
 # Not used in pusher pose controller
@@ -333,7 +325,7 @@ class HybridModelPredictiveControlSystem(LeafSystem):
         u_traj: List[npt.NDArray[np.float64]] = self.desired_control_port.Eval(context)  # type: ignore
         if len(u_traj) > 1:
             # Closed loop control
-            _, control_next = self.mpc.compute_control(x_curr, x_traj, u_traj)
+            _, control_next, _ = self.mpc.compute_control(x_curr, x_traj, u_traj)
 
             # Open loop control
             # control_next = u_traj[0]

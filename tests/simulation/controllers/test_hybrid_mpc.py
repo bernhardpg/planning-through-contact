@@ -487,10 +487,10 @@ def execute_hybrid_mpc_controller(
             state_log, desired_state_log, control_log, desired_control_log
         )
         plot_control_sols_vs_time(mpc_controller.mpc.control_log)
-        plot_velocities(
-            mpc_controller.mpc.desired_velocity_log,
-            mpc_controller.mpc.commanded_velocity_log,
-        )
+        # plot_velocities(
+        #     mpc_controller.mpc.desired_velocity_log,
+        #     mpc_controller.mpc.commanded_velocity_log,
+        # )
 
 
 def test_hybrid_mpc_controller_curve_tracking(
@@ -599,7 +599,7 @@ def test_hybrid_mpc_controller_curve_tracking_C_4() -> None:  # type: ignore
 @pytest.mark.skip(reason="Requires saved plan file")
 def test_hybrid_mpc_controller_curve_tracking_C_1() -> None:  # type: ignore
     traj = PlanarPushingTrajectory.load(
-        "trajectories/box_pushing_demos/hw_demo_C_1.pkl"
+        "trajectories/box_pushing_demos/hw_demo_C_1_rounded.pkl"
     )
     print("start test_C_1")
     for idx, seg in enumerate(traj.traj_segments):
