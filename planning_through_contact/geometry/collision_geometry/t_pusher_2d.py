@@ -40,6 +40,13 @@ class TPusher2d(CollisionGeometry):
     box_1: Box2d = field(default_factory=lambda: Box2d(0.2, 0.05))
     box_2: Box2d = field(default_factory=lambda: Box2d(0.05, 0.15))
 
+    @property
+    def collision_geometry_names(self) -> List[str]:
+        return [
+            "t_pusher::t_pusher_bottom_collision",
+            "t_pusher::t_pusher_top_collision",
+        ]
+
     @classmethod
     def from_drake(cls, drake_shape: DrakeShape):
         raise NotImplementedError()

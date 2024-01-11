@@ -9,17 +9,16 @@
     Origin:
       (0, 0, 0) at the center of the box.
   -->
-    <link name="t_pusher">
+    <link name="t_pusher_top">
       <inertial>
-        <pose>0.0 -0.04285714 0.0 0.0 0.0 0.0</pose>
-        <mass>0.153</mass>
+        <mass>0.08742857142857141</mass>
         <inertia>
-          <ixx>0.00082875</ixx>
+          <ixx>3.64285714e-05</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>0.00033696</iyy>
+          <iyy>3.09642857e-04</iyy>
           <iyz>0</iyz>
-          <izz>0.00110196</izz>
+          <izz>3.09642857e-04</izz>
         </inertia>
       </inertial>
       <visual name="t_pusher_top_visual">
@@ -48,9 +47,22 @@
           <drake:mu_static>0.5</drake:mu_static>
         </drake:proximity_properties>
       </collision>
-      
+    </link>
+    <link name="t_pusher_bottom">
+      <pose>0 -0.1 0 0 0 0</pose>
+      <inertial>
+        <mass>0.06557142857142857</mass>
+        <inertia>
+          <ixx>1.36607143e-04</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.73214286e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.36607143e-04</izz>
+        </inertia>
+      </inertial>
       <visual name="t_pusher_bottom_visual">
-        <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 0.0 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.05 0.15 0.05</size>
@@ -61,7 +73,7 @@
         </material>
       </visual>
       <collision name="t_pusher_bottom_collision">
-        <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 0.0 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.05 0.15 0.05</size>
@@ -69,13 +81,18 @@
         </geometry>
         <drake:proximity_properties>
           <drake:compliant_hydroelastic/>
-          <drake:hunt_crossley_dissipation>1.25</drake:hunt_crossley_dissipation>
-          <drake:hydroelastic_modulus>1e5</drake:hydroelastic_modulus>
+          <drake:hunt_crossley_dissipation>3.0</drake:hunt_crossley_dissipation>
+          <drake:hydroelastic_modulus>1e7</drake:hydroelastic_modulus>
           <drake:mesh_resolution_hint>0.005</drake:mesh_resolution_hint>
           <drake:mu_dynamic>0.5</drake:mu_dynamic>
           <drake:mu_static>0.5</drake:mu_static>
         </drake:proximity_properties>
       </collision>
     </link>
+    <joint name="t_pusher_joint" type="fixed">
+      <parent>t_pusher_top</parent>
+      <child>t_pusher_bottom</child>
+      <pose>0 0 0 0 0 0</pose>
+    </joint>
   </model>
 </sdf>

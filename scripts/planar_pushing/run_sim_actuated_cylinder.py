@@ -67,10 +67,10 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
-        use_realtime=False,
+        use_realtime=True,
         delay_before_execution=1,
         use_diff_ik=True,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -102,8 +102,9 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         if save_recording
         else None
     )
+    # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
-    # environment.simulate(8, save_recording_as=recording_name)
+    # environment.simulate(300, save_recording_as=recording_name)
 
     if debug:
         for (
@@ -136,7 +137,8 @@ def run_multiple(start: int, end: int):
 if __name__ == "__main__":
     # run_multiple(0, 9)
     run_sim(
-        plan="trajectories/box_pushing_demos/hw_demo_C_9_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        # plan="trajectories/box_pushing_demos/hw_demo_C_9.pkl",
         save_recording=True,
         debug=True,
     )

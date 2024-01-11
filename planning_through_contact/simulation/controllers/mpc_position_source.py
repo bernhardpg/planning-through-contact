@@ -54,7 +54,10 @@ class MPCPositionSource(DesiredPositionSourceBase):
         # Contact Detection System
         self._contact_detector = builder.AddNamedSystem(
             "ContactDetectionSystem",
-            ContactDetectionSystem("pusher::collision", "box::box_collision"),
+            ContactDetectionSystem(
+                "pusher::collision",
+                self._sim_config.slider.geometry.collision_geometry_names,
+            ),
         )
 
         # MPC controllers

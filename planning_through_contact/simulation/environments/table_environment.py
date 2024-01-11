@@ -141,7 +141,9 @@ class TableEnvironment:
 
         # Will break if save plots during teleop
         if sim_config.save_plots:
-            assert not isinstance(self._desired_position_source, TeleopPositionSource)
+            assert not isinstance(
+                self._desired_position_source, TeleopPositionSource
+            ), "Cannot save plots during teleop"
             # Actual State Loggers
             pusher_pose_to_vector = builder.AddSystem(
                 RigidTransformToPlanarPoseVectorSystem()
@@ -183,6 +185,7 @@ class TableEnvironment:
             self._slider_pose_desired_logger = slider_pose_desired_logger
 
         diagram = builder.Build()
+        self._diagram = diagram
 
         self._simulator = Simulator(diagram)
         if sim_config.use_realtime:
@@ -203,6 +206,14 @@ class TableEnvironment:
         self._state_estimator._plant.SetDefaultPositions(
             robot_model_instance, self._sim_config.pusher_start_pose.pos()
         )
+
+    def export_diagram(self, filename: str):
+        import pydot
+
+        pydot.graph_from_dot_data(self._diagram.GetGraphvizString())[0].write_pdf(  # type: ignore
+            filename
+        )
+        print(f"Saved diagram to: {filename}")
 
     def add_all_directives(self, plant, scene_graph) -> Tuple[str, ModelInstanceIndex]:
         parser = Parser(plant, scene_graph)
@@ -252,23 +263,25 @@ class TableEnvironment:
             self._state_estimator.meshcat.StartRecording()
             self._meshcat.StartRecording()
         time_step = self._sim_config.time_step * 100
-        for t in np.append(np.arange(0, timeout, time_step), timeout):
-            self._simulator.AdvanceTo(t)
-            # Hacky way of visualizing the desired slider pose
-            context = (
-                self._desired_position_source.planar_pose_pub.GetMyContextFromRoot(
-                    self.context
+        if not isinstance(self._desired_position_source, TeleopPositionSource):
+            for t in np.append(np.arange(0, timeout, time_step), timeout):
+                self._simulator.AdvanceTo(t)
+                # Hacky way of visualizing the desired slider pose
+                context = (
+                    self._desired_position_source.planar_pose_pub.GetMyContextFromRoot(
+                        self.context
+                    )
                 )
-            )
-            slider_desired_pose_vec = (
-                self._desired_position_source.planar_pose_pub.GetOutputPort(
-                    "desired_slider_planar_pose_vector"
-                ).Eval(context)
-            )
-            self._state_estimator._visualize_desired_slider_pose(
-                PlanarPose(*slider_desired_pose_vec)
-            )
-        # self._simulator.AdvanceTo(timeout)
+                slider_desired_pose_vec = (
+                    self._desired_position_source.planar_pose_pub.GetOutputPort(
+                        "desired_slider_planar_pose_vector"
+                    ).Eval(context)
+                )
+                self._state_estimator._visualize_desired_slider_pose(
+                    PlanarPose(*slider_desired_pose_vec)
+                )
+        else:
+            self._simulator.AdvanceTo(timeout)
         if save_recording_as:
             self._meshcat.StopRecording()
             self._meshcat.SetProperty("/drake/contact_forces", "visible", False)

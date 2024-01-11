@@ -29,6 +29,10 @@ class Box2d(CollisionGeometry):
     # |     |
     # v3 -- v2
 
+    @property
+    def collision_geometry_names(self) -> List[str]:
+        return ["box::box_collision"]
+
     @classmethod
     def from_drake(
         cls, drake_box: DrakeBox, axis_mode: Literal["planar"] = "planar"
