@@ -119,7 +119,9 @@ class LinTrajSegment:
             if order == 0:
                 knot_point_times = np.linspace(start_time, end_time, num_samples + 1)
                 # Repeat last knot point to get the correct number of samples
-                samples = np.hstack((knot_points, knot_points[:, -1].reshape((num_dims, 1))))
+                samples = np.hstack(
+                    (knot_points, knot_points[:, -1].reshape((num_dims, 1)))
+                )
             else:
                 knot_point_times = np.linspace(start_time, end_time, num_samples)
                 samples = knot_points

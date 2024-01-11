@@ -1,30 +1,19 @@
-from typing import Tuple, Optional
+from typing import Optional
 
 from pydrake.all import (
-    StartMeshcat,
     DiagramBuilder,
-    Parser,
-    AddMultibodyPlantSceneGraph,
-    RigidTransform,
     Simulator,
     LogVectorOutput,
-    ContactModel,
-    LoadModelDirectives,
-    ProcessModelDirectives,
-    DiscreteContactApproximation,
-    AddDefaultVisualization,
     Meshcat,
-    RollPitchYaw,
     Demultiplexer,
-    ModelInstanceIndex,
 )
 import numpy as np
-from planning_through_contact.simulation.controllers.desired_position_source_base import (
-    DesiredPositionSourceBase,
+from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
+    DesiredPlanarPositionSourceBase,
 )
 
-from planning_through_contact.simulation.controllers.position_controller_base import (
-    PositionControllerBase,
+from planning_through_contact.simulation.controllers.robot_system_base import (
+    RobotSystemBase,
 )
 from planning_through_contact.simulation.controllers.teleop_position_source import (
     TeleopPositionSource,
@@ -32,8 +21,6 @@ from planning_through_contact.simulation.controllers.teleop_position_source impo
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.state_estimators.state_estimator import (
     StateEstimator,
@@ -44,100 +31,104 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs_from_pose_vectors,
 )
-from planning_through_contact.simulation.sim_utils import ConfigureParser, models_folder
 
 
 class TableEnvironment:
     def __init__(
         self,
-        desired_position_source: DesiredPositionSourceBase,
-        position_controller: PositionControllerBase,
+        desired_position_source: DesiredPlanarPositionSourceBase,
+        robot_system: RobotSystemBase,
         sim_config: PlanarPushingSimConfig,
-        meshcat: Optional[Meshcat] = None,
+        station_meshcat: Optional[Meshcat] = None,
+        state_estimator_meshcat: Optional[Meshcat] = None,
     ):
         self._desired_position_source = desired_position_source
-        self._position_controller = position_controller
+        self._robot_system = robot_system
         self._sim_config = sim_config
-        self._meshcat = None
+        self._meshcat = station_meshcat
         self._simulator = None
 
-        if meshcat is None:
-            self._meshcat = StartMeshcat()
-        else:
-            self._meshcat = meshcat
-
         builder = DiagramBuilder()
-        self._plant, self._scene_graph = AddMultibodyPlantSceneGraph(
-            builder, time_step=self._sim_config.time_step
-        )
-        slider_name, self.slider = self.add_all_directives(
-            self._plant, self._scene_graph
-        )
 
-        self._meshcat.SetTransform(
-            path="/Cameras/default",
-            matrix=RigidTransform(
-                RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-                np.array([1, 0, 0]),
-            ).GetAsMatrix4(),
-        )
-        AddDefaultVisualization(builder, self._meshcat)
+        ## Add systems
 
-        # Set up state estimator
         self._state_estimator = builder.AddNamedSystem(
             "state_estimator",
             StateEstimator(
-                sim_config=sim_config, environment=self, add_visualizer=True
+                sim_config=sim_config,
+                meshcat=state_estimator_meshcat,
             ),
         )
 
-        # Set up position controller
-        self._position_controller.add_meshcat(self._meshcat)
-        desired_state_source = self._position_controller.AddToBuilder(
-            builder=builder,
-            state_estimator=self._state_estimator,
-            station_plant=self._plant,
+        builder.AddNamedSystem(
+            "DesiredPlanarPositionSource",
+            self._desired_position_source,
         )
 
-        # Set up desired position source
-        self._desired_position_source.add_meshcat(self._meshcat)
-        desired_position_source_output_port = (
-            self._desired_position_source.AddToBuilder(
-                builder, state_estimator=self._state_estimator
+        builder.AddNamedSystem(
+            "PositionController",
+            self._robot_system,
+        )
+        self._meshcat = self._robot_system._meshcat
+
+        ## Connect systems
+
+        # Inputs to desired position source
+        if self._sim_config.closed_loop:
+            builder.Connect(
+                self._state_estimator.GetOutputPort("query_object"),
+                self._desired_position_source.GetInputPort("query_object"),
             )
+            builder.Connect(
+                self._state_estimator.GetOutputPort("slider_pose_estimated"),
+                self._desired_position_source.GetInputPort("slider_pose_estimated"),
+            )
+            builder.Connect(
+                self._state_estimator.GetOutputPort("pusher_pose_estimated"),
+                self._desired_position_source.GetInputPort("pusher_pose_estimated"),
+            )
+
+        # Inputs to robot system
+        builder.Connect(
+            self._desired_position_source.GetOutputPort("planar_position_command"),
+            self._robot_system.GetInputPort("planar_position_command"),
         )
 
-        # This is only when not using hardware (fully simulated)
-        # Note this name will be wrong when we transition to handling the iiwa as the robot as well
-        robot_model_instance = self._plant.GetModelInstanceByName("pusher")
+        builder.Connect(
+            self._state_estimator.GetOutputPort(
+                f"{self._robot_system.robot_model_name}_state"
+            ),
+            self._robot_system.GetInputPort("robot_state_estimated"),
+        )
+
+        # Inputs to state estimator
         # Connections to update the robot state within state estimator
         builder.Connect(
-            self._plant.get_state_output_port(robot_model_instance),
+            self._robot_system.GetOutputPort("robot_state_measured"),
             self._state_estimator.GetInputPort("robot_state"),
         )
-        # Connections to update the object position within state estimator
-        slider_demux = builder.AddSystem(
-            Demultiplexer(
-                [
-                    self._plant.num_positions(self.slider),
-                    self._plant.num_velocities(self.slider),
-                ]
+        if sim_config.use_hardware:
+            raise NotImplementedError()
+        else:
+            # Connections to update the object position within state estimator
+            self._plant = self._robot_system._station_plant
+            self._slider = self._robot_system._slider
+            slider_demux = builder.AddSystem(
+                Demultiplexer(
+                    [
+                        self._plant.num_positions(self._slider),
+                        self._plant.num_velocities(self._slider),
+                    ]
+                )
             )
-        )
-        builder.Connect(
-            self._plant.get_state_output_port(self.slider),
-            slider_demux.get_input_port(),
-        )
-        builder.Connect(
-            slider_demux.get_output_port(0),
-            self._state_estimator.GetInputPort("object_position"),
-        )
-
-        # Connection to update the desired position within the position controller
-        builder.Connect(
-            desired_position_source_output_port,
-            desired_state_source.get_input_port(),
-        )
+            builder.Connect(
+                self._robot_system.GetOutputPort("object_state_measured"),
+                slider_demux.get_input_port(),
+            )
+            builder.Connect(
+                slider_demux.get_output_port(0),
+                self._state_estimator.GetInputPort("object_position"),
+            )
 
         # Will break if save plots during teleop
         if sim_config.save_plots:
@@ -149,7 +140,7 @@ class TableEnvironment:
                 RigidTransformToPlanarPoseVectorSystem()
             )
             builder.Connect(
-                self._state_estimator.GetOutputPort("pusher_pose"),
+                self._state_estimator.GetOutputPort("pusher_pose_estimated"),
                 pusher_pose_to_vector.get_input_port(),
             )
             pusher_pose_logger = LogVectorOutput(
@@ -159,7 +150,7 @@ class TableEnvironment:
                 RigidTransformToPlanarPoseVectorSystem()
             )
             builder.Connect(
-                self._state_estimator.GetOutputPort("slider_pose"),
+                self._state_estimator.GetOutputPort("slider_pose_estimated"),
                 slider_pose_to_vector.get_input_port(),
             )
             slider_pose_logger = LogVectorOutput(
@@ -167,13 +158,13 @@ class TableEnvironment:
             )
             # Desired State Loggers
             pusher_pose_desired_logger = LogVectorOutput(
-                self._desired_position_source.planar_pose_pub.GetOutputPort(
+                self._desired_position_source.GetOutputPort(
                     "desired_pusher_planar_pose_vector"
                 ),
                 builder,
             )
             slider_pose_desired_logger = LogVectorOutput(
-                self._desired_position_source.planar_pose_pub.GetOutputPort(
+                self._desired_position_source.GetOutputPort(
                     "desired_slider_planar_pose_vector"
                 ),
                 builder,
@@ -192,20 +183,23 @@ class TableEnvironment:
             self._simulator.set_target_realtime_rate(1.0)
 
         self.context = self._simulator.get_mutable_context()
-        self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
-        self.set_slider_planar_pose(self._sim_config.slider_start_pose)
-
-        self._plant.SetDefaultPositions(
-            robot_model_instance, self._sim_config.pusher_start_pose.pos()
-        )
-        self._plant.SetPositions(
-            self.mbp_context,
-            robot_model_instance,
-            self._sim_config.pusher_start_pose.pos(),
-        )
-        self._state_estimator._plant.SetDefaultPositions(
-            robot_model_instance, self._sim_config.pusher_start_pose.pos()
-        )
+        if not sim_config.use_hardware:
+            self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
+            self.set_slider_planar_pose(self._sim_config.slider_start_pose)
+            robot_model_instance = self._plant.GetModelInstanceByName(
+                self._robot_system.robot_model_name
+            )
+            self._plant.SetDefaultPositions(
+                robot_model_instance, self._sim_config.pusher_start_pose.pos()
+            )
+            self._plant.SetPositions(
+                self.mbp_context,
+                robot_model_instance,
+                self._sim_config.pusher_start_pose.pos(),
+            )
+            self._state_estimator._plant.SetDefaultPositions(
+                robot_model_instance, self._sim_config.pusher_start_pose.pos()
+            )
 
     def export_diagram(self, filename: str):
         import pydot
@@ -215,45 +209,12 @@ class TableEnvironment:
         )
         print(f"Saved diagram to: {filename}")
 
-    def add_all_directives(self, plant, scene_graph) -> Tuple[str, ModelInstanceIndex]:
-        parser = Parser(plant, scene_graph)
-        ConfigureParser(parser)
-        use_hydroelastic = self._sim_config.contact_model == ContactModel.kHydroelastic
-
-        if not use_hydroelastic:
-            raise NotImplementedError()
-
-        directives = LoadModelDirectives(
-            f"{models_folder}/{self._sim_config.scene_directive_name}"
-        )
-        ProcessModelDirectives(directives, plant, parser)  # type: ignore
-
-        if isinstance(self._sim_config.slider.geometry, Box2d):
-            body_name = "box"
-            slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
-        elif isinstance(self._sim_config.slider.geometry, TPusher2d):
-            body_name = "t_pusher"
-            slider_sdf_url = "package://planning_through_contact/t_pusher.sdf"
-        else:
-            raise NotImplementedError(f"Body '{self._sim_config.slider}' not supported")
-
-        (slider,) = parser.AddModels(url=slider_sdf_url)
-
-        if use_hydroelastic:
-            plant.set_contact_model(ContactModel.kHydroelastic)
-            plant.set_discrete_contact_approximation(
-                DiscreteContactApproximation.kLagged
-            )
-
-        plant.Finalize()
-        return body_name, slider
-
     def set_slider_planar_pose(self, pose: PlanarPose):
         min_height = 0.05
 
         # add a small height to avoid the box penetrating the table
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
-        self._plant.SetPositions(self.mbp_context, self.slider, q)
+        self._plant.SetPositions(self.mbp_context, self._slider, q)
 
     def simulate(self, timeout=1e8, save_recording_as: Optional[str] = None) -> None:
         """
@@ -262,23 +223,20 @@ class TableEnvironment:
         if save_recording_as:
             self._state_estimator.meshcat.StartRecording()
             self._meshcat.StartRecording()
-        time_step = self._sim_config.time_step * 100
+        time_step = self._sim_config.time_step * 10
         if not isinstance(self._desired_position_source, TeleopPositionSource):
             for t in np.append(np.arange(0, timeout, time_step), timeout):
                 self._simulator.AdvanceTo(t)
                 # Hacky way of visualizing the desired slider pose
-                context = (
-                    self._desired_position_source.planar_pose_pub.GetMyContextFromRoot(
-                        self.context
-                    )
+                context = self._desired_position_source.GetMyContextFromRoot(
+                    self.context
                 )
-                slider_desired_pose_vec = (
-                    self._desired_position_source.planar_pose_pub.GetOutputPort(
-                        "desired_slider_planar_pose_vector"
-                    ).Eval(context)
-                )
+                slider_desired_pose_vec = self._desired_position_source.GetOutputPort(
+                    "desired_slider_planar_pose_vector"
+                ).Eval(context)
                 self._state_estimator._visualize_desired_slider_pose(
-                    PlanarPose(*slider_desired_pose_vec)
+                    PlanarPose(*slider_desired_pose_vec),
+                    time_in_recording=t,
                 )
         else:
             self._simulator.AdvanceTo(timeout)
@@ -286,10 +244,9 @@ class TableEnvironment:
             self._meshcat.StopRecording()
             self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
             self._meshcat.PublishRecording()
-
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty(
-                "/drake/contact_forces", "visible", False
+                "/drake/contact_forces", "visible", True
             )
             self._state_estimator.meshcat.PublishRecording()
             res = self._state_estimator.meshcat.StaticHtml()

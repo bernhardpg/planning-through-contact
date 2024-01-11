@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.multibody.plant import ContactModel
+from pydrake.all import ContactModel, StartMeshcat
 import logging
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -7,7 +7,6 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.simulation.controllers.cylinder_actuated_controller import (
     CylinderActuatedController,
 )
@@ -24,18 +23,21 @@ from planning_through_contact.simulation.environments.table_environment import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
-    PlanarPushingSimulation,
-)
+
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
     plot_cost,
     plot_velocities,
 )
-from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
-def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
+def run_sim(
+    plan: str,
+    save_recording: bool = False,
+    debug: bool = False,
+    station_meshcat=None,
+    state_estimator_meshcat=None,
+):
     logging.basicConfig(level=logging.INFO)
     logging.getLogger(
         "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
@@ -70,10 +72,10 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         use_realtime=True,
         delay_before_execution=1,
         use_diff_ik=True,
-        closed_loop=False,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
-        save_plots=True,
+        save_plots=False,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
     )
     # Commented out code for generating values for hybrid MPC tests
@@ -83,19 +85,25 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     # for seg in traj.traj_segments:
     #     print(f"Segment with mode {seg.mode}, {type(seg)}, from {seg.start_time} to {seg.end_time}")
 
-    # Choose position source
+    ## Choose position source
     # Option 1: Use teleop
     # teleop = dict(input_limit= 1.0, step_size=0.01, start_translation=[0.0,0.0])
-    # position_source = TeleopPositionSource(sim_config=sim_config, teleop_config=teleop)
+    # position_source = TeleopPositionSource(sim_config=sim_config, teleop_config=teleop, meshcat=station_meshcat)
+
     # Option 2: Use open/closed loop controller based on planned trajectory
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
-    # Set up position controller
-    position_controller = CylinderActuatedController(sim_config=sim_config)
+
+    ## Set up position controller
+    position_controller = CylinderActuatedController(
+        sim_config=sim_config, meshcat=station_meshcat
+    )
 
     environment = TableEnvironment(
         desired_position_source=position_source,
-        position_controller=position_controller,
+        robot_system=position_controller,
         sim_config=sim_config,
+        station_meshcat=station_meshcat,
+        state_estimator_meshcat=state_estimator_meshcat,
     )
     recording_name = (
         plan.split(".")[0] + f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html"
@@ -103,14 +111,14 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         else None
     )
     # environment.export_diagram("environment_diagram.pdf")
-    environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
-    # environment.simulate(300, save_recording_as=recording_name)
+    # environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
+    environment.simulate(5, save_recording_as=recording_name)
 
-    if debug:
+    if debug and isinstance(position_source, MPCPositionSource):
         for (
             contact_loc,
             mpc,
-        ) in position_source.pusher_pose_controller.mpc_controllers.items():
+        ) in position_source._pusher_pose_controller.mpc_controllers.items():
             if len(mpc.control_log) > 0:
                 plot_cost(mpc.cost_log, suffix=f"_{contact_loc}")
                 plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
@@ -121,7 +129,9 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
                 # )
 
 
-def run_multiple(start: int, end: int):
+def run_multiple(
+    start: int, end: int, station_meshcat=None, state_estimator_meshcat=None
+):
     plans = [
         f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl"
         for i in range(start, end + 1)
@@ -131,15 +141,30 @@ def run_multiple(start: int, end: int):
     ]
     print(f"Running {len(plans)} plans\n{plans}")
     for plan in plans:
-        run_sim(plan, save_recording=True, debug=False)
+        run_sim(
+            plan,
+            save_recording=True,
+            debug=False,
+            station_meshcat=station_meshcat,
+            state_estimator_meshcat=state_estimator_meshcat,
+        )
+        station_meshcat.Delete()
+        station_meshcat.DeleteAddedControls()
+        state_estimator_meshcat.Delete()
 
 
 if __name__ == "__main__":
-    # run_multiple(0, 9)
+    print(f"station meshcat")
+    station_meshcat = StartMeshcat()
+    print(f"state estimator meshcat")
+    state_estimator_meshcat = StartMeshcat()
+    # run_multiple(0, 2, station_meshcat=station_meshcat, state_estimator_meshcat=state_estimator_meshcat)
     run_sim(
-        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        # plan="trajectories/box_pushing_demos/hw_demo_C_9.pkl",
+        # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        plan="trajectories/box_pushing_demos/hw_demo_C_9.pkl",
         save_recording=True,
         debug=True,
+        station_meshcat=station_meshcat,
+        state_estimator_meshcat=state_estimator_meshcat,
     )
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

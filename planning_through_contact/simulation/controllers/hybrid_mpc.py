@@ -286,10 +286,11 @@ class HybridMpc:
             )
         u_next = control_sol[:, 0]
 
-
         # Finite difference method to get velocity of pusher
-        v_WP_W = (self.model.get_p_WP_from_state(x_next) - self.model.get_p_WP_from_state(x_curr))/self.config.step_size
-
+        v_WP_W = (
+            self.model.get_p_WP_from_state(x_next)
+            - self.model.get_p_WP_from_state(x_curr)
+        ) / self.config.step_size
 
         return x_dot_curr.flatten(), u_next, v_WP_W
 
