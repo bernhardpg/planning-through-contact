@@ -11,6 +11,9 @@ import numpy as np
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
+from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
+    IiwaHardwareStation,
+)
 
 from planning_through_contact.simulation.controllers.robot_system_base import (
     RobotSystemBase,
@@ -57,6 +60,7 @@ class TableEnvironment:
             StateEstimator(
                 sim_config=sim_config,
                 meshcat=state_estimator_meshcat,
+                robot_model_name=robot_system.robot_model_name,
             ),
         )
 
@@ -94,13 +98,6 @@ class TableEnvironment:
             self._robot_system.GetInputPort("planar_position_command"),
         )
 
-        builder.Connect(
-            self._state_estimator.GetOutputPort(
-                f"{self._robot_system.robot_model_name}_state"
-            ),
-            self._robot_system.GetInputPort("robot_state_estimated"),
-        )
-
         # Inputs to state estimator
         # Connections to update the robot state within state estimator
         builder.Connect(
@@ -111,8 +108,8 @@ class TableEnvironment:
             raise NotImplementedError()
         else:
             # Connections to update the object position within state estimator
-            self._plant = self._robot_system._station_plant
-            self._slider = self._robot_system._slider
+            self._plant = self._robot_system.station_plant
+            self._slider = self._robot_system.slider
             slider_demux = builder.AddSystem(
                 Demultiplexer(
                     [
@@ -157,10 +154,10 @@ class TableEnvironment:
                 slider_pose_to_vector.get_output_port(), builder
             )
             # Desired State Loggers
+            # "desired_pusher_planar_pose_vector" is the reference trajectory
+            # "planar_position_command" is the commanded trajectory (e.g. after passing through MPC if closed loop or just the reference trajectory if open loop)
             pusher_pose_desired_logger = LogVectorOutput(
-                self._desired_position_source.GetOutputPort(
-                    "desired_pusher_planar_pose_vector"
-                ),
+                self._desired_position_source.GetOutputPort("planar_position_command"),
                 builder,
             )
             slider_pose_desired_logger = LogVectorOutput(
@@ -183,23 +180,20 @@ class TableEnvironment:
             self._simulator.set_target_realtime_rate(1.0)
 
         self.context = self._simulator.get_mutable_context()
+        self._robot_system.pre_sim_callback(self.context)
         if not sim_config.use_hardware:
             self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
             self.set_slider_planar_pose(self._sim_config.slider_start_pose)
-            robot_model_instance = self._plant.GetModelInstanceByName(
+
+            robot_model_instance = self._state_estimator._plant.GetModelInstanceByName(
                 self._robot_system.robot_model_name
             )
-            self._plant.SetDefaultPositions(
-                robot_model_instance, self._sim_config.pusher_start_pose.pos()
-            )
-            self._plant.SetPositions(
-                self.mbp_context,
-                robot_model_instance,
-                self._sim_config.pusher_start_pose.pos(),
-            )
-            self._state_estimator._plant.SetDefaultPositions(
-                robot_model_instance, self._sim_config.pusher_start_pose.pos()
-            )
+            # This will break for actuated cylinder
+            if isinstance(self._robot_system, IiwaHardwareStation):
+                self._state_estimator._plant.SetDefaultPositions(
+                    robot_model_instance,
+                    self._robot_system.start_joint_positions,
+                )
 
     def export_diagram(self, filename: str):
         import pydot
@@ -227,7 +221,7 @@ class TableEnvironment:
         if not isinstance(self._desired_position_source, TeleopPositionSource):
             for t in np.append(np.arange(0, timeout, time_step), timeout):
                 self._simulator.AdvanceTo(t)
-                # Hacky way of visualizing the desired slider pose
+                # Visualizing the desired slider pose
                 context = self._desired_position_source.GetMyContextFromRoot(
                     self.context
                 )
@@ -238,6 +232,14 @@ class TableEnvironment:
                     PlanarPose(*slider_desired_pose_vec),
                     time_in_recording=t,
                 )
+                pusher_desired_pose_vec = self._desired_position_source.GetOutputPort(
+                    "planar_position_command"
+                ).Eval(context)
+                self._state_estimator._visualize_desired_pusher_pose(
+                    PlanarPose(*pusher_desired_pose_vec, 0),
+                    time_in_recording=t,
+                )
+
         else:
             self._simulator.AdvanceTo(timeout)
         if save_recording_as:

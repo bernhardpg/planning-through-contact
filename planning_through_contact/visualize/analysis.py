@@ -86,11 +86,20 @@ class PlanarPushingLog:
     ) -> "PlanarPushingLog":
         t = pose_vector_log.sample_times()
         state_np_array = pose_vector_log.data()
-        # Padding state since we didn't log lam
         PAD_VAL = 0
-        state_np_array = np.vstack(
-            (state_np_array, PAD_VAL * np.ones_like(state_np_array[0, :]))
-        )
+        single_row_pad = np.ones_like(state_np_array[0, :]) * PAD_VAL
+        if state_np_array.shape[0] == 3:
+            # Padding state since we didn't log lam
+            state_np_array = np.vstack((state_np_array, single_row_pad))
+        elif state_np_array.shape[0] == 2:
+            # Padding state since we didn't log theta and lam
+            state_np_array = np.vstack(
+                (
+                    state_np_array,
+                    single_row_pad,
+                    single_row_pad,
+                )
+            )
         control_np_array = np.ones((3, len(t))) * PAD_VAL
         return cls.from_np(t, state_np_array, control_np_array)
 
@@ -254,7 +263,8 @@ def plot_planar_pushing_trajectory(
     x_error = actual.x - desired.x
     y_error = actual.y - desired.y
     pos = np.vstack((x_error, y_error))
-    max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
+    # max_pos_change = max(np.ptp(np.linalg.norm(pos, axis=0)), MIN_AXIS_SIZE) * 1.3
+    max_pos_change = 0.1
 
     axes[0].plot(actual.t, x_error, label="Error")
     axes[0].set_title("x")
@@ -270,6 +280,7 @@ def plot_planar_pushing_trajectory(
 
     theta_error = actual.theta - desired.theta
     th_change = max(np.ptp(theta_error), MIN_AXIS_SIZE) * 2.0  # type: ignore
+    th_change = 0.1
 
     axes[2].plot(actual.t, theta_error, label="Error")
     axes[2].set_title("theta")

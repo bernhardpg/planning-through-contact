@@ -72,10 +72,10 @@ class PlanarPushingSimConfig:
     use_realtime: bool = False
     delay_before_execution: float = 5.0
     save_plots: bool = False
-    use_diff_ik: bool = True
     mpc_config: HybridMpcConfig = field(default_factory=lambda: HybridMpcConfig())
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
+    pusher_z_offset: float = 0.05
 
 
 class PusherSliderPoseSelector(LeafSystem):

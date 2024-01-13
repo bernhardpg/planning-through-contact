@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Literal
 
 from pydrake.all import (
     LoadModelDirectives,
@@ -35,6 +36,16 @@ def AddPackagePaths(parser):
     parser.package_map().PopulateFromFolder(str(models_folder))
 
 
+def LoadRobotOnly(sim_config, robot_plant_file) -> MultibodyPlant:
+    robot = MultibodyPlant(sim_config.time_step)
+    parser = GetParser(robot)
+    # Load the controller plant, i.e. the plant without the box
+    directives = LoadModelDirectives(f"{models_folder}/{robot_plant_file}")
+    ProcessModelDirectives(directives, robot, parser)  # type: ignore
+    robot.Finalize()
+    return robot
+
+
 def AddSliderAndConfigureContact(sim_config, plant, scene_graph) -> ModelInstanceIndex:
     parser = Parser(plant, scene_graph)
     ConfigureParser(parser)
@@ -48,12 +59,7 @@ def AddSliderAndConfigureContact(sim_config, plant, scene_graph) -> ModelInstanc
     )
     ProcessModelDirectives(directives, plant, parser)  # type: ignore
 
-    if isinstance(sim_config.slider.geometry, Box2d):
-        slider_sdf_url = "package://planning_through_contact/box_hydroelastic.sdf"
-    elif isinstance(sim_config.slider.geometry, TPusher2d):
-        slider_sdf_url = "package://planning_through_contact/t_pusher.sdf"
-    else:
-        raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
+    slider_sdf_url = GetSliderUrl(sim_config)
 
     (slider,) = parser.AddModels(url=slider_sdf_url)
 
@@ -63,3 +69,13 @@ def AddSliderAndConfigureContact(sim_config, plant, scene_graph) -> ModelInstanc
 
     plant.Finalize()
     return slider
+
+
+def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
+    if isinstance(sim_config.slider.geometry, Box2d):
+        slider_sdf_url = f"package://planning_through_contact/box_hydroelastic.{format}"
+    elif isinstance(sim_config.slider.geometry, TPusher2d):
+        slider_sdf_url = f"package://planning_through_contact/t_pusher.{format}"
+    else:
+        raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
+    return slider_sdf_url

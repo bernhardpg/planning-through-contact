@@ -1,0 +1,13 @@
+demo:
+    directives:
+    - add_directives:
+        file: package://planning_through_contact/cylinder_controller_plant.yaml
+    - add_directives:
+        file: package://planning_through_contact/small_table.yaml
+    plant_config:
+        time_step: 0.001
+        contact_model: "hydroelastic"
+        discrete_contact_approximation: "sap"
+    # model_drivers:
+    #     iiwa: !IiwaDriver
+    #         hand_model_name: ""

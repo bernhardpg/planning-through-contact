@@ -12,6 +12,9 @@ class RobotSystemBase(Diagram):
     def add_meshcat(self, meshcat: Meshcat) -> None:
         self._meshcat = meshcat
 
+    def pre_sim_callback(self, root_context):
+        ...
+
     @property
     @abstractmethod
     def robot_model_name(self) -> str:

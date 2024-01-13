@@ -23,7 +23,7 @@ from planning_through_contact.simulation.sim_utils import (
 )
 
 
-class CylinderActuatedController(RobotSystemBase):
+class CylinderActuatedStation(RobotSystemBase):
     """Base controller class for an actuated floating cylinder robot."""
 
     def __init__(
@@ -49,11 +49,11 @@ class CylinderActuatedController(RobotSystemBase):
         robot_controller_plant.Finalize()
 
         # "External" station plant
-        self._station_plant, self._scene_graph = AddMultibodyPlantSceneGraph(
+        self.station_plant, self._scene_graph = AddMultibodyPlantSceneGraph(
             builder, time_step=self._sim_config.time_step
         )
-        self._slider = AddSliderAndConfigureContact(
-            sim_config, self._station_plant, self._scene_graph
+        self.slider = AddSliderAndConfigureContact(
+            sim_config, self.station_plant, self._scene_graph
         )
 
         self._meshcat.SetTransform(
@@ -90,12 +90,17 @@ class CylinderActuatedController(RobotSystemBase):
 
         ## Connect systems
 
-        self._robot_model_instance = self._station_plant.GetModelInstanceByName(
+        self._robot_model_instance = self.station_plant.GetModelInstanceByName(
             self.robot_model_name
         )
         builder.Connect(
             robot_controller.get_output_port_control(),
-            self._station_plant.get_actuation_input_port(self._robot_model_instance),
+            self.station_plant.get_actuation_input_port(self._robot_model_instance),
+        )
+
+        builder.Connect(
+            self.station_plant.get_state_output_port(self._robot_model_instance),
+            robot_controller.get_input_port_estimated_state(),
         )
 
         builder.Connect(
@@ -110,23 +115,24 @@ class CylinderActuatedController(RobotSystemBase):
             "planar_position_command",
         )
 
-        builder.ExportInput(
-            robot_controller.get_input_port_estimated_state(), "robot_state_estimated"
-        )
-
         builder.ExportOutput(
-            self._station_plant.get_state_output_port(self._robot_model_instance),
+            self.station_plant.get_state_output_port(self._robot_model_instance),
             "robot_state_measured",
         )
 
         # Only relevant when use_hardware=False
         # If use_hardware=True, this info will be updated by the optitrack system in the state estimator directly
         builder.ExportOutput(
-            self._station_plant.get_state_output_port(self._slider),
+            self.station_plant.get_state_output_port(self.slider),
             "object_state_measured",
         )
 
         builder.BuildInto(self)
+
+        ## Set default position for the robot
+        self.station_plant.SetDefaultPositions(
+            self._robot_model_instance, self._sim_config.pusher_start_pose.pos()
+        )
 
     @property
     def robot_model_name(self) -> str:

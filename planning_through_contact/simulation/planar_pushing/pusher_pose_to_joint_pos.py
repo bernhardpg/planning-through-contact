@@ -49,68 +49,53 @@ def _load_robot(time_step: float = 1e-3) -> MultibodyPlant:
 
 
 def solve_ik(
-    diagram: Diagram,
-    station: PlanarPushingDiagram,
+    plant: MultibodyPlant,
     pose: RigidTransform,
-    current_slider_pose: RigidTransform,
     default_joint_positions: npt.NDArray[np.float64],
-    current_joint_pos: Optional[npt.NDArray[np.float64]] = None,
-    disregard_angle: bool = True,
+    disregard_angle: bool = False,
 ) -> npt.NDArray[np.float64]:
+    # Plant needs to be just the robot without other objects
     # Need to create a new context that the IK can use for solving the problem
-    context = diagram.CreateDefaultContext()
-    mbp_context = station.mbp.GetMyContextFromRoot(context)
 
-    # drake typing error
-    ik = InverseKinematics(station.mbp, mbp_context, with_joint_limits=True)  # type: ignore
-
+    ik = InverseKinematics(plant, with_joint_limits=True)  # type: ignore
+    pusher_frame = plant.GetFrameByName("pusher_end")
+    EPS = 1e-3
+    # print("pose.translation()", pose.translation())
+    # print("ub", pose.translation() + np.ones(3) * EPS)
+    # print("lb", pose.translation() - np.ones(3) * EPS)
     ik.AddPositionConstraint(
-        station.pusher_frame,
+        pusher_frame,
         np.zeros(3),
-        station.mbp.world_frame(),
-        pose.translation(),
-        pose.translation(),
+        plant.world_frame(),
+        pose.translation() - np.ones(3) * EPS,
+        pose.translation() + np.ones(3) * EPS,
     )
 
     if disregard_angle:
         z_unit_vec = np.array([0, 0, 1])
         ik.AddAngleBetweenVectorsConstraint(
-            station.pusher_frame,
+            pusher_frame,
             z_unit_vec,
-            station.mbp.world_frame(),
+            plant.world_frame(),
             -z_unit_vec,  # The pusher object has z-axis pointing up
-            0,
-            0,
+            0 - EPS,
+            0 + EPS,
         )
 
     else:
         ik.AddOrientationConstraint(
-            station.pusher_frame,
+            pusher_frame,
             RotationMatrix(),
-            station.mbp.world_frame(),
+            plant.world_frame(),
             pose.rotation(),
-            0.0,
+            EPS,
         )
-
-    # Non-penetration
-    # ik.AddMinimumDistanceConstraint(0.001, 0.1)
 
     # Cost on deviation from default joint positions
     prog = ik.get_mutable_prog()
     q = ik.q()
 
-    slider_state = np.concatenate(
-        [
-            current_slider_pose.rotation().ToQuaternion().wxyz(),
-            current_slider_pose.translation(),
-        ]
-    )
-    get_full_q = lambda q_iiwa: np.concatenate([q_iiwa, slider_state])
-
-    if current_joint_pos is not None:
-        prog.SetInitialGuess(q, get_full_q(current_joint_pos))
-
-    q0 = get_full_q(default_joint_positions)
+    q0 = default_joint_positions
     prog.AddQuadraticErrorCost(np.identity(len(q)), q0, q)
     prog.SetInitialGuess(q, q0)
 
@@ -118,11 +103,9 @@ def solve_ik(
     assert result.is_success()
 
     q_sol = result.GetSolution(q)
-    # TODO: Should call joint.Lock on slider, see https://drake.mit.edu/doxygen_cxx/classdrake_1_1multibody_1_1_inverse_kinematics.html
-    q_iiwa = q_sol[:7]
-    return q_iiwa
+    return q_sol
 
-
+# Deprecated
 class PusherPoseInverseKinematics(LeafSystem):
     def __init__(
         self,
@@ -210,6 +193,7 @@ class PusherPoseInverseKinematics(LeafSystem):
         return ik
 
 
+# Deprecated
 class PusherPoseToJointPosDiffIk:
     def __init__(
         self,

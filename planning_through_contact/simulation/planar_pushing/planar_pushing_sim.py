@@ -72,31 +72,20 @@ class PlanarPushingSimulation:
             ),
         )
 
-        if sim_config.use_diff_ik:
-            self.pusher_pose_to_joint_pos = PusherPoseToJointPosDiffIk.add_to_builder(
-                builder,
-                self.station.GetInputPort("iiwa_position"),
-                self.station.GetOutputPort("iiwa_state_measured"),
-                time_step=sim_config.time_step,
-                use_diff_ik_feedback=False,
-            )
-            planar_translation_to_rigid_tranform = builder.AddSystem(
-                PlanarTranslationToRigidTransformSystem()
-            )
-            builder.Connect(
-                planar_translation_to_rigid_tranform.get_output_port(),
-                self.pusher_pose_to_joint_pos.get_pose_input_port(),
-            )
-        else:
-            # TODO: outdated, fix
-            ik = PusherPoseInverseKinematics.AddTobuilder(
-                builder,
-                self.pusher_pose_controller.get_output_port(),
-                self.station.GetOutputPort("iiwa_position_measured"),
-                self.station.GetOutputPort("slider_pose"),
-                self.station.GetInputPort("iiwa_position"),
-                sim_config.default_joint_positions,
-            )
+        self.pusher_pose_to_joint_pos = PusherPoseToJointPosDiffIk.add_to_builder(
+            builder,
+            self.station.GetInputPort("iiwa_position"),
+            self.station.GetOutputPort("iiwa_state_measured"),
+            time_step=sim_config.time_step,
+            use_diff_ik_feedback=False,
+        )
+        planar_translation_to_rigid_tranform = builder.AddSystem(
+            PlanarTranslationToRigidTransformSystem()
+        )
+        builder.Connect(
+            planar_translation_to_rigid_tranform.get_output_port(),
+            self.pusher_pose_to_joint_pos.get_pose_input_port(),
+        )
 
         self.pusher_pose_controller = PusherPoseController.AddToBuilder(
             builder,

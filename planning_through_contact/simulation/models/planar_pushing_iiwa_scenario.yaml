@@ -1,0 +1,37 @@
+demo:
+    directives:
+    - add_directives:
+        file: package://planning_through_contact/iiwa_controller_plant.yaml
+    - add_directives:
+        file: package://planning_through_contact/small_table.yaml
+    plant_config:
+        time_step: 0.001
+        contact_model: "hydroelastic"
+        discrete_contact_approximation: "sap"
+    model_drivers:
+        # iiwa: !IiwaDriver
+        #     hand_model_name: ""
+        iiwa: !JointStiffnessDriver
+            gains:
+                iiwa_motor_1:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_2:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_3:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_4:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_5:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_6:
+                    kp: 800
+                    kd: 100
+                iiwa_motor_7:
+                    kp: 800
+                    kd: 100
+                
