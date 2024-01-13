@@ -12,7 +12,7 @@ from planning_through_contact.simulation.controllers.desired_planar_position_sou
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import (

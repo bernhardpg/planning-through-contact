@@ -23,7 +23,7 @@ from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpc
 from planning_through_contact.simulation.environments.table_environment import (
     TableEnvironment,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 
@@ -75,13 +75,13 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=1,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
         scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
         use_hardware=False,
-        pusher_z_offset=0.02,
+        pusher_z_offset=0.1,
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -117,7 +117,7 @@ def run_sim(
     )
     # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
-    # environment.simulate(10, save_recording_as=recording_name)
+    # environment.simulate(3, save_recording_as=recording_name)
 
     if debug and isinstance(position_source, MPCPositionSource):
         for (
@@ -169,18 +169,18 @@ if __name__ == "__main__":
     station_meshcat = StartMeshcat()
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
-    run_multiple(
-        0,
-        9,
-        station_meshcat=station_meshcat,
-        state_estimator_meshcat=state_estimator_meshcat,
-    )
-    # run_sim(
-    #     # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-    #     plan="trajectories/box_pushing_demos/hw_demo_C_8_rounded.pkl",
-    #     save_recording=True,
-    #     debug=True,
+    # run_multiple(
+    #     0,
+    #     9,
     #     station_meshcat=station_meshcat,
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
+    run_sim(
+        # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        plan="trajectories/box_pushing_demos/hw_demo_C_8_rounded.pkl",
+        save_recording=True,
+        debug=True,
+        station_meshcat=station_meshcat,
+        state_estimator_meshcat=state_estimator_meshcat,
+    )
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)

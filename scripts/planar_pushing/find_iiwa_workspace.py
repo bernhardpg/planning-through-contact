@@ -6,17 +6,13 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
-    PlanarPushingSimulation,
-)
+
 from planning_through_contact.simulation.sim_utils import LoadRobotOnly
-from scripts.planar_pushing.create_plan import get_slider_box, get_tee
-from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
+from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
 )
 

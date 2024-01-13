@@ -20,7 +20,7 @@ from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpc
 from planning_through_contact.simulation.environments.table_environment import (
     TableEnvironment,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 

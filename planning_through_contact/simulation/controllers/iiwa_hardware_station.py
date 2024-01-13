@@ -4,7 +4,6 @@ from manipulation.station import (
     MakeHardwareStation,
     LoadScenario,
     Scenario,
-    AppendDirectives,
     JointStiffnessDriver,
     IiwaDriver,
 )
@@ -12,38 +11,28 @@ from manipulation.station import (
 from pydrake.all import (
     DiagramBuilder,
     Context,
-    MultibodyPlant,
-    InverseDynamicsController,
     StateInterpolatorWithDiscreteDerivative,
-    AddMultibodyPlantSceneGraph,
-    RigidTransform,
-    RollPitchYaw,
-    AddDefaultVisualization,
+    ConstantValueSource,
+    AbstractValue,
     Meshcat,
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
 )
 
-from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
-    PusherPoseToJointPosDiffIk,
+from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
-)
-from planning_through_contact.simulation.state_estimators.state_estimator import (
-    StateEstimator,
 )
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
 from .robot_system_base import RobotSystemBase
 from planning_through_contact.simulation.sim_utils import (
-    GetParser,
-    AddSliderAndConfigureContact,
     LoadRobotOnly,
     models_folder,
     package_xml_file,
     GetSliderUrl,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 
@@ -134,6 +123,9 @@ class IiwaHardwareStation(RobotSystemBase):
                 ik_params,
             ),
         )
+        const = builder.AddNamedSystem(
+            "false", ConstantValueSource(AbstractValue.Make(False))
+        )
 
         planar_translation_to_rigid_tranform = builder.AddSystem(
             PlanarTranslationToRigidTransformSystem(z_dist=sim_config.pusher_z_offset)
@@ -160,6 +152,10 @@ class IiwaHardwareStation(RobotSystemBase):
         builder.Connect(
             self.station.GetOutputPort("iiwa.state_estimated"),
             self._diff_ik.GetInputPort("robot_state"),
+        )
+        builder.Connect(
+            const.get_output_port(),
+            self._diff_ik.GetInputPort("use_robot_state"),
         )
 
         if isinstance(driver_config, JointStiffnessDriver):
@@ -211,6 +207,10 @@ class IiwaHardwareStation(RobotSystemBase):
     def pre_sim_callback(self, root_context: Context) -> None:
         # Set default joint positions for iiwa
         # Note this will break when using hardware=True
+        # Are both of these necessary?
+        self._diff_ik.get_mutable_parameters().set_nominal_joint_position(
+            self.start_joint_positions
+        )
         self._diff_ik.SetPositions(
             self._diff_ik.GetMyMutableContextFromRoot(root_context),
             self.start_joint_positions,

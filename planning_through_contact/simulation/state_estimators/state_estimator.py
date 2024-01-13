@@ -23,8 +23,10 @@ from pydrake.all import (
     Meshcat,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.systems.pusher_slider_pose_selector import (
     PusherSliderPoseSelector,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.sim_utils import AddSliderAndConfigureContact
