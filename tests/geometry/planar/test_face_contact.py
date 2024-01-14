@@ -510,3 +510,46 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
         plot_cos_sine_trajs(rs)
+
+
+def test_face_contact_euclidean_distance_cost(plan_config: PlanarPlanConfig) -> None:
+    plan_config.use_band_sparsity = True
+    plan_config.num_knot_points_contact = 4
+
+    # Do not expect to get tight solutions with this, this is just to test the code
+    plan_config.contact_config.cost.cost_type = ContactCostType.STANDARD
+    plan_config.contact_config.cost.angular_arc_length = 0.1
+    plan_config.contact_config.cost.linear_arc_length = 0.1
+    plan_config.contact_config.cost.keypoint_arc_length = 0.1
+
+    contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
+    initial_pose = PlanarPose(0.3, 0.2, 1.0)
+    final_pose = PlanarPose(0, 0, 0)
+
+    plan_config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
+
+    mode = FaceContactMode.create_from_plan_spec(
+        contact_location,
+        plan_config,
+    )
+    mode.set_slider_initial_pose(initial_pose)
+    mode.set_slider_final_pose(final_pose, hard_constraint=False)
+
+    mode.formulate_convex_relaxation()
+    solver = MosekSolver()
+    result = solver.Solve(mode.relaxed_prog)  # type: ignore
+    assert result.is_success()
+
+    vars = mode.variables.eval_result(result)
+    traj = PlanarPushingTrajectory(mode.config, [vars])
+
+    if DEBUG:
+        vars = mode.variables.eval_result(result)
+        traj = PlanarPushingTrajectory(mode.config, [vars])
+
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+        # (num_knot_points, 2): first col cosines, second col sines
+        rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
+        plot_cos_sine_trajs(rs)

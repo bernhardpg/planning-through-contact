@@ -149,9 +149,15 @@ class ContactCostType(Enum):
 @dataclass
 class ContactCost:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    keypoint_arc_length: Optional[float] = 1.0
+    linear_arc_length: Optional[float] = 1.0
+    angular_arc_length: Optional[float] = 1.0
     force_regularization: Optional[float] = 1.0
-    velocity_regularization: Optional[float] = 1.0
+    keypoint_velocity_regularization: Optional[float] = 1.0
+    ang_velocity_regularization: Optional[float] = 1.0
+    lin_velocity_regularization: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
+    trace: Optional[float] = None
     # TODO(bernhardpg): Remove these terms
     lin_displacements: Optional[float] = 1.0
     ang_displacements: Optional[float] = 1.0
@@ -223,7 +229,6 @@ class PlanarPlanConfig:
     contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
     minimize_squared_eucl_dist: bool = True
-    minimize_trace: bool = False
     avoidance_cost: Literal[
         "linear",
         "quadratic",

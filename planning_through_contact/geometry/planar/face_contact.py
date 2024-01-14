@@ -8,6 +8,7 @@ import pydrake.symbolic as sym
 from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
+    L2NormCost,
     LinearCost,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
@@ -474,7 +475,74 @@ class FaceContactMode(AbstractContactMode):
         cost_config = self.config.contact_config.cost
 
         if cost_config.cost_type == ContactCostType.STANDARD:
-            # Minimize arc length on keypoint trajectories
+            # Arc length on keypoint trajectories
+            if cost_config.keypoint_arc_length is not None:
+                slider = self.config.dynamics_config.slider.geometry
+                p_Wv_is = [
+                    [
+                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
+                        for vertex_idx in range(len(slider.vertices))
+                    ]
+                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
+                ]
+                num_keypoints = len(slider.vertices)
+                for k in range(self.num_knot_points - 1):
+                    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                        vars = np.concatenate(
+                            [
+                                self.variables.p_WBs[k].flatten(),
+                                [self.variables.cos_ths[k], self.variables.sin_ths[k]],
+                                self.variables.p_WBs[k + 1].flatten(),
+                                [
+                                    self.variables.cos_ths[k + 1],
+                                    self.variables.sin_ths[k + 1],
+                                ],
+                            ]
+                        )
+                        distance = vertex_k_next - vertex_k
+                        cost_expr = (
+                            cost_config.keypoint_arc_length
+                            * (1 / num_keypoints)
+                            * distance
+                        )
+                        A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                        self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+
+            # Linear arc length
+            if cost_config.linear_arc_length is not None:
+                for k in range(self.num_knot_points - 1):
+                    vars = np.concatenate(
+                        [
+                            self.variables.p_WBs[k].flatten(),
+                            self.variables.p_WBs[k + 1].flatten(),
+                        ]
+                    )
+                    distance = self.variables.p_WBs[k + 1] - self.variables.p_WBs[k]
+                    cost_expr = cost_config.linear_arc_length * distance
+                    A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                    self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+
+            # Angular arc length
+            if cost_config.angular_arc_length is not None:
+                for k in range(self.num_knot_points - 1):
+                    vars = np.array(
+                        [
+                            self.variables.cos_ths[k],
+                            self.variables.sin_ths[k],
+                            self.variables.cos_ths[k + 1],
+                            self.variables.sin_ths[k + 1],
+                        ]
+                    )
+                    r_k = np.array(
+                        [self.variables.cos_ths[k], self.variables.sin_ths[k]]
+                    )
+                    r_k_next = np.array(
+                        [self.variables.cos_ths[k + 1], self.variables.sin_ths[k + 1]]
+                    )
+                    distance = r_k_next - r_k
+                    cost_expr = cost_config.angular_arc_length * distance
+                    A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                    self.prog_wrapper.add_l2_norm_cost(A, b, vars)
 
             # Contact force regularization
             if cost_config.force_regularization is not None:
@@ -488,8 +556,8 @@ class FaceContactMode(AbstractContactMode):
                         k, k, cost_config.force_regularization * c_f**2
                     )
 
-            # Velocity regularization
-            if cost_config.velocity_regularization is not None:
+            # Keypoint velocity regularization
+            if cost_config.keypoint_velocity_regularization is not None:
                 slider = self.config.dynamics_config.slider.geometry
                 p_Wv_is = [
                     [
@@ -498,7 +566,7 @@ class FaceContactMode(AbstractContactMode):
                     ]
                     for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
                 ]
-                num_keypoints = len(p_Wv_is)
+                num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                         disp = vertex_k_next - vertex_k
@@ -506,10 +574,34 @@ class FaceContactMode(AbstractContactMode):
                         self.prog_wrapper.add_quadratic_cost(
                             k,
                             k + 1,
-                            cost_config.velocity_regularization
+                            cost_config.keypoint_velocity_regularization
                             * (1 / num_keypoints)
                             * sq_disp,
                         )
+
+            # Linear velocity regularization
+            if cost_config.lin_velocity_regularization is not None:
+                sq_linear_vels = [
+                    v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs
+                ]
+                for idx, term in enumerate(sq_linear_vels):
+                    self.prog_wrapper.add_quadratic_cost(
+                        idx,
+                        idx + 1,
+                        cost_config.lin_velocity_regularization * term,
+                    )
+
+            # Angular velocity regularization
+            if cost_config.ang_velocity_regularization is not None:
+                for k, (delta_cos_th, delta_sin_th) in enumerate(
+                    zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+                ):
+                    self.prog_wrapper.add_quadratic_cost(
+                        k,
+                        k + 1,
+                        cost_config.ang_velocity_regularization
+                        * (delta_sin_th**2 + delta_cos_th**2),
+                    )
 
         elif cost_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
@@ -728,11 +820,11 @@ class FaceContactMode(AbstractContactMode):
         else:
             if self.config.use_band_sparsity:
                 self.relaxed_prog = self.prog_wrapper.make_relaxation(
-                    minimize_trace=self.config.minimize_trace
+                    trace_cost=self.config.contact_config.cost.trace
                 )
             else:
                 self.relaxed_prog = self.prog_wrapper.make_full_relaxation(
-                    minimize_trace=self.config.minimize_trace
+                    trace_cost=self.config.contact_config.cost.trace
                 )
 
     def get_convex_set(self) -> opt.Spectrahedron:
