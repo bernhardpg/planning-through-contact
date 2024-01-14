@@ -72,7 +72,7 @@ DEBUG = False
 def test_rounding_one_mode() -> None:
     cost_config = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
     )
     contact_config = ContactConfig(
         cost=cost_config,
@@ -218,7 +218,7 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     )
     contact_cost = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
         mode_transition_cost=1.0,
     )
     contact_config = ContactConfig(

@@ -224,7 +224,7 @@ def planner(
     plan_config.dynamics_config.pusher_radius = 0.015
     cost_config = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
         mode_transition_cost=None,
     )
     contact_config = ContactConfig(
