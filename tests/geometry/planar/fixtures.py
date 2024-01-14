@@ -222,24 +222,37 @@ def planner(
         plan_config.avoid_object = False
 
     plan_config.dynamics_config.pusher_radius = 0.015
-    cost_config = ContactCost(
-        cost_type=ContactCostType.OPTIMAL_CONTROL,
-        force_regularization=5.0,
-        mode_transition_cost=None,
-    )
-    contact_config = ContactConfig(
-        cost=cost_config,
-        delta_vel_max=0.1,
-        delta_theta_max=0.8,
-    )
+
+    if request.param.get("standard_cost"):
+        contact_cost = ContactCost(
+            cost_type=ContactCostType.STANDARD,
+            keypoint_arc_length=1,
+            linear_arc_length=None,
+            angular_arc_length=None,
+            force_regularization=0.1,
+            keypoint_velocity_regularization=None,
+            ang_velocity_regularization=1.0,
+            lin_velocity_regularization=0.1,
+            trace=1e-5,
+        )
+        contact_config = ContactConfig(contact_cost)
+    else:
+        cost_config = ContactCost(
+            cost_type=ContactCostType.OPTIMAL_CONTROL,
+            force_regularization=5.0,
+            mode_transition_cost=None,
+        )
+        contact_config = ContactConfig(
+            cost=cost_config,
+            delta_vel_max=0.1,
+            delta_theta_max=0.8,
+        )
+
     plan_config.contact_config = request.param.get("contact_config", contact_config)
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
-    plan_config.penalize_mode_transitions = request.param.get(
-        "penalize_mode_transition", False
-    )
     plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 

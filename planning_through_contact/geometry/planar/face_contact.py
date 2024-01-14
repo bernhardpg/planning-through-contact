@@ -338,6 +338,7 @@ class FaceContactMode(AbstractContactMode):
         self.redundant_constraints = []
         if self.config.use_approx_exponential_map:
             self.constraints["exponential_map"] = []
+        self.l2_norm_costs = []
 
         self.slider_final_pose = None
         self.slider_initial_pose = None
@@ -506,7 +507,9 @@ class FaceContactMode(AbstractContactMode):
                             * distance
                         )
                         A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                        self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+                        cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+
+                        self.l2_norm_costs.append(cost)
 
             # Linear arc length
             if cost_config.linear_arc_length is not None:
@@ -520,7 +523,9 @@ class FaceContactMode(AbstractContactMode):
                     distance = self.variables.p_WBs[k + 1] - self.variables.p_WBs[k]
                     cost_expr = cost_config.linear_arc_length * distance
                     A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                    self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+                    cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+
+                    self.l2_norm_costs.append(cost)
 
             # Angular arc length
             if cost_config.angular_arc_length is not None:
@@ -542,7 +547,9 @@ class FaceContactMode(AbstractContactMode):
                     distance = r_k_next - r_k
                     cost_expr = cost_config.angular_arc_length * distance
                     A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                    self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+                    cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+
+                    self.l2_norm_costs.append(cost)
 
             # Contact force regularization
             if cost_config.force_regularization is not None:
@@ -932,27 +939,43 @@ class FaceContactMode(AbstractContactMode):
                 self.variables.sin_ths[-1],
             )
 
-    def _get_cost_terms(self) -> Tuple[List[List[int]], List[LinearCost]]:
+    def _get_cost_terms(
+        self, costs: List[Binding]
+    ) -> Tuple[List[List[int]], List[LinearCost]]:
         if self.relaxed_prog is None:
             raise RuntimeError(
                 "Relaxed program must be constructed before cost can be formulated for vertex."
             )
 
-        costs = self.relaxed_prog.linear_costs()
         evaluators = [cost.evaluator() for cost in costs]
         # NOTE: here we must get the indices from the relaxed program!
         var_idxs = [
             self.relaxed_prog.FindDecisionVariableIndices(cost.variables())
             for cost in costs
         ]
+
         return var_idxs, evaluators
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
-        var_idxs, evaluators = self._get_cost_terms()
+        if self.relaxed_prog is None:
+            raise RuntimeError(
+                "Relaxed program must be constructed before cost can be formulated for vertex."
+            )
+
+        # Add all linear cost terms
+        var_idxs, evaluators = self._get_cost_terms(self.relaxed_prog.linear_costs())
         vars = [vertex.x()[idxs] for idxs in var_idxs]
         bindings = [Binding[LinearCost](e, v) for e, v in zip(evaluators, vars)]
         for b in bindings:
             vertex.AddCost(b)
+
+        if len(self.l2_norm_costs) > 0:
+            # Add L2 norm cost terms
+            var_idxs, evaluators = self._get_cost_terms(self.l2_norm_costs)
+            vars = [vertex.x()[idxs] for idxs in var_idxs]
+            bindings = [Binding[L2NormCost](e, v) for e, v in zip(evaluators, vars)]
+            for b in bindings:
+                vertex.AddCost(b)
 
     def eval_binding(
         self,

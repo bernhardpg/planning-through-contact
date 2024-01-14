@@ -120,12 +120,16 @@ class BandSparseSemidefiniteRelaxation:
         cost = self.prog.AddL2NormCost(A, b, vars)
         self.l2_norm_costs.append(cost)
 
+        return cost
+
     def add_independent_cost(self, *args):
         """
         Add a cost that is just added to the relaxation without any tightening constraints
         """
         cost = self.prog.AddCost(*args)
         self.independent_costs.append(cost)
+
+        return cost
 
     # TODO(bernhardpg): Temporary function to make it possible to use my old code
     def _make_bbox_to_expr(
@@ -151,7 +155,7 @@ class BandSparseSemidefiniteRelaxation:
         return np.array(bounding_box_constraints)
 
     def make_relaxation(
-        self, trace_cost: Optional[float] = None
+        self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
     ) -> MathematicalProgram:
         relaxed_prog = MathematicalProgram()
 
@@ -206,11 +210,13 @@ class BandSparseSemidefiniteRelaxation:
         # We add independent costs without any fancy relaxation machinery
         for cost in self.independent_costs:
             relaxed_prog.AddCost(cost.evaluator(), cost.variables())
-        for cost in self.l2_norm_costs:
-            A = cost.evaluator().A()
-            b = cost.evaluator().b()
-            vars = cost.variables()
-            relaxed_prog.AddL2NormCostUsingConicConstraint(A, b, vars)
+
+        if add_l2_norm_cost:
+            for cost in self.l2_norm_costs:
+                A = cost.evaluator().A()
+                b = cost.evaluator().b()
+                vars = cost.variables()
+                relaxed_prog.AddL2NormCostUsingConicConstraint(A, b, vars)
 
         # Add all linear constraints directly
         for idx in range(self.num_groups):
