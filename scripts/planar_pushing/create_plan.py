@@ -10,6 +10,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
+    ContactCost,
     ContactCostType,
     PlanarCostFunctionTerms,
     PlanarPlanConfig,
@@ -205,12 +206,16 @@ def create_plan(
         integration_constant=0.02,
     )
 
-    contact_config = ContactConfig(
+    contact_cost = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         sq_forces=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,
+    )
+
+    contact_config = ContactConfig(
+        cost=contact_cost,
         lam_min=0.47,
         lam_max=0.53,
         delta_vel_max=0.05 * 2,

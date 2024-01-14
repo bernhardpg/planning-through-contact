@@ -19,6 +19,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
+    ContactCost,
     ContactCostType,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
@@ -64,7 +65,8 @@ def test_planar_pushing_trajectory_values(
         friction_coeff_table_slider=0.5,
         integration_constant=0.7,
     )
-    contact_config = ContactConfig(cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS)
+    contact_cost = ContactCost(cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS)
+    contact_config = ContactConfig(contact_cost)
     plan_cfg = PlanarPlanConfig(
         dynamics_config=cfg,
         num_knot_points_contact=4,

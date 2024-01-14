@@ -138,28 +138,37 @@ class PlanarCostFunctionTerms:
 
 
 class ContactCostType(Enum):
+    # TODO(bernhardpg): All these costs are experimental and will probably be removed
     SQ_VELOCITIES = 0
     KEYPOINT_DISPLACEMENTS = 1
     OPTIMAL_CONTROL = 2
+    # TODO: Keep only this cost
+    STANDARD = 3
 
 
 @dataclass
-class ContactConfig:
+class ContactCost:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
     lin_displacements: Optional[float] = 1.0
     ang_displacements: Optional[float] = 1.0
     sq_forces: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
-    # Min and max values for the scaled position of the finger on the face of the slider
-    lam_min: Optional[float] = 0.0
-    lam_max: Optional[float] = 1.0
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             assert self.lin_displacements is not None
             assert self.ang_displacements is not None
+
+
+# TODO: Refactor this
+@dataclass
+class ContactConfig:
+    cost: ContactCost = field(default_factory=ContactCost)
+    # Min and max values for the scaled position of the finger on the face of the slider
+    lam_min: Optional[float] = 0.0
+    lam_max: Optional[float] = 1.0
+    delta_theta_max: Optional[float] = None
+    delta_vel_max: Optional[float] = None
 
 
 @dataclass
