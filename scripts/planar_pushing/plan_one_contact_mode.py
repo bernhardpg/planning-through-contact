@@ -17,7 +17,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarCostFunctionTerms,
+    NonCollisionCost,
     PlanarPlanConfig,
     SliderPusherSystemConfig,
 )
@@ -36,7 +36,7 @@ cfg = SliderPusherSystemConfig(
     friction_coeff_table_slider=0.5,
     integration_constant=0.7,
 )
-cost_terms = PlanarCostFunctionTerms(sq_forces=1.0, ang_displacements=1.0)
+cost_terms = NonCollisionCost(sq_forces=1.0, ang_displacements=1.0)
 plan_cfg = PlanarPlanConfig(
     dynamics_config=cfg,
     num_knot_points_contact=40,

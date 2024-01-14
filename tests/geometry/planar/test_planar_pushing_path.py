@@ -31,7 +31,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCost,
     ContactCostType,
-    PlanarCostFunctionTerms,
+    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
@@ -226,7 +226,7 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
         delta_vel_max=0.1,
         delta_theta_max=0.8,
     )
-    cost_terms = PlanarCostFunctionTerms(
+    cost_terms = NonCollisionCost(
         obj_avoidance_quad_weight=0.4,
     )
     config = PlanarPlanConfig(

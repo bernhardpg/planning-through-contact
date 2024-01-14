@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Literal, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -127,14 +127,14 @@ class PlanarSolverParams:
 
 
 @dataclass
-class PlanarCostFunctionTerms:
-    # TODO: Refactor this into NonCollisionCost similar to face contaacts
-    # Non-collision
-    obj_avoidance_lin: float = 0.1  # TODO: Remove
-    obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
-    obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
-    obj_avoidance_socp: float = 0.001
-    sq_eucl_dist: float = 1.0
+class NonCollisionCost:
+    distance_to_object_quadratic_preferred_distance: float = 0.2  # TODO: Remove
+    distance_to_object_quadratic: Optional[float] = None
+    distance_to_object_socp: Optional[float] = None
+    # NOTE: The single mode is only used to test one non-collision mode at a time
+    distance_to_object_socp_single_mode: Optional[float] = None
+    eucl_distance_squared: Optional[float] = None
+    eucl_distance: Optional[float] = None
 
 
 class ContactCostType(Enum):
@@ -207,7 +207,6 @@ class PlanarPlanConfig:
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2  # TODO: remove, no time
     time_non_collision: float = 0.5  # TODO: remove, there is no time
-    avoid_object: bool = False
     allow_teleportation: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True
@@ -220,18 +219,11 @@ class PlanarPlanConfig:
     )
     use_band_sparsity: bool = True
     # TODO(bernhardpg): Refactor these cost terms into a struct
-    cost_terms: PlanarCostFunctionTerms = field(
-        default_factory=lambda: PlanarCostFunctionTerms()
+    non_collision_cost: NonCollisionCost = field(
+        default_factory=lambda: NonCollisionCost()
     )
     contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
-    minimize_squared_eucl_dist: bool = True
-    avoidance_cost: Literal[
-        "linear",
-        "quadratic",
-        "socp",
-        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
-    ] = "socp"
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
