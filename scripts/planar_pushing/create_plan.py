@@ -208,7 +208,7 @@ def create_plan(
 
     contact_cost = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
         ang_displacements=1.0,
         lin_displacements=1.0,
         mode_transition_cost=None,

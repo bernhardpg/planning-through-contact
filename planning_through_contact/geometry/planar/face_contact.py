@@ -471,7 +471,9 @@ class FaceContactMode(AbstractContactMode):
             )
 
     def _define_costs(self) -> None:
-        if self.config.contact_config.cost.cost_type == ContactCostType.STANDARD:
+        cost_config = self.config.contact_config.cost
+
+        if cost_config.cost_type == ContactCostType.STANDARD:
             # Minimize arc length on keypoint trajectories
 
             # Contact force regularization
@@ -496,13 +498,13 @@ class FaceContactMode(AbstractContactMode):
                     sq_disp = (disp.T @ disp).item()
                     self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
 
-        elif self.config.contact_config.cost.cost_type == ContactCostType.SQ_VELOCITIES:
+        elif cost_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
             for idx, term in enumerate(sq_linear_vels):
                 self.prog_wrapper.add_quadratic_cost(
                     idx,
                     idx + 1,
-                    self.config.contact_config.cost.lin_displacements * term,
+                    cost_config.lin_displacements * term,
                 )
             # TODO(bernhardpg): Remove
             if self.config.use_approx_exponential_map:
@@ -510,7 +512,7 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k,
-                        self.config.contact_config.cost.ang_displacements * th_dot**2,
+                        cost_config.ang_displacements * th_dot**2,
                     )
             else:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -519,14 +521,11 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k + 1,
-                        self.config.contact_config.cost.ang_displacements
+                        cost_config.ang_displacements
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 
-        elif (
-            self.config.contact_config.cost.cost_type
-            == ContactCostType.KEYPOINT_DISPLACEMENTS
-        ):
+        elif cost_config.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             slider = self.config.dynamics_config.slider.geometry
             p_Wv_is = [
                 [
@@ -541,9 +540,7 @@ class FaceContactMode(AbstractContactMode):
                     sq_disp = (disp.T @ disp).item()
                     self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
 
-        elif (
-            self.config.contact_config.cost.cost_type == ContactCostType.OPTIMAL_CONTROL
-        ):
+        elif cost_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             assert self.config.start_and_goal is not None
             target_pose = self.config.start_and_goal.slider_target_pose
 
@@ -560,15 +557,19 @@ class FaceContactMode(AbstractContactMode):
                 cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
                 self.prog_wrapper.add_quadratic_cost(k, k, cost)
 
-        if self.config.contact_config.cost.sq_forces is not None:
+        if cost_config.force_regularization is not None:
             for k, c_n in enumerate(self.variables.normal_forces):
                 self.prog_wrapper.add_quadratic_cost(
-                    k, k, self.config.contact_config.cost.sq_forces * c_n**2
+                    k,
+                    k,
+                    cost_config.force_regularization * c_n**2,
                 )
 
             for k, c_f in enumerate(self.variables.friction_forces):
                 self.prog_wrapper.add_quadratic_cost(
-                    k, k, self.config.contact_config.cost.sq_forces * c_f**2
+                    k,
+                    k,
+                    cost_config.force_regularization * c_f**2,
                 )
 
     def set_finger_pos(self, lam_target: float) -> None:
