@@ -457,6 +457,44 @@ class PlanarPushingTrajectory:
         t_idx = np.where(t <= ts)[0][0]
 
         val = self.get_value(ts[t_idx], traj_to_get)
+
+        # This is a hack to make sure we get R_WBs that are potentially not with determinant 1
+        if traj_to_get == "R_WB":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                R_WB = self.path_knot_points[segment_idx].R_WB
+            else:  # FaceContactVariables
+                R_WB = self.path_knot_points[segment_idx].R_WBs[t_idx]
+
+            temp = np.eye(3)
+            temp[:2, :2] = R_WB
+            return temp
+
+        elif traj_to_get == "p_WB":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                p_WB = self.path_knot_points[segment_idx].p_WB
+            else:  # FaceContactVariables
+                p_WB = self.path_knot_points[segment_idx].p_WBs[t_idx]
+
+            return p_WB
+
+        elif traj_to_get == "p_WP":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                R_WB = self.path_knot_points[segment_idx].R_WB
+                p_WB = self.path_knot_points[segment_idx].p_WB
+            else:  # FaceContactVariables
+                R_WB = self.path_knot_points[segment_idx].R_WBs[t_idx]
+                p_WB = self.path_knot_points[segment_idx].p_WBs[t_idx]
+
+            p_BP = self.path_knot_points[segment_idx].p_BPs[t_idx]
+            p_WP = p_WB + R_WB @ p_BP
+            return p_WP
+
         return val
 
     def get_value(
