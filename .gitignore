@@ -1,3 +1,7 @@
+# Generated files
+demos/
+trajectories/
+
 # Vim
 *.swp
 *.swo

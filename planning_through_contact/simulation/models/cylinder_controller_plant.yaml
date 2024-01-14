@@ -1,0 +1,11 @@
+directives:
+- add_model:
+    name: pusher
+    file: package://planning_through_contact/pusher_floating_hydroelastic_actuated.sdf
+- add_frame:
+    name: pusher_end
+    X_PF:
+        base_frame: pusher::pusher
+        rotation: !Rpy { deg: [180, 0.0, 0.0]}
+        # displace by pusher length
+        translation: [0.0, 0.0, -0.07]

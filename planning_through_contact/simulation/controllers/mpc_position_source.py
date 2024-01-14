@@ -1,19 +1,18 @@
 from pydrake.all import (
     DiagramBuilder,
-    OutputPort,
-    Diagram,
+    ZeroOrderHold,
 )
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 
-from planning_through_contact.simulation.controllers.desired_position_source_base import (
-    DesiredPositionSourceBase,
+from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
+    DesiredPlanarPositionSourceBase,
 )
 from planning_through_contact.simulation.planar_pushing.planar_pose_traj_publisher import (
     PlanarPoseTrajPublisher,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.planar_pushing.pusher_pose_controller import (
@@ -24,7 +23,7 @@ from planning_through_contact.simulation.systems.contact_detection_system import
 )
 
 
-class MPCPositionSource(DesiredPositionSourceBase):
+class MPCPositionSource(DesiredPlanarPositionSourceBase):
     """Uses the desired trajectory of the entire system and MPC controllers
     to generate desired positions for the robot."""
 
@@ -33,16 +32,17 @@ class MPCPositionSource(DesiredPositionSourceBase):
         sim_config: PlanarPushingSimConfig,
         traj: PlanarPushingTrajectory,
     ):
+        super().__init__()
+
         self._sim_config = sim_config
         self._traj = traj
 
-    def AddToBuilder(
-        self, builder: DiagramBuilder, state_estimator: Diagram
-    ) -> OutputPort:
-        """Setup the desired position source (MPC)."""
+        builder = DiagramBuilder()
+
+        ## Add Leaf systems
 
         # Desired trajectory sources for pusher and slider
-        self.planar_pose_pub = builder.AddNamedSystem(
+        self._planar_pose_pub = builder.AddNamedSystem(
             "PlanarPoseTrajPublisher",
             PlanarPoseTrajPublisher(
                 self._traj,
@@ -51,41 +51,91 @@ class MPCPositionSource(DesiredPositionSourceBase):
             ),
         )
 
-        # Contact Detection System
+        # Contact Detection System that tells the pusher pose controller when the contact is broken between pusher and slider
         self._contact_detector = builder.AddNamedSystem(
             "ContactDetectionSystem",
-            ContactDetectionSystem("pusher::collision", "box::box_collision"),
+            ContactDetectionSystem(
+                "pusher::collision",
+                self._sim_config.slider.geometry.collision_geometry_names,
+            ),
         )
 
-        # MPC controllers
-        self.pusher_pose_controller = PusherPoseController.AddToBuilder(
-            builder=builder,
-            dynamics_config=self._sim_config.dynamics_config,
-            mpc_config=self._sim_config.mpc_config,
-            contact_mode_traj=self.planar_pose_pub.GetOutputPort("contact_mode_traj"),
-            slider_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
-                "slider_planar_pose_traj"
+        # MPC controller
+        self._pusher_pose_controller = builder.AddNamedSystem(
+            "PusherPoseController",
+            PusherPoseController(
+                dynamics_config=self._sim_config.dynamics_config,
+                mpc_config=self._sim_config.mpc_config,
+                closed_loop=self._sim_config.closed_loop,
             ),
-            pusher_planar_pose_traj=self.planar_pose_pub.GetOutputPort(
-                "pusher_planar_pose_traj"
-            ),
-            contact_force_traj=self.planar_pose_pub.GetOutputPort("contact_force_traj"),
-            pose_cmd=None,  # Connect this in environment
-            closed_loop=self._sim_config.closed_loop,
-            pusher_planar_pose_measured=state_estimator.GetOutputPort("pusher_pose"),
-            slider_pose_measured=state_estimator.GetOutputPort("slider_pose"),
         )
 
-        # Connect contact detection system
-        builder.Connect(
-            state_estimator.GetOutputPort("query_object"),
-            self._contact_detector.GetInputPort("query_object"),
+        # Zero order hold for desired planar pose
+        period = 1 / self._sim_config.mpc_config.rate_Hz
+        self._zero_order_hold = builder.AddNamedSystem(
+            "ZeroOrderHold",
+            ZeroOrderHold(period, vector_size=2),  # Just the x and y positions
         )
+
+        ## Internal connections
+
         builder.Connect(
             self._contact_detector.GetOutputPort("contact_detected"),
-            self.pusher_pose_controller.GetInputPort("pusher_slider_contact"),
+            self._pusher_pose_controller.GetInputPort("pusher_slider_contact"),
         )
-        # Last system of the PusherPoseController, it's output is not connected
-        zero_order_hold = builder.GetSubsystemByName("ZeroOrderHold")
 
-        return zero_order_hold.get_output_port()
+        builder.Connect(
+            self._pusher_pose_controller.get_output_port(),
+            self._zero_order_hold.get_input_port(),
+        )
+
+        builder.Connect(
+            self._planar_pose_pub.GetOutputPort("contact_mode_traj"),
+            self._pusher_pose_controller.GetInputPort("contact_mode_traj"),
+        )
+        builder.Connect(
+            self._planar_pose_pub.GetOutputPort("pusher_planar_pose_traj"),
+            self._pusher_pose_controller.GetInputPort("pusher_planar_pose_traj"),
+        )
+        builder.Connect(
+            self._planar_pose_pub.GetOutputPort("slider_planar_pose_traj"),
+            self._pusher_pose_controller.GetInputPort("slider_planar_pose_traj"),
+        )
+        builder.Connect(
+            self._planar_pose_pub.GetOutputPort("contact_force_traj"),
+            self._pusher_pose_controller.GetInputPort("contact_force_traj"),
+        )
+
+        ## Export inputs and outputs (external)
+
+        builder.ExportInput(
+            self._contact_detector.GetInputPort("query_object"), "query_object"
+        )
+
+        builder.ExportInput(
+            self._pusher_pose_controller.GetInputPort("slider_pose_estimated"),
+            "slider_pose_estimated",
+        )
+
+        builder.ExportInput(
+            self._pusher_pose_controller.GetInputPort("pusher_pose_estimated"),
+            "pusher_pose_estimated",
+        )
+
+        builder.ExportOutput(
+            self._zero_order_hold.get_output_port(), "planar_position_command"
+        )
+
+        # Reference trajectory for pusher
+        builder.ExportOutput(
+            self._planar_pose_pub.GetOutputPort("desired_pusher_planar_pose_vector"),
+            "desired_pusher_planar_pose_vector",
+        )
+
+        # Reference trajectory for slider
+        builder.ExportOutput(
+            self._planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"),
+            "desired_slider_planar_pose_vector",
+        )
+
+        builder.BuildInto(self)

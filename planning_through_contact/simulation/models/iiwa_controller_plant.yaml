@@ -1,15 +1,27 @@
 directives:
 - add_model:
     name: iiwa
-    file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_with_box_collision.sdf
+    # file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_primitive_collision.urdf
+    file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_no_collision.urdf
+    default_joint_positions:
+        iiwa_joint_1: [0]
+        iiwa_joint_2: [0.1]
+        iiwa_joint_3: [0]
+        iiwa_joint_4: [-1.2]
+        iiwa_joint_5: [0]
+        iiwa_joint_6: [1.6]
+        iiwa_joint_7: [0]
 
 - add_weld:
     parent: world
-    child: iiwa::iiwa_link_0
+    child: iiwa::base
+    X_PC:
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.0, 0.0, 0.0]
 
 - add_model:
     name: pusher
-    file: package://planning_through_contact/pusher_floating.sdf
+    file: package://planning_through_contact/pusher_floating_hydroelastic.sdf
 
 - add_frame:
     name: pusher_base

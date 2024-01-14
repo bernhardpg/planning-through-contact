@@ -10,6 +10,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
     CylinderActuatedStation,
 )
+from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
+    IiwaHardwareStation,
+)
 from planning_through_contact.simulation.controllers.mpc_position_source import (
     MPCPositionSource,
 )
@@ -72,12 +75,13 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=1,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
-        scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
-        pusher_z_offset=0.03,
+        scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
+        use_hardware=False,
+        pusher_z_offset=0.1,
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -95,7 +99,7 @@ def run_sim(
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
 
     ## Set up position controller
-    position_controller = CylinderActuatedStation(
+    position_controller = IiwaHardwareStation(
         sim_config=sim_config, meshcat=station_meshcat
     )
 
@@ -107,13 +111,13 @@ def run_sim(
         state_estimator_meshcat=state_estimator_meshcat,
     )
     recording_name = (
-        plan.split(".")[0] + f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html"
+        plan.split(".")[0] + f"_cl{sim_config.closed_loop}" + ".html"
         if save_recording
         else None
     )
     # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
-    # environment.simulate(10, save_recording_as=recording_name)
+    # environment.simulate(3, save_recording_as=recording_name)
 
     if debug and isinstance(position_source, MPCPositionSource):
         for (
@@ -131,15 +135,21 @@ def run_sim(
 
 
 def run_multiple(
-    start: int, end: int, station_meshcat=None, state_estimator_meshcat=None
+    start: int,
+    end: int,
+    station_meshcat=None,
+    state_estimator_meshcat=None,
+    run_non_rounded=False,
 ):
     plans = [
         f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl"
         for i in range(start, end + 1)
-    ] + [
-        f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl"
-        for i in range(start, end + 1)
     ]
+    if run_non_rounded:
+        plans += [
+            f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl"
+            for i in range(start, end + 1)
+        ]
     print(f"Running {len(plans)} plans\n{plans}")
     for plan in plans:
         run_sim(
@@ -159,10 +169,15 @@ if __name__ == "__main__":
     station_meshcat = StartMeshcat()
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
-    # run_multiple(0, 9, station_meshcat=station_meshcat, state_estimator_meshcat=state_estimator_meshcat)
+    # run_multiple(
+    #     0,
+    #     9,
+    #     station_meshcat=station_meshcat,
+    #     state_estimator_meshcat=state_estimator_meshcat,
+    # )
     run_sim(
         # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/box_pushing_demos/hw_demo_C_2_rounded.pkl",
+        plan="trajectories/box_pushing_demos/hw_demo_C_8_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

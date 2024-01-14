@@ -1,0 +1,4 @@
+directives:
+- add_model:
+    name: t_pusher
+    file: package://planning_through_contact/t_pusher.sdf

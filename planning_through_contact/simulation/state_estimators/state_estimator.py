@@ -1,4 +1,6 @@
-from typing import List
+from typing import List, Optional
+import numpy as np
+from manipulation.scenarios import AddMultibodyTriad
 from pydrake.all import (
     Context,
     Diagram,
@@ -12,15 +14,22 @@ from pydrake.all import (
     GeometryInstance,
     RigidBody as DrakeRigidBody,
     Box as DrakeBox,
+    Cylinder as DrakeCylinder,
     GeometryInstance,
     MakePhongIllustrationProperties,
     Rgba,
+    RigidTransform,
+    RollPitchYaw,
+    Meshcat,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.systems.pusher_slider_pose_selector import (
     PusherSliderPoseSelector,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.sim_utils import AddSliderAndConfigureContact
 from planning_through_contact.simulation.state_estimators.plant_updater import (
     PlantUpdater,
 )
@@ -37,11 +46,14 @@ class StateEstimator(Diagram):
     def __init__(
         self,
         sim_config: PlanarPushingSimConfig,
-        environment,  # TODO: Fix circular import issue
-        add_visualizer: bool = False,
+        meshcat: Meshcat,
+        robot_model_name: str,
     ):
         super().__init__()
+        self._sim_config = sim_config
         self._goal_geometries = []
+        self._desired_pusher_geometry = None
+        self.meshcat = meshcat
         builder = DiagramBuilder()
 
         # Create the multibody plant and scene graph
@@ -50,17 +62,16 @@ class StateEstimator(Diagram):
         self._scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
         self._plant.RegisterAsSourceForSceneGraph(self._scene_graph)
 
-        slider_name, self.slider = environment.add_all_directives(
-            plant=self._plant, scene_graph=self._scene_graph
+        self.slider = AddSliderAndConfigureContact(
+            sim_config=sim_config, plant=self._plant, scene_graph=self._scene_graph
         )
-        robot_model_name = "pusher"  # TODO fix this, this will break when we transition to using the iiwa as the robot
         # Add system for updating the plant
         self._plant_updater: PlantUpdater = builder.AddNamedSystem(
             "plant_updater",
             PlantUpdater(
                 plant=self._plant,
                 robot_model_name=robot_model_name,
-                object_model_name=slider_name,
+                object_model_name=sim_config.slider.name,
             ),
         )
 
@@ -81,7 +92,7 @@ class StateEstimator(Diagram):
         )
 
         # Connect pusher slider planar pose selector
-        slider_idx = self._plant.GetBodyByName(slider_name).index()
+        slider_idx = self._plant.GetBodyByName(sim_config.slider.name).index()
         pusher_idx = self._plant.GetBodyByName("pusher").index()
 
         self._pusher_slider_pose_selector = builder.AddNamedSystem(
@@ -92,18 +103,14 @@ class StateEstimator(Diagram):
             self._pusher_slider_pose_selector.GetInputPort("body_poses"),
         )
 
-        # Export planar pose and velocity output ports
+        # Export planar pose output ports
         builder.ExportOutput(
             self._pusher_slider_pose_selector.GetOutputPort("slider_pose"),
-            "slider_pose",
-        )
-        builder.ExportOutput(
-            self._pusher_slider_pose_selector.GetOutputPort("slider_spatial_velocity"),
-            "slider_spatial_velocity",
+            "slider_pose_estimated",
         )
         builder.ExportOutput(
             self._pusher_slider_pose_selector.GetOutputPort("pusher_pose"),
-            "pusher_pose",
+            "pusher_pose_estimated",
         )
 
         # Export input ports
@@ -130,14 +137,34 @@ class StateEstimator(Diagram):
                 f"{model_instance_name}_state",
             )
 
-        if add_visualizer:
-            self.meshcat = StartMeshcat()  # type: ignore
-            visualizer = MeshcatVisualizer.AddToBuilder(
-                builder, self._scene_graph.get_query_output_port(), self.meshcat
-            )
-            if sim_config.visualize_desired:
-                assert sim_config.slider_goal_pose is not None
-                self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
+        visualizer = MeshcatVisualizer.AddToBuilder(
+            builder, self._scene_graph.get_query_output_port(), self.meshcat
+        )
+        self.meshcat.SetTransform(
+            path="/Cameras/default",
+            matrix=RigidTransform(
+                RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
+                np.array([1, 0, 0]),
+            ).GetAsMatrix4(),
+        )
+        if sim_config.visualize_desired:
+            assert sim_config.slider_goal_pose is not None
+            self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
+
+        if sim_config.draw_frames:
+            print(f"Drawing frames")
+            for frame_name in [
+                # "iiwa_link_7",
+                # "pusher_base",
+                # "t_pusher",
+                "pusher_end",
+            ]:
+                AddMultibodyTriad(
+                    self._plant.GetFrameByName(frame_name),
+                    self._scene_graph,
+                    length=0.1,
+                    radius=0.001,
+                )
 
         builder.BuildInto(self)
 
@@ -150,7 +177,9 @@ class StateEstimator(Diagram):
     def get_scene_graph(self) -> SceneGraph:
         return self._scene_graph
 
-    def _visualize_desired_slider_pose(self, desired_planar_pose: PlanarPose) -> None:
+    def _visualize_desired_slider_pose(
+        self, desired_planar_pose: PlanarPose, time_in_recording: float = 0.0
+    ) -> None:
         shapes = self.get_slider_shapes()
         poses = self.get_slider_shape_poses()
 
@@ -187,7 +216,56 @@ class StateEstimator(Diagram):
                 )
         else:
             for pose, geom_name in zip(poses, self._goal_geometries):
-                self.meshcat.SetTransform(geom_name, desired_pose.multiply(pose))
+                self.meshcat.SetTransform(
+                    geom_name, desired_pose.multiply(pose), time_in_recording
+                )
+
+    def _visualize_desired_pusher_pose(
+        self, desired_planar_pose: PlanarPose, time_in_recording: float = 0.0
+    ) -> None:
+        shape = self.get_pusher_shape()
+        shape = DrakeCylinder(shape.radius(), self._sim_config.pusher_z_offset)
+        # height = 0.1 # height for the actuated cylinder robot
+        height = shape.length() / 2
+        # height = self._sim_config.pusher_z_offset +( shape.length())/2 # height for iiwa
+        pose = self.get_pusher_shape_pose()
+        desired_pose = desired_planar_pose.to_pose(height, z_axis_is_positive=True)
+        if self._desired_pusher_geometry is None:
+            source_id = self._scene_graph.RegisterSource()
+            BOX_COLOR = COLORS["emeraldgreen"]
+            DESIRED_POSE_ALPHA = 0.4
+            geom_name = f"desired_pusher"
+            geom_instance = GeometryInstance(
+                desired_pose,  # desired_pose.multiply(pose),
+                shape,
+                geom_name,
+            )
+            curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
+                source_id,
+                geom_instance,
+            )
+            self._scene_graph.AssignRole(
+                source_id,
+                curr_shape_geometry_id,
+                MakePhongIllustrationProperties(BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)),
+            )
+
+            self._desired_pusher_geometry = geom_name
+            self.meshcat.SetObject(
+                geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA))
+            )
+        else:
+            self.meshcat.SetTransform(
+                self._desired_pusher_geometry,
+                desired_pose,  # desired_pose.multiply(pose),
+                time_in_recording,
+            )
+
+    def get_slider_min_height(self) -> float:
+        shapes = self.get_slider_shapes()
+        heights = [shape.height() for shape in shapes]
+        min_height = min(heights)
+        return min_height
 
     def get_slider_body(self) -> DrakeRigidBody:
         slider_body = self._plant.GetUniqueFreeBaseBodyOrThrow(self.slider)
@@ -217,3 +295,29 @@ class StateEstimator(Diagram):
         poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]
 
         return poses
+
+    def get_pusher_shape(self) -> DrakeCylinder:
+        pusher_body = self._plant.GetBodyByName("pusher")
+        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
+            pusher_body
+        )
+
+        inspector = self._scene_graph.model_inspector()
+        shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
+
+        # for now we only support Cylinder shapes
+        assert all([isinstance(shape, DrakeCylinder) for shape in shapes])
+        assert len(shapes) == 1, "Pusher should only have one shape"
+
+        return shapes[0]
+
+    def get_pusher_shape_pose(self) -> RigidTransform:
+        pusher_body = self._plant.GetBodyByName("pusher")
+        collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
+            pusher_body
+        )
+
+        inspector = self._scene_graph.model_inspector()
+        pose = inspector.GetPoseInFrame(collision_geometries_ids[0])
+
+        return pose

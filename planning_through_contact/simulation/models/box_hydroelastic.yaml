@@ -1,0 +1,4 @@
+directives:
+- add_model:
+    name: box
+    file: package://planning_through_contact/box_hydroelastic.sdf

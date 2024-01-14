@@ -94,6 +94,8 @@ class LinTrajSegment:
     end_time: float
     knot_points: npt.NDArray[np.float64]
     traj: Trajectory
+    # Zero or first order hold
+    order: Literal[0, 1] = 1
 
     @classmethod
     def from_knot_points(
@@ -101,27 +103,36 @@ class LinTrajSegment:
         knot_points: npt.NDArray[np.float64],
         start_time: float,
         end_time: float,
+        order: Literal[0, 1] = 1,
     ) -> "LinTrajSegment":
         if len(knot_points.shape) == 1:  # (NUM_SAMPLES, )
-            knot_point_times = np.linspace(start_time, end_time, len(knot_points))
-            samples = knot_points.reshape(
+            knot_points = knot_points.reshape(
                 (1, -1)
-            )  # FirstOrderHold expects values to be two-dimensional
-            num_dims = 1
-        elif len(knot_points.shape) == 2:  # (NUM_DIMS, NUM_SAMPLES)
-            num_dims, num_samples = knot_points.shape
+            )  # First/ZeroOrderHold expects values to be two-dimensional
 
-            if num_samples == 1:  # just a constant value throughout the traj time
-                knot_point_times = np.array([start_time, end_time])
-                samples = np.repeat(knot_points, 2, axis=1)
+        num_dims, num_samples = knot_points.shape
+
+        if num_samples == 1:  # just a constant value throughout the traj time
+            knot_point_times = np.array([start_time, end_time])
+            samples = np.repeat(knot_points, 2, axis=1)
+        else:
+            if order == 0:
+                knot_point_times = np.linspace(start_time, end_time, num_samples + 1)
+                # Repeat last knot point to get the correct number of samples
+                samples = np.hstack(
+                    (knot_points, knot_points[:, -1].reshape((num_dims, 1)))
+                )
             else:
                 knot_point_times = np.linspace(start_time, end_time, num_samples)
                 samples = knot_points
-        else:
-            raise ValueError("Invalid shape for knot points")
 
-        traj = PiecewisePolynomial.FirstOrderHold(knot_point_times, samples)
-        return cls(num_dims, start_time, end_time, knot_points, traj)
+        if order == 0:
+            traj = PiecewisePolynomial.ZeroOrderHold(knot_point_times, samples)
+        elif order == 1:
+            traj = PiecewisePolynomial.FirstOrderHold(knot_point_times, samples)
+        else:
+            raise ValueError("Invalid order")
+        return cls(num_dims, start_time, end_time, knot_points, traj, order)
 
     def eval(self, t: float) -> float | npt.NDArray[np.float64]:
         if self.num_dims == 1:
@@ -230,17 +241,19 @@ class FaceContactTrajSegment(AbstractTrajSegment):
         end_time: float,
         config: SliderPusherSystemConfig,
     ) -> "FaceContactTrajSegment":
-        p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time)  # type: ignore
-        p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time)  # type: ignore
-        lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time)  # type: ignore
+        # FirstOrderHold
+        p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time, 1)  # type: ignore
+        p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time, 1)  # type: ignore
+        lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time, 1)  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)  # type: ignore
 
         v_WB_x = p_WB_x.make_derivative()
         v_WB_y = p_WB_y.make_derivative()
 
-        c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time)  # type: ignore
-        c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time)  # type: ignore
-        f_B = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Bs), start_time, end_time)  # type: ignore
+        # ZeroOrderHold (Forward Euler integration expects constant input between steps/knot points)
+        c_n = LinTrajSegment.from_knot_points(knot_points.normal_forces, start_time, end_time, 0)  # type: ignore
+        c_f = LinTrajSegment.from_knot_points(knot_points.friction_forces, start_time, end_time, 0)  # type: ignore
+        f_B = LinTrajSegment.from_knot_points(np.hstack(knot_points.f_c_Bs), start_time, end_time, 0)  # type: ignore
         lam_dot = lam.make_derivative()
 
         sys = SliderPusherSystem(knot_points.contact_location, config)

@@ -6,26 +6,23 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
-from planning_through_contact.simulation.planar_pushing.planar_pushing_diagram import (
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim import (
-    PlanarPushingSimulation,
-)
-from scripts.planar_pushing.create_plan import get_slider_box, get_tee
-from planning_through_contact.simulation.planar_pushing.pusher_pose_to_joint_pos import (
+
+from planning_through_contact.simulation.sim_utils import LoadRobotOnly
+from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
 )
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     traj = PlanarPushingTrajectory.load(plan)
-
+    print(f"running plan:{plan}")
+    print(traj.config.dynamics_config)
     slider = traj.config.dynamics_config.slider
-
-    mpc_config = HybridMpcConfig(rate_Hz=20, horizon=20, step_size=0.05)
+    mpc_config = HybridMpcConfig()
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -34,32 +31,30 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         slider_goal_pose=traj.target_slider_planar_pose,
         visualize_desired=True,
         time_step=1e-3,
-        use_realtime=False,
+        use_realtime=True,
         delay_before_execution=1,
-        use_diff_ik=True,
         closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
-        save_plots=True,
+        save_plots=False,
+        scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
+        use_hardware=False,
     )
-    sim = PlanarPushingSimulation(traj, sim_config)
-    desired_slider_pose = sim_config.slider_start_pose.to_pose(
-        sim.station.get_slider_min_height()
-    )
-    for z in [0.05]:
+    robot_plant = LoadRobotOnly(sim_config, "iiwa_controller_plant.yaml")
+    step = 0.05
+    for z in [0.1, 0.2, 0.3, 0.4]:
         pass_coords = []
         fail_coords = []
-        for x in np.arange(0, 1, 0.05):
-            for y in np.arange(-1, 1, 0.05):
+        plt.figure()
+        for x in np.arange(0, 1.3, step):
+            for y in np.arange(-1, 1, step):
                 pusher_start_pose = PlanarPose(x, y, 0)
 
                 try:
                     desired_pusher_pose = pusher_start_pose.to_pose(z)
                     start_joint_positions = solve_ik(
-                        sim.diagram,
-                        sim.station,
+                        plant=robot_plant,
                         pose=desired_pusher_pose,
-                        current_slider_pose=desired_slider_pose,
                         default_joint_positions=sim_config.default_joint_positions,
                     )
                     # print(f"ik succeeded for {pusher_start_pose.vector()}")
