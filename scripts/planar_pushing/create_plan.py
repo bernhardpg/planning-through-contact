@@ -12,7 +12,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCost,
     ContactCostType,
-    PlanarCostFunctionTerms,
+    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
@@ -235,7 +235,7 @@ def create_plan(
             filename=f"{traj_name}_start_and_goal_{body_to_use}",
         )
 
-    cost_terms = PlanarCostFunctionTerms(
+    cost_terms = NonCollisionCost(
         obj_avoidance_quad_weight=0.4,
     )
 
