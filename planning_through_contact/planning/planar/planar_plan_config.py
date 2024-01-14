@@ -149,13 +149,13 @@ class ContactCostType(Enum):
 @dataclass
 class ContactCost:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
-    keypoint_arc_length: Optional[float] = 1.0
-    linear_arc_length: Optional[float] = 1.0
-    angular_arc_length: Optional[float] = 1.0
-    force_regularization: Optional[float] = 1.0
-    keypoint_velocity_regularization: Optional[float] = 1.0
-    ang_velocity_regularization: Optional[float] = 1.0
-    lin_velocity_regularization: Optional[float] = 1.0
+    keypoint_arc_length: Optional[float] = None
+    linear_arc_length: Optional[float] = None
+    angular_arc_length: Optional[float] = None
+    force_regularization: Optional[float] = None
+    keypoint_velocity_regularization: Optional[float] = None
+    ang_velocity_regularization: Optional[float] = None
+    lin_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
     # TODO(bernhardpg): Remove these terms
