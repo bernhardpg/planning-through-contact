@@ -477,26 +477,39 @@ class FaceContactMode(AbstractContactMode):
             # Minimize arc length on keypoint trajectories
 
             # Contact force regularization
-            for k, c_n in enumerate(self.variables.normal_forces):
-                self.prog_wrapper.add_quadratic_cost(k, k, c_n**2)
+            if cost_config.force_regularization is not None:
+                for k, c_n in enumerate(self.variables.normal_forces):
+                    self.prog_wrapper.add_quadratic_cost(
+                        k, k, cost_config.force_regularization * c_n**2
+                    )
 
-            for k, c_f in enumerate(self.variables.friction_forces):
-                self.prog_wrapper.add_quadratic_cost(k, k, c_f**2)
+                for k, c_f in enumerate(self.variables.friction_forces):
+                    self.prog_wrapper.add_quadratic_cost(
+                        k, k, cost_config.force_regularization * c_f**2
+                    )
 
-            # Velocity regularization (on slider keypoints)
-            slider = self.config.dynamics_config.slider.geometry
-            p_Wv_is = [
-                [
-                    slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                    for vertex_idx in range(len(slider.vertices))
+            # Velocity regularization
+            if cost_config.velocity_regularization is not None:
+                slider = self.config.dynamics_config.slider.geometry
+                p_Wv_is = [
+                    [
+                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
+                        for vertex_idx in range(len(slider.vertices))
+                    ]
+                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
                 ]
-                for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-            ]
-            for k in range(self.num_knot_points - 1):
-                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                    disp = vertex_k_next - vertex_k
-                    sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
+                num_keypoints = len(p_Wv_is)
+                for k in range(self.num_knot_points - 1):
+                    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                        disp = vertex_k_next - vertex_k
+                        sq_disp = (disp.T @ disp).item()
+                        self.prog_wrapper.add_quadratic_cost(
+                            k,
+                            k + 1,
+                            cost_config.velocity_regularization
+                            * (1 / num_keypoints)
+                            * sq_disp,
+                        )
 
         elif cost_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
@@ -557,7 +570,13 @@ class FaceContactMode(AbstractContactMode):
                 cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
                 self.prog_wrapper.add_quadratic_cost(k, k, cost)
 
-        if cost_config.force_regularization is not None:
+        # For the other costs we add force regularization here
+        # TODO(bernhardpg): This is messy and only kept this way because the other costs are
+        # experimental and will probably be removed
+        if (
+            not cost_config.cost_type == ContactCostType.STANDARD
+            and cost_config.force_regularization is not None
+        ):
             for k, c_n in enumerate(self.variables.normal_forces):
                 self.prog_wrapper.add_quadratic_cost(
                     k,

@@ -150,6 +150,7 @@ class ContactCostType(Enum):
 class ContactCost:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
     force_regularization: Optional[float] = 1.0
+    velocity_regularization: Optional[float] = 1.0
     mode_transition_cost: Optional[float] = None
     # TODO(bernhardpg): Remove these terms
     lin_displacements: Optional[float] = 1.0
