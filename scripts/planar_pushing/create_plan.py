@@ -239,8 +239,9 @@ def create_plan(
     # Configure non-collision cost
     non_collision_cost = NonCollisionCost(
         distance_to_object_quadratic=0.4,
+        distance_to_object_quadratic_preferred_distance=0.2,
         eucl_distance_squared=1.0,
-        eucl_distance=1.0,
+        eucl_distance=None,
     )
 
     config = PlanarPlanConfig(
@@ -248,7 +249,7 @@ def create_plan(
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
         num_knot_points_contact=4,
-        num_knot_points_non_collision=3,
+        num_knot_points_non_collision=4,
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
