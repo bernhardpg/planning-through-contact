@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -28,9 +28,14 @@ def add_continuity_constraints_btwn_modes(
     incoming_mode: "AbstractContactMode",
     edge: GcsEdge,
     only_continuity_on_slider: bool = False,
+    continuity_on_pusher_velocities: bool = False,
 ):
-    lhs = outgoing_mode.get_continuity_terms(edge, "last", only_continuity_on_slider)
-    rhs = incoming_mode.get_continuity_terms(edge, "first", only_continuity_on_slider)
+    lhs = outgoing_mode.get_continuity_terms(
+        edge, "last", only_continuity_on_slider, continuity_on_pusher_velocities
+    )
+    rhs = incoming_mode.get_continuity_terms(
+        edge, "first", only_continuity_on_slider, continuity_on_pusher_velocities
+    )
 
     constraint = eq(lhs, rhs)
     for c in constraint:
@@ -47,30 +52,39 @@ class ContinuityVariables:
     p_WB: NpVariableArray
     cos_th: sym.Variable
     sin_th: sym.Variable
+    # For non-collision modes we also enforce continuity over pusher velocities
+    # to ensure smooth transitions between Bezier curves
+    v_BP: Optional[NpVariableArray] = None
 
-    def vector(self) -> NpVariableArray | NpExpressionArray:
-        return np.concatenate(
-            (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
-        )
+    def vector(
+        self, include_pusher_velocities: bool = False
+    ) -> NpVariableArray | NpExpressionArray:
+        if include_pusher_velocities:
+            assert self.v_BP is not None
+            return np.concatenate(
+                (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th), self.v_BP.flatten())  # type: ignore
+            )
+        else:
+            return np.concatenate(
+                (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
+            )
 
-    def get_pure_variables(self) -> NpVariableArray:
+    def get_pure_variables(
+        self, include_pusher_velocities: bool = False
+    ) -> NpVariableArray:
         """
         Function that returns a vector with only the symbolic variables (as opposed to having some be symbolic Expressions)
         """
-        # some variables can be sym.Expression
-        if isinstance(self.p_BP[0, 0], sym.Expression):
-            vars = sym.Variables()
-            for expr_or_var in self.vector():
-                if isinstance(expr_or_var, sym.Expression):
-                    vars.insert(expr_or_var.GetVariables())
-                elif isinstance(expr_or_var, sym.Variable):
-                    vars.insert(expr_or_var)
-                else:
-                    raise RuntimeError("Must be a variable or expression!")
+        vars = sym.Variables()
+        for expr_or_var in self.vector(include_pusher_velocities):
+            if isinstance(expr_or_var, sym.Expression):
+                vars.insert(expr_or_var.GetVariables())
+            elif isinstance(expr_or_var, sym.Variable):
+                vars.insert(expr_or_var)
+            else:
+                raise RuntimeError("Must be a variable or expression!")
 
-            return np.array(list(vars))
-        else:  # NonCollisionMode: All variables are just sym.Variable
-            return self.vector()
+        return np.array(list(vars))
 
     def slider_vector(self) -> NpVariableArray | NpExpressionArray:
         return np.concatenate(
@@ -82,14 +96,15 @@ class ContinuityVariables:
         vertex_vars: NpVariableArray,
         mode: "AbstractContactMode",
         only_continuity_on_slider: bool = True,
+        continuity_on_pusher_velocities: bool = False,
     ) -> NpExpressionArray:
         if only_continuity_on_slider:
             # TODO(bernhardpg): This needs to be updated if I use equality elimination on NonCollisionModes too
             vars = self.slider_vector()
             exprs = vars  # for just the slider, all entries are variables
         else:  # contuity on both objects
-            exprs = self.vector()
-            vars = self.get_pure_variables()
+            exprs = self.vector(continuity_on_pusher_velocities)
+            vars = self.get_pure_variables(continuity_on_pusher_velocities)
 
         A, b = sym.DecomposeAffineExpressions(exprs, vars)
         var_idxs = mode.get_variable_indices_in_gcs_vertex(vars)
@@ -200,10 +215,11 @@ class AbstractContactMode(ABC):
         edge: GcsEdge,
         first_or_last: Literal["first", "last"],
         only_continuity_on_slider: bool = False,
+        continuity_on_pusher_velocities: bool = False,
     ) -> NpExpressionArray | NpVariableArray:
         vars = self.get_continuity_vars(first_or_last)
         edge_vars = edge.xu() if first_or_last == "last" else edge.xv()
         terms = vars.create_expressions_with_vertex_variables(
-            edge_vars, self, only_continuity_on_slider
+            edge_vars, self, only_continuity_on_slider, continuity_on_pusher_velocities
         )
         return terms

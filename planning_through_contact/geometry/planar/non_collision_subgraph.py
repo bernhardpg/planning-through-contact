@@ -37,10 +37,15 @@ def gcs_add_edge_with_continuity(
     outgoing: VertexModePair,
     incoming: VertexModePair,
     only_continuity_on_slider: bool = False,
+    continuity_on_pusher_velocities: bool = False,
 ) -> None:
     edge = gcs.AddEdge(outgoing.vertex, incoming.vertex)
     add_continuity_constraints_btwn_modes(
-        outgoing.mode, incoming.mode, edge, only_continuity_on_slider
+        outgoing.mode,
+        incoming.mode,
+        edge,
+        only_continuity_on_slider,
+        continuity_on_pusher_velocities,
     )
     return edge
 

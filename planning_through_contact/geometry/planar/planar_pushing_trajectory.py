@@ -419,7 +419,6 @@ class PlanarPushingTrajectory:
         self.start_times = start_and_end_times[:-1]
         self.end_times = start_and_end_times[1:]
 
-        # Trajectory segments that only contain "global" states
         self.traj_segments = [
             NonCollisionTrajSegment.from_knot_points(p, start, end)
             if isinstance(p, NonCollisionVariables)
