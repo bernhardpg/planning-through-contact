@@ -31,6 +31,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
@@ -55,7 +56,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = False
+DEBUG = True
 
 
 @pytest.mark.parametrize(
@@ -76,7 +77,10 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
     for edge in subgraph.gcs.Edges():
         assert len(edge.GetConstraints()) == num_continuity_variables
 
-    if subgraph.config.avoid_object and subgraph.config.avoidance_cost == "quadratic":
+    if (
+        subgraph.config.non_collision_cost.avoid_object
+        and subgraph.config.non_collision_cost.distance_to_object_quadratic is not None
+    ):
         # Check costs are correctly added to GCS instance
         for v in subgraph.gcs.Vertices():
             if v.name() in ("source", "target"):
@@ -186,9 +190,16 @@ def test_non_collision_subgraph_initial_and_final(
             "finger_final": PlanarPose(0.20, 0.1, 0),
             "pusher_velocity_continuity": True,
         },
+        {
+            "boundary_conds": True,
+            "avoid_object": False,
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0.1, 0),
+            "eucl_distance_cost": True,
+        },
     ],
     indirect=["subgraph"],
-    ids=[1, 2, 3, 4, 5],
+    ids=[1, 2, 3, 4, "cont_pusher_vel", "eucl_dist"],
 )
 def test_subgraph_planning(
     subgraph: NonCollisionSubGraph,
@@ -258,7 +269,7 @@ def test_subgraph_planning(
         ]
     assert all([v == t for v, t in zip(vertex_names, targets)])
 
-    if subgraph.config.avoid_object:
+    if subgraph.config.non_collision_cost.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         finger_traj = np.hstack(
             [
@@ -368,7 +379,7 @@ def test_subgraph_with_contact_modes(
         ]
     )
 
-    if subgraph.config.avoid_object:
+    if subgraph.config.non_collision_cost.avoid_object:
         first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,
@@ -395,7 +406,12 @@ def test_subgraph_with_contact_modes(
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
 def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object: bool):
-    plan_config.avoid_object = avoid_object
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0
+    )
+    if avoid_object:
+        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+
     plan_config.num_knot_points_non_collision = 4
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
     gcs = opt.GraphOfConvexSets()
@@ -452,7 +468,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
         ]
     )
 
-    if subgraph.config.avoid_object:
+    if subgraph.config.non_collision_cost.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
         finger_traj = np.hstack(
             [
@@ -485,7 +501,11 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
 def test_subgraph_contact_modes_t_pusher(
     plan_config: PlanarPlanConfig, avoid_object: bool, gcs_options
 ):
-    plan_config.avoid_object = avoid_object
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0
+    )
+    if avoid_object:
+        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
     plan_config.num_knot_points_non_collision = 4
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
     plan_config.dynamics_config.pusher_radius = 0.015
@@ -647,7 +667,7 @@ def test_subgraph_with_contact_modes_band_sparsity(
         ]
     )
 
-    if subgraph.config.avoid_object:
+    if subgraph.config.non_collision_cost.avoid_object:
         first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
         assert_object_is_avoided(
             subgraph.slider.geometry,

@@ -25,6 +25,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -186,13 +187,14 @@ def test_pos_in_loc(rigid_body_box: RigidBody) -> None:
 def test_eucl_dist(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 3
     plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
-    plan_config.minimize_squared_eucl_dist = False
+    plan_config.non_collision_cost = NonCollisionCost(pusher_arc_length=1.0)
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
-    assert len(mode.prog.linear_costs()) == NUM_KNOT_POINTS - 1
+    assert len(mode.prog.linear_costs()) == 0
     assert len(mode.prog.quadratic_costs()) == 0
+    assert len(mode.prog.l2norm_costs()) == NUM_KNOT_POINTS - 1
 
 
 def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
@@ -241,7 +243,10 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 5
     plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
     plan_config.dynamics_config.pusher_radius = 0.03
-    plan_config.avoid_object = True
+
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0, distance_to_object_quadratic=1.0
+    )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
@@ -290,8 +295,10 @@ def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
     NUM_KNOT_POINTS = 5
     plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
     plan_config.dynamics_config.pusher_radius = 0.03
-    plan_config.avoid_object = True
-    plan_config.avoidance_cost = "socp_single_mode"
+
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0, distance_to_object_socp_single_mode=1.0
+    )
     loc = PolytopeContactLocation(ContactLocation.FACE, 3)
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
@@ -367,8 +374,14 @@ def test_avoid_object_t_pusher(
 ) -> None:
     plan_config.num_knot_points_non_collision = 5
     plan_config.dynamics_config.pusher_radius = 0.015
-    plan_config.avoid_object = True
-    plan_config.avoidance_cost = cost
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0
+    )
+    if cost == "quadratic":
+        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+    else:  # "socp_single_mode"
+        plan_config.non_collision_cost.distance_to_object_socp_single_mode = 1.0
+
     plan_config.time_non_collision = 3
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
 

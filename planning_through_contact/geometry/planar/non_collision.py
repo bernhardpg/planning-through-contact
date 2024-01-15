@@ -9,6 +9,7 @@ from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
+    L2NormCost,
     LinearConstraint,
     LinearCost,
     LorentzConeConstraint,
@@ -240,6 +241,11 @@ class NonCollisionMode(AbstractContactMode):
             self.contact_location,
             self.dynamics_config.pusher_radius,
         )
+
+        self.l2_norm_costs = []
+        self.squared_eucl_dist_cost = None
+        self.quadratic_distance_cost = None
+
         self._define_constraints()
         self._define_cost()
 
@@ -277,7 +283,9 @@ class NonCollisionMode(AbstractContactMode):
         return exprs
 
     def _define_cost(self) -> None:
-        if self.config.minimize_squared_eucl_dist:
+        self.cost_config = self.config.non_collision_cost
+
+        if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
                 position_diffs = [
                     p_next - p_curr
@@ -288,55 +296,51 @@ class NonCollisionMode(AbstractContactMode):
                 position_diffs = np.vstack(position_diffs)
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-                self.prog.AddQuadraticCost(
-                    self.config.cost_terms.sq_eucl_dist * squared_eucl_dist,
+                self.squared_eucl_dist_cost = self.prog.AddQuadraticCost(
+                    self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
                     is_convex=True,
                 )
 
-        else:  # Minimize total Euclidean distance
-            position_diffs = [
-                p_next - p_curr
-                for p_next, p_curr in zip(
-                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
+        if self.cost_config.pusher_arc_length is not None:
+            for k in range(self.num_knot_points - 1):
+                vars = np.concatenate(
+                    [
+                        self.variables.p_BPs[k].flatten(),
+                        self.variables.p_BPs[k + 1].flatten(),
+                    ]
                 )
-            ]
-            slacks = self.prog.NewContinuousVariables(len(position_diffs), "t")
-            for d, s in zip(position_diffs, slacks):
-                # Let d := diff
-                # we want to minimize the Euclidean distance:
-                #   minimize sqrt(d_1^2 + d_2^2)
-                # reformulate as:
-                #   minimize s s.t. s >= sqrt(d_1^2 + d_2^2)
-                # which is exactly a Lorentz cone constraint:
-                # (s,d) \in LorentzCone <=> s >= sqrt(d_1^2 + d_2^2)
-                vec = np.vstack([[s], d]).flatten()  # (s, x_diff, y_diff)
-                self.prog.AddLorentzConeConstraint(vec)
-                self.prog.AddLinearCost(s)
+                distance = self.variables.p_BPs[k + 1] - self.variables.p_BPs[k]
+                cost_expr = self.cost_config.pusher_arc_length * distance
+                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                cost = self.prog.AddL2NormCost(A, b, vars)
+                self.l2_norm_costs.append(cost)
 
-        if self.config.avoid_object:
+        if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
             dists_for_each_plane = [
                 [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
                 for plane in planes
             ]
-            if self.config.avoidance_cost == "linear":
-                raise NotImplementedError("Will be removed!")
-                self.prog.AddLinearCost(
-                    -self.config.cost_terms.obj_avoidance_lin * np.sum(dists)
-                )  # maximize distances
 
-            elif self.config.avoidance_cost == "quadratic":
+            if self.cost_config.distance_to_object_quadratic is not None:
                 squared_dists = [
-                    self.config.cost_terms.obj_avoidance_quad_weight
-                    * (d - self.config.cost_terms.obj_avoidance_quad_dist) ** 2
+                    self.cost_config.distance_to_object_quadratic
+                    * (
+                        d
+                        - self.cost_config.distance_to_object_quadratic_preferred_distance
+                    )
+                    ** 2
                     for dist in dists_for_each_plane
                     for d in dist
                 ]
-                self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
+                self.quadratic_distance_cost = self.prog.AddQuadraticCost(
+                    np.sum(squared_dists), is_convex=True
+                )
 
-            elif (
-                self.config.avoidance_cost == "socp_single_mode"
-            ):  # NOTE: Only a research feature for adding socp costs on a single mode (i.e. not in GCS)
+            if self.cost_config.distance_to_object_socp_single_mode:
+                # TODO: Can probably get rid of this
+
+                # NOTE: Only a research feature for adding socp costs on a single mode (i.e. not in GCS)
                 for dists in dists_for_each_plane:
                     dists_except_first_and_last = dists[1:-1]
                     slacks = self.prog.NewContinuousVariables(
@@ -355,10 +359,11 @@ class NonCollisionMode(AbstractContactMode):
 
                         self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
                         self.prog.AddLinearCost(
-                            self.config.cost_terms.obj_avoidance_socp * s
+                            self.cost_config.distance_to_object_socp_single_mode * s
                         )
 
-        if self.terminal_cost:  # Penalize difference from target position on slider
+        # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
+        if self.terminal_cost:  # Penalize difference from target position on slider.
             assert self.config.start_and_goal is not None
 
             pos_diff = (
@@ -518,39 +523,14 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.v_BPs[-1] if self.num_knot_points > 1 else None,
             )
 
-    # TODO(bernhardpg): refactor common code
-    def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        if self.config.avoid_object and self.config.avoidance_cost == "quadratic":
-            assert len(self.prog.quadratic_costs()) == 2
-        else:
-            assert len(self.prog.quadratic_costs()) == 1
-
-        eucl_dist_cost = self.prog.quadratic_costs()[0]  # should only be one cost
-        var_idxs = self.get_variable_indices_in_gcs_vertex(eucl_dist_cost.variables())
-        return var_idxs, eucl_dist_cost.evaluator()
-
-    # TODO(bernhardpg): refactor common code
-    def _get_object_avoidance_cost_term(
-        self,
-    ) -> Tuple[List[int], LinearCost | QuadraticCost]:
-        if self.config.avoidance_cost == "linear":
-            assert len(self.prog.linear_costs()) == 1
-            object_avoidance_cost = self.prog.linear_costs()[0]
-        elif self.config.avoidance_cost == "quadratic":
-            assert len(self.prog.quadratic_costs()) == 2
-            object_avoidance_cost = self.prog.quadratic_costs()[1]
-        else:
-            raise NotImplementedError(
-                f"Cannot get object avoidance cost terms for cost type {self.config.avoidance_cost}."
-            )
-
-        var_idxs = self.get_variable_indices_in_gcs_vertex(
-            object_avoidance_cost.variables()
-        )
-        return var_idxs, object_avoidance_cost.evaluator()
+    def _get_cost_terms(self, cost: Binding) -> Tuple[List[int], QuadraticCost]:
+        var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
+        return var_idxs, cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
         is_target_or_source = self.num_knot_points == 1
+
+        # TODO: This is old code that is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if is_target_or_source:
             assert (
                 len(self.prog.quadratic_costs()) == 2
@@ -564,47 +544,53 @@ class NonCollisionMode(AbstractContactMode):
                 new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
                 vertex.AddCost(new_binding)
         else:
-            # euclidean distance cost
-            var_idxs, evaluator = self._get_eucl_dist_cost_term()
-            vars = vertex.x()[var_idxs]
-            binding = Binding[QuadraticCost](evaluator, vars)
-            vertex.AddCost(binding)
+            if self.cost_config.pusher_velocity_regularization is not None:
+                var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
+                vars = vertex.x()[var_idxs]
+                binding = Binding[QuadraticCost](evaluator, vars)
+                vertex.AddCost(binding)
 
-            if self.config.avoid_object:
-                if self.config.avoidance_cost in ["quadratic", "linear"]:
-                    var_idxs, evaluator = self._get_object_avoidance_cost_term()
+            if self.cost_config.pusher_arc_length is not None:
+                assert len(self.l2_norm_costs) > 0
+
+                # Add L2 norm cost terms
+                for cost in self.l2_norm_costs:
+                    var_idxs, evaluator = self._get_cost_terms(cost)
                     vars = vertex.x()[var_idxs]
-                    cost_type = (
-                        LinearCost
-                        if self.config.avoidance_cost == "linear"
-                        else QuadraticCost
-                    )
-                    binding = Binding[cost_type](evaluator, vars)
+                    binding = Binding[L2NormCost](evaluator, vars)
                     vertex.AddCost(binding)
-                else:  # socp
-                    # TODO(bernhardpg): Clean up this part
-                    planes = self.slider_geometry.get_contact_planes(
-                        self.contact_location.idx
-                    )
-                    for plane in planes:
-                        for p_BP in self.variables.p_BPs:
-                            # A = [a^T; 0]
-                            NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
-                            NUM_DIMS = 2
-                            A = np.zeros((NUM_VARS, NUM_DIMS))
-                            A[0, :] = (
-                                plane.a.T * self.config.cost_terms.obj_avoidance_socp
-                            )
-                            # b = [b; 1]
-                            b = np.ones((NUM_VARS, 1))
-                            b[0] = plane.b
-                            b = b * self.config.cost_terms.obj_avoidance_socp
 
-                            # z = [a^T x + b; 1]
-                            cost = PerspectiveQuadraticCost(A, b)
-                            vars_in_vertex = vertex.x()[
-                                self.prog.FindDecisionVariableIndices(p_BP)
-                            ]
-                            vertex.AddCost(
-                                Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
-                            )
+            # The code for adding cost for avoiding the slider is kind of hacky
+            # to avoid spending time on generalizing it to the case where we
+            # just want to test one mode.
+            if self.cost_config.distance_to_object_quadratic is not None:
+                var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
+                vars = vertex.x()[var_idxs]
+                binding = Binding[QuadraticCost](evaluator, vars)
+                vertex.AddCost(binding)
+
+            if self.cost_config.distance_to_object_socp:
+                # TODO(bernhardpg): Clean up this part
+                planes = self.slider_geometry.get_contact_planes(
+                    self.contact_location.idx
+                )
+                for plane in planes:
+                    for p_BP in self.variables.p_BPs:
+                        # A = [a^T; 0]
+                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
+                        NUM_DIMS = 2
+                        A = np.zeros((NUM_VARS, NUM_DIMS))
+                        A[0, :] = plane.a.T * self.cost_config.distance_to_object_socp
+                        # b = [b; 1]
+                        b = np.ones((NUM_VARS, 1))
+                        b[0] = plane.b
+                        b = b * self.cost_config.distance_to_object_socp
+
+                        # z = [a^T x + b; 1]
+                        cost = PerspectiveQuadraticCost(A, b)
+                        vars_in_vertex = vertex.x()[
+                            self.prog.FindDecisionVariableIndices(p_BP)
+                        ]
+                        vertex.AddCost(
+                            Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
+                        )

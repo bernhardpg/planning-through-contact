@@ -81,12 +81,13 @@ def test_planner_construction(
         assert len(costs) == len(m.prog.GetAllCosts())
 
         for idx, cost in enumerate(costs):
-            var_idxs = m._get_cost_terms()[0][idx]
-            target_vars = Variables(v.x()[var_idxs])
-            assert target_vars.EqualTo(Variables(cost.variables()))
+            if len(m.prog.linear_costs()) > 0:
+                var_idxs = m._get_cost_terms(m.prog.linear_costs())[0][idx]
+                target_vars = Variables(v.x()[var_idxs])
+                assert target_vars.EqualTo(Variables(cost.variables()))
 
-            # Costs should be linear in SDP relaxation
-            assert isinstance(cost.evaluator(), LinearCost)
+                # Costs should be linear in SDP relaxation
+                assert isinstance(cost.evaluator(), LinearCost)
 
     assert planner.source_subgraph is not None
     assert planner.target_subgraph is not None
@@ -524,6 +525,59 @@ def test_make_plan_band_sparsity_box(
     ids=[1, 2],
 )
 def test_make_plan_band_sparsity_t_pusher(
+    planner: PlanarPushingPlanner,
+) -> None:
+    solver_params = PlanarSolverParams(save_solver_output=DEBUG)
+    result = planner._solve(solver_params)
+    assert result.is_success()
+
+    path = planner.get_solution_path(result)
+    traj = path.to_traj()
+
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.pusher_pose_initial,
+        planner.slider_pose_target,
+        planner.pusher_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
+
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            "use_band_sparsity": True,
+            "body": "box",
+            "standard_cost": True,
+        },
+    ],
+    indirect=["planner"],
+    ids=[1],
+)
+def test_planner_standard_cost(
     planner: PlanarPushingPlanner,
 ) -> None:
     solver_params = PlanarSolverParams(save_solver_output=DEBUG)

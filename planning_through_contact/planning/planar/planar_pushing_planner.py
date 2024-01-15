@@ -61,12 +61,18 @@ class PlanarPushingPlanner:
         self.source = None
         self.target = None
 
-        if self.config.avoid_object and config.num_knot_points_non_collision <= 2:
+        if (
+            self.config.non_collision_cost.avoid_object
+            and config.num_knot_points_non_collision <= 2
+        ):
             raise ValueError(
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if self.config.avoid_object and self.config.allow_teleportation:
+        if (
+            self.config.non_collision_cost.avoid_object
+            and self.config.allow_teleportation
+        ):
             raise ValueError("Cannot avoid object while allowing teleportation")
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the
@@ -90,9 +96,9 @@ class PlanarPushingPlanner:
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
 
-        if self.config.contact_config.mode_transition_cost is not None:
+        if self.config.contact_config.cost.mode_transition_cost is not None:
             for v in self.contact_vertices:
-                v.AddCost(self.config.contact_config.mode_transition_cost)  # type: ignore
+                v.AddCost(self.config.contact_config.cost.mode_transition_cost)  # type: ignore
 
     @property
     def num_contact_modes(self) -> int:
@@ -301,7 +307,8 @@ class PlanarPushingPlanner:
     ) -> VertexModePair:
         if (
             initial_or_final == "final"
-            and self.config.contact_config.cost_type == ContactCostType.OPTIMAL_CONTROL
+            and self.config.contact_config.cost.cost_type
+            == ContactCostType.OPTIMAL_CONTROL
         ):  # we don't enforce target position for slider with this cost
             # set_slider_pose = False
             # terminal_cost = True

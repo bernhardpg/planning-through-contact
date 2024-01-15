@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -39,6 +39,10 @@ class BandSparseSemidefiniteRelaxation:
 
         # Constraints that will just be added directly to SDP and will not be multiplied
         self.independent_constraints = []
+
+        # Costs that will just be added directly to SDP
+        self.independent_costs = []
+        self.l2_norm_costs = []
 
         # Include quadratic terms
         for i in range(num_groups):
@@ -109,6 +113,24 @@ class BandSparseSemidefiniteRelaxation:
         constraint = self.prog.AddConstraint(*args)
         self.independent_constraints.append(constraint)
 
+    def add_l2_norm_cost(self, A, b, vars):
+        """
+        Add a cost that is just added to the relaxation without any tightening constraints
+        """
+        cost = self.prog.AddL2NormCost(A, b, vars)
+        self.l2_norm_costs.append(cost)
+
+        return cost
+
+    def add_independent_cost(self, *args):
+        """
+        Add a cost that is just added to the relaxation without any tightening constraints
+        """
+        cost = self.prog.AddCost(*args)
+        self.independent_costs.append(cost)
+
+        return cost
+
     # TODO(bernhardpg): Temporary function to make it possible to use my old code
     def _make_bbox_to_expr(
         self, bounding_box_bindings: List[Binding[BoundingBoxConstraint]]  # type: ignore
@@ -132,7 +154,9 @@ class BandSparseSemidefiniteRelaxation:
 
         return np.array(bounding_box_constraints)
 
-    def make_relaxation(self, minimize_trace: bool = False) -> MathematicalProgram:
+    def make_relaxation(
+        self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
+    ) -> MathematicalProgram:
         relaxed_prog = MathematicalProgram()
 
         # First gather variables
@@ -182,6 +206,17 @@ class BandSparseSemidefiniteRelaxation:
         # We add independent constraints without any fancy relaxation machinery
         for const in self.independent_constraints:
             relaxed_prog.AddConstraint(const.evaluator(), const.variables())
+
+        # We add independent costs without any fancy relaxation machinery
+        for cost in self.independent_costs:
+            relaxed_prog.AddCost(cost.evaluator(), cost.variables())
+
+        if add_l2_norm_cost:
+            for cost in self.l2_norm_costs:
+                A = cost.evaluator().A()
+                b = cost.evaluator().b()
+                vars = cost.variables()
+                relaxed_prog.AddL2NormCostUsingConicConstraint(A, b, vars)
 
         # Add all linear constraints directly
         for idx in range(self.num_groups):
@@ -407,10 +442,9 @@ class BandSparseSemidefiniteRelaxation:
                 # TODO(bernhardpg): Seems like a bug that the lower and upper bound is scaled by 2?
                 relaxed_prog.AddLinearCost(cost)
 
-        if minimize_trace:
-            EPS = 1.0
+        if trace_cost is not None:
             for X in self.Xs.values():
-                relaxed_prog.AddLinearCost(EPS * np.trace(X))
+                relaxed_prog.AddLinearCost(trace_cost * np.trace(X))
 
         self.relaxed_prog = relaxed_prog
         return self.relaxed_prog
@@ -459,12 +493,10 @@ class BandSparseSemidefiniteRelaxation:
         return big_X
 
     # TODO: This should not really be a part of this class
-    def make_full_relaxation(self, minimize_trace: bool = False) -> MathematicalProgram:
+    def make_full_relaxation(self, trace_cost: Optional[float]) -> MathematicalProgram:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
-        if minimize_trace:
-            EPS = 0.01
-
+        if trace_cost is not None:
             assert (
                 len(self.relaxed_prog.positive_semidefinite_constraints()) == 1
             )  # should only be one big X
@@ -472,5 +504,5 @@ class BandSparseSemidefiniteRelaxation:
             N = np.sqrt(len(X))
             assert int(N) == N
             X = X.reshape((int(N), int(N)))
-            self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
+            self.relaxed_prog.AddLinearCost(trace_cost * np.trace(X))
         return self.relaxed_prog

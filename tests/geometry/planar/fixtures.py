@@ -35,7 +35,9 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
     ContactConfig,
+    ContactCost,
     ContactCostType,
+    NonCollisionCost,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
@@ -64,13 +66,18 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
+    non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
+    contact_cost = ContactCost(
+        cost_type=ContactCostType.SQ_VELOCITIES, force_regularization=0.1
+    )
+    contact_config = ContactConfig(cost=contact_cost)
     cfg = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         use_approx_exponential_map=False,
         use_band_sparsity=False,
-        avoidance_cost="quadratic",  # TODO: Tests should be updated to use socp cost
+        non_collision_cost=non_collision_cost,
+        contact_config=contact_config,
     )
-    cfg.contact_config.cost_type = ContactCostType.SQ_VELOCITIES
     return cfg
 
 
@@ -134,7 +141,7 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
-    plan_config.contact_config.cost_type = request.param.get(
+    plan_config.contact_config.cost.cost_type = request.param.get(
         "contact_cost", ContactCostType.SQ_VELOCITIES
     )
 
@@ -171,8 +178,18 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
-    plan_config.avoid_object = request.param.get("avoid_object", False)
-    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
+
+    if request.param.get("eucl_distance_cost"):
+        plan_config.non_collision_cost = NonCollisionCost(pusher_arc_length=1.0)
+    else:
+        plan_config.non_collision_cost = NonCollisionCost(
+            pusher_velocity_regularization=1.0
+        )
+    if request.param.get("avoid_object"):
+        if request.param.get("avoidance_cost_type", "quadratic"):
+            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        else:
+            plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.continuity_on_pusher_velocity = request.param.get(
         "pusher_velocity_continuity", False
@@ -220,27 +237,42 @@ def planner(
 
     if request.param.get("avoid_object"):
         plan_config.num_knot_points_non_collision = 4
-        plan_config.avoid_object = True
-    else:
-        plan_config.avoid_object = False
+        if request.param.get("avoidance_cost_type", "quadratic"):
+            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        else:
+            plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.dynamics_config.pusher_radius = 0.015
-    contact_config = ContactConfig(
-        cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
-        mode_transition_cost=None,
-        delta_vel_max=0.1,
-        delta_theta_max=0.8,
-    )
+
+    if request.param.get("standard_cost"):
+        contact_cost = ContactCost(
+            cost_type=ContactCostType.STANDARD,
+            keypoint_arc_length=1,
+            linear_arc_length=None,
+            angular_arc_length=None,
+            force_regularization=0.1,
+            keypoint_velocity_regularization=None,
+            ang_velocity_regularization=1.0,
+            lin_velocity_regularization=0.1,
+            trace=1e-5,
+        )
+        contact_config = ContactConfig(contact_cost)
+    else:
+        cost_config = ContactCost(
+            cost_type=ContactCostType.OPTIMAL_CONTROL,
+            force_regularization=5.0,
+            mode_transition_cost=None,
+        )
+        contact_config = ContactConfig(
+            cost=cost_config,
+            delta_vel_max=0.1,
+            delta_theta_max=0.8,
+        )
+
     plan_config.contact_config = request.param.get("contact_config", contact_config)
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
-    plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
-    plan_config.penalize_mode_transitions = request.param.get(
-        "penalize_mode_transition", False
-    )
-    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
     plan_config.continuity_on_pusher_velocity = request.param.get(
         "pusher_velocity_continuity", False

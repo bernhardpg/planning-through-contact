@@ -29,8 +29,9 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
+    ContactCost,
     ContactCostType,
-    PlanarCostFunctionTerms,
+    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
@@ -69,9 +70,12 @@ DEBUG = False
 
 
 def test_rounding_one_mode() -> None:
-    contact_config = ContactConfig(
+    cost_config = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
+    )
+    contact_config = ContactConfig(
+        cost=cost_config,
         delta_vel_max=0.15,
         delta_theta_max=0.4,
     )
@@ -212,25 +216,27 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     dynamics_config = SliderPusherSystemConfig(
         pusher_radius=0.035, slider=slider, friction_coeff_slider_pusher=0.25
     )
-    contact_config = ContactConfig(
+    contact_cost = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
-        sq_forces=5.0,
+        force_regularization=5.0,
         mode_transition_cost=1.0,
+    )
+    contact_config = ContactConfig(
+        cost=contact_cost,
         delta_vel_max=0.1,
         delta_theta_max=0.8,
     )
-    cost_terms = PlanarCostFunctionTerms(
-        obj_avoidance_quad_weight=0.4,
+    non_collision_cost = NonCollisionCost(
+        distance_to_object_quadratic=0.4,
+        pusher_velocity_regularization=1.0,
     )
     config = PlanarPlanConfig(
         dynamics_config=dynamics_config,
-        cost_terms=cost_terms,
+        non_collision_cost=non_collision_cost,
         time_in_contact=2.0,
         time_non_collision=1.0,
         num_knot_points_contact=3,
         num_knot_points_non_collision=3,
-        avoid_object=True,
-        avoidance_cost="quadratic",
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,

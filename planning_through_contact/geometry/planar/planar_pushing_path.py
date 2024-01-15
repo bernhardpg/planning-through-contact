@@ -270,6 +270,8 @@ class PlanarPushingPath:
                 raise RuntimeError("Rounding was not succesfull.")
         else:
             if not result.is_success():
-                print("Warning! Rounding was not succesfull")
+                print(
+                    "Warning, rounding did not return is_success() == True, and might now have converged"
+                )
 
         return result

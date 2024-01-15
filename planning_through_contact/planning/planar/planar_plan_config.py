@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Literal, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -127,39 +127,64 @@ class PlanarSolverParams:
 
 
 @dataclass
-class PlanarCostFunctionTerms:
-    # TODO: Refactor this into NonCollisionCost similar to face contaacts
-    # Non-collision
-    obj_avoidance_lin: float = 0.1  # TODO: Remove
-    obj_avoidance_quad_dist: float = 0.2  # TODO: Remove
-    obj_avoidance_quad_weight: float = 0.4  # TODO: Remove
-    obj_avoidance_socp: float = 0.001
-    sq_eucl_dist: float = 1.0
+class NonCollisionCost:
+    distance_to_object_quadratic_preferred_distance: float = 0.2  # TODO: Remove
+    distance_to_object_quadratic: Optional[float] = None
+    distance_to_object_socp: Optional[float] = None
+    # NOTE: The single mode is only used to test one non-collision mode at a time
+    distance_to_object_socp_single_mode: Optional[float] = None
+    pusher_velocity_regularization: Optional[float] = None
+    pusher_arc_length: Optional[float] = None
+
+    @property
+    def avoid_object(self) -> bool:
+        return (
+            self.distance_to_object_quadratic is not None
+            or self.distance_to_object_socp is not None
+            or self.distance_to_object_socp_single_mode is not None
+        )
 
 
 class ContactCostType(Enum):
+    # TODO(bernhardpg): All these costs are experimental and will probably be removed
     SQ_VELOCITIES = 0
     KEYPOINT_DISPLACEMENTS = 1
     OPTIMAL_CONTROL = 2
+    # TODO: Keep only this cost
+    STANDARD = 3
 
 
 @dataclass
-class ContactConfig:
+class ContactCost:
     cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    keypoint_arc_length: Optional[float] = None
+    linear_arc_length: Optional[float] = None
+    angular_arc_length: Optional[float] = None
+    force_regularization: Optional[float] = None
+    keypoint_velocity_regularization: Optional[float] = None
+    ang_velocity_regularization: Optional[float] = None
+    lin_velocity_regularization: Optional[float] = None
+    mode_transition_cost: Optional[float] = None
+    trace: Optional[float] = None
+    # TODO(bernhardpg): Remove these terms
     lin_displacements: Optional[float] = 1.0
     ang_displacements: Optional[float] = 1.0
-    sq_forces: Optional[float] = 1.0
-    mode_transition_cost: Optional[float] = None
-    # Min and max values for the scaled position of the finger on the face of the slider
-    lam_min: Optional[float] = 0.0
-    lam_max: Optional[float] = 1.0
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             assert self.lin_displacements is not None
             assert self.ang_displacements is not None
+
+
+# TODO: Refactor this
+@dataclass
+class ContactConfig:
+    cost: ContactCost = field(default_factory=ContactCost)
+    # Min and max values for the scaled position of the finger on the face of the slider
+    lam_min: Optional[float] = 0.0
+    lam_max: Optional[float] = 1.0
+    delta_theta_max: Optional[float] = None
+    delta_vel_max: Optional[float] = None
 
 
 @dataclass
@@ -193,7 +218,6 @@ class PlanarPlanConfig:
     continuity_on_pusher_velocity: bool = (
         False  # TODO: Move this into a NonCollisionConfig
     )
-    avoid_object: bool = False
     allow_teleportation: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True
@@ -206,19 +230,11 @@ class PlanarPlanConfig:
     )
     use_band_sparsity: bool = True
     # TODO(bernhardpg): Refactor these cost terms into a struct
-    cost_terms: PlanarCostFunctionTerms = field(
-        default_factory=lambda: PlanarCostFunctionTerms()
+    non_collision_cost: NonCollisionCost = field(
+        default_factory=lambda: NonCollisionCost()
     )
     contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
-    minimize_squared_eucl_dist: bool = True
-    minimize_trace: bool = False
-    avoidance_cost: Literal[
-        "linear",
-        "quadratic",
-        "socp",
-        "socp_single_mode",  # NOTE: The single mode is only used to test one non-collision mode at a time
-    ] = "socp"
 
     @property
     def slider_geometry(self) -> CollisionGeometry:
