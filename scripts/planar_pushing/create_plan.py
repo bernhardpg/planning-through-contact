@@ -198,6 +198,19 @@ def create_plan(
     elif body_to_use == "sugar_box":
         slider = get_sugar_box()
 
+    if animation_output_dir != "":
+        traj_name = animation_output_dir + "/" + traj_name
+
+    if debug:
+        visualize_planar_pushing_start_and_goal(
+            slider.geometry,
+            pusher_radius,
+            plan_spec,
+            # show=True,
+            save=True,
+            filename=f"{traj_name}_start_and_goal_{body_to_use}",
+        )
+
     dynamics_config = SliderPusherSystemConfig(
         pusher_radius=pusher_radius,
         slider=slider,
@@ -222,36 +235,22 @@ def create_plan(
         delta_theta_max=0.4 * 2,
     )
 
-    if animation_output_dir != "":
-        traj_name = animation_output_dir + "/" + traj_name
-
-    if debug:
-        visualize_planar_pushing_start_and_goal(
-            slider.geometry,
-            pusher_radius,
-            plan_spec,
-            # show=True,
-            save=True,
-            filename=f"{traj_name}_start_and_goal_{body_to_use}",
-        )
-
-    cost_terms = NonCollisionCost(
-        obj_avoidance_quad_weight=0.4,
+    non_collision_cost = NonCollisionCost(
+        distance_to_object_quadratic=0.4,
+        eucl_distance_squared=1.0,
     )
 
     config = PlanarPlanConfig(
         dynamics_config=dynamics_config,
-        cost_terms=cost_terms,
         time_in_contact=time_in_contact,
         time_non_collision=time_in_non_collision,
         num_knot_points_contact=4,
         num_knot_points_non_collision=3,
-        avoid_object=True,
-        avoidance_cost="quadratic",
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
         contact_config=contact_config,
+        non_collision_cost=non_collision_cost,
     )
 
     planner = PlanarPushingPlanner(config)
