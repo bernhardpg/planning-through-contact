@@ -192,8 +192,9 @@ def test_eucl_dist(plan_config: PlanarPlanConfig) -> None:
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
-    assert len(mode.prog.linear_costs()) == NUM_KNOT_POINTS - 1
+    assert len(mode.prog.linear_costs()) == 0
     assert len(mode.prog.quadratic_costs()) == 0
+    assert len(mode.prog.l2norm_costs()) == NUM_KNOT_POINTS - 1
 
 
 def test_multiple_knot_points(plan_config: PlanarPlanConfig) -> None:
