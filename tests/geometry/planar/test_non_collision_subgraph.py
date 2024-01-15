@@ -179,9 +179,16 @@ def test_non_collision_subgraph_initial_and_final(
             "finger_initial": PlanarPose(-0.20, 0, 0),
             "finger_final": PlanarPose(0.20, 0.1, 0),
         },
+        {
+            "boundary_conds": True,
+            "avoid_object": True,
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0.1, 0),
+            "pusher_velocity_continuity": True,
+        },
     ],
     indirect=["subgraph"],
-    ids=[1, 2, 3, 4],
+    ids=[1, 2, 3, 4, 5],
 )
 def test_subgraph_planning(
     subgraph: NonCollisionSubGraph,

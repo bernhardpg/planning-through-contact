@@ -174,6 +174,10 @@ def subgraph(
     plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
 
+    plan_config.continuity_on_pusher_velocity = request.param.get(
+        "pusher_velocity_continuity", False
+    )
+
     gcs = opt.GraphOfConvexSets()
 
     subgraph = NonCollisionSubGraph.create_with_gcs(
@@ -238,6 +242,9 @@ def planner(
     )
     plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
+    plan_config.continuity_on_pusher_velocity = request.param.get(
+        "pusher_velocity_continuity", False
+    )
 
     planner = PlanarPushingPlanner(
         plan_config,

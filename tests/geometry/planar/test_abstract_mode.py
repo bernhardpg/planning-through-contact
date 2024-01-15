@@ -130,6 +130,87 @@ def test_add_continuity_constraints_between_non_collision_modes(
         )
 
 
+def test_add_velocity_constraints_between_non_collision_modes(
+    dynamics_config: SliderPusherSystemConfig,
+) -> None:
+    # We need at least 3 knot points for this to work
+    config = PlanarPlanConfig(
+        num_knot_points_non_collision=3, dynamics_config=dynamics_config
+    )
+
+    contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
+    contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
+
+    source_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_start, config, "source"
+    )
+    target_mode = NonCollisionMode.create_from_plan_spec(
+        contact_location_end, config, "target"
+    )
+
+    slider_pose = PlanarPose(0.0, 0, 0)
+    source_mode.set_slider_pose(slider_pose)
+    target_mode.set_slider_pose(slider_pose)
+
+    finger_initial_pose = PlanarPose(-0.2, 0, 0)
+    source_mode.set_finger_initial_pose(finger_initial_pose)
+    finger_target_pose = PlanarPose(0.0, 0.2, 0)
+    target_mode.set_finger_final_pose(finger_target_pose)
+
+    gcs = opt.GraphOfConvexSets()
+    source_vertex = gcs.AddVertex(source_mode.get_convex_set(), source_mode.name)
+    target_vertex = gcs.AddVertex(target_mode.get_convex_set(), target_mode.name)
+
+    gcs_add_edge_with_continuity(
+        gcs,
+        VertexModePair(source_vertex, source_mode),
+        VertexModePair(target_vertex, target_mode),
+        continuity_on_pusher_velocities=True,
+    )
+
+    gcs_add_edge_with_continuity(
+        gcs,
+        VertexModePair(target_vertex, target_mode),
+        VertexModePair(source_vertex, source_mode),
+        continuity_on_pusher_velocities=True,
+    )
+
+    save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
+    result = gcs.SolveShortestPath(source_vertex, target_vertex)
+    assert result.is_success()
+
+    pairs = {
+        "source": VertexModePair(source_vertex, source_mode),
+        "target": VertexModePair(target_vertex, target_mode),
+    }
+
+    path = PlanarPushingPath.from_result(
+        gcs, result, source_vertex, target_vertex, pairs
+    )
+    traj = path.to_traj()
+
+    # NOTE: This only works because the slider pose is (0,0,0)
+    # as the finger poses are in the B frame
+    assert_initial_and_final_poses(
+        traj,
+        slider_pose,
+        finger_initial_pose,
+        slider_pose,
+        finger_target_pose,
+    )
+
+    if DEBUG:
+        start_and_goal = PlanarPushingStartAndGoal(
+            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
+        )
+        traj.config.start_and_goal = start_and_goal  # needed for viz
+        save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
+        save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+
+
 def test_add_continuity_between_non_coll_and_face_contact(
     plan_config: PlanarPlanConfig,
     gcs_options: opt.GraphOfConvexSetsOptions,

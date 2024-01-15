@@ -33,6 +33,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.utils import calc_displacements
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
@@ -137,6 +138,12 @@ class NonCollisionVariables(AbstractModeVariables):
             np.expand_dims(np.array([x, y]), 1)
             for x, y in zip(self.p_BP_xs, self.p_BP_ys)
         ]  # (2, 1)
+
+    @property
+    def v_BPs(self):
+        # TODO(bernhardpg): Not really velocities, right now these are just
+        # time-independent displacements
+        return calc_displacements(self.p_BPs)
 
     @property
     def p_WB(self):
@@ -496,6 +503,9 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
+                # There will be no velocities if there is only one knot point
+                # (i.e. for source or target vertex)
+                self.variables.v_BPs[0] if self.num_knot_points > 1 else None,
             )
         else:
             return ContinuityVariables(
@@ -503,6 +513,9 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
+                # There will be no velocities if there is only one knot point
+                # (i.e. for source or target vertex)
+                self.variables.v_BPs[-1] if self.num_knot_points > 1 else None,
             )
 
     # TODO(bernhardpg): refactor common code

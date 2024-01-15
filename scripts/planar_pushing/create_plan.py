@@ -184,7 +184,7 @@ def create_plan(
     do_rounding: bool = True,
     time_in_non_collision: float = 7,
     animation_output_dir: str = "",
-    animation_smooth: bool = False,
+    interpolate_video: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
     save_analysis: bool = False,
@@ -247,6 +247,7 @@ def create_plan(
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
         contact_config=contact_config,
+        continuity_on_pusher_velocity=True,
     )
 
     planner = PlanarPushingPlanner(config)
@@ -319,7 +320,7 @@ def create_plan(
             save=True,
             # show=True,
             filename=f"{traj_name}_{body_to_use}",
-            visualize_knot_points=not animation_smooth,
+            visualize_knot_points=not interpolate_video,
             lims=animation_lims,
         )
 
@@ -329,7 +330,7 @@ def create_plan(
                 save=True,
                 # show=True,
                 filename=f"{traj_name}_{body_to_use}_rounded",
-                visualize_knot_points=not animation_smooth,
+                visualize_knot_points=not interpolate_video,
                 lims=animation_lims,
             )
 
@@ -354,12 +355,16 @@ if __name__ == "__main__":
     parser.add_argument("--demos", help="Generate demos", action="store_true")
     parser.add_argument("--hardware_demos", help="Generate demos", action="store_true")
     parser.add_argument("--debug", help="Debug mode", action="store_true")
+    parser.add_argument(
+        "--interpolate", help="Interpolate trajectory in video", action="store_true"
+    )
     args = parser.parse_args()
     traj_number = args.traj
     make_demos = args.demos
     hardware_demos = args.hardware_demos
     debug = args.debug
     rounding = args.round
+    interpolate = args.interpolate
 
     pusher_radius = 0.015
 
@@ -381,7 +386,7 @@ if __name__ == "__main__":
                 animation_lims=animation_lims,
                 time_in_contact=2.0,
                 time_in_non_collision=1.0,
-                animation_smooth=False,
+                interpolate_video=interpolate,
                 save_analysis=True,
                 do_rounding=rounding,
             )
@@ -399,7 +404,7 @@ if __name__ == "__main__":
                     animation_lims=animation_lims,
                     time_in_contact=2.0,
                     time_in_non_collision=1.0,
-                    animation_smooth=False,
+                    interpolate_video=interpolate,
                     save_analysis=True,
                     do_rounding=rounding,
                 )
@@ -420,7 +425,7 @@ if __name__ == "__main__":
                 animation_lims=animation_lims,
                 time_in_contact=4.0,
                 time_in_non_collision=2.0,
-                animation_smooth=False,
+                interpolate_video=interpolate,
                 save_analysis=True,
                 do_rounding=rounding,
             )
@@ -438,7 +443,7 @@ if __name__ == "__main__":
                     animation_lims=animation_lims,
                     time_in_contact=4.0,
                     time_in_non_collision=2.0,
-                    animation_smooth=False,
+                    interpolate_video=interpolate,
                     save_analysis=True,
                     do_rounding=rounding,
                 )

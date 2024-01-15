@@ -37,10 +37,15 @@ def gcs_add_edge_with_continuity(
     outgoing: VertexModePair,
     incoming: VertexModePair,
     only_continuity_on_slider: bool = False,
+    continuity_on_pusher_velocities: bool = False,
 ) -> None:
     edge = gcs.AddEdge(outgoing.vertex, incoming.vertex)
     add_continuity_constraints_btwn_modes(
-        outgoing.mode, incoming.mode, edge, only_continuity_on_slider
+        outgoing.mode,
+        incoming.mode,
+        edge,
+        only_continuity_on_slider,
+        continuity_on_pusher_velocities,
     )
     return edge
 
@@ -103,6 +108,7 @@ class NonCollisionSubGraph:
                         VertexModePair(
                             non_collision_vertices[j], non_collision_modes[j]
                         ),
+                        continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                     )
                 else:
                     gcs_add_edge_with_continuity(
@@ -113,17 +119,20 @@ class NonCollisionSubGraph:
                         VertexModePair(
                             non_collision_vertices[i], non_collision_modes[i]
                         ),
+                        continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                     )
             else:
                 gcs_add_edge_with_continuity(
                     gcs,
                     VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
                     VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
+                    continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                 )
                 gcs_add_edge_with_continuity(
                     gcs,
                     VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
                     VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
+                    continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                 )
 
         return cls(
