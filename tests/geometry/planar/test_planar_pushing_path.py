@@ -226,18 +226,17 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
         delta_vel_max=0.1,
         delta_theta_max=0.8,
     )
-    cost_terms = NonCollisionCost(
-        obj_avoidance_quad_weight=0.4,
+    non_collision_cost = NonCollisionCost(
+        distance_to_object_quadratic=0.4,
+        eucl_distance_squared=1.0,
     )
     config = PlanarPlanConfig(
         dynamics_config=dynamics_config,
-        cost_terms=cost_terms,
+        non_collision_cost=non_collision_cost,
         time_in_contact=2.0,
         time_non_collision=1.0,
         num_knot_points_contact=3,
         num_knot_points_non_collision=3,
-        avoid_object=True,
-        avoidance_cost="quadratic",
         allow_teleportation=False,
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,

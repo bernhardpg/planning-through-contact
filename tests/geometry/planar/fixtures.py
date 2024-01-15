@@ -176,8 +176,13 @@ def subgraph(
 ) -> NonCollisionSubGraph:
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
-    plan_config.avoid_object = request.param.get("avoid_object", False)
-    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
+
+    plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    if request.param.get("avoid_object"):
+        if request.param.get("avoidance_cost_type", "quadratic"):
+            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        else:
+            plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     gcs = opt.GraphOfConvexSets()
 
@@ -221,9 +226,10 @@ def planner(
 
     if request.param.get("avoid_object"):
         plan_config.num_knot_points_non_collision = 4
-        plan_config.avoid_object = True
-    else:
-        plan_config.avoid_object = False
+        if request.param.get("avoidance_cost_type", "quadratic"):
+            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        else:
+            plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.dynamics_config.pusher_radius = 0.015
 
@@ -255,9 +261,7 @@ def planner(
     plan_config.contact_config = request.param.get("contact_config", contact_config)
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
-    plan_config.avoid_object = request.param.get("avoid_object", False)
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
-    plan_config.avoidance_cost = request.param.get("avoidance_cost_type", "quadratic")
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 
     planner = PlanarPushingPlanner(

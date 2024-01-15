@@ -314,12 +314,7 @@ class NonCollisionMode(AbstractContactMode):
                 self.prog.AddLorentzConeConstraint(vec)
                 self.prog.AddLinearCost(s)
 
-        avoid_object = (
-            (self.cost_config.distance_to_object_quadratic is not None)
-            or (self.cost_config.distance_to_object_socp is not None)
-            or self.cost_config.distance_to_object_socp_single_mode is not None
-        )
-        if avoid_object:
+        if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
             dists_for_each_plane = [
                 [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]

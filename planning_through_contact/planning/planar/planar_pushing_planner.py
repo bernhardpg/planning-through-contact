@@ -61,12 +61,18 @@ class PlanarPushingPlanner:
         self.source = None
         self.target = None
 
-        if self.config.avoid_object and config.num_knot_points_non_collision <= 2:
+        if (
+            self.config.non_collision_cost.avoid_object
+            and config.num_knot_points_non_collision <= 2
+        ):
             raise ValueError(
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if self.config.avoid_object and self.config.allow_teleportation:
+        if (
+            self.config.non_collision_cost.avoid_object
+            and self.config.allow_teleportation
+        ):
             raise ValueError("Cannot avoid object while allowing teleportation")
 
         # TODO(bernhardpg): should just extract faces, rather than relying on the

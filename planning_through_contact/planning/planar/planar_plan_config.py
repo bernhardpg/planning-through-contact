@@ -136,6 +136,14 @@ class NonCollisionCost:
     eucl_distance_squared: Optional[float] = None
     eucl_distance: Optional[float] = None
 
+    @property
+    def avoid_object(self) -> bool:
+        return (
+            self.distance_to_object_quadratic is not None
+            or self.distance_to_object_socp is not None
+            or self.distance_to_object_socp_single_mode is not None
+        )
+
 
 class ContactCostType(Enum):
     # TODO(bernhardpg): All these costs are experimental and will probably be removed
