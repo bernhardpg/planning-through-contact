@@ -444,9 +444,20 @@ def test_make_plan(
             },
             "use_band_sparsity": True,
         },
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
+                "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
+            },
+            "use_band_sparsity": True,
+            "pusher_velocity_continuity": True,
+        },
     ],
     indirect=["planner"],
-    ids=[1, 2],
+    ids=["plan_1", "plan_2", "velocity_cont"],
 )
 def test_make_plan_band_sparsity_box(
     planner: PlanarPushingPlanner,
