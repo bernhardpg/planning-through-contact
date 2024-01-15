@@ -240,6 +240,7 @@ def create_plan(
     non_collision_cost = NonCollisionCost(
         distance_to_object_quadratic=0.4,
         eucl_distance_squared=1.0,
+        eucl_distance=1.0,
     )
 
     config = PlanarPlanConfig(

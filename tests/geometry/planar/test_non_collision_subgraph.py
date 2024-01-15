@@ -56,7 +56,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = False
+DEBUG = True
 
 
 @pytest.mark.parametrize(
@@ -190,9 +190,16 @@ def test_non_collision_subgraph_initial_and_final(
             "finger_final": PlanarPose(0.20, 0.1, 0),
             "pusher_velocity_continuity": True,
         },
+        {
+            "boundary_conds": True,
+            "avoid_object": False,
+            "finger_initial": PlanarPose(-0.20, 0, 0),
+            "finger_final": PlanarPose(0.20, 0.1, 0),
+            "eucl_distance_cost": True,
+        },
     ],
     indirect=["subgraph"],
-    ids=[1, 2, 3, 4, 5],
+    ids=[1, 2, 3, 4, "cont_pusher_vel", "eucl_dist"],
 )
 def test_subgraph_planning(
     subgraph: NonCollisionSubGraph,

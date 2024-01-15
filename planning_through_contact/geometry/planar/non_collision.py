@@ -9,6 +9,7 @@ from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
+    L2NormCost,
     LinearConstraint,
     LinearCost,
     LorentzConeConstraint,
@@ -241,6 +242,7 @@ class NonCollisionMode(AbstractContactMode):
             self.dynamics_config.pusher_radius,
         )
 
+        self.l2_norm_costs = []
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
@@ -300,26 +302,18 @@ class NonCollisionMode(AbstractContactMode):
                 )
 
         if self.cost_config.eucl_distance is not None:
-            # TODO: This should be added as an L2NormCost
-            position_diffs = [
-                p_next - p_curr
-                for p_next, p_curr in zip(
-                    self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
+            for k in range(self.num_knot_points - 1):
+                vars = np.concatenate(
+                    [
+                        self.variables.p_BPs[k].flatten(),
+                        self.variables.p_BPs[k + 1].flatten(),
+                    ]
                 )
-            ]
-
-            slacks = self.prog.NewContinuousVariables(len(position_diffs), "t")
-            for d, s in zip(position_diffs, slacks):
-                # Let d := diff
-                # we want to minimize the Euclidean distance:
-                #   minimize sqrt(d_1^2 + d_2^2)
-                # reformulate as:
-                #   minimize s s.t. s >= sqrt(d_1^2 + d_2^2)
-                # which is exactly a Lorentz cone constraint:
-                # (s,d) \in LorentzCone <=> s >= sqrt(d_1^2 + d_2^2)
-                vec = np.vstack([[s], d]).flatten()  # (s, x_diff, y_diff)
-                self.prog.AddLorentzConeConstraint(vec)
-                self.prog.AddLinearCost(s)
+                distance = self.variables.p_BPs[k + 1] - self.variables.p_BPs[k]
+                cost_expr = self.cost_config.eucl_distance * distance
+                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                cost = self.prog.AddL2NormCost(A, b, vars)
+                self.l2_norm_costs.append(cost)
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
@@ -550,10 +544,21 @@ class NonCollisionMode(AbstractContactMode):
                 new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
                 vertex.AddCost(new_binding)
         else:
-            var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
-            vars = vertex.x()[var_idxs]
-            binding = Binding[QuadraticCost](evaluator, vars)
-            vertex.AddCost(binding)
+            if self.cost_config.eucl_distance_squared is not None:
+                var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
+                vars = vertex.x()[var_idxs]
+                binding = Binding[QuadraticCost](evaluator, vars)
+                vertex.AddCost(binding)
+
+            if self.cost_config.eucl_distance is not None:
+                assert len(self.l2_norm_costs) > 0
+
+                # Add L2 norm cost terms
+                for cost in self.l2_norm_costs:
+                    var_idxs, evaluator = self._get_cost_terms(cost)
+                    vars = vertex.x()[var_idxs]
+                    binding = Binding[L2NormCost](evaluator, vars)
+                    vertex.AddCost(binding)
 
             # The code for adding cost for avoiding the slider is kind of hacky
             # to avoid spending time on generalizing it to the case where we

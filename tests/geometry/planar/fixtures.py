@@ -179,7 +179,10 @@ def subgraph(
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
 
-    plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    if request.param.get("eucl_distance_cost"):
+        plan_config.non_collision_cost = NonCollisionCost(eucl_distance=1.0)
+    else:
+        plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
     if request.param.get("avoid_object"):
         if request.param.get("avoidance_cost_type", "quadratic"):
             plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
