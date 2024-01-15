@@ -190,6 +190,9 @@ class PlanarPlanConfig:
     num_knot_points_non_collision: int = 2
     time_in_contact: float = 2  # TODO: remove, no time
     time_non_collision: float = 0.5  # TODO: remove, there is no time
+    continuity_on_pusher_velocity: bool = (
+        False  # TODO: Move this into a NonCollisionConfig
+    )
     avoid_object: bool = False
     allow_teleportation: bool = False
     use_eq_elimination: bool = False  # TODO: Remove

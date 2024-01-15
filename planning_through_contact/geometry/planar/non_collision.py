@@ -503,7 +503,9 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
-                self.variables.v_BPs[0],
+                # There will be no velocities if there is only one knot point
+                # (i.e. for source or target vertex)
+                self.variables.v_BPs[0] if self.num_knot_points > 1 else None,
             )
         else:
             return ContinuityVariables(
@@ -511,7 +513,9 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.p_WB,
                 self.variables.cos_th,  # type: ignore
                 self.variables.sin_th,  # type: ignore
-                self.variables.v_BPs[-1],
+                # There will be no velocities if there is only one knot point
+                # (i.e. for source or target vertex)
+                self.variables.v_BPs[-1] if self.num_knot_points > 1 else None,
             )
 
     # TODO(bernhardpg): refactor common code
