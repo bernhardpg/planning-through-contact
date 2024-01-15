@@ -67,7 +67,9 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
-    contact_cost = ContactCost(cost_type=ContactCostType.SQ_VELOCITIES)
+    contact_cost = ContactCost(
+        cost_type=ContactCostType.SQ_VELOCITIES, force_regularization=0.1
+    )
     contact_config = ContactConfig(cost=contact_cost)
     cfg = PlanarPlanConfig(
         dynamics_config=dynamics_config,

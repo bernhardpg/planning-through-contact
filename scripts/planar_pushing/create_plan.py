@@ -219,6 +219,7 @@ def create_plan(
         integration_constant=0.02,
     )
 
+    # Configure contact cost
     contact_cost = ContactCost(
         cost_type=ContactCostType.OPTIMAL_CONTROL,
         force_regularization=5.0,
@@ -235,6 +236,7 @@ def create_plan(
         delta_theta_max=0.4 * 2,
     )
 
+    # Configure non-collision cost
     non_collision_cost = NonCollisionCost(
         distance_to_object_quadratic=0.4,
         eucl_distance_squared=1.0,
