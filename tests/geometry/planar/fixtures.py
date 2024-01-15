@@ -37,6 +37,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCost,
     ContactCostType,
+    NonCollisionCost,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
@@ -65,13 +66,16 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
+    non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    contact_cost = ContactCost(cost_type=ContactCostType.SQ_VELOCITIES)
+    contact_config = ContactConfig(cost=contact_cost)
     cfg = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         use_approx_exponential_map=False,
         use_band_sparsity=False,
-        avoidance_cost="quadratic",  # TODO: Tests should be updated to use socp cost
+        non_collision_cost=non_collision_cost,
+        contact_config=contact_config,
     )
-    cfg.contact_config.cost_type = ContactCostType.SQ_VELOCITIES
     return cfg
 
 

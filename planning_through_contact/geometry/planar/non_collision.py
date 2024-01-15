@@ -240,6 +240,10 @@ class NonCollisionMode(AbstractContactMode):
             self.contact_location,
             self.dynamics_config.pusher_radius,
         )
+
+        self.squared_eucl_dist_cost = None
+        self.quadratic_distance_cost = None
+
         self._define_constraints()
         self._define_cost()
 
@@ -290,7 +294,7 @@ class NonCollisionMode(AbstractContactMode):
                 position_diffs = np.vstack(position_diffs)
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-                self.prog.AddQuadraticCost(
+                self.squared_eucl_dist_cost = self.prog.AddQuadraticCost(
                     self.cost_config.eucl_distance_squared * squared_eucl_dist,
                     is_convex=True,
                 )
@@ -340,7 +344,9 @@ class NonCollisionMode(AbstractContactMode):
                     for dist in dists_for_each_plane
                     for d in dist
                 ]
-                self.prog.AddQuadraticCost(np.sum(squared_dists), is_convex=True)
+                self.quadratic_distance_cost = self.prog.AddQuadraticCost(
+                    np.sum(squared_dists), is_convex=True
+                )
 
             if self.cost_config.distance_to_object_socp_single_mode:
                 # TODO: Can probably get rid of this
@@ -528,41 +534,14 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.v_BPs[-1] if self.num_knot_points > 1 else None,
             )
 
-    # TODO(bernhardpg): refactor common code
-    def _get_eucl_dist_cost_term(self) -> Tuple[List[int], QuadraticCost]:
-        if self.config.avoid_object and self.config.avoidance_cost == "quadratic":
-            assert len(self.prog.quadratic_costs()) == 2
-        else:
-            assert len(self.prog.quadratic_costs()) == 1
-
-        eucl_dist_cost = self.prog.quadratic_costs()[0]  # should only be one cost
-        var_idxs = self.get_variable_indices_in_gcs_vertex(eucl_dist_cost.variables())
-        return var_idxs, eucl_dist_cost.evaluator()
-
-    # TODO(bernhardpg): refactor common code
-    def _get_object_avoidance_cost_term(
-        self,
-    ) -> Tuple[List[int], LinearCost | QuadraticCost]:
-        if self.config.avoidance_cost == "linear":
-            assert len(self.prog.linear_costs()) == 1
-            object_avoidance_cost = self.prog.linear_costs()[0]
-        elif self.config.avoidance_cost == "quadratic":
-            assert len(self.prog.quadratic_costs()) == 2
-            object_avoidance_cost = self.prog.quadratic_costs()[1]
-        else:
-            raise NotImplementedError(
-                f"Cannot get object avoidance cost terms for cost type {self.config.avoidance_cost}."
-            )
-
-        var_idxs = self.get_variable_indices_in_gcs_vertex(
-            object_avoidance_cost.variables()
-        )
-        return var_idxs, object_avoidance_cost.evaluator()
+    def _get_cost_terms(self, cost: Binding) -> Tuple[List[int], QuadraticCost]:
+        var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
+        return var_idxs, cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
         is_target_or_source = self.num_knot_points == 1
 
-        # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
+        # TODO: This is old code that is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if is_target_or_source:
             assert (
                 len(self.prog.quadratic_costs()) == 2
@@ -576,7 +555,7 @@ class NonCollisionMode(AbstractContactMode):
                 new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
                 vertex.AddCost(new_binding)
         else:
-            var_idxs, evaluator = self._get_eucl_dist_cost_term()
+            var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
             vars = vertex.x()[var_idxs]
             binding = Binding[QuadraticCost](evaluator, vars)
             vertex.AddCost(binding)
@@ -585,7 +564,7 @@ class NonCollisionMode(AbstractContactMode):
             # to avoid spending time on generalizing it to the case where we
             # just want to test one mode.
             if self.cost_config.distance_to_object_quadratic is not None:
-                var_idxs, evaluator = self._get_object_avoidance_cost_term()
+                var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
                 vars = vertex.x()[var_idxs]
                 binding = Binding[QuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
