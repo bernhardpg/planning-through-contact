@@ -285,7 +285,7 @@ class NonCollisionMode(AbstractContactMode):
     def _define_cost(self) -> None:
         self.cost_config = self.config.non_collision_cost
 
-        if self.cost_config.eucl_distance_squared is not None:
+        if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
                 position_diffs = [
                     p_next - p_curr
@@ -297,11 +297,11 @@ class NonCollisionMode(AbstractContactMode):
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
                 self.squared_eucl_dist_cost = self.prog.AddQuadraticCost(
-                    self.cost_config.eucl_distance_squared * squared_eucl_dist,
+                    self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
                     is_convex=True,
                 )
 
-        if self.cost_config.eucl_distance is not None:
+        if self.cost_config.pusher_arc_length is not None:
             for k in range(self.num_knot_points - 1):
                 vars = np.concatenate(
                     [
@@ -310,7 +310,7 @@ class NonCollisionMode(AbstractContactMode):
                     ]
                 )
                 distance = self.variables.p_BPs[k + 1] - self.variables.p_BPs[k]
-                cost_expr = self.cost_config.eucl_distance * distance
+                cost_expr = self.cost_config.pusher_arc_length * distance
                 A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
                 cost = self.prog.AddL2NormCost(A, b, vars)
                 self.l2_norm_costs.append(cost)
@@ -544,13 +544,13 @@ class NonCollisionMode(AbstractContactMode):
                 new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
                 vertex.AddCost(new_binding)
         else:
-            if self.cost_config.eucl_distance_squared is not None:
+            if self.cost_config.pusher_velocity_regularization is not None:
                 var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
                 vars = vertex.x()[var_idxs]
                 binding = Binding[QuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
 
-            if self.cost_config.eucl_distance is not None:
+            if self.cost_config.pusher_arc_length is not None:
                 assert len(self.l2_norm_costs) > 0
 
                 # Add L2 norm cost terms

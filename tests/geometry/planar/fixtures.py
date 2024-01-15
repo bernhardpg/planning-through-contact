@@ -66,7 +66,7 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
-    non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
     contact_cost = ContactCost(
         cost_type=ContactCostType.SQ_VELOCITIES, force_regularization=0.1
     )
@@ -180,9 +180,11 @@ def subgraph(
     plan_config.num_knot_points_non_collision = num_knot_points
 
     if request.param.get("eucl_distance_cost"):
-        plan_config.non_collision_cost = NonCollisionCost(eucl_distance=1.0)
+        plan_config.non_collision_cost = NonCollisionCost(pusher_arc_length=1.0)
     else:
-        plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+        plan_config.non_collision_cost = NonCollisionCost(
+            pusher_velocity_regularization=1.0
+        )
     if request.param.get("avoid_object"):
         if request.param.get("avoidance_cost_type", "quadratic"):
             plan_config.non_collision_cost.distance_to_object_quadratic = 1.0

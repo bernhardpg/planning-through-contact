@@ -133,8 +133,8 @@ class NonCollisionCost:
     distance_to_object_socp: Optional[float] = None
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
-    eucl_distance_squared: Optional[float] = None
-    eucl_distance: Optional[float] = None
+    pusher_velocity_regularization: Optional[float] = None
+    pusher_arc_length: Optional[float] = None
 
     @property
     def avoid_object(self) -> bool:

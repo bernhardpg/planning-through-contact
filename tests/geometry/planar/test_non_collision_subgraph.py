@@ -406,7 +406,9 @@ def test_subgraph_with_contact_modes(
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])
 def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object: bool):
-    plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0
+    )
     if avoid_object:
         plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
 
@@ -499,7 +501,9 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
 def test_subgraph_contact_modes_t_pusher(
     plan_config: PlanarPlanConfig, avoid_object: bool, gcs_options
 ):
-    plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    plan_config.non_collision_cost = NonCollisionCost(
+        pusher_velocity_regularization=1.0
+    )
     if avoid_object:
         plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
     plan_config.num_knot_points_non_collision = 4
