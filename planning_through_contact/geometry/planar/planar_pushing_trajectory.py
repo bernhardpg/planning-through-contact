@@ -10,6 +10,7 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.math import RotationMatrix
 from pydrake.trajectories import (
+    BezierCurve,
     PiecewisePolynomial,
     PiecewiseQuaternionSlerp,
     Trajectory,
@@ -120,6 +121,9 @@ class LinTrajSegment:
             samples = np.repeat(knot_points, 2, axis=1)
         else:
             if traj_type == "zero_order_hold":
+                # With zero order hold we need to add an extra time and knot point
+                # (we will only have N-1 knot point values, but with Drake's API ZOH still
+                # requires N knot point values and time values).
                 knot_point_times = np.linspace(start_time, end_time, num_samples + 1)
                 # Repeat last knot point to get the correct number of samples
                 samples = np.hstack(
@@ -133,6 +137,9 @@ class LinTrajSegment:
             traj = PiecewisePolynomial.ZeroOrderHold(knot_point_times, samples)
         elif traj_type == "first_order_hold":
             traj = PiecewisePolynomial.FirstOrderHold(knot_point_times, samples)
+        elif traj_type == "bezier":
+            traj = BezierCurve(start_time, end_time, samples)
+
         else:
             raise ValueError("Invalid trajectory type")
         return cls(num_dims, start_time, end_time, knot_points, traj, traj_type)
@@ -360,9 +367,10 @@ class NonCollisionTrajSegment(AbstractTrajSegment):
             np.vstack([knot_points.p_WB]),  # just one value
             start_time,
             end_time,
+            "first_order_hold",
         )
         p_BP = LinTrajSegment.from_knot_points(
-            np.hstack(knot_points.p_BPs), start_time, end_time
+            np.hstack(knot_points.p_BPs), start_time, end_time, "bezier"
         )
         R_WB = So3TrajSegment.from_knot_points(
             [knot_points.R_WB],  # just one value
