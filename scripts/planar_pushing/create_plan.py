@@ -247,6 +247,7 @@ def create_plan(
         use_band_sparsity=True,
         use_entry_and_exit_subgraphs=True,
         contact_config=contact_config,
+        continuity_on_pusher_velocity=True,
     )
 
     planner = PlanarPushingPlanner(config)
