@@ -373,8 +373,12 @@ def test_avoid_object_t_pusher(
 ) -> None:
     plan_config.num_knot_points_non_collision = 5
     plan_config.dynamics_config.pusher_radius = 0.015
-    plan_config.avoid_object = True
-    plan_config.avoidance_cost = cost
+    plan_config.non_collision_cost = NonCollisionCost(eucl_distance_squared=1.0)
+    if cost == "quadratic":
+        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+    else:  # "socp_single_mode"
+        plan_config.non_collision_cost.distance_to_object_socp_single_mode = 1.0
+
     plan_config.time_non_collision = 3
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
 
