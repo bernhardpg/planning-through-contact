@@ -185,15 +185,6 @@ class TableEnvironment:
             self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
             self.set_slider_planar_pose(self._sim_config.slider_start_pose)
 
-            robot_model_instance = self._state_estimator._plant.GetModelInstanceByName(
-                self._robot_system.robot_model_name
-            )
-            # This will break for actuated cylinder
-            if isinstance(self._robot_system, IiwaHardwareStation):
-                self._state_estimator._plant.SetDefaultPositions(
-                    robot_model_instance,
-                    self._robot_system.start_joint_positions,
-                )
 
     def export_diagram(self, filename: str):
         import pydot

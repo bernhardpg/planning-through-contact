@@ -74,14 +74,14 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=1,
-        closed_loop=False,
+        delay_before_execution=4,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
         scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
         use_hardware=False,
-        pusher_z_offset=0.1,
+        pusher_z_offset=0.03,
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -116,8 +116,8 @@ def run_sim(
         else None
     )
     # environment.export_diagram("environment_diagram.pdf")
-    environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
-    # environment.simulate(3, save_recording_as=recording_name)
+    environment.simulate(traj.end_time + sim_config.delay_before_execution + 0.5, save_recording_as=recording_name)
+    # environment.simulate(10, save_recording_as=recording_name)
 
     if debug and isinstance(position_source, MPCPositionSource):
         for (
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     # )
     run_sim(
         # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/box_pushing_demos/hw_demo_C_8_rounded.pkl",
+        plan="trajectories/box_pushing_demos/hw_demo_C_5_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

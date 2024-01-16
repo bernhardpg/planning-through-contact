@@ -17,7 +17,9 @@ from pydrake.all import (
     Meshcat,
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
+    PortSwitch,
 )
+from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
@@ -77,25 +79,24 @@ class IiwaHardwareStation(RobotSystemBase):
             external_mbp = self.station.GetSubsystemByName("plant")
             self.station_plant = external_mbp
             self.slider = external_mbp.GetModelInstanceByName(sim_config.slider.name)
-            self._robot_model_instance = self.station_plant.GetModelInstanceByName(
-                self.robot_model_name
-            )
-            # Set default joint positions for iiwa
-            robot_only_plant = LoadRobotOnly(
-                sim_config, robot_plant_file="iiwa_controller_plant.yaml"
-            )
-            desired_pose = self._sim_config.pusher_start_pose.to_pose(
-                self._sim_config.pusher_z_offset
-            )
-            start_joint_positions = solve_ik(
-                plant=robot_only_plant,
-                pose=desired_pose,
-                default_joint_positions=self._sim_config.default_joint_positions,
-            )
-            self.start_joint_positions = start_joint_positions
-            self.station_plant.SetDefaultPositions(
-                self._robot_model_instance, start_joint_positions
-            )
+        
+        # Iiwa Planer
+        # Delay between starting the simulation and the iiwa starting to go to the home position
+        INITIAL_DELAY = 1.0
+        # Delay between the iiwa reaching the home position and the pusher starting to follow the planned pushing trajectory
+        WAIT_PUSH_DELAY = 1.0
+        assert sim_config.delay_before_execution > INITIAL_DELAY + WAIT_PUSH_DELAY
+        self._planner = builder.AddNamedSystem(
+            "IiwaPlanner",
+            IiwaPlanner(
+                sim_config=sim_config,
+                robot_plant=LoadRobotOnly(
+                    sim_config, robot_plant_file="iiwa_controller_plant.yaml"
+                ),
+                initial_delay=INITIAL_DELAY,
+                wait_push_delay=WAIT_PUSH_DELAY,
+            ),
+        )
 
         # Diff IK
         EE_FRAME = "pusher_end"
@@ -141,8 +142,17 @@ class IiwaHardwareStation(RobotSystemBase):
                     time_step=sim_config.time_step,
                 ),
             )
+        
+        # Switch for switching between planner output (for GoPushStart), and diff IK output (for pushing)
+        switch = builder.AddNamedSystem("switch", PortSwitch(robot.num_positions()))
 
         ## Connect systems
+
+        # Inputs to the planner
+        builder.Connect(
+            self.station.GetOutputPort("iiwa.state_estimated"),
+            self._planner.GetInputPort("iiwa_state_estimated")
+        )
 
         # Inputs to diff IK
         builder.Connect(
@@ -153,15 +163,35 @@ class IiwaHardwareStation(RobotSystemBase):
             self.station.GetOutputPort("iiwa.state_estimated"),
             self._diff_ik.GetInputPort("robot_state"),
         )
+
         builder.Connect(
             const.get_output_port(),
             self._diff_ik.GetInputPort("use_robot_state"),
+        )
+        # Strangely, when we use the planner's reset_diff_ik port, which sets use_robot_state to True before the pushing phase and False during the pushing phase, we get persistent diff IK drift.
+        # builder.Connect(
+        #     self._planner.GetOutputPort("reset_diff_ik"),
+        #     self._diff_ik.GetInputPort("use_robot_state"),
+        # )
+
+        # Inputs to switch
+        builder.Connect(
+            self._planner.GetOutputPort("iiwa_position_command"),
+            switch.DeclareInputPort("planner_iiwa_position_command")
+        )
+        builder.Connect(
+            self._diff_ik.get_output_port(),
+            switch.DeclareInputPort("open_loop_iiwa_position_cmd")
+        )
+        builder.Connect(
+            self._planner.GetOutputPort("control_mode"),
+            switch.get_port_selector_input_port()
         )
 
         if isinstance(driver_config, JointStiffnessDriver):
             # Inputs to state interpolator
             builder.Connect(
-                self._diff_ik.get_output_port(),
+                switch.get_output_port(),
                 self._state_interpolator.get_input_port(),
             )
 
@@ -173,7 +203,7 @@ class IiwaHardwareStation(RobotSystemBase):
         elif isinstance(driver_config, IiwaDriver):
             # Inputs to station
             builder.Connect(
-                self._diff_ik.get_output_port(),
+                switch.get_output_port(),
                 self.station.GetInputPort("iiwa.position"),
             )
 
@@ -205,24 +235,7 @@ class IiwaHardwareStation(RobotSystemBase):
         ...
 
     def pre_sim_callback(self, root_context: Context) -> None:
-        # Set default joint positions for iiwa
-        # Note this will break when using hardware=True
-        # Are both of these necessary?
-        self._diff_ik.get_mutable_parameters().set_nominal_joint_position(
-            self.start_joint_positions
-        )
-        self._diff_ik.SetPositions(
-            self._diff_ik.GetMyMutableContextFromRoot(root_context),
-            self.start_joint_positions,
-        )
-        self.station_plant.SetDefaultPositions(
-            self._robot_model_instance, self.start_joint_positions
-        )
-        # self.station_plant.SetPositions(
-        #     self.station_plant.GetMyMutableContextFromRoot(root_context),
-        #     self._robot_model_instance,
-        #     self.start_joint_positions,
-        # )
+        ...
 
     @property
     def robot_model_name(self) -> str:
