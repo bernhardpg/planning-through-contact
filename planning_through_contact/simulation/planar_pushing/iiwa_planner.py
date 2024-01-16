@@ -6,7 +6,7 @@ import logging
 from pydrake.all import (
     GcsTrajectoryOptimization,
     HPolyhedron,
-    PiecewisePolynomial,  
+    PiecewisePolynomial,
     Point,
     Toppra,
     PathParameterizedTrajectory,
@@ -17,10 +17,15 @@ from pydrake.all import (
     MultibodyPlant,
 )
 
-from planning_through_contact.simulation.planar_pushing.inverse_kinematics import solve_ik
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import PlanarPushingSimConfig
+from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
+    solve_ik,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
+    PlanarPushingSimConfig,
+)
 
 logger = logging.getLogger(__name__)
+
 
 class IiwaPlannerMode(Enum):
     PLAN_GO_PUSH_START = 0
@@ -28,9 +33,17 @@ class IiwaPlannerMode(Enum):
     WAIT_PUSH = 2
     PUSHING = 3
 
+
 class IiwaPlanner(LeafSystem):
     """Planner that manages the iiwa going to the start position, waiting and then pushing according to the desired planar position source."""
-    def __init__(self, sim_config: PlanarPushingSimConfig, robot_plant: MultibodyPlant, initial_delay=2, wait_push_delay=2):
+
+    def __init__(
+        self,
+        sim_config: PlanarPushingSimConfig,
+        robot_plant: MultibodyPlant,
+        initial_delay=2,
+        wait_push_delay=2,
+    ):
         LeafSystem.__init__(self)
         self._wait_push_delay = wait_push_delay
         self._mode_index = self.DeclareAbstractState(
@@ -43,8 +56,8 @@ class IiwaPlanner(LeafSystem):
 
         # For GoPushStart mode:
         num_positions = robot_plant.num_positions()
-        self._iiwa_state_estimated_index = self.DeclareVectorInputPort(
-            "iiwa_state_estimated", robot_plant.num_multibody_states()
+        self._iiwa_position_measured_index = self.DeclareVectorInputPort(
+            "iiwa_position_measured", robot_plant.num_positions()
         ).get_index()
         self.DeclareAbstractOutputPort(
             "control_mode",
@@ -71,7 +84,7 @@ class IiwaPlanner(LeafSystem):
         self._internal_model = robot_plant
 
         self._sim_config = sim_config
-    
+
     def Update(self, context, state):
         # FSM Logic for planner
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
@@ -90,43 +103,46 @@ class IiwaPlanner(LeafSystem):
 
             if current_time > times["go_push_start_final"]:
                 # We have reached the end of the GoPushStart trajectory.
-                state.get_mutable_abstract_state(
-                    int(self._mode_index)
-                ).set_value(IiwaPlannerMode.WAIT_PUSH)
+                state.get_mutable_abstract_state(int(self._mode_index)).set_value(
+                    IiwaPlannerMode.WAIT_PUSH
+                )
                 logger.debug(f"Switching to WAIT_PUSH mode at time {current_time}.")
-                current_pos = self.get_input_port(self._iiwa_state_estimated_index).Eval(context)[:self._internal_model.num_positions()]
+                current_pos = self.get_input_port(
+                    self._iiwa_position_measured_index
+                ).Eval(context)
                 logger.debug(f"Current position: {current_pos}")
             return
         elif mode == IiwaPlannerMode.WAIT_PUSH:
             if current_time > times["wait_push_final"]:
                 # We have reached the end of the GoPushStart trajectory.
-                state.get_mutable_abstract_state(
-                    int(self._mode_index)
-                ).set_value(IiwaPlannerMode.PUSHING)
+                state.get_mutable_abstract_state(int(self._mode_index)).set_value(
+                    IiwaPlannerMode.PUSHING
+                )
                 logger.debug(f"Switching to PUSHING mode at time {current_time}.")
-                current_pos = self.get_input_port(self._iiwa_state_estimated_index).Eval(context)[:self._internal_model.num_positions()]
+                current_pos = self.get_input_port(
+                    self._iiwa_position_measured_index
+                ).Eval(context)
                 logger.debug(f"Current position: {current_pos}")
                 global time_pushing_transition
                 time_pushing_transition = current_time
             return
-        
+
     def PlanGoPushStart(self, context, state):
         logger.debug(f"PlanGoPushStart at time {context.get_time()}.")
         q_start = copy(context.get_discrete_state(self._q0_index).get_value())
         q_goal = self.get_desired_start_pos()
 
         q_traj = self.create_go_push_start_traj(q_goal, q_start)
-        state.get_mutable_abstract_state(int(self._traj_q_index)).set_value(
-            q_traj
-        )
+        state.get_mutable_abstract_state(int(self._traj_q_index)).set_value(q_traj)
         times = state.get_mutable_abstract_state(int(self._times_index)).get_value()
         times["go_push_start_initial"] = context.get_time()
         times["go_push_start_final"] = q_traj.end_time() + context.get_time()
         times["wait_push_final"] = times["go_push_start_final"] + self._wait_push_delay
         state.get_mutable_abstract_state(int(self._times_index)).set_value(times)
-        state.get_mutable_abstract_state(int(self._mode_index)).set_value(IiwaPlannerMode.GO_PUSH_START)
+        state.get_mutable_abstract_state(int(self._mode_index)).set_value(
+            IiwaPlannerMode.GO_PUSH_START
+        )
         self.push_start_pos = q_goal
-        
 
     def CalcControlMode(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
@@ -142,7 +158,7 @@ class IiwaPlanner(LeafSystem):
             output.set_value(False)
         else:
             output.set_value(True)
-    
+
     def CalcIiwaPosition(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
         if mode == IiwaPlannerMode.PLAN_GO_PUSH_START:
@@ -163,20 +179,24 @@ class IiwaPlanner(LeafSystem):
         elif mode == IiwaPlannerMode.WAIT_PUSH:
             output.SetFromVector(self.push_start_pos)
         elif mode == IiwaPlannerMode.PUSHING:
-            assert False, "Planner CalcIiwaPosition should not be called in PUSHING mode."
+            assert (
+                False
+            ), "Planner CalcIiwaPosition should not be called in PUSHING mode."
         else:
             assert False, "Invalid mode."
 
     def Initialize(self, context, discrete_state):
         discrete_state.set_value(
             int(self._q0_index),
-            self.get_input_port(int(self._iiwa_state_estimated_index)).Eval(context)[:self._internal_model.num_positions()],
+            self.get_input_port(int(self._iiwa_position_measured_index)).Eval(context),
         )
 
     def get_desired_start_pos(self):
         # Set iiwa starting position
         global desired_pose
-        desired_pose = self._sim_config.pusher_start_pose.to_pose(self._sim_config.pusher_z_offset)
+        desired_pose = self._sim_config.pusher_start_pose.to_pose(
+            self._sim_config.pusher_z_offset
+        )
         start_joint_positions = solve_ik(
             self._internal_model,
             pose=desired_pose,
@@ -187,17 +207,20 @@ class IiwaPlanner(LeafSystem):
 
     @staticmethod
     def make_traj_toppra(traj, plant, vel_limits, accel_limits, num_grid_points=1000):
-        toppra = Toppra(traj, plant, np.linspace(traj.start_time(), traj.end_time(), num_grid_points))
+        toppra = Toppra(
+            traj,
+            plant,
+            np.linspace(traj.start_time(), traj.end_time(), num_grid_points),
+        )
         toppra.AddJointVelocityLimit(-vel_limits, vel_limits)
         toppra.AddJointAccelerationLimit(-accel_limits, accel_limits)
         time_traj = toppra.SolvePathParameterization()
         return PathParameterizedTrajectory(traj, time_traj)
-    
-    def create_go_push_start_traj(self, q_goal, q_start):
 
+    def create_go_push_start_traj(self, q_goal, q_start):
         plant = self._internal_model
         num_positions = plant.num_positions()
-        
+
         gcs = GcsTrajectoryOptimization(plant.num_positions())
 
         workspace = gcs.AddRegions(
@@ -214,26 +237,26 @@ class IiwaPlanner(LeafSystem):
         logger.debug(f"q_start = {q_start}")
         logger.debug(f"q_goal = {q_goal}")
 
-
-        vel_limits = 0.3 * np.ones(7) # 0.15
+        vel_limits = 0.3 * np.ones(7)  # 0.15
         accel_limits = 0.3 * np.ones(7)
         # Set non-zero h_min for start and goal to enforce zero velocity.
         start = gcs.AddRegions([Point(q_start)], order=1, h_min=0.1)
         goal = gcs.AddRegions([Point(q_goal)], order=1, h_min=0.1)
-        goal.AddVelocityBounds([0]*num_positions, [0]*num_positions)
+        goal.AddVelocityBounds([0] * num_positions, [0] * num_positions)
         gcs.AddEdges(start, workspace)
         gcs.AddEdges(workspace, goal)
         gcs.AddTimeCost()
         gcs.AddPathLengthCost()
-        gcs.AddVelocityBounds(
-            -vel_limits, vel_limits
-        )
+        gcs.AddVelocityBounds(-vel_limits, vel_limits)
 
         traj, result = gcs.SolvePath(start, goal)
 
-        traj_toppra = IiwaPlanner.make_traj_toppra(traj, plant, vel_limits=vel_limits, accel_limits=accel_limits)
+        traj_toppra = IiwaPlanner.make_traj_toppra(
+            traj, plant, vel_limits=vel_limits, accel_limits=accel_limits
+        )
 
         return traj_toppra
+
 
 class RigidTransformToVector(LeafSystem):
     def __init__(self):
@@ -246,9 +269,7 @@ class RigidTransformToVector(LeafSystem):
         self._position_vector_index = self.DeclareVectorOutputPort(
             "position_vector", 3, self.CalcPositionVector
         ).get_index()
-    
+
     def CalcPositionVector(self, context, output):
-        rigid_transform = (
-            self.get_input_port(self._rigid_transform_index).Eval(context)
-        )
+        rigid_transform = self.get_input_port(self._rigid_transform_index).Eval(context)
         output.SetFromVector(rigid_transform.translation())

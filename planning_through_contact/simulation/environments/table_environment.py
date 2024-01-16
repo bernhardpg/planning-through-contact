@@ -6,6 +6,7 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Demultiplexer,
+    ConstantVectorSource,
 )
 import numpy as np
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
@@ -105,7 +106,17 @@ class TableEnvironment:
             self._state_estimator.GetInputPort("robot_state"),
         )
         if sim_config.use_hardware:
-            raise NotImplementedError()
+            # TODO connect Optitrack system
+            # For now set the object_position to be constant
+            height = 0.025
+            q_slider = sim_config.slider_start_pose.to_generalized_coords(
+                height, z_axis_is_positive=True
+            )
+            const_object_position = builder.AddSystem(ConstantVectorSource(q_slider))
+            builder.Connect(
+                const_object_position.get_output_port(),
+                self._state_estimator.GetInputPort("object_position"),
+            )
         else:
             # Connections to update the object position within state estimator
             self._plant = self._robot_system.station_plant
@@ -184,7 +195,6 @@ class TableEnvironment:
         if not sim_config.use_hardware:
             self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
             self.set_slider_planar_pose(self._sim_config.slider_start_pose)
-
 
     def export_diagram(self, filename: str):
         import pydot

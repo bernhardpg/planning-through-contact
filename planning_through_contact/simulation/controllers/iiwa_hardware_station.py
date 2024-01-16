@@ -18,6 +18,8 @@ from pydrake.all import (
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
     PortSwitch,
+    Demultiplexer,
+    Multiplexer,
 )
 from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 
@@ -79,7 +81,7 @@ class IiwaHardwareStation(RobotSystemBase):
             external_mbp = self.station.GetSubsystemByName("plant")
             self.station_plant = external_mbp
             self.slider = external_mbp.GetModelInstanceByName(sim_config.slider.name)
-        
+
         # Iiwa Planer
         # Delay between starting the simulation and the iiwa starting to go to the home position
         INITIAL_DELAY = 1.0
@@ -142,26 +144,22 @@ class IiwaHardwareStation(RobotSystemBase):
                     time_step=sim_config.time_step,
                 ),
             )
-        
+
         # Switch for switching between planner output (for GoPushStart), and diff IK output (for pushing)
         switch = builder.AddNamedSystem("switch", PortSwitch(robot.num_positions()))
 
-        ## Connect systems
+        if isinstance(driver_config, IiwaDriver):
+            # Iiwa state estimated multiplexer
+            iiwa_state_estimated_mux = builder.AddSystem(
+                Multiplexer(input_sizes=[robot.num_positions(), robot.num_velocities()])
+            )
 
-        # Inputs to the planner
-        builder.Connect(
-            self.station.GetOutputPort("iiwa.state_estimated"),
-            self._planner.GetInputPort("iiwa_state_estimated")
-        )
+        ## Connect systems
 
         # Inputs to diff IK
         builder.Connect(
             planar_translation_to_rigid_tranform.get_output_port(),
             self._diff_ik.GetInputPort("X_WE_desired"),
-        )
-        builder.Connect(
-            self.station.GetOutputPort("iiwa.state_estimated"),
-            self._diff_ik.GetInputPort("robot_state"),
         )
 
         builder.Connect(
@@ -174,21 +172,27 @@ class IiwaHardwareStation(RobotSystemBase):
         #     self._diff_ik.GetInputPort("use_robot_state"),
         # )
 
-        # Inputs to switch
-        builder.Connect(
-            self._planner.GetOutputPort("iiwa_position_command"),
-            switch.DeclareInputPort("planner_iiwa_position_command")
-        )
-        builder.Connect(
-            self._diff_ik.get_output_port(),
-            switch.DeclareInputPort("open_loop_iiwa_position_cmd")
-        )
-        builder.Connect(
-            self._planner.GetOutputPort("control_mode"),
-            switch.get_port_selector_input_port()
-        )
-
         if isinstance(driver_config, JointStiffnessDriver):
+            # Inputs to the planner
+            # Need an additional demultiplexer to split state_estimated into position and velocity
+            demux = builder.AddSystem(
+                Demultiplexer([robot.num_positions(), robot.num_velocities()])
+            )
+            builder.Connect(
+                self.station.GetOutputPort("iiwa.state_estimated"),
+                demux.get_input_port(),
+            )
+            builder.Connect(
+                demux.get_output_port(0),
+                self._planner.GetInputPort("iiwa_position_measured"),
+            )
+
+            # Input to Diff IK
+            builder.Connect(
+                self.station.GetOutputPort("iiwa.state_estimated"),
+                self._diff_ik.GetInputPort("robot_state"),
+            )
+
             # Inputs to state interpolator
             builder.Connect(
                 switch.get_output_port(),
@@ -200,12 +204,49 @@ class IiwaHardwareStation(RobotSystemBase):
                 self._state_interpolator.get_output_port(),
                 self.station.GetInputPort("iiwa.desired_state"),
             )
+
         elif isinstance(driver_config, IiwaDriver):
+            # Inputs to the planner
+            builder.Connect(
+                self.station.GetOutputPort("iiwa.position_measured"),
+                self._planner.GetInputPort("iiwa_position_measured"),
+            )
+
+            # Inputs to the state estimator multiplexer
+            builder.Connect(
+                self.station.GetOutputPort("iiwa.position_measured"),
+                iiwa_state_estimated_mux.get_input_port(0),
+            )
+            builder.Connect(
+                self.station.GetOutputPort("iiwa.velocity_estimated"),
+                iiwa_state_estimated_mux.get_input_port(1),
+            )
+
+            # Input to Diff IK
+            builder.Connect(
+                iiwa_state_estimated_mux.get_output_port(),
+                self._diff_ik.GetInputPort("robot_state"),
+            )
+
             # Inputs to station
             builder.Connect(
                 switch.get_output_port(),
                 self.station.GetInputPort("iiwa.position"),
             )
+
+        # Inputs to switch
+        builder.Connect(
+            self._planner.GetOutputPort("iiwa_position_command"),
+            switch.DeclareInputPort("planner_iiwa_position_command"),
+        )
+        builder.Connect(
+            self._diff_ik.get_output_port(),
+            switch.DeclareInputPort("open_loop_iiwa_position_cmd"),
+        )
+        builder.Connect(
+            self._planner.GetOutputPort("control_mode"),
+            switch.get_port_selector_input_port(),
+        )
 
         ## Export inputs and outputs
         builder.ExportInput(
@@ -213,10 +254,16 @@ class IiwaHardwareStation(RobotSystemBase):
             "planar_position_command",
         )
 
-        builder.ExportOutput(
-            self.station.GetOutputPort("iiwa.state_estimated"),
-            "robot_state_measured",
-        )
+        if isinstance(driver_config, JointStiffnessDriver):
+            builder.ExportOutput(
+                self.station.GetOutputPort("iiwa.state_estimated"),
+                "robot_state_measured",
+            )
+        elif isinstance(driver_config, IiwaDriver):
+            builder.ExportOutput(
+                iiwa_state_estimated_mux.get_output_port(),
+                "robot_state_measured",
+            )
 
         if not sim_config.use_hardware:
             # Only relevant when use_hardware=False
