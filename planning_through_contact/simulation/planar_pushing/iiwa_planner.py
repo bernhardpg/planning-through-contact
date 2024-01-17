@@ -126,7 +126,11 @@ class IiwaPlanner(LeafSystem):
                 global time_pushing_transition
                 time_pushing_transition = current_time
             return
-
+        # elif mode == IiwaPlannerMode.PUSHING:
+        #     current_pos = self.get_input_port(
+        #         self._iiwa_position_measured_index
+        #     ).Eval(context)
+        #     logger.debug(f"PUSHING: time {context.get_time()} Current position: {current_pos}")
     def PlanGoPushStart(self, context, state):
         logger.debug(f"PlanGoPushStart at time {context.get_time()}.")
         q_start = copy(context.get_discrete_state(self._q0_index).get_value())
@@ -238,8 +242,8 @@ class IiwaPlanner(LeafSystem):
         logger.debug(f"q_start = {q_start}")
         logger.debug(f"q_goal = {q_goal}")
 
-        vel_limits = 0.3 * np.ones(7)  # 0.15
-        accel_limits = 0.3 * np.ones(7)
+        vel_limits = 0.15 * np.ones(7)  # 0.15
+        accel_limits = 0.05 * np.ones(7)
         # Set non-zero h_min for start and goal to enforce zero velocity.
         start = gcs.AddRegions([Point(q_start)], order=1, h_min=0.1)
         goal = gcs.AddRegions([Point(q_goal)], order=1, h_min=0.1)
