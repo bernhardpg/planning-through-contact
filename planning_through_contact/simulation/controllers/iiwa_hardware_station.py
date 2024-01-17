@@ -26,6 +26,7 @@ from planning_through_contact.simulation.planar_pushing.iiwa_planner import Iiwa
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
 )
+from planning_through_contact.simulation.systems.joint_velocity_clamp import JointVelocityClamp
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
@@ -110,7 +111,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # True velocity limits for the IIWA14
         # (in rad, rounded down to the first decimal)
         IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 0.7
+        velocity_limit_factor = 1.0
         ik_params.set_joint_velocity_limits(
             (
                 -velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
@@ -154,6 +155,16 @@ class IiwaHardwareStation(RobotSystemBase):
             iiwa_state_estimated_mux = builder.AddSystem(
                 Multiplexer(input_sizes=[robot.num_positions(), robot.num_velocities()])
             )
+        
+        # Velocity clamp to prevent sudden spike when switching to diff IK
+        joint_velocity_clamp = builder.AddNamedSystem(
+            "JointVelocityClamp",
+            JointVelocityClamp(
+                num_positions=robot.num_positions(),
+                joint_velocity_limits= 3 * IIWA14_VELOCITY_LIMITS,
+                time_step=sim_config.time_step,
+            ),
+        )
 
         ## Connect systems
 
@@ -194,9 +205,15 @@ class IiwaHardwareStation(RobotSystemBase):
                 self._diff_ik.GetInputPort("robot_state"),
             )
 
-            # Inputs to state interpolator
+            # Input to joint velocity clamp
             builder.Connect(
                 switch.get_output_port(),
+                joint_velocity_clamp.get_input_port(),
+            )
+
+            # Inputs to state interpolator
+            builder.Connect(
+                joint_velocity_clamp.get_output_port(),
                 self._state_interpolator.get_input_port(),
             )
 
@@ -229,9 +246,15 @@ class IiwaHardwareStation(RobotSystemBase):
                 self._diff_ik.GetInputPort("robot_state"),
             )
 
-            # Inputs to station
+            # Input to joint velocity clamp
             builder.Connect(
                 switch.get_output_port(),
+                joint_velocity_clamp.get_input_port(),
+            )
+
+            # Inputs to station
+            builder.Connect(
+                joint_velocity_clamp.get_output_port(),
                 self.station.GetInputPort("iiwa.position"),
             )
 
@@ -242,7 +265,7 @@ class IiwaHardwareStation(RobotSystemBase):
         )
         builder.Connect(
             self._diff_ik.get_output_port(),
-            switch.DeclareInputPort("open_loop_iiwa_position_cmd"),
+            switch.DeclareInputPort("diff_ik_iiwa_position_cmd"),
         )
         builder.Connect(
             self._planner.GetOutputPort("control_mode"),

@@ -162,7 +162,7 @@ class IiwaPlanner(LeafSystem):
         if mode == IiwaPlannerMode.PUSHING:
             output.set_value(False) # Pushing (DiffIK)
         else:
-            output.set_value(False) # Wait/GoPushStart
+            output.set_value(True) # Wait/GoPushStart
 
     def CalcIiwaPosition(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
