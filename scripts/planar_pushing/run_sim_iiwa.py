@@ -78,7 +78,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=8,
+        delay_before_execution=6,
         closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,

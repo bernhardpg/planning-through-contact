@@ -87,10 +87,10 @@ class IiwaPlanner(LeafSystem):
 
     def Update(self, context, state):
         # FSM Logic for planner
-        mode = context.get_abstract_state(int(self._mode_index)).get_value()
+        mode = context.get_abstract_state(self._mode_index).get_value()
 
         current_time = context.get_time()
-        times = context.get_abstract_state(int(self._times_index)).get_value()
+        times = context.get_abstract_state(self._times_index).get_value()
 
         if mode == IiwaPlannerMode.PLAN_GO_PUSH_START:
             if context.get_time() > times["initial"]:
@@ -131,6 +131,7 @@ class IiwaPlanner(LeafSystem):
         #         self._iiwa_position_measured_index
         #     ).Eval(context)
         #     logger.debug(f"PUSHING: time {context.get_time()} Current position: {current_pos}")
+
     def PlanGoPushStart(self, context, state):
         logger.debug(f"PlanGoPushStart at time {context.get_time()}.")
         q_start = copy(context.get_discrete_state(self._q0_index).get_value())
@@ -140,7 +141,10 @@ class IiwaPlanner(LeafSystem):
         state.get_mutable_abstract_state(int(self._traj_q_index)).set_value(q_traj)
         times = state.get_mutable_abstract_state(int(self._times_index)).get_value()
 
-        assert self._sim_config.delay_before_execution >= q_traj.end_time() + context.get_time() + self._wait_push_delay, "Not enough time to execute plan."
+        assert (
+            self._sim_config.delay_before_execution
+            >= q_traj.end_time() + context.get_time() + self._wait_push_delay
+        ), "Not enough time to execute plan."
         times["go_push_start_initial"] = context.get_time()
         times["go_push_start_final"] = q_traj.end_time() + context.get_time()
         times["wait_push_final"] = times["go_push_start_final"] + self._wait_push_delay
@@ -151,21 +155,21 @@ class IiwaPlanner(LeafSystem):
         self.push_start_pos = q_goal
 
     def CalcControlMode(self, context, output):
-        mode = context.get_abstract_state(int(self._mode_index)).get_value()
+        mode = context.get_abstract_state(self._mode_index).get_value()
         if mode == IiwaPlannerMode.PUSHING:
             output.set_value(InputPortIndex(2))  # Pushing (DiffIK)
         else:
             output.set_value(InputPortIndex(1))  # Wait/GoPushStart
 
     def CalcDiffIKReset(self, context, output):
-        mode = context.get_abstract_state(int(self._mode_index)).get_value()
+        mode = context.get_abstract_state(self._mode_index).get_value()
         if mode == IiwaPlannerMode.PUSHING:
-            output.set_value(False) # Pushing (DiffIK)
+            output.set_value(False)  # Pushing (DiffIK)
         else:
-            output.set_value(True) # Wait/GoPushStart
+            output.set_value(True)  # Wait/GoPushStart
 
     def CalcIiwaPosition(self, context, output):
-        mode = context.get_abstract_state(int(self._mode_index)).get_value()
+        mode = context.get_abstract_state(self._mode_index).get_value()
         if mode == IiwaPlannerMode.PLAN_GO_PUSH_START:
             q_start = copy(context.get_discrete_state(self._q0_index).get_value())
             output.SetFromVector(q_start)

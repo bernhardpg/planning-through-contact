@@ -26,7 +26,9 @@ from planning_through_contact.simulation.planar_pushing.iiwa_planner import Iiwa
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
 )
-from planning_through_contact.simulation.systems.joint_velocity_clamp import JointVelocityClamp
+from planning_through_contact.simulation.systems.joint_velocity_clamp import (
+    JointVelocityClamp,
+)
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
@@ -104,6 +106,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # Diff IK
         EE_FRAME = "pusher_end"
         robot = LoadRobotOnly(sim_config, robot_plant_file="iiwa_controller_plant.yaml")
+        self.robot = robot
         ik_params = DifferentialInverseKinematicsParameters(
             robot.num_positions(), robot.num_velocities()
         )
@@ -111,7 +114,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # True velocity limits for the IIWA14
         # (in rad, rounded down to the first decimal)
         IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 1.0
+        velocity_limit_factor = 0.3
         ik_params.set_joint_velocity_limits(
             (
                 -velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
@@ -155,14 +158,13 @@ class IiwaHardwareStation(RobotSystemBase):
             iiwa_state_estimated_mux = builder.AddSystem(
                 Multiplexer(input_sizes=[robot.num_positions(), robot.num_velocities()])
             )
-        
+
         # Velocity clamp to prevent sudden spike when switching to diff IK
         joint_velocity_clamp = builder.AddNamedSystem(
             "JointVelocityClamp",
             JointVelocityClamp(
                 num_positions=robot.num_positions(),
-                joint_velocity_limits= 3 * IIWA14_VELOCITY_LIMITS,
-                time_step=sim_config.time_step,
+                joint_velocity_limits=velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
             ),
         )
 

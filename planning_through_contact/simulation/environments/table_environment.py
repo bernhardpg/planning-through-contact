@@ -34,6 +34,7 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 )
 from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs_from_pose_vectors,
+    plot_joint_state_logs,
 )
 
 
@@ -177,6 +178,9 @@ class TableEnvironment:
                 ),
                 builder,
             )
+            self._joint_state_logger = LogVectorOutput(
+                self._robot_system.GetOutputPort("robot_state_measured"), builder
+            )
 
             self._pusher_pose_logger = pusher_pose_logger
             self._slider_pose_logger = slider_pose_logger
@@ -269,4 +273,8 @@ class TableEnvironment:
                 slider_pose_log,
                 pusher_pose_desired_log,
                 slider_pose_desired_log,
+            )
+            plot_joint_state_logs(
+                self._joint_state_logger.FindLog(self.context),
+                self._robot_system.robot.num_positions(),
             )

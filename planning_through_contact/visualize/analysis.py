@@ -335,6 +335,38 @@ def plot_planar_pushing_trajectory(
     plt.savefig(f"planar_pushing_control{suffix}.pdf")
 
 
+def plot_joint_state_logs(joint_state_log, num_positions, suffix=""):
+    num_velocities = joint_state_log.data().shape[0] - num_positions
+    # Split the data into positions and velocities
+    data = joint_state_log.data()
+    sample_times = joint_state_log.sample_times()
+    positions = data[:num_positions, :]
+    velocities = data[num_positions:, :]
+
+    # Create a figure with two subplots
+    fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
+    # Plotting positions
+    for i in range(num_positions):
+        axs[0].plot(sample_times, positions[i, :], label=f"Joint {i+1}")
+    axs[0].set_title("Joint Positions")
+    axs[0].set_xlabel("Time")
+    axs[0].set_ylabel("Position")
+    axs[0].legend()
+
+    # Plotting velocities
+    for i in range(num_velocities):
+        axs[1].plot(sample_times, velocities[i, :], label=f"Joint {i+1}")
+    axs[1].set_title("Joint Velocities")
+    axs[1].set_xlabel("Time")
+    axs[1].set_ylabel("Velocity")
+    axs[1].legend()
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.savefig(f"joint_states{suffix}.pdf")
+
+
 PLOT_WIDTH_INCH = 7
 PLOT_HEIGHT_INCH = 4.5
 
