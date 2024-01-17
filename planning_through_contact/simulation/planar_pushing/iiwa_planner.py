@@ -135,6 +135,8 @@ class IiwaPlanner(LeafSystem):
         q_traj = self.create_go_push_start_traj(q_goal, q_start)
         state.get_mutable_abstract_state(int(self._traj_q_index)).set_value(q_traj)
         times = state.get_mutable_abstract_state(int(self._times_index)).get_value()
+
+        assert self._sim_config.delay_before_execution >= q_traj.end_time() + context.get_time() + self._wait_push_delay, "Not enough time to execute plan."
         times["go_push_start_initial"] = context.get_time()
         times["go_push_start_final"] = q_traj.end_time() + context.get_time()
         times["wait_push_final"] = times["go_push_start_final"] + self._wait_push_delay
@@ -147,17 +149,16 @@ class IiwaPlanner(LeafSystem):
     def CalcControlMode(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
         if mode == IiwaPlannerMode.PUSHING:
-            output.set_value(InputPortIndex(2))  # Pushing
+            output.set_value(InputPortIndex(2))  # Pushing (DiffIK)
         else:
             output.set_value(InputPortIndex(1))  # Wait/GoPushStart
 
     def CalcDiffIKReset(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
-
         if mode == IiwaPlannerMode.PUSHING:
-            output.set_value(False)
+            output.set_value(False) # Pushing (DiffIK)
         else:
-            output.set_value(True)
+            output.set_value(False) # Wait/GoPushStart
 
     def CalcIiwaPosition(self, context, output):
         mode = context.get_abstract_state(int(self._mode_index)).get_value()
@@ -256,20 +257,3 @@ class IiwaPlanner(LeafSystem):
         )
 
         return traj_toppra
-
-
-class RigidTransformToVector(LeafSystem):
-    def __init__(self):
-        LeafSystem.__init__(self)
-        # Input
-        self._rigid_transform_index = self.DeclareAbstractInputPort(
-            "rigid_transform", AbstractValue.Make(RigidTransform())
-        ).get_index()
-        # Output
-        self._position_vector_index = self.DeclareVectorOutputPort(
-            "position_vector", 3, self.CalcPositionVector
-        ).get_index()
-
-    def CalcPositionVector(self, context, output):
-        rigid_transform = self.get_input_port(self._rigid_transform_index).Eval(context)
-        output.SetFromVector(rigid_transform.translation())

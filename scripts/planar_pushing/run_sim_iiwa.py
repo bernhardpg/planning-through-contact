@@ -48,6 +48,10 @@ def run_sim(
     logging.getLogger(
         "planning_through_contact.simulation.controllers.hybrid_mpc"
     ).setLevel(logging.DEBUG)
+    logging.getLogger(
+        "planning_through_contact.simulation.planar_pushing.iiwa_planner"
+    ).setLevel(logging.DEBUG)
+
     traj = PlanarPushingTrajectory.load(plan)
     print(f"running plan:{plan}")
     print(traj.config.dynamics_config)
@@ -74,7 +78,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=4,
+        delay_before_execution=15,
         closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
@@ -82,6 +86,7 @@ def run_sim(
         scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
         use_hardware=True,
         pusher_z_offset=0.1,
+        default_joint_positions=[ 0.0735,  1.0232,  0.3392, -1.3109,  2.7611, -0.8708,  0.5074]
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -120,6 +125,10 @@ def run_sim(
         traj.end_time + sim_config.delay_before_execution + 0.5,
         save_recording_as=recording_name,
     )
+    # environment.simulate(
+    #     sim_config.delay_before_execution+0.5,
+    #     save_recording_as=recording_name,
+    # )
     # environment.simulate(10, save_recording_as=recording_name)
 
     if debug and isinstance(position_source, MPCPositionSource):

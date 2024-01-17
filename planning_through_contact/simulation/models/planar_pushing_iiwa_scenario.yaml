@@ -38,5 +38,5 @@ demo:
         #         iiwa_motor_7:
         #             kp: 800
         #             kd: 100
-    simulation_duration: 600
+    simulation_duration: 6000
                 

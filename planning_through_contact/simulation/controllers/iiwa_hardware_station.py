@@ -117,6 +117,7 @@ class IiwaHardwareStation(RobotSystemBase):
                 velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
             )
         )
+        ik_params.set_nominal_joint_position(self._sim_config.default_joint_positions)
         self._diff_ik = builder.AddNamedSystem(
             "DiffIk",
             DifferentialInverseKinematicsIntegrator(
@@ -162,15 +163,15 @@ class IiwaHardwareStation(RobotSystemBase):
             self._diff_ik.GetInputPort("X_WE_desired"),
         )
 
-        builder.Connect(
-            const.get_output_port(),
-            self._diff_ik.GetInputPort("use_robot_state"),
-        )
-        # Strangely, when we use the planner's reset_diff_ik port, which sets use_robot_state to True before the pushing phase and False during the pushing phase, we get persistent diff IK drift.
         # builder.Connect(
-        #     self._planner.GetOutputPort("reset_diff_ik"),
+        #     const.get_output_port(),
         #     self._diff_ik.GetInputPort("use_robot_state"),
         # )
+        # Strangely, when we use the planner's reset_diff_ik port, which sets use_robot_state to True before the pushing phase and False during the pushing phase, we get persistent diff IK drift.
+        builder.Connect(
+            self._planner.GetOutputPort("reset_diff_ik"),
+            self._diff_ik.GetInputPort("use_robot_state"),
+        )
 
         if isinstance(driver_config, JointStiffnessDriver):
             # Inputs to the planner
