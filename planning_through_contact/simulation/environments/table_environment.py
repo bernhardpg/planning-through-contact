@@ -6,6 +6,7 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Demultiplexer,
+    ConstantVectorSource,
 )
 import numpy as np
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
@@ -33,6 +34,7 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 )
 from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_logs_from_pose_vectors,
+    plot_joint_state_logs,
 )
 
 
@@ -105,7 +107,17 @@ class TableEnvironment:
             self._state_estimator.GetInputPort("robot_state"),
         )
         if sim_config.use_hardware:
-            raise NotImplementedError()
+            # TODO connect Optitrack system
+            # For now set the object_position to be constant
+            height = 0.025
+            q_slider = sim_config.slider_start_pose.to_generalized_coords(
+                height, z_axis_is_positive=True
+            )
+            const_object_position = builder.AddSystem(ConstantVectorSource(q_slider))
+            builder.Connect(
+                const_object_position.get_output_port(),
+                self._state_estimator.GetInputPort("object_position"),
+            )
         else:
             # Connections to update the object position within state estimator
             self._plant = self._robot_system.station_plant
@@ -166,6 +178,9 @@ class TableEnvironment:
                 ),
                 builder,
             )
+            self._joint_state_logger = LogVectorOutput(
+                self._robot_system.GetOutputPort("robot_state_measured"), builder
+            )
 
             self._pusher_pose_logger = pusher_pose_logger
             self._slider_pose_logger = slider_pose_logger
@@ -184,16 +199,6 @@ class TableEnvironment:
         if not sim_config.use_hardware:
             self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
             self.set_slider_planar_pose(self._sim_config.slider_start_pose)
-
-            robot_model_instance = self._state_estimator._plant.GetModelInstanceByName(
-                self._robot_system.robot_model_name
-            )
-            # This will break for actuated cylinder
-            if isinstance(self._robot_system, IiwaHardwareStation):
-                self._state_estimator._plant.SetDefaultPositions(
-                    robot_model_instance,
-                    self._robot_system.start_joint_positions,
-                )
 
     def export_diagram(self, filename: str):
         import pydot
@@ -268,4 +273,8 @@ class TableEnvironment:
                 slider_pose_log,
                 pusher_pose_desired_log,
                 slider_pose_desired_log,
+            )
+            plot_joint_state_logs(
+                self._joint_state_logger.FindLog(self.context),
+                self._robot_system.robot.num_positions(),
             )
