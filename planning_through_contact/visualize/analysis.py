@@ -857,39 +857,41 @@ def analyze_mode_result(
     mode: FaceContactMode,
     traj: PlanarPushingTrajectory,
     result: MathematicalProgramResult,
+    rank_analysis: bool = True,
 ) -> None:
-    Xs = mode.get_Xs()
+    if rank_analysis:
+        Xs = mode.get_Xs()
 
-    if len(Xs) == 1:
-        X_sol = result.GetSolution(Xs[0])
+        if len(Xs) == 1:
+            X_sol = result.GetSolution(Xs[0])
 
-        eigs, _ = np.linalg.eig(X_sol)
-        norms = np.abs(eigs)
+            eigs, _ = np.linalg.eig(X_sol)
+            norms = np.abs(eigs)
 
-        plt.bar(range(len(norms)), norms)
-        plt.xlabel("Index of Eigenvalue")
-        plt.ylabel("Norm of Eigenvalue")
-        plt.title("Norms of the Eigenvalues of the Matrix")
-        plt.show()
-    else:
-        X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
+            plt.bar(range(len(norms)), norms)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Norm of Eigenvalue")
+            plt.title("Norms of the Eigenvalues of the Matrix")
+            plt.show()
+        else:
+            X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
 
-        eigs, _ = zip(*[np.linalg.eig(X_sol) for X_sol in X_sols])
-        norms = [np.abs(eig) for eig in eigs]
+            eigs, _ = zip(*[np.linalg.eig(X_sol) for X_sol in X_sols])
+            norms = [np.abs(eig) for eig in eigs]
 
-        data = [
-            [norm[i] if i < len(norm) else 0 for norm in norms]
-            for i in range(len(norms[0]))
-        ]
+            data = [
+                [norm[i] if i < len(norm) else 0 for norm in norms]
+                for i in range(len(norms[0]))
+            ]
 
-        means = [np.mean(sublist) for sublist in data]
-        std_devs = [np.std(sublist) for sublist in data]
+            means = [np.mean(sublist) for sublist in data]
+            std_devs = [np.std(sublist) for sublist in data]
 
-        plt.bar(range(len(means)), means, yerr=std_devs)
-        plt.xlabel("Index of Eigenvalue")
-        plt.ylabel("Norm of Eigenvalue")
-        plt.title("Norms of the Eigenvalues of the Matrix")
-        plt.show()
+            plt.bar(range(len(means)), means, yerr=std_devs)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Norm of Eigenvalue")
+            plt.title("Norms of the Eigenvalues of the Matrix")
+            plt.show()
 
     keys = mode.constraints.keys()
     constraint_violations = {key: [] for key in keys}
