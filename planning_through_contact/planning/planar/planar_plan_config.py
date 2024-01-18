@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -114,6 +114,7 @@ class PlanarSolverParams:
     measure_solve_time: bool = False
     print_path: bool = False
     print_cost: bool = False
+    solver: Literal["mosek", "clarabel"] = "mosek"
     get_rounded_and_original_traj: bool = False
     nonl_round_major_feas_tol: float = (
         1e-3  # Feasibility treshold for nonlinear rounding
