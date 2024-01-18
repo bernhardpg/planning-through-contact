@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -53,6 +54,265 @@ from planning_through_contact.visualize.visualizer_2d import (
 )
 
 
+def compare_trajs(
+    traj_a: PlanarPushingTrajectory,
+    traj_b: PlanarPushingTrajectory,
+    filename: Optional[str] = None,
+    plot_lims: Optional[Tuple[float, float, float, float]] = None,
+    plot_knot_points: bool = True,
+    traj_a_legend: str = "traj_a",
+    traj_b_legend: str = "traj_b",
+) -> None:
+    # We need to add the first vertex again to close the polytope
+    vertices = np.hstack(
+        traj_a.config.slider_geometry.vertices
+        + [traj_a.config.slider_geometry.vertices[0]]
+    )
+
+    get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
+
+    TRAJ_A_COLOR = COLORS["aquamarine4"].diffuse()
+    TRAJ_B_COLOR = COLORS["firebrick3"].diffuse()
+
+    GOAL_COLOR = EMERALDGREEN.diffuse()
+    GOAL_TRANSPARENCY = 1.0
+
+    START_COLOR = CRIMSON.diffuse()
+    START_TRANSPARENCY = 1.0
+
+    traj_a_segment_groups = []
+    idx = 0
+    while idx < len(traj_a.path_knot_points):
+        group = []
+        no_face_contact = True
+        while no_face_contact and idx < len(traj_a.path_knot_points):
+            curr_segment = traj_a.traj_segments[idx]
+            curr_knot_points = traj_a.path_knot_points[idx]
+            group.append((curr_segment, curr_knot_points))
+            idx += 1
+
+            if isinstance(curr_knot_points, FaceContactVariables):
+                no_face_contact = False
+
+        traj_a_segment_groups.append(group)
+
+    traj_b_segment_groups = []
+    idx = 0
+    while idx < len(traj_b.path_knot_points):
+        group = []
+        no_face_contact = True
+        while no_face_contact and idx < len(traj_b.path_knot_points):
+            curr_segment = traj_b.traj_segments[idx]
+            curr_knot_points = traj_b.path_knot_points[idx]
+            group.append((curr_segment, curr_knot_points))
+            idx += 1
+
+            if isinstance(curr_knot_points, FaceContactVariables):
+                no_face_contact = False
+
+        traj_b_segment_groups.append(group)
+
+    fig_height = 3
+    fig, axs = plt.subplots(
+        1,
+        len(traj_a_segment_groups),
+        figsize=(fig_height * len(traj_a_segment_groups), 3),
+    )
+
+    if plot_lims is not None:
+        x_min, x_max, y_min, y_max = plot_lims
+    else:
+        x_min, x_max, y_min, y_max = traj_a.get_pos_limits(buffer=0.1)
+
+    def _plot_segment_groups(segment_groups, color):
+        for segment_idx, segment_group in enumerate(segment_groups):
+            if len(segment_groups) == 1:  # only one subplot
+                ax = axs
+            else:
+                ax = axs[segment_idx]
+
+            ax.axis("equal")  # Ensures the x and y axis are scaled equally
+
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+            # Hide the axes, including the spines, ticks, labels, and title
+            ax.set_axis_off()
+
+            num_frames_in_group = sum(
+                [knot_points.num_knot_points for _, knot_points in segment_group]
+            )
+            frame_count = 0
+
+            start_transparency = 0.5
+            end_transparency = 0.9
+            get_transp_for_frame = (
+                lambda idx, num_points: (end_transparency - start_transparency)
+                * idx
+                / num_points
+                + start_transparency
+            )
+
+            # Plot workspace
+            ws_rect = plt.Rectangle(
+                (0.4, -0.25),
+                0.35,
+                0.5,
+                linewidth=1,
+                edgecolor="grey",
+                facecolor="none",
+                linestyle="--",
+            )
+            ax.add_patch(ws_rect)
+
+            for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
+                ts = np.linspace(
+                    traj_segment.start_time,
+                    traj_segment.end_time,
+                    knot_points.num_knot_points,
+                )
+
+                for idx in range(knot_points.num_knot_points):
+                    R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
+                    p_WB = traj_segment.get_p_WB(ts[idx])
+                    p_WP = traj_segment.get_p_WP(ts[idx])
+
+                    # We only plot the current frame if it will change next frame
+                    # (this is to avoid plotting multiple frames on top of each other)
+                    if idx + 1 < knot_points.num_knot_points:
+                        next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[
+                            :2, :2
+                        ]  # 2x2 matrix
+                        next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
+                        next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
+                    else:
+                        next_R_WB = R_WB
+                        next_p_WB = p_WB
+                        next_p_WP = p_WP
+
+                    vertices_W = get_vertices_W(p_WB, R_WB)
+
+                    transparency = get_transp_for_frame(
+                        frame_count, num_frames_in_group
+                    )
+                    line_transparency = transparency
+
+                    # Plot polytope
+                    if (
+                        np.any(next_R_WB != R_WB)
+                        or np.any(next_p_WB != p_WB)
+                        or element_idx == len(segment_group) - 1
+                    ):
+                        ax.plot(
+                            vertices_W[0, :],
+                            vertices_W[1, :],
+                            color=color,
+                            alpha=line_transparency,
+                            linewidth=1,
+                        )
+
+                    # # Plot pusher
+                    # if np.any(next_p_WP != p_WP) or element_idx == len(segment_group) - 1:
+                    #     ax.add_patch(make_circle(p_WP, fill_transparency))
+
+                    # Plot forces
+                    FORCE_SCALE = 2.0
+                    # only N-1 inputs
+                    if (idx < knot_points.num_knot_points - 1) and (
+                        isinstance(knot_points, FaceContactVariables)
+                    ):
+                        f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+                        p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
+                        ax.arrow(
+                            p_Wc[0],
+                            p_Wc[1],
+                            f_W[0],
+                            f_W[1],
+                            color=color,
+                            fill=True,
+                            zorder=99999,
+                            alpha=line_transparency,
+                            joinstyle="round",
+                            linewidth=0.0,
+                            width=0.006,
+                        )
+
+                    frame_count += 1
+
+    _plot_segment_groups(traj_a_segment_groups, TRAJ_A_COLOR)
+    _plot_segment_groups(traj_b_segment_groups, TRAJ_B_COLOR)
+
+    if not plot_knot_points:
+        raise NotImplementedError(
+            "Support for making figure of interpolated trajectory is not yet supported"
+        )
+
+        # # Plot start pos
+        # slider_initial_pose = traj_a.config.start_and_goal.slider_initial_pose  # type: ignore
+        # p_WB = slider_initial_pose.pos()
+        # R_WB = slider_initial_pose.two_d_rot_matrix()
+        # goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        # ax.plot(
+        #     goal_vertices_W[0, :],
+        #     goal_vertices_W[1, :],
+        #     color=START_COLOR,
+        #     alpha=START_TRANSPARENCY,
+        #     linewidth=1,
+        #     linestyle="--",
+        # )
+        # if traj_a.config.start_and_goal.pusher_initial_pose is not None:
+        #     p_WP = traj_a.config.start_and_goal.pusher_initial_pose.pos()  # type: ignore
+        #     circle = plt.Circle(
+        #         p_WP.flatten(),
+        #         traj_a.config.pusher_radius,  # type: ignore
+        #         edgecolor=START_COLOR,
+        #         facecolor="none",
+        #         linewidth=1,
+        #         alpha=START_TRANSPARENCY,
+        #         linestyle="--",
+        #     )
+        #     ax.add_patch(circle)
+        #
+        # # Plot target pos
+        # slider_target_pose = traj_a.config.start_and_goal.slider_target_pose  # type: ignore
+        # p_WB = slider_target_pose.pos()
+        # R_WB = slider_target_pose.two_d_rot_matrix()
+        # goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        # ax.plot(
+        #     goal_vertices_W[0, :],
+        #     goal_vertices_W[1, :],
+        #     color=GOAL_COLOR,
+        #     alpha=GOAL_TRANSPARENCY,
+        #     linewidth=1,
+        #     linestyle="--",
+        # )
+        # if traj_a.config.start_and_goal.pusher_initial_pose is not None:
+        #     p_WP = traj_a.config.start_and_goal.pusher_target_pose.pos()  # type: ignore
+        #     circle = plt.Circle(
+        #         p_WP.flatten(),
+        #         traj_a.config.pusher_radius,  # type: ignore
+        #         edgecolor=GOAL_COLOR,
+        #         facecolor="none",
+        #         linewidth=1,
+        #         alpha=GOAL_TRANSPARENCY,
+        #         linestyle="--",
+        #     )
+        #     ax.add_patch(circle)
+
+    # Create a list of patches to use as legend handles
+    custom_patches = [
+        mpatches.Patch(color=color, label=label)
+        for label, color in zip(
+            [traj_a_legend, traj_b_legend], [TRAJ_A_COLOR, TRAJ_B_COLOR]
+        )
+    ]
+    # Creating the custom legend
+    plt.legend(handles=custom_patches)
+
+    fig.tight_layout()
+    if filename is not None:
+        fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
+
+
 def make_traj_figure(
     traj: PlanarPushingTrajectory,
     filename: str,
@@ -92,9 +352,9 @@ def make_traj_figure(
 
         segment_groups.append(group)
 
-    fig_height = 3
+    fig_height = 5
     fig, axs = plt.subplots(
-        1, len(segment_groups), figsize=(fig_height * len(segment_groups), 3)
+        1, len(segment_groups), figsize=(fig_height * len(segment_groups), fig_height)
     )
 
     if plot_lims is not None:
