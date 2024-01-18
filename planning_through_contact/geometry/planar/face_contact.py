@@ -804,7 +804,7 @@ class FaceContactMode(AbstractContactMode):
                 idx, a[0] * cos_th + a[1] * sin_th >= b
             )
 
-    def formulate_convex_relaxation(self) -> None:
+    def formulate_convex_relaxation(self, add_l2_norm_cost: bool = False) -> None:
         # TODO: This part of the code is outdated and will most likely not work correctly
         if self.config.use_eq_elimination:
             self.original_prog = self.prog_wrapper
@@ -827,7 +827,8 @@ class FaceContactMode(AbstractContactMode):
         else:
             if self.config.use_band_sparsity:
                 self.relaxed_prog = self.prog_wrapper.make_relaxation(
-                    trace_cost=self.config.contact_config.cost.trace
+                    trace_cost=self.config.contact_config.cost.trace,
+                    add_l2_norm_cost=add_l2_norm_cost,
                 )
             else:
                 self.relaxed_prog = self.prog_wrapper.make_full_relaxation(
