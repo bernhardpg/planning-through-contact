@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.all import ContactModel, StartMeshcat
+from pydrake.all import (ContactModel, StartMeshcat, RollPitchYaw, RotationMatrix, RigidTransform)
 import logging
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -26,6 +26,7 @@ from planning_through_contact.simulation.environments.table_environment import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.sensors.optitrack import OptitrackConfig
 
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
@@ -88,6 +89,21 @@ def run_sim(
         pusher_z_offset=0.03,
         default_joint_positions=[ 0.0776,  1.0562,  0.3326, -1.3048,  2.7515, -0.8441,  0.5127]
     )
+    R_OptitrackBody_SimBody_W = RotationMatrix(RollPitchYaw([
+        0.02858276367889423 - 0.035, 
+        -(0.010134800302549629) - 0.02,
+        1.5283178523081473]))
+    p_OptitrackBody_SimBody_W = [
+        0.3+0.28101587, 
+        -0.03574987,
+        0.0249886399-0.03845533]
+    optitrack_config: OptitrackConfig = OptitrackConfig(
+        iiwa_id=4,
+        slider_id=5,
+        X_optitrackBody_plantBody_world=RigidTransform(
+            R_OptitrackBody_SimBody_W, p_OptitrackBody_SimBody_W
+        ),
+    )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
     #     print(traj.get_slider_planar_pose(t))
@@ -112,6 +128,7 @@ def run_sim(
         desired_position_source=position_source,
         robot_system=position_controller,
         sim_config=sim_config,
+        optitrack_config=optitrack_config,
         station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
     )

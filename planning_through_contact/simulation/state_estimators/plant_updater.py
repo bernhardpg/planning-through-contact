@@ -81,12 +81,13 @@ class PlantUpdater(LeafSystem):
             self._robot_state_input_port.Eval(context),
         )
 
-        # Update object position
-        self._plant.SetPositions(
-            self._plant_context,
-            self._object_model_instance_index,
-            self._object_position_input_port.Eval(context),
-        )
+        if self._object_position_input_port.HasValue(context):
+            # Update object position
+            self._plant.SetPositions(
+                self._plant_context,
+                self._object_model_instance_index,
+                self._object_position_input_port.Eval(context),
+            )
 
     def _get_position(self, context: Context, output: BasicVector) -> None:
         if self._plant_context is None:

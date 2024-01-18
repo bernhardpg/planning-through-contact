@@ -26,6 +26,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.simulation.sensors.optitrack import OptitrackConfig, OptitrackObjectTransformUpdaterDiagram
 from planning_through_contact.simulation.state_estimators.state_estimator import (
     StateEstimator,
 )
@@ -44,6 +45,7 @@ class TableEnvironment:
         desired_position_source: DesiredPlanarPositionSourceBase,
         robot_system: RobotSystemBase,
         sim_config: PlanarPushingSimConfig,
+        optitrack_config: OptitrackConfig,
         station_meshcat: Optional[Meshcat] = None,
         state_estimator_meshcat: Optional[Meshcat] = None,
     ):
@@ -77,6 +79,19 @@ class TableEnvironment:
         )
         self._meshcat = self._robot_system._meshcat
 
+        if sim_config.use_hardware:
+            optitrack_object_transform_updater: OptitrackObjectTransformUpdaterDiagram = (
+                builder.AddNamedSystem(
+                    "OptitrackTransformUpdater",
+                    OptitrackObjectTransformUpdaterDiagram(
+                        state_estimator=self._state_estimator,
+                        optitrack_iiwa_id=optitrack_config.iiwa_id,
+                        optitrack_body_id=optitrack_config.slider_id,
+                        X_optitrackBody_plantBody_world=optitrack_config.X_optitrackBody_plantBody_world,
+                    ),
+                )
+            )
+
         ## Connect systems
 
         # Inputs to desired position source
@@ -109,15 +124,16 @@ class TableEnvironment:
         if sim_config.use_hardware:
             # TODO connect Optitrack system
             # For now set the object_position to be constant
-            height = 0.025
-            q_slider = sim_config.slider_start_pose.to_generalized_coords(
-                height, z_axis_is_positive=True
-            )
-            const_object_position = builder.AddSystem(ConstantVectorSource(q_slider))
-            builder.Connect(
-                const_object_position.get_output_port(),
-                self._state_estimator.GetInputPort("object_position"),
-            )
+            # height = 0.025
+            # q_slider = sim_config.slider_start_pose.to_generalized_coords(
+            #     height, z_axis_is_positive=True
+            # )
+            # const_object_position = builder.AddSystem(ConstantVectorSource(q_slider))
+            # builder.Connect(
+            #     const_object_position.get_output_port(),
+            #     self._state_estimator.GetInputPort("object_position"),
+            # )
+            pass
         else:
             # Connections to update the object position within state estimator
             self._plant = self._robot_system.station_plant
@@ -196,7 +212,11 @@ class TableEnvironment:
 
         self.context = self._simulator.get_mutable_context()
         self._robot_system.pre_sim_callback(self.context)
-        if not sim_config.use_hardware:
+        if sim_config.use_hardware:
+            optitrack_object_transform_updater.set_plant_context(
+                self._state_estimator.get_plant_context()
+            )
+        else:
             self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
             self.set_slider_planar_pose(self._sim_config.slider_start_pose)
 
