@@ -72,7 +72,9 @@ def compare_trajs(
     get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
 
     TRAJ_A_COLOR = COLORS["aquamarine4"].diffuse()
+    TRAJ_A_COLOR_DARK = COLORS["darkgreen"].diffuse()
     TRAJ_B_COLOR = COLORS["firebrick3"].diffuse()
+    TRAJ_B_COLOR_DARK = COLORS["firebrick4"].diffuse()
 
     GOAL_COLOR = EMERALDGREEN.diffuse()
     GOAL_TRANSPARENCY = 1.0
@@ -112,19 +114,24 @@ def compare_trajs(
 
         traj_b_segment_groups.append(group)
 
-    fig_height = 3
+    # Remove the last group as we don't need to plot this
+    # (slider is standing still, only pusher is moving)
+    traj_a_segment_groups = traj_a_segment_groups[:-1]
+    traj_b_segment_groups = traj_b_segment_groups[:-1]
+
+    fig_height = 5
     fig, axs = plt.subplots(
         1,
         len(traj_a_segment_groups),
-        figsize=(fig_height * len(traj_a_segment_groups), 3),
+        figsize=(fig_height * len(traj_a_segment_groups), fig_height),
     )
 
     if plot_lims is not None:
         x_min, x_max, y_min, y_max = plot_lims
     else:
-        x_min, x_max, y_min, y_max = traj_a.get_pos_limits(buffer=0.1)
+        x_min, x_max, y_min, y_max = traj_a.get_pos_limits(buffer=0.5)
 
-    def _plot_segment_groups(segment_groups, color):
+    def _plot_segment_groups(segment_groups, color, color_dark):
         for segment_idx, segment_group in enumerate(segment_groups):
             if len(segment_groups) == 1:  # only one subplot
                 ax = axs
@@ -151,18 +158,6 @@ def compare_trajs(
                 / num_points
                 + start_transparency
             )
-
-            # Plot workspace
-            ws_rect = plt.Rectangle(
-                (0.4, -0.25),
-                0.35,
-                0.5,
-                linewidth=1,
-                edgecolor="grey",
-                facecolor="none",
-                linestyle="--",
-            )
-            ax.add_patch(ws_rect)
 
             for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
                 ts = np.linspace(
@@ -206,7 +201,8 @@ def compare_trajs(
                             vertices_W[0, :],
                             vertices_W[1, :],
                             color=color,
-                            alpha=line_transparency,
+                            alpha=line_transparency
+                            * 0.7,  # we plot the slider a bit more transparent to make forces visible
                             linewidth=1,
                         )
 
@@ -227,7 +223,7 @@ def compare_trajs(
                             p_Wc[1],
                             f_W[0],
                             f_W[1],
-                            color=color,
+                            color=color_dark,
                             fill=True,
                             zorder=99999,
                             alpha=line_transparency,
@@ -238,8 +234,8 @@ def compare_trajs(
 
                     frame_count += 1
 
-    _plot_segment_groups(traj_a_segment_groups, TRAJ_A_COLOR)
-    _plot_segment_groups(traj_b_segment_groups, TRAJ_B_COLOR)
+    _plot_segment_groups(traj_a_segment_groups, TRAJ_A_COLOR, TRAJ_A_COLOR_DARK)
+    _plot_segment_groups(traj_b_segment_groups, TRAJ_B_COLOR, TRAJ_B_COLOR_DARK)
 
     if not plot_knot_points:
         raise NotImplementedError(

@@ -762,7 +762,9 @@ def plot_constraint_violation(
         plt.show()
 
 
-def analyze_plan(path: PlanarPushingPath, filename: str, rounded: bool = False) -> None:
+def analyze_plan(
+    path: PlanarPushingPath, filename: Optional[str] = None, rounded: bool = False
+) -> None:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
