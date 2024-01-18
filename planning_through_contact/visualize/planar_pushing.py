@@ -214,17 +214,21 @@ def compare_trajs(
 
                     # Plot forces
                     FORCE_SCALE = 2.0
+                    FORCE_VIS_TRESH = 1e-2
                     # only N-1 inputs
                     if (idx < knot_points.num_knot_points - 1) and (
                         isinstance(knot_points, FaceContactVariables)
                     ):
-                        f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+                        f_W = traj_segment.get_f_W(ts[idx]).flatten()
+                        if np.linalg.norm(f_W) < FORCE_VIS_TRESH:
+                            continue
+
                         p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
                         ax.arrow(
                             p_Wc[0],
                             p_Wc[1],
-                            f_W[0],
-                            f_W[1],
+                            f_W[0] * FORCE_SCALE,
+                            f_W[1] * FORCE_SCALE,
                             color=color_dark,
                             fill=True,
                             zorder=99999,

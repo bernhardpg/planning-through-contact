@@ -415,9 +415,9 @@ class FaceContactMode(AbstractContactMode):
             for k, (delta_cos_th, delta_sin_th) in enumerate(
                 zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
             ):
-                approx_delta_theta = delta_cos_th**2 + delta_sin_th**2
+                approx_delta_theta_sq = delta_cos_th**2 + delta_sin_th**2
                 self.prog_wrapper.add_quadratic_constraint(
-                    k, k + 1, approx_delta_theta, 0, delta_th_max**2
+                    k, k + 1, approx_delta_theta_sq, 0, delta_th_max**2
                 )
 
         # TODO(bernhardpg): Remove, we don't want to use velocity limits
