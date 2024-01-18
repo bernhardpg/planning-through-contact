@@ -271,7 +271,7 @@ class PlanarPushingPath:
         else:
             if not result.is_success():
                 print(
-                    "Warning, rounding did not return is_success() == True, and might now have converged"
+                    "Warning, rounding did not return is_success() == True, and might not have converged"
                 )
 
         return result
