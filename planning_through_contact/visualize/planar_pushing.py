@@ -116,8 +116,10 @@ def compare_trajs(
 
     # Remove the last group as we don't need to plot this
     # (slider is standing still, only pusher is moving)
-    traj_a_segment_groups = traj_a_segment_groups[:-1]
-    traj_b_segment_groups = traj_b_segment_groups[:-1]
+    if len(traj_a_segment_groups) > 1:
+        traj_a_segment_groups = traj_a_segment_groups[:-1]
+    if len(traj_b_segment_groups) > 1:
+        traj_b_segment_groups = traj_b_segment_groups[:-1]
 
     fig_height = 5
     fig, axs = plt.subplots(

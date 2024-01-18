@@ -283,6 +283,11 @@ class NonCollisionMode(AbstractContactMode):
         return exprs
 
     def _define_cost(self) -> None:
+        if self.num_knot_points == 1 and not self.terminal_cost:
+            # If we have only one knot point we are either a source or target mode, in that
+            # case we don't add any cost (unless explicitly specified)
+            return
+
         self.cost_config = self.config.non_collision_cost
 
         if self.cost_config.pusher_velocity_regularization is not None:

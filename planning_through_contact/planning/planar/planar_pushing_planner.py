@@ -70,12 +70,6 @@ class PlanarPushingPlanner:
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if (
-            self.config.non_collision_cost.avoid_object
-            and self.config.allow_teleportation
-        ):
-            raise ValueError("Cannot avoid object while allowing teleportation")
-
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
         self.contact_locations = contact_locations
