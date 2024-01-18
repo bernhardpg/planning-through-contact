@@ -816,23 +816,31 @@ def analyze_plan(
         constraint_violations[key] = np.array(item)  # type: ignore
 
     num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
-    ref_theta_vel = np.mean(
-        np.concatenate(
-            [
-                points.delta_omega_WBs
-                for points in path_knot_points
-                if isinstance(points, FaceContactVariables)
-            ]
-        )
+    MIN_REF_THETA_VEL = np.pi / 15
+    ref_theta_vel = max(
+        np.mean(
+            np.concatenate(
+                [
+                    points.delta_omega_WBs
+                    for points in path_knot_points
+                    if isinstance(points, FaceContactVariables)
+                ]
+            )
+        ),
+        MIN_REF_THETA_VEL,
     )
-    ref_vel = np.mean(
-        np.concatenate(
-            [
-                [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
-                for points in path_knot_points
-                if isinstance(points, FaceContactVariables)
-            ]
-        )
+    MIN_REF_VEL = 0.05  # m/s
+    ref_vel = max(
+        np.mean(
+            np.concatenate(
+                [
+                    [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
+                    for points in path_knot_points
+                    if isinstance(points, FaceContactVariables)
+                ]
+            )
+        ),
+        MIN_REF_VEL,
     )
     ref_vals = {
         "SO2": 1,
