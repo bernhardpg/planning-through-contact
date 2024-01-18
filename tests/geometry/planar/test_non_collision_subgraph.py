@@ -56,7 +56,7 @@ from tests.geometry.planar.tools import (
     assert_object_is_avoided,
 )
 
-DEBUG = True
+DEBUG = False
 
 
 @pytest.mark.parametrize(
