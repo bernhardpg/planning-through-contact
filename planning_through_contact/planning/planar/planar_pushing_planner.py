@@ -364,7 +364,7 @@ class PlanarPushingPlanner:
             options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
 
         options.convex_relaxation = solver_params.gcs_convex_relaxation
-        if options.convex_relaxation is True:
+        if solver_params.gcs_convex_relaxation:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = solver_params.gcs_max_rounded_paths
 
