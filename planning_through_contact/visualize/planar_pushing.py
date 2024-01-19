@@ -312,7 +312,7 @@ def compare_trajs(
 
     fig.tight_layout()
     if filename is not None:
-        fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
+        fig.savefig(filename + f".pdf")  # type: ignore
 
 
 def make_traj_figure(
