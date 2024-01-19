@@ -21,7 +21,10 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     AbstractModeVariables,
 )
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.face_contact import (
+    FaceContactMode,
+    FaceContactVariables,
+)
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -158,6 +161,27 @@ class PlanarPushingPath:
             for pair in self.pairs
         ]
         return vars_on_path
+
+    def get_determinants(self, rounded: bool = False) -> List[float]:
+        if rounded:
+            face_contact_vars = [
+                vars
+                for vars in self.get_rounded_vars()
+                if isinstance(vars, FaceContactVariables)
+            ]
+        else:  # rounded == False
+            face_contact_vars = [
+                vars
+                for vars in self.get_vars()
+                if isinstance(vars, FaceContactVariables)
+            ]
+        cos_ths = np.concatenate([var.cos_ths for var in face_contact_vars])
+        sin_ths = np.concatenate([var.sin_ths for var in face_contact_vars])
+
+        determinants: List[float] = [
+            np.linalg.norm([cos, sin]) for cos, sin in zip(cos_ths, sin_ths)
+        ]
+        return determinants
 
     def do_rounding(self, solver_params: PlanarSolverParams) -> None:
         self.rounded_result = self._do_nonlinear_rounding(solver_params)

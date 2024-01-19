@@ -66,6 +66,8 @@ def get_default_non_collision_cost() -> NonCollisionCost:
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee"] = "box",
     pusher_radius: float = 0.035,
+    integration_constant: float = 0.6,
+    arc_length_weight: Optional[float] = None,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -82,10 +84,13 @@ def get_default_plan_config(
         pusher_radius=pusher_radius,
         friction_coeff_slider_pusher=0.4,
         friction_coeff_table_slider=0.5,
-        integration_constant=0.6,
+        integration_constant=integration_constant,
     )
 
     contact_cost = get_default_contact_cost()
+    if arc_length_weight is not None:
+        contact_cost.keypoint_arc_length = arc_length_weight
+
     non_collision_cost = get_default_non_collision_cost()
 
     contact_config = ContactConfig(
