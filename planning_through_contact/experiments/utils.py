@@ -60,8 +60,8 @@ def get_default_non_collision_cost() -> NonCollisionCost:
         distance_to_object_quadratic_preferred_distance=0.1,
         # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
         distance_to_object_socp=None,
-        pusher_velocity_regularization=0.01,
-        pusher_arc_length=0.005,
+        pusher_velocity_regularization=0.005,
+        pusher_arc_length=0.001,
     )
     return non_collision_cost
 
@@ -73,6 +73,8 @@ def get_default_plan_config(
     friction_coeff: float = 0.4,
     lam_buffer: float = 0.2,
     arc_length_weight: Optional[float] = None,
+    time_contact: float = 2.0,
+    time_non_collision: float = 4.0,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -111,6 +113,8 @@ def get_default_plan_config(
         non_collision_cost=non_collision_cost,
         continuity_on_pusher_velocity=True,
         allow_teleportation=False,
+        time_in_contact=time_contact,
+        time_non_collision=time_non_collision,
     )
 
     return plan_cfg
