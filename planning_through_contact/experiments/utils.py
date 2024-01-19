@@ -56,9 +56,11 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=None,
-        distance_to_object_socp=0.0003,
-        pusher_velocity_regularization=0.005,
+        distance_to_object_quadratic=0.2,
+        distance_to_object_quadratic_preferred_distance=0.1,
+        # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
+        distance_to_object_socp=None,
+        pusher_velocity_regularization=0.01,
         pusher_arc_length=0.005,
     )
     return non_collision_cost
@@ -68,6 +70,8 @@ def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee"] = "box",
     pusher_radius: float = 0.035,
     integration_constant: float = 0.6,
+    friction_coeff: float = 0.4,
+    lam_buffer: float = 0.2,
     arc_length_weight: Optional[float] = None,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
@@ -83,7 +87,7 @@ def get_default_plan_config(
     slider_pusher_config = SliderPusherSystemConfig(
         slider=slider,
         pusher_radius=pusher_radius,
-        friction_coeff_slider_pusher=0.4,
+        friction_coeff_slider_pusher=friction_coeff,
         friction_coeff_table_slider=0.5,
         integration_constant=integration_constant,
     )
@@ -95,9 +99,7 @@ def get_default_plan_config(
     non_collision_cost = get_default_non_collision_cost()
 
     contact_config = ContactConfig(
-        cost=contact_cost,
-        lam_min=0.1,
-        lam_max=0.9,
+        cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
     )
 
     plan_cfg = PlanarPlanConfig(

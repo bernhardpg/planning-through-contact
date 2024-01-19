@@ -137,6 +137,7 @@ def get_plans_to_point(
     lims: Tuple[float, float, float, float],
     pusher_radius: float,
     point: Tuple[float, float] = (0, 0),  # Default is origin
+    limit_rotations: bool = True,  # Use this to start with
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
@@ -151,7 +152,10 @@ def get_plans_to_point(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
+        if limit_rotations:
+            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+        else:
+            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(point[0], point[1], 0)
@@ -255,7 +259,9 @@ def create_plan(
         config = get_default_plan_config(
             slider_type=slider_type,
             pusher_radius=pusher_radius,
-            integration_constant=0.4,
+            integration_constant=0.1,
+            friction_coeff=0.05,
+            lam_buffer=0.4,
         )
         solver_params = get_default_solver_params(debug)
 
