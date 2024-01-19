@@ -2,12 +2,19 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
     AblationStudy,
     run_ablation_with_default_config,
 )
-from planning_through_contact.visualize.ablation_study import visualize_ablation_study
+from planning_through_contact.visualize.ablation_study import (
+    visualize_ablation_optimality_gap_3d,
+    visualize_ablation_optimality_gap_thetas,
+    visualize_ablation_optimality_gaps,
+    visualize_ablation_sdp_optimality_gap_3d,
+    visualize_ablation_sdp_optimality_gap_thetas,
+)
 
-filename = "results/ablation_results.pkl"
-num_runs = 20
+slider = "box"
+num_runs = 100
+filename = f"results/ablation_results_{slider}_{num_runs}.pkl"
 
-run_ablation_with_default_config(num_runs, filename)
+run_ablation_with_default_config(slider, num_runs, filename)
 
-study = AblationStudy.load(filename)
-visualize_ablation_study(study)
+# study = AblationStudy.load(filename)
+# visualize_ablation_optimality_gaps(study)

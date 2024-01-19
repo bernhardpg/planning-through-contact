@@ -2,7 +2,7 @@ import pickle
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import numpy as np
 from tqdm import tqdm
@@ -46,6 +46,17 @@ class SingleRunResult:
     def optimality_gap(self) -> float:
         return (self.relaxed_cost / self.rounded_cost) * 100
 
+    @property
+    def sdp_optimality_gap(self) -> float:
+        return (self.relaxed_cost / self.sdp_cost) * 100
+
+    @property
+    def distance(self) -> float:
+        start = self.start_and_goal.slider_initial_pose.pos()
+        end = self.start_and_goal.slider_target_pose.pos()
+        dist: float = np.linalg.norm(start - end)
+        return dist
+
 
 @dataclass
 class AblationStudy:
@@ -53,12 +64,19 @@ class AblationStudy:
 
     @property
     def thetas(self) -> List[float]:
-        ths = [res.start_and_goal.slider_initial_pose.theta for res in self.results]
-        return ths
+        return [res.start_and_goal.slider_initial_pose.theta for res in self.results]
+
+    @property
+    def distances(self) -> List[float]:
+        return [res.distance for res in self.results]
 
     @property
     def optimality_gaps(self) -> List[float]:
         return [res.optimality_gap for res in self.results]
+
+    @property
+    def sdp_optimality_gaps(self) -> List[float]:
+        return [res.sdp_optimality_gap for res in self.results]
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
@@ -157,7 +175,9 @@ def run_ablation(
 
 
 def run_ablation_with_default_config(
-    num_experiments: int, filename: Optional[str] = None
+    slider_type: Literal["box", "sugar_box", "tee"],
+    num_experiments: int,
+    filename: Optional[str] = None,
 ) -> None:
     config = get_default_plan_config()
     solver_params = get_default_solver_params()
