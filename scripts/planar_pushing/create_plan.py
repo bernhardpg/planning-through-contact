@@ -245,7 +245,7 @@ def create_plan(
             gcs_max_rounded_paths=20,
             print_flows=False,
             print_solver_output=debug,
-            save_solver_output=debug,
+            save_solver_output=False,
             print_path=debug,
             print_cost=debug,
             assert_result=True,
@@ -257,7 +257,7 @@ def create_plan(
             pusher_radius=pusher_radius,
             integration_constant=0.4,
         )
-        solver_params = get_default_solver_params()
+        solver_params = get_default_solver_params(debug)
 
     if debug:
         visualize_planar_pushing_start_and_goal(
