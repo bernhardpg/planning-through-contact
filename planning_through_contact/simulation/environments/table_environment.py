@@ -1,4 +1,5 @@
 from typing import Optional
+import logging
 
 from pydrake.all import (
     DiagramBuilder,
@@ -38,6 +39,7 @@ from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
 )
 
+logger = logging.getLogger(__name__)
 
 class TableEnvironment:
     def __init__(
@@ -264,6 +266,9 @@ class TableEnvironment:
                     PlanarPose(*pusher_desired_pose_vec, 0),
                     time_in_recording=t,
                 )
+                # Print the time every 5 seconds
+                if t % 5 == 0:
+                    logger.info(f"t={t}")
 
         else:
             self._simulator.AdvanceTo(timeout)

@@ -79,7 +79,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=6,
+        delay_before_execution=300,
         closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
@@ -90,13 +90,13 @@ def run_sim(
         default_joint_positions=[ 0.0776,  1.0562,  0.3326, -1.3048,  2.7515, -0.8441,  0.5127]
     )
     R_OptitrackBody_SimBody_W = RotationMatrix(RollPitchYaw([
-        0.02858276367889423 - 0.035, 
-        -(0.010134800302549629) - 0.02,
-        1.5283178523081473]))
+        0.02197141250460133, 
+        -0.010860361271065305,
+        -1.6066440528064356]))
     p_OptitrackBody_SimBody_W = [
-        0.3+0.28101587, 
-        -0.03574987,
-        0.0249886399-0.03845533]
+        0.3-0.34221192, 
+        0.09634937,
+        0.0249886399-0.02975556]
     optitrack_config: OptitrackConfig = OptitrackConfig(
         iiwa_id=4,
         slider_id=5,
@@ -205,8 +205,8 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_6_rounded.pkl",
+        # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,
