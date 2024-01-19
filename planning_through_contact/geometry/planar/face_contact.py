@@ -442,7 +442,8 @@ class FaceContactMode(AbstractContactMode):
             p_Bc = self.variables.p_Bcs[k]
             R_WB = self.variables.R_WBs[k]
 
-            trans_vel_constraint = v_WB - R_WB @ f_c_B
+            c_f = self.config.dynamics_config.f_max**-2
+            trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
             constraint = []
             for c in trans_vel_constraint.flatten():
                 constraint.append(
@@ -450,7 +451,7 @@ class FaceContactMode(AbstractContactMode):
                 )
             self.constraints["translational_dynamics"].append(np.array(constraint))
 
-            trans_vel_constraint = R_WB.T @ v_WB - f_c_B
+            trans_vel_constraint = R_WB.T @ v_WB - (c_f * f_c_B)
             constraint = []
             for c in trans_vel_constraint.flatten():
                 c = self.prog_wrapper.add_quadratic_constraint(k, k + 1, c, 0, 0)
@@ -459,8 +460,9 @@ class FaceContactMode(AbstractContactMode):
 
             self.constraints["translational_dynamics_red"].append(np.array(constraint))
 
-            c = self.config.dynamics_config.limit_surface_const
-            ang_vel_constraint = theta_WB_dot - c * cross_2d(p_Bc, f_c_B)
+            c_tau = self.config.dynamics_config.tau_max**-2
+            torque = c_tau * cross_2d(p_Bc, f_c_B)
+            ang_vel_constraint = theta_WB_dot - torque
             constraint = self.prog_wrapper.add_quadratic_constraint(
                 k, k + 1, ang_vel_constraint, 0, 0
             )
