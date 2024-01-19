@@ -207,7 +207,7 @@ class PlanarPushingPath:
         return prog
 
     def _get_initial_guess(
-        self, scale_rot_values: bool = False
+        self, scale_rot_values: bool = True
     ) -> npt.NDArray[np.float64]:
         original_decision_var_idxs_in_vertices = [
             mode.get_variable_indices_in_gcs_vertex(mode.prog.decision_variables())
