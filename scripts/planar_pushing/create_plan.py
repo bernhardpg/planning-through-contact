@@ -434,7 +434,7 @@ if __name__ == "__main__":
                 debug=debug,
                 slider_type=args.body,
                 traj_name=f"hw_demo_C_{traj_number}",
-                visualize=False,
+                visualize=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
                 animation_output_dir="demos",
