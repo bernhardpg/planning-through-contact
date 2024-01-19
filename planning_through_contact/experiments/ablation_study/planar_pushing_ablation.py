@@ -40,7 +40,10 @@ class SingleRunResult:
     sdp_is_success: bool
     relaxed_is_success: bool
     rounded_is_success: bool
+    relaxed_mean_determinant: float
+    rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal
+    integration_constant: float
 
     @property
     def optimality_gap(self) -> float:
@@ -67,12 +70,22 @@ class AblationStudy:
         return [res.start_and_goal.slider_initial_pose.theta for res in self.results]
 
     @property
+    def relaxed_mean_determinants(self) -> List[float]:
+        return [res.relaxed_mean_determinant for res in self.results]
+
+    @property
+    def rounded_mean_determinants(self) -> List[float]:
+        return [res.rounded_mean_determinant for res in self.results]
+
+    @property
     def distances(self) -> List[float]:
         return [res.distance for res in self.results]
 
     @property
     def optimality_gaps(self) -> List[float]:
-        return [res.optimality_gap for res in self.results]
+        return [
+            res.optimality_gap if res.rounded_is_success else 0 for res in self.results
+        ]
 
     @property
     def sdp_optimality_gaps(self) -> List[float]:
@@ -138,6 +151,11 @@ def do_one_run(
     rounding_elapsed_time = time.time() - start_time
     rounded_cost = rounding_result.get_optimal_cost()
 
+    relaxed_mean_determinant: float = np.mean(path.get_determinants())
+
+    path.rounded_result = rounding_result
+    rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
+
     return SingleRunResult(
         sdp_cost,
         rounded_cost,
@@ -148,7 +166,10 @@ def do_one_run(
         sdp_result.is_success(),
         relaxed_result.is_success(),
         rounding_result.is_success(),
+        relaxed_mean_determinant,
+        rounded_mean_determinant,
         start_and_goal,
+        plan_config.dynamics_config.integration_constant,
     )
 
 
@@ -176,9 +197,14 @@ def run_ablation(
 
 def run_ablation_with_default_config(
     slider_type: Literal["box", "sugar_box", "tee"],
+    pusher_radius: float,
+    integration_constant: float,
     num_experiments: int,
+    arc_length_weight: Optional[float] = None,
     filename: Optional[str] = None,
 ) -> None:
-    config = get_default_plan_config()
+    config = get_default_plan_config(
+        slider_type, pusher_radius, integration_constant, arc_length_weight
+    )
     solver_params = get_default_solver_params()
     run_ablation(config, solver_params, num_experiments, filename)
