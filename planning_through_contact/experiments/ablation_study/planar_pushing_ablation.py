@@ -2,7 +2,7 @@ import pickle
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 from tqdm import tqdm
@@ -41,6 +41,34 @@ class SingleRunResult:
     relaxed_is_success: bool
     rounded_is_success: bool
     start_and_goal: PlanarPushingStartAndGoal
+
+    @property
+    def optimality_gap(self) -> float:
+        return (self.relaxed_cost / self.rounded_cost) * 100
+
+
+@dataclass
+class AblationStudy:
+    results: List[SingleRunResult]
+
+    @property
+    def thetas(self) -> List[float]:
+        ths = [res.start_and_goal.slider_initial_pose.theta for res in self.results]
+        return ths
+
+    @property
+    def optimality_gaps(self) -> List[float]:
+        return [res.optimality_gap for res in self.results]
+
+    def save(self, filename: str) -> None:
+        with open(Path(filename), "wb") as file:
+            pickle.dump(self.results, file)
+
+    @classmethod
+    def load(cls, filename: str) -> "AblationStudy":
+        with open(Path(filename), "rb") as file:
+            results = pickle.load(file)
+        return cls(results)
 
 
 def do_one_run(
@@ -123,9 +151,9 @@ def run_ablation(
         result = do_one_run(plan_config, solver_params, start_and_goal)
         results.append(result)
 
+    study = AblationStudy(results)
     if filename is not None:
-        with open(Path(filename), "wb") as file:
-            pickle.dump(results, file)
+        study.save(filename)
 
 
 def run_ablation_with_default_config(
@@ -134,6 +162,3 @@ def run_ablation_with_default_config(
     config = get_default_plan_config()
     solver_params = get_default_solver_params()
     run_ablation(config, solver_params, num_experiments, filename)
-
-
-run_ablation_with_default_config(5, "results/ablation_results.pkl")
