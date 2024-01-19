@@ -146,8 +146,8 @@ class FaceContactVariables(AbstractModeVariables):
         return FaceContactVariables(
             contact_location,
             num_knot_points,
-            time_in_mode,  # TODO: Remove
-            dt,  # TODO: Remove
+            time_in_mode,
+            dt,
             pusher_radius,
             rel_finger_pos,
             normal_forces,
@@ -268,19 +268,19 @@ class FaceContactVariables(AbstractModeVariables):
 
     @property
     def v_WBs(self):
-        return calc_displacements(self.p_WBs)
+        return calc_displacements(self.p_WBs, self.dt)
 
     @property
     def v_BPs(self):
-        return calc_displacements(self.p_BPs)
+        return calc_displacements(self.p_BPs, self.dt)
 
     @property
     def delta_cos_ths(self):
-        return np.array(calc_displacements(self.cos_ths))
+        return np.array(calc_displacements(self.cos_ths, self.dt))
 
     @property
     def delta_sin_ths(self):
-        return np.array(calc_displacements(self.sin_ths))
+        return np.array(calc_displacements(self.sin_ths, self.dt))
 
     @property
     def delta_omega_WBs(self):

@@ -142,9 +142,7 @@ class NonCollisionVariables(AbstractModeVariables):
 
     @property
     def v_BPs(self):
-        # TODO(bernhardpg): Not really velocities, right now these are just
-        # time-independent displacements
-        return calc_displacements(self.p_BPs)
+        return calc_displacements(self.p_BPs, self.dt)
 
     @property
     def p_WB(self):
