@@ -35,7 +35,7 @@ from planning_through_contact.simulation.state_estimators.state_estimator import
 class OptitrackConfig:
     iiwa_id: int
     slider_id: int
-    X_optitrackBody_plantBody_world: RigidTransform
+    X_optitrackBody_plantBody: RigidTransform
 
 class OptitrackFrameSource(LeafSystem):
     def __init__(
@@ -140,7 +140,7 @@ class OptitrackObjectTransformUpdater(LeafSystem):
         object_instance_idx: ModelInstanceIndex,
         optitrack_iiwa_id: int,
         optitrack_body_id: int,
-        X_optitrackBody_plantBody_world: RigidTransform,
+        X_optitrackBody_plantBody: RigidTransform,
         retain_z: bool,
         retain_roll: bool,
         retain_pitch: bool,
@@ -157,7 +157,7 @@ class OptitrackObjectTransformUpdater(LeafSystem):
             optitrack_body_id (int): The optitrack body ID that corresponds to the
             object.
             X_optitrackBody_plantBody (RigidTransform): The trasform from the optitrack
-            pose to the plant/ simulated pose, expressed in the world frame.
+            pose to the plant/ simulated pose.
             retain_z (bool): Whether to keep the current z position of the object rather
             than changing it to the optitrack measurement. This can be useful for planar
             pushing tasks, where we know that z doesn't change and small measurement
@@ -174,7 +174,7 @@ class OptitrackObjectTransformUpdater(LeafSystem):
         self._object_instance_idx = object_instance_idx
         self._optitrack_iiwa_id = optitrack_iiwa_id
         self._optitrack_body_id = optitrack_body_id
-        self._X_optitrackBody_plantBody_world = X_optitrackBody_plantBody_world
+        self._X_optitrackBody_plantBody = X_optitrackBody_plantBody
         self._retain_z = retain_z
         self._retain_roll = retain_roll
         self._retain_pitch = retain_pitch
@@ -241,13 +241,9 @@ class OptitrackObjectTransformUpdater(LeafSystem):
         X_world_optitrackBody: RigidTransform = (
             self._X_world_iiwa @ X_iiwa_origin @ X_origin_optitrackBody
         )
-        X_optitrackBody_plantBody = RigidTransform(
-            self._X_optitrackBody_plantBody_world.rotation(),
-            X_world_optitrackBody.inverse().rotation()
-            @ self._X_optitrackBody_plantBody_world.translation(),
-        )
+
         X_world_plantBody: RigidTransform = (
-            X_world_optitrackBody @ X_optitrackBody_plantBody
+            X_world_optitrackBody @ self._X_optitrackBody_plantBody
         )
         object_quaternion = copy(X_world_plantBody.rotation().ToQuaternion())
         object_translation = copy(X_world_plantBody.translation())
@@ -312,7 +308,7 @@ class OptitrackObjectTransformUpdaterDiagram(Diagram):
         state_estimator: StateEstimator,
         optitrack_iiwa_id: int,
         optitrack_body_id: int,
-        X_optitrackBody_plantBody_world: RigidTransform,
+        X_optitrackBody_plantBody: RigidTransform,
         retain_z: bool = False,
         retain_roll: bool = False,
         retain_pitch: bool = False,
@@ -332,7 +328,7 @@ class OptitrackObjectTransformUpdaterDiagram(Diagram):
             optitrack_body_id (int): The optitrack body ID that corresponds to the
             object.
             X_optitrackBody_plantBody (RigidTransform): The trasform from the optitrack
-            pose to the plant/ simulated pose, expressed in the world frame.
+            pose to the plant/ simulated pose.
             retain_z (bool): Whether to keep the current z position of the object rather
             than changing it to the optitrack measurement. This can be useful for planar
             pushing tasks, where we know that z doesn't change and small measurement
@@ -404,7 +400,7 @@ class OptitrackObjectTransformUpdaterDiagram(Diagram):
                     object_instance_idx=manipuland_instance,
                     optitrack_iiwa_id=optitrack_iiwa_id,
                     optitrack_body_id=optitrack_body_id,
-                    X_optitrackBody_plantBody_world=X_optitrackBody_plantBody_world,
+                    X_optitrackBody_plantBody=X_optitrackBody_plantBody,
                     retain_z=retain_z,
                     retain_roll=retain_roll,
                     retain_pitch=retain_pitch,

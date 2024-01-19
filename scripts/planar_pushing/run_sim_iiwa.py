@@ -52,6 +52,9 @@ def run_sim(
     logging.getLogger(
         "planning_through_contact.simulation.planar_pushing.iiwa_planner"
     ).setLevel(logging.DEBUG)
+    logging.getLogger(
+        "planning_through_contact.simulation.environments.table_environment"
+    ).setLevel(logging.DEBUG)
 
     traj = PlanarPushingTrajectory.load(plan)
     print(f"running plan:{plan}")
@@ -79,7 +82,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=300,
+        delay_before_execution=4,
         closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
@@ -89,20 +92,21 @@ def run_sim(
         pusher_z_offset=0.03,
         default_joint_positions=[ 0.0776,  1.0562,  0.3326, -1.3048,  2.7515, -0.8441,  0.5127]
     )
-    R_OptitrackBody_SimBody_W = RotationMatrix(RollPitchYaw([
-        0.02197141250460133, 
-        -0.010860361271065305,
-        -1.6066440528064356]))
-    p_OptitrackBody_SimBody_W = [
-        0.3-0.34221192, 
-        0.09634937,
-        0.0249886399-0.02975556]
+    X_W_pB = RigidTransform([0.3, 0, 0.019528])
+    X_W_oB = RigidTransform(
+        RollPitchYaw(
+            roll=-0.0005501813449522164,
+            pitch=-0.0035562762931490095,
+            yaw=2.5148623228867155
+        ),
+        [0.30120039, -0.05201317,  0.02920317],
+    )
+
+    X_oB_pB = X_W_oB.inverse() @ X_W_pB
     optitrack_config: OptitrackConfig = OptitrackConfig(
         iiwa_id=4,
-        slider_id=5,
-        X_optitrackBody_plantBody_world=RigidTransform(
-            R_OptitrackBody_SimBody_W, p_OptitrackBody_SimBody_W
-        ),
+        slider_id=10,
+        X_optitrackBody_plantBody=X_oB_pB
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:

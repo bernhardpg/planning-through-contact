@@ -1,8 +1,7 @@
 directives:
 - add_model:
     name: iiwa
-    # file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_primitive_collision.urdf
-    file: package://drake/manipulation/models/iiwa_description/urdf/iiwa14_no_collision.urdf
+    file: package://drake/manipulation/models/iiwa_description/iiwa7/iiwa7_no_collision.sdf
     default_joint_positions:
         iiwa_joint_1: [0.1]
         iiwa_joint_2: [1.0]
@@ -21,7 +20,7 @@ directives:
 
 - add_weld:
     parent: world
-    child: iiwa::base
+    child: iiwa::iiwa_link_0
     X_PC:
         rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
         translation: [0.0, 0.0, 0.0]
@@ -37,7 +36,7 @@ directives:
         rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
         # displace by half of the pusher length, so the pusher starts
         # exactly at the iiwa_link_7 base frame
-        translation: [0.0, 0.0, -0.095]
+        translation: [0.0, 0.0, -0.075]
 
 - add_weld:
     parent: iiwa::iiwa_link_7
@@ -49,4 +48,4 @@ directives:
         base_frame: pusher_base
         rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
         # displace by pusher length
-        translation: [0.0, 0.0, 0.19]
+        translation: [0.0, 0.0, 0.15]

@@ -8,4 +8,4 @@ directives:
     child: small_table::TableTop
     X_PC:
         rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
-        translation: [0.61, 0, 0.0]
+        translation: [0.486, 0, 0.0]

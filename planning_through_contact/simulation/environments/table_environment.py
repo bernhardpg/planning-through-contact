@@ -89,7 +89,7 @@ class TableEnvironment:
                         state_estimator=self._state_estimator,
                         optitrack_iiwa_id=optitrack_config.iiwa_id,
                         optitrack_body_id=optitrack_config.slider_id,
-                        X_optitrackBody_plantBody_world=optitrack_config.X_optitrackBody_plantBody_world,
+                        X_optitrackBody_plantBody=optitrack_config.X_optitrackBody_plantBody,
                     ),
                 )
             )
