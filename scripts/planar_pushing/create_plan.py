@@ -151,7 +151,7 @@ def get_plans_to_point(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi + 0.4, np.pi - 0.4)
+        th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(point[0], point[1], 0)
