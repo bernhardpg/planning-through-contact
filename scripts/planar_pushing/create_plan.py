@@ -3,6 +3,7 @@ from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
+from planning_through_contact.experiments.utils import get_box, get_sugar_box, get_tee
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -30,26 +31,6 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
-
-
-def get_slider_box() -> RigidBody:
-    mass = 0.1
-    box_geometry = Box2d(width=0.07, height=0.07)
-    slider = RigidBody("box", box_geometry, mass)
-    return slider
-
-
-def get_tee() -> RigidBody:
-    mass = 0.1
-    body = RigidBody("t_pusher", TPusher2d(), mass)
-    return body
-
-
-def get_sugar_box() -> RigidBody:
-    mass = 0.1
-    box_geometry = Box2d(width=0.106, height=0.185)
-    slider = RigidBody("sugar_box", box_geometry, mass)
-    return slider
 
 
 def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
@@ -192,7 +173,7 @@ def create_plan(
     debug: bool = False,
 ):
     if body_to_use == "box":
-        slider = get_slider_box()
+        slider = get_box()
     elif body_to_use == "t_pusher":
         slider = get_tee()
     elif body_to_use == "sugar_box":

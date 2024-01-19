@@ -1,3 +1,4 @@
+from planning_through_contact.experiments.utils import get_box, get_tee
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -5,7 +6,6 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.visualize.planar import (
     visualize_planar_pushing_trajectory_legacy,
 )
-from scripts.planar_pushing.create_plan import get_slider_box, get_tee
 
 
 def visualize_plan(debug: bool = False):
@@ -13,7 +13,7 @@ def visualize_plan(debug: bool = False):
     traj = PlanarPushingTrajectory.load(plan)
 
     if "box" in plan:
-        slider = get_slider_box()
+        slider = get_box()
         body = "box"
     elif "t_pusher" in plan:
         slider = get_tee()
