@@ -114,16 +114,16 @@ def get_default_plan_config(
     return plan_cfg
 
 
-def get_default_solver_params() -> PlanarSolverParams:
+def get_default_solver_params(debug: bool = False) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
-        measure_solve_time=False,
+        measure_solve_time=debug,
         gcs_max_rounded_paths=20,
         print_flows=False,
         solver="mosek",
-        print_solver_output=False,
+        print_solver_output=debug,
         save_solver_output=False,
         print_path=False,
-        print_cost=False,
+        print_cost=debug,
         assert_result=False,
     )
     return solver_params
