@@ -49,14 +49,14 @@ def get_default_contact_cost() -> ContactCost:
         ang_velocity_regularization=1.0,
         lin_velocity_regularization=0.1,
         trace=None,
-        mode_transition_cost=0.2,
+        mode_transition_cost=0.4,
     )
     return contact_cost
 
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.2,
+        distance_to_object_quadratic=0.05,
         distance_to_object_quadratic_preferred_distance=0.1,
         # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
         distance_to_object_socp=None,
