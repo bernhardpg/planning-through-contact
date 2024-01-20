@@ -37,6 +37,7 @@ from planning_through_contact.visualize.analysis import (
 from planning_through_contact.visualize.planar_pushing import (
     compare_trajs,
     make_traj_figure,
+    plot_forces,
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
@@ -313,11 +314,19 @@ def create_plan(
         traj_relaxed,
         filename=f"{traj_name}_{slider_type}",
     )
+    plot_forces(
+        traj_relaxed,
+        filename=f"{traj_name}_{slider_type}_forces",
+    )
     if traj_rounded is not None:
         make_traj_figure(
             traj_rounded,
             filename=f"{traj_name}_{slider_type}_rounded",
         )
+    plot_forces(
+        traj_relaxed,
+        filename=f"{traj_name}_{slider_type}_forces_rounded",
+    )
 
     if visualize:
         if debug:
