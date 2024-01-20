@@ -53,7 +53,8 @@ class TPusher2d(CollisionGeometry):
 
     @property
     def com_offset(self) -> npt.NDArray[np.float64]:
-        return np.array([0, -0.04]).reshape((-1, 1))
+        y_offset = -0.04285714
+        return np.array([0, y_offset]).reshape((-1, 1))
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
