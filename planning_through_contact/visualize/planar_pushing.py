@@ -214,7 +214,7 @@ def compare_trajs(
 
                     # Plot forces
                     FORCE_SCALE = 2.0
-                    FORCE_VIS_TRESH = 1e-2
+                    FORCE_VIS_TRESH = 1e-4
                     # only N-1 inputs
                     if (idx < knot_points.num_knot_points - 1) and (
                         isinstance(knot_points, FaceContactVariables)
@@ -313,6 +313,39 @@ def compare_trajs(
     fig.tight_layout()
     if filename is not None:
         fig.savefig(filename + f".pdf")  # type: ignore
+
+
+def plot_forces(
+    traj: PlanarPushingTrajectory,
+    filename: str,
+) -> None:
+    face_knot_points = [
+        knot_points
+        for knot_points in traj.path_knot_points
+        if isinstance(knot_points, FaceContactVariables)
+    ]
+
+    normal_forces = np.array(
+        [knot_point.normal_forces for knot_point in face_knot_points]
+    )
+    friction_forces = np.array(
+        [knot_point.friction_forces for knot_point in face_knot_points]
+    )
+
+    fig, axs = plt.subplots(2)
+    # First plot
+    axs[0].plot(normal_forces)
+    axs[0].set_title("Normal forces")
+
+    # Second plot
+    axs[1].plot(friction_forces)
+    axs[1].set_title("Friction forces")
+
+    # Automatically adjust subplot params so that the subplot(s) fits in to the figure area
+    plt.tight_layout()
+
+    if filename is not None:
+        fig.savefig(filename + ".pdf")  # type: ignore
 
 
 def make_traj_figure(
