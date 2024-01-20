@@ -58,7 +58,9 @@ def run_sim(
 
     traj = PlanarPushingTrajectory.load(plan)
     print(f"running plan:{plan}")
+    # traj.config.dynamics_config.integration_constant = 0.1
     print(traj.config.dynamics_config)
+    
     slider = traj.config.dynamics_config.slider
     mpc_config = HybridMpcConfig(
         step_size=0.03,
@@ -68,7 +70,7 @@ def run_sim(
         Q=np.diag([3, 3, 1, 0]) * 100,
         Q_N=np.diag([3, 3, 1, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
-        u_max_magnitude=[0.3, 0.3, 0.1],
+        u_max_magnitude=[0.4, 0.4, 0.2],
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -83,7 +85,7 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=6,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -209,7 +211,7 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_0_rounded.pkl",
         # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,
