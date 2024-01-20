@@ -431,7 +431,7 @@ if __name__ == "__main__":
                 save_traj=True,
                 animation_output_dir="demos",
                 animation_lims=animation_lims,
-                time_in_contact=4.0,
+                time_in_contact=6.0,
                 time_in_non_collision=2.0,
                 interpolate_video=interpolate,
                 save_analysis=True,

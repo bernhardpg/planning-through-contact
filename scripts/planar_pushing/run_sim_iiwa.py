@@ -65,8 +65,8 @@ def run_sim(
         horizon=35,
         num_sliding_steps=1,
         rate_Hz=50,
-        Q=np.diag([3, 3, 0.01, 0]) * 100,
-        Q_N=np.diag([3, 3, 0.01, 0]) * 2000,
+        Q=np.diag([3, 3, 1, 0]) * 100,
+        Q_N=np.diag([3, 3, 1, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
         u_max_magnitude=[0.3, 0.3, 0.1],
     )
@@ -82,8 +82,8 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=4,
-        closed_loop=False,
+        delay_before_execution=6,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -92,14 +92,14 @@ def run_sim(
         pusher_z_offset=0.03,
         default_joint_positions=[ 0.0776,  1.0562,  0.3326, -1.3048,  2.7515, -0.8441,  0.5127]
     )
-    X_W_pB = RigidTransform([0.3, 0, 0.019528])
+    X_W_pB = RigidTransform([0.3, -0.04285714, 0.019528])
     X_W_oB = RigidTransform(
         RollPitchYaw(
-            roll=-0.0005501813449522164,
-            pitch=-0.0035562762931490095,
-            yaw=2.5148623228867155
+            roll=0.0014019521180919092,
+            pitch=-0.0017132056231440778,
+            yaw=2.5206443933848894
         ),
-        [0.30120039, -0.05201317,  0.02920317],
+        [0.30213178, -0.05107934,  0.02950026],
     )
 
     X_oB_pB = X_W_oB.inverse() @ X_W_pB
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_6_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
         # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,
