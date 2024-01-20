@@ -84,7 +84,7 @@ class TPusher2d(CollisionGeometry):
         vs = [v0, v1, v2, v3, v4, v5, v6, v7]
 
         # Calculated COM for Tee
-        vs_offset = [v + self.com_offset for v in vs]
+        vs_offset = [v - self.com_offset for v in vs]
         return vs_offset
 
     @property
@@ -360,11 +360,11 @@ class TPusher2d(CollisionGeometry):
     ) -> Tuple[List[Box2d], List[RigidTransform]]:
         box_1 = self.box_1
         box_1_center = np.array([0, 0, z_value])
-        box_1_center[:2] += self.com_offset.flatten()
+        box_1_center[:2] -= self.com_offset.flatten()
         transform_1 = RigidTransform(RotationMatrix.Identity(), box_1_center)  # type: ignore
         box_2 = self.box_2
         box_2_center = np.array([0, -self.box_1.height / 2 - self.box_2.height / 2, 0])
-        box_2_center[:2] += self.com_offset.flatten()
+        box_2_center[:2] -= self.com_offset.flatten()
         transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)
 
         return [box_1, box_2], [transform_1, transform_2]
