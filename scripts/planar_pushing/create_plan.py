@@ -260,7 +260,7 @@ def create_plan(
         config = get_default_plan_config(
             slider_type=slider_type,
             pusher_radius=pusher_radius,
-            integration_constant=0.1,
+            integration_constant=0.4,
             friction_coeff=0.05,
             lam_buffer=0.4,
         )
@@ -442,7 +442,7 @@ if __name__ == "__main__":
     elif hardware_demos:
         lims = (0.5, 0.6, -0.15, 0.15)
         # animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, 0))
+        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, -0.04285714))
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
