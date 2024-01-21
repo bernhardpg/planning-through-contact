@@ -31,7 +31,7 @@
         <geometry>
           <cylinder>
             <radius> 0.015 </radius>
-            <length> 0.19 </length>
+            <length> 0.15 </length>
           </cylinder>
         </geometry>
         <material>
@@ -43,7 +43,7 @@
         <geometry>
           <cylinder>
             <radius> 0.015 </radius>
-            <length> 0.19 </length>
+            <length> 0.15 </length>
           </cylinder>        
         </geometry>
         <drake:proximity_properties>

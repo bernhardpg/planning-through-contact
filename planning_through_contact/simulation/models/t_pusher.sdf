@@ -11,7 +11,7 @@
   -->
     <link name="t_pusher">
       <inertial>
-        <pose>0.0 -0.04285714 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 0.0 0.0 0.0 0.0 0.0</pose>
         <mass>0.153</mass>
         <inertia>
           <ixx>0.00082875</ixx>
@@ -23,7 +23,7 @@
         </inertia>
       </inertial>
       <visual name="t_pusher_top_visual">
-        <pose>0.0 0.0 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 0.04285714 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.2 0.05 0.05</size>
@@ -34,6 +34,7 @@
         </material>
       </visual>
       <collision name="t_pusher_top_collision">
+        <pose>0.0 0.04285714 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.2 0.05 0.05</size>
@@ -50,7 +51,7 @@
       </collision>
       
       <visual name="t_pusher_bottom_visual">
-        <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 -0.05714286 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.05 0.15 0.05</size>
@@ -61,7 +62,7 @@
         </material>
       </visual>
       <collision name="t_pusher_bottom_collision">
-        <pose>0.0 -0.1 0.0 0.0 0.0 0.0</pose>
+        <pose>0.0 -0.05714286 0.0 0.0 0.0 0.0</pose>
         <geometry>
           <box>
             <size>0.05 0.15 0.05</size>

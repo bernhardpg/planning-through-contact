@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.all import ContactModel, StartMeshcat
+from pydrake.all import (ContactModel, StartMeshcat, RollPitchYaw, RotationMatrix, RigidTransform)
 import logging
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -26,6 +26,7 @@ from planning_through_contact.simulation.environments.table_environment import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.sensors.optitrack import OptitrackConfig
 
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
@@ -51,20 +52,25 @@ def run_sim(
     logging.getLogger(
         "planning_through_contact.simulation.planar_pushing.iiwa_planner"
     ).setLevel(logging.DEBUG)
+    logging.getLogger(
+        "planning_through_contact.simulation.environments.table_environment"
+    ).setLevel(logging.DEBUG)
 
     traj = PlanarPushingTrajectory.load(plan)
     print(f"running plan:{plan}")
+    # traj.config.dynamics_config.integration_constant = 0.1
     print(traj.config.dynamics_config)
+    
     slider = traj.config.dynamics_config.slider
     mpc_config = HybridMpcConfig(
         step_size=0.03,
         horizon=35,
         num_sliding_steps=1,
         rate_Hz=50,
-        Q=np.diag([3, 3, 0.01, 0]) * 100,
-        Q_N=np.diag([3, 3, 0.01, 0]) * 2000,
+        Q=np.diag([3, 3, 1, 0]) * 100,
+        Q_N=np.diag([3, 3, 1, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
-        u_max_magnitude=[0.3, 0.3, 0.1],
+        u_max_magnitude=[0.4, 0.4, 0.2],
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -87,6 +93,22 @@ def run_sim(
         use_hardware=True,
         pusher_z_offset=0.03,
         default_joint_positions=[ 0.0776,  1.0562,  0.3326, -1.3048,  2.7515, -0.8441,  0.5127]
+    )
+    X_W_pB = RigidTransform([0.3, -0.04285714, 0.019528])
+    X_W_oB = RigidTransform(
+        RollPitchYaw(
+            roll=0.0014019521180919092,
+            pitch=-0.0017132056231440778,
+            yaw=2.5206443933848894
+        ),
+        [0.30213178, -0.05107934,  0.02950026],
+    )
+
+    X_oB_pB = X_W_oB.inverse() @ X_W_pB
+    optitrack_config: OptitrackConfig = OptitrackConfig(
+        iiwa_id=4,
+        slider_id=10,
+        X_optitrackBody_plantBody=X_oB_pB
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -112,6 +134,7 @@ def run_sim(
         desired_position_source=position_source,
         robot_system=position_controller,
         sim_config=sim_config,
+        optitrack_config=optitrack_config,
         station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
     )
@@ -188,8 +211,8 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_0_rounded.pkl",
+        # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,
