@@ -41,15 +41,15 @@ def get_sugar_box() -> RigidBody:
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
-        keypoint_arc_length=1.0,
+        keypoint_arc_length=10.0,
         linear_arc_length=None,
         angular_arc_length=None,
-        force_regularization=0.3,
+        force_regularization=0.01,
         keypoint_velocity_regularization=None,
-        ang_velocity_regularization=1.0,
-        lin_velocity_regularization=0.1,
+        ang_velocity_regularization=10.0,
+        lin_velocity_regularization=1.0,
         trace=None,
-        mode_transition_cost=0.3,
+        mode_transition_cost=1.0,
     )
     return contact_cost
 
@@ -120,12 +120,14 @@ def get_default_plan_config(
     return plan_cfg
 
 
-def get_default_solver_params(debug: bool = False) -> PlanarSolverParams:
+def get_default_solver_params(
+    debug: bool = False, clarabel: bool = False
+) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
         measure_solve_time=debug,
         gcs_max_rounded_paths=20,
         print_flows=False,
-        solver="mosek",
+        solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
         save_solver_output=False,
         print_path=False,
