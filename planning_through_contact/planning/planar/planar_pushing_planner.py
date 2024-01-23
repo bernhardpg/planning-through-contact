@@ -461,6 +461,7 @@ class PlanarPushingPlanner:
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
+            assert_nan_values=solver_params.assert_nan_values,
         )
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
