@@ -1,3 +1,4 @@
+from dataclasses import field
 from typing import Literal, Optional, Tuple
 
 import numpy as np
@@ -13,6 +14,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
+    PlanarPushingWorkspace,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
@@ -75,6 +77,9 @@ def get_default_plan_config(
     arc_length_weight: Optional[float] = None,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
+    workspace: PlanarPushingWorkspace = field(
+        default_factory=lambda: PlanarPushingWorkspace()
+    ),
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -115,6 +120,7 @@ def get_default_plan_config(
         allow_teleportation=False,
         time_in_contact=time_contact,
         time_non_collision=time_non_collision,
+        workspace=workspace,
     )
 
     return plan_cfg

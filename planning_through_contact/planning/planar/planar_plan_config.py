@@ -22,22 +22,23 @@ class BoxWorkspace:
     center: npt.NDArray[np.float64] = field(
         default_factory=lambda: np.array([0.0, 0.0])
     )
+    buffer: float = 0.0
 
     @property
     def x_min(self) -> float:
-        return self.center[0] - self.width / 2
+        return self.center[0] - self.width / 2 - self.buffer
 
     @property
     def x_max(self) -> float:
-        return self.center[0] + self.width / 2
+        return self.center[0] + self.width / 2 + self.buffer
 
     @property
     def y_min(self) -> float:
-        return self.center[1] - self.height / 2
+        return self.center[1] - self.height / 2 - self.buffer
 
     @property
     def y_max(self) -> float:
-        return self.center[1] + self.height / 2
+        return self.center[1] + self.height / 2 + self.buffer
 
     @property
     def bounds(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -48,16 +49,10 @@ class BoxWorkspace:
 
 @dataclass
 class PlanarPushingWorkspace:
-    # Currently we don't use the workspace constraints for the slider, because
-    # the full Semidefinite relaxation of the QCQP creates a ton of
-    # constraints, which really slows down the optimization!
     slider: BoxWorkspace = field(
         default_factory=lambda: BoxWorkspace(
-            width=1.0, height=1.0, center=np.array([0.4, 0.0])
+            width=1.0, height=1.0, center=np.array([0.0, 0.0]), buffer=0.0
         )
-    )
-    pusher: BoxWorkspace = field(
-        default_factory=lambda: BoxWorkspace(width=0.8, height=0.8)
     )
 
 
@@ -229,9 +224,7 @@ class PlanarPlanConfig:
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False  # TODO: remove, not used
-    workspace: PlanarPushingWorkspace = field(
-        default_factory=lambda: PlanarPushingWorkspace()
-    )
+    workspace: Optional[PlanarPushingWorkspace] = None
     dynamics_config: SliderPusherSystemConfig = field(
         default_factory=lambda: SliderPusherSystemConfig()
     )
