@@ -67,6 +67,7 @@ class FaceContactVariables(AbstractModeVariables):
     pv2: npt.NDArray[np.float64]
     normal_vec: npt.NDArray[np.float64]
     tangent_vec: npt.NDArray[np.float64]
+    force_scale: float
 
     @classmethod
     def from_prog(
@@ -77,6 +78,7 @@ class FaceContactVariables(AbstractModeVariables):
         num_knot_points: int,
         time_in_mode: float,
         pusher_radius: float,
+        force_scale: float = 0.01,
         define_theta_dots: bool = True,
     ) -> "FaceContactVariables":
         # Contact positions
@@ -146,8 +148,8 @@ class FaceContactVariables(AbstractModeVariables):
         return FaceContactVariables(
             contact_location,
             num_knot_points,
-            time_in_mode,  # TODO: Remove
-            dt,  # TODO: Remove
+            time_in_mode,
+            dt,
             pusher_radius,
             rel_finger_pos,
             normal_forces,
@@ -161,6 +163,7 @@ class FaceContactVariables(AbstractModeVariables):
             pv2,
             normal_vec,
             tangent_vec,
+            force_scale,
         )
 
     def eval_result(self, result: MathematicalProgramResult) -> "FaceContactVariables":
@@ -194,6 +197,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
+            self.force_scale,
         )
 
     def from_reduced_prog(
@@ -228,6 +232,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
+            self.force_scale,
         )
 
     @property
@@ -246,8 +251,10 @@ class FaceContactVariables(AbstractModeVariables):
 
     @property
     def f_c_Bs(self):
+        # We scale the force components to make the optimization program better posed
+        # With this scaling, the values should be approx same OoM as 1
         return [
-            c_n * self.normal_vec + c_f * self.tangent_vec
+            self.force_scale * (c_n * self.normal_vec + c_f * self.tangent_vec)
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
@@ -268,19 +275,19 @@ class FaceContactVariables(AbstractModeVariables):
 
     @property
     def v_WBs(self):
-        return calc_displacements(self.p_WBs)
+        return calc_displacements(self.p_WBs, self.dt)
 
     @property
     def v_BPs(self):
-        return calc_displacements(self.p_BPs)
+        return calc_displacements(self.p_BPs, self.dt)
 
     @property
     def delta_cos_ths(self):
-        return np.array(calc_displacements(self.cos_ths))
+        return np.array(calc_displacements(self.cos_ths, self.dt))
 
     @property
     def delta_sin_ths(self):
-        return np.array(calc_displacements(self.sin_ths))
+        return np.array(calc_displacements(self.sin_ths, self.dt))
 
     @property
     def delta_omega_WBs(self):
@@ -326,6 +333,7 @@ class FaceContactMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
             self.dynamics_config.pusher_radius,
+            self.dynamics_config.force_scale,
             define_theta_dots=self.config.use_approx_exponential_map,
         )
         self.constraints = {
@@ -415,9 +423,9 @@ class FaceContactMode(AbstractContactMode):
             for k, (delta_cos_th, delta_sin_th) in enumerate(
                 zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
             ):
-                approx_delta_theta = delta_cos_th**2 + delta_sin_th**2
+                approx_delta_theta_sq = delta_cos_th**2 + delta_sin_th**2
                 self.prog_wrapper.add_quadratic_constraint(
-                    k, k + 1, approx_delta_theta, 0, delta_th_max**2
+                    k, k + 1, approx_delta_theta_sq, 0, delta_th_max**2
                 )
 
         # TODO(bernhardpg): Remove, we don't want to use velocity limits
@@ -442,7 +450,8 @@ class FaceContactMode(AbstractContactMode):
             p_Bc = self.variables.p_Bcs[k]
             R_WB = self.variables.R_WBs[k]
 
-            trans_vel_constraint = v_WB - R_WB @ f_c_B
+            c_f = self.config.dynamics_config.f_max**-2
+            trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
             constraint = []
             for c in trans_vel_constraint.flatten():
                 constraint.append(
@@ -450,7 +459,7 @@ class FaceContactMode(AbstractContactMode):
                 )
             self.constraints["translational_dynamics"].append(np.array(constraint))
 
-            trans_vel_constraint = R_WB.T @ v_WB - f_c_B
+            trans_vel_constraint = R_WB.T @ v_WB - (c_f * f_c_B)
             constraint = []
             for c in trans_vel_constraint.flatten():
                 c = self.prog_wrapper.add_quadratic_constraint(k, k + 1, c, 0, 0)
@@ -459,8 +468,9 @@ class FaceContactMode(AbstractContactMode):
 
             self.constraints["translational_dynamics_red"].append(np.array(constraint))
 
-            c = self.config.dynamics_config.limit_surface_const
-            ang_vel_constraint = theta_WB_dot - c * cross_2d(p_Bc, f_c_B)
+            c_tau = self.config.dynamics_config.tau_max**-2
+            torque = c_tau * cross_2d(p_Bc, f_c_B)
+            ang_vel_constraint = theta_WB_dot - torque
             constraint = self.prog_wrapper.add_quadratic_constraint(
                 k, k + 1, ang_vel_constraint, 0, 0
             )
@@ -474,6 +484,9 @@ class FaceContactMode(AbstractContactMode):
 
     def _define_costs(self) -> None:
         cost_config = self.config.contact_config.cost
+
+        if cost_config.mode_transition_cost is not None:
+            self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
 
         if cost_config.cost_type == ContactCostType.STANDARD:
             # Arc length on keypoint trajectories
@@ -804,7 +817,7 @@ class FaceContactMode(AbstractContactMode):
                 idx, a[0] * cos_th + a[1] * sin_th >= b
             )
 
-    def formulate_convex_relaxation(self) -> None:
+    def formulate_convex_relaxation(self, add_l2_norm_cost: bool = False) -> None:
         # TODO: This part of the code is outdated and will most likely not work correctly
         if self.config.use_eq_elimination:
             self.original_prog = self.prog_wrapper
@@ -827,7 +840,8 @@ class FaceContactMode(AbstractContactMode):
         else:
             if self.config.use_band_sparsity:
                 self.relaxed_prog = self.prog_wrapper.make_relaxation(
-                    trace_cost=self.config.contact_config.cost.trace
+                    trace_cost=self.config.contact_config.cost.trace,
+                    add_l2_norm_cost=add_l2_norm_cost,
                 )
             else:
                 self.relaxed_prog = self.prog_wrapper.make_full_relaxation(
@@ -881,6 +895,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.pv2,
             self.variables.normal_vec,
             self.variables.tangent_vec,
+            self.dynamics_config.force_scale,
         )
 
     def get_variable_solutions(
@@ -919,6 +934,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.pv2,
             self.variables.normal_vec,
             self.variables.tangent_vec,
+            self.dynamics_config.force_scale,
         )
 
     def get_continuity_vars(

@@ -21,7 +21,11 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     AbstractModeVariables,
 )
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
+from planning_through_contact.geometry.planar.face_contact import (
+    FaceContactMode,
+    FaceContactVariables,
+)
+from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
     VertexModePair,
 )
@@ -159,6 +163,27 @@ class PlanarPushingPath:
         ]
         return vars_on_path
 
+    def get_determinants(self, rounded: bool = False) -> List[float]:
+        if rounded:
+            face_contact_vars = [
+                vars
+                for vars in self.get_rounded_vars()
+                if isinstance(vars, FaceContactVariables)
+            ]
+        else:  # rounded == False
+            face_contact_vars = [
+                vars
+                for vars in self.get_vars()
+                if isinstance(vars, FaceContactVariables)
+            ]
+        cos_ths = np.concatenate([var.cos_ths for var in face_contact_vars])
+        sin_ths = np.concatenate([var.sin_ths for var in face_contact_vars])
+
+        determinants: List[float] = [
+            np.linalg.norm([cos, sin]) for cos, sin in zip(cos_ths, sin_ths)
+        ]
+        return determinants
+
     def do_rounding(self, solver_params: PlanarSolverParams) -> None:
         self.rounded_result = self._do_nonlinear_rounding(solver_params)
 
@@ -181,15 +206,51 @@ class PlanarPushingPath:
         add_edge_constraints_to_prog(self.edges, prog, self.pairs)
         return prog
 
-    def _get_initial_guess(self) -> npt.NDArray[np.float64]:
-        num_vars_in_modes = [p.mode.prog.num_vars() for p in self.pairs]
-        all_vertex_vars_concatenated = np.concatenate(
-            [
-                pair.vertex.x()[:num_vars]
-                for pair, num_vars in zip(self.pairs, num_vars_in_modes)
-            ]
-        )
+    def _get_initial_guess(
+        self, scale_rot_values: bool = True
+    ) -> npt.NDArray[np.float64]:
+        original_decision_var_idxs_in_vertices = [
+            mode.get_variable_indices_in_gcs_vertex(mode.prog.decision_variables())
+            for _, mode in self.pairs
+        ]
+        decision_vars_in_vertex_vars = [
+            vertex.x()[idxs]
+            for (vertex, _), idxs in zip(
+                self.pairs, original_decision_var_idxs_in_vertices
+            )
+        ]
+        all_vertex_vars_concatenated = np.concatenate(decision_vars_in_vertex_vars)
+
         vertex_var_vals = self.result.GetSolution(all_vertex_vars_concatenated)
+
+        # This scales the rotational values so the initial guess starts with
+        # (cos, sin) being on the unit circle
+        if scale_rot_values:
+            mock_prog = MathematicalProgram()
+            mock_prog.AddDecisionVariables(all_vertex_vars_concatenated)
+
+            def _scale_rot_vec(cos, sin):
+                idx = mode.get_variable_indices_in_gcs_vertex(np.array([cos, sin]))
+                vertex_vars = vertex.x()[idx]
+                idx_in_stacked_vec = mock_prog.FindDecisionVariableIndices(vertex_vars)
+                rot_vec = vertex_var_vals[idx_in_stacked_vec]
+                length = np.linalg.norm(rot_vec)
+
+                # Scale rotation parameters so they are on unit circle
+                vertex_var_vals[idx_in_stacked_vec] = rot_vec / length
+
+            for vertex, mode in self.pairs:
+                if isinstance(mode, NonCollisionMode):
+                    # _scale_rot_vec(mode.variables.cos_th, mode.variables.sin_th)
+                    ...
+                elif isinstance(mode, FaceContactMode):
+                    for k in range(mode.num_knot_points):
+                        _scale_rot_vec(
+                            mode.variables.cos_ths[k], mode.variables.sin_ths[k]
+                        )
+                else:
+                    raise NotImplementedError(f"Mode {type(mode)} not supported")
+
         return vertex_var_vals
 
     def _do_nonlinear_rounding(
@@ -271,7 +332,7 @@ class PlanarPushingPath:
         else:
             if not result.is_success():
                 print(
-                    "Warning, rounding did not return is_success() == True, and might now have converged"
+                    "Warning, rounding did not return is_success() == True, and might not have converged"
                 )
 
         return result

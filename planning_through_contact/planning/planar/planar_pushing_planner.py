@@ -5,6 +5,7 @@ import pydot
 import pydrake.geometry.optimization as opt
 from pydrake.geometry.optimization import Point
 from pydrake.solvers import (
+    ClarabelSolver,
     CommonSolverOption,
     MathematicalProgramResult,
     MosekSolver,
@@ -69,12 +70,6 @@ class PlanarPushingPlanner:
                 "It is not possible to avoid object with only 2 knot points."
             )
 
-        if (
-            self.config.non_collision_cost.avoid_object
-            and self.config.allow_teleportation
-        ):
-            raise ValueError("Cannot avoid object while allowing teleportation")
-
         # TODO(bernhardpg): should just extract faces, rather than relying on the
         # object to only pass faces as contact locations
         self.contact_locations = contact_locations
@@ -95,10 +90,6 @@ class PlanarPushingPlanner:
         # costs for non-collisions are added by each of the separate subgraphs
         for m, v in zip(self.contact_modes, self.contact_vertices):
             m.add_cost_to_vertex(v)
-
-        if self.config.contact_config.cost.mode_transition_cost is not None:
-            for v in self.contact_vertices:
-                v.AddCost(self.config.contact_config.cost.mode_transition_cost)  # type: ignore
 
     @property
     def num_contact_modes(self) -> int:
@@ -373,21 +364,28 @@ class PlanarPushingPlanner:
             options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
 
         options.convex_relaxation = solver_params.gcs_convex_relaxation
-        if options.convex_relaxation is True:
+        if solver_params.gcs_convex_relaxation:
             options.preprocessing = True  # TODO(bernhardpg): should this be changed?
             options.max_rounded_paths = solver_params.gcs_max_rounded_paths
 
-        mosek = MosekSolver()
-        options.solver = mosek
-        options.solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-3
-        )
-        options.solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-3
-        )
-        options.solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-3
-        )
+        if solver_params.solver == "mosek":
+            mosek = MosekSolver()
+            options.solver = mosek
+            options.solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-4
+            )
+            options.solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-4
+            )
+            options.solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-4
+            )
+        else:  # clarabel
+            clarabel = ClarabelSolver()
+            options.solver = clarabel
+            options.solver_options.SetOption(clarabel.solver_id(), "tol_feas", 1e-4)
+            options.solver_options.SetOption(clarabel.solver_id(), "tol_gap_rel", 1e-4)
+            options.solver_options.SetOption(clarabel.solver_id(), "tol_gap_abs", 1e-4)
 
         assert self.source is not None
         assert self.target is not None

@@ -3,6 +3,15 @@ from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
+from planning_through_contact.experiments.utils import (
+    get_box,
+    get_default_contact_cost,
+    get_default_non_collision_cost,
+    get_default_plan_config,
+    get_default_solver_params,
+    get_sugar_box,
+    get_tee,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
@@ -26,30 +35,12 @@ from planning_through_contact.visualize.analysis import (
     analyze_plan,
 )
 from planning_through_contact.visualize.planar_pushing import (
+    compare_trajs,
     make_traj_figure,
+    plot_forces,
     visualize_planar_pushing_start_and_goal,
     visualize_planar_pushing_trajectory,
 )
-
-
-def get_slider_box() -> RigidBody:
-    mass = 0.1
-    box_geometry = Box2d(width=0.07, height=0.07)
-    slider = RigidBody("box", box_geometry, mass)
-    return slider
-
-
-def get_tee() -> RigidBody:
-    mass = 0.1
-    body = RigidBody("t_pusher", TPusher2d(), mass)
-    return body
-
-
-def get_sugar_box() -> RigidBody:
-    mass = 0.1
-    box_geometry = Box2d(width=0.106, height=0.185)
-    slider = RigidBody("sugar_box", box_geometry, mass)
-    return slider
 
 
 def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
@@ -147,6 +138,7 @@ def get_plans_to_point(
     lims: Tuple[float, float, float, float],
     pusher_radius: float,
     point: Tuple[float, float] = (0, 0),  # Default is origin
+    limit_rotations: bool = True,  # Use this to start with
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(1)
@@ -161,7 +153,10 @@ def get_plans_to_point(
     for _ in range(num_plans):
         x_initial = np.random.uniform(x_min, x_max)
         y_initial = np.random.uniform(y_min, y_max)
-        th_initial = np.random.uniform(-np.pi + 0.1, np.pi - 0.1)
+        if limit_rotations:
+            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+        else:
+            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 
         slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
         slider_target_pose = PlanarPose(point[0], point[1], 0)
@@ -177,7 +172,7 @@ def get_plans_to_point(
 
 def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
-    body_to_use: Literal["box", "t_pusher", "sugar_box"] = "sugar_box",
+    slider_type: Literal["box", "tee", "sugar_box"] = "sugar_box",
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
     pusher_radius: float = 0.035,
@@ -190,86 +185,98 @@ def create_plan(
     save_traj: bool = False,
     save_analysis: bool = False,
     debug: bool = False,
+    use_old_params: bool = False,
 ):
-    if body_to_use == "box":
-        slider = get_slider_box()
-    elif body_to_use == "t_pusher":
-        slider = get_tee()
-    elif body_to_use == "sugar_box":
-        slider = get_sugar_box()
-
     if animation_output_dir != "":
         traj_name = animation_output_dir + "/" + traj_name
 
+    if use_old_params:
+        if slider_type == "box":
+            slider = get_box()
+        elif slider_type == "tee":
+            slider = get_tee()
+        elif slider_type == "sugar_box":
+            slider = get_sugar_box()
+
+        dynamics_config = SliderPusherSystemConfig(
+            pusher_radius=pusher_radius,
+            slider=slider,
+            friction_coeff_slider_pusher=0.25,
+            friction_coeff_table_slider=0.5,
+            integration_constant=0.02,
+        )
+
+        # Configure contact cost
+        contact_cost = ContactCost(
+            cost_type=ContactCostType.OPTIMAL_CONTROL,
+            force_regularization=5.0,
+            ang_displacements=1.0,
+            lin_displacements=1.0,
+            mode_transition_cost=None,
+        )
+
+        contact_config = ContactConfig(
+            cost=contact_cost,
+            lam_min=0.47,
+            lam_max=0.53,
+            delta_vel_max=0.05 * 2,
+            delta_theta_max=0.4 * 2,
+        )
+
+        # Configure non-collision cost
+        non_collision_cost = NonCollisionCost(
+            distance_to_object_quadratic=None,
+            distance_to_object_socp=1.0,
+            pusher_velocity_regularization=1.0,
+            pusher_arc_length=None,
+        )
+
+        config = PlanarPlanConfig(
+            dynamics_config=dynamics_config,
+            time_in_contact=time_in_contact,
+            time_non_collision=time_in_non_collision,
+            num_knot_points_contact=4,
+            num_knot_points_non_collision=4,
+            allow_teleportation=False,
+            use_band_sparsity=True,
+            use_entry_and_exit_subgraphs=True,
+            contact_config=contact_config,
+            continuity_on_pusher_velocity=True,
+            non_collision_cost=non_collision_cost,
+        )
+
+        solver_params = PlanarSolverParams(
+            measure_solve_time=True,
+            gcs_max_rounded_paths=20,
+            print_flows=False,
+            print_solver_output=debug,
+            save_solver_output=False,
+            print_path=debug,
+            print_cost=debug,
+            assert_result=True,
+        )
+
+    else:
+        config = get_default_plan_config(
+            slider_type=slider_type,
+            pusher_radius=pusher_radius,
+            integration_constant=0.3,
+            friction_coeff=0.05,
+            lam_buffer=0.4,
+        )
+        solver_params = get_default_solver_params(debug, clarabel=False)
+
     if debug:
         visualize_planar_pushing_start_and_goal(
-            slider.geometry,
+            config.dynamics_config.slider.geometry,
             pusher_radius,
             plan_spec,
             # show=True,
             save=True,
-            filename=f"{traj_name}_start_and_goal_{body_to_use}",
+            filename=f"{traj_name}_start_and_goal_{slider_type}",
         )
 
-    dynamics_config = SliderPusherSystemConfig(
-        pusher_radius=pusher_radius,
-        slider=slider,
-        friction_coeff_slider_pusher=0.25,
-        friction_coeff_table_slider=0.5,
-        integration_constant=0.02,
-    )
-
-    # Configure contact cost
-    contact_cost = ContactCost(
-        cost_type=ContactCostType.OPTIMAL_CONTROL,
-        force_regularization=5.0,
-        ang_displacements=1.0,
-        lin_displacements=1.0,
-        mode_transition_cost=None,
-    )
-
-    contact_config = ContactConfig(
-        cost=contact_cost,
-        lam_min=0.47,
-        lam_max=0.53,
-        delta_vel_max=0.05 * 2,
-        delta_theta_max=0.4 * 2,
-    )
-
-    # Configure non-collision cost
-    non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.4,
-        distance_to_object_quadratic_preferred_distance=0.2,
-        pusher_velocity_regularization=1.0,
-        pusher_arc_length=None,
-    )
-
-    config = PlanarPlanConfig(
-        dynamics_config=dynamics_config,
-        time_in_contact=time_in_contact,
-        time_non_collision=time_in_non_collision,
-        num_knot_points_contact=4,
-        num_knot_points_non_collision=4,
-        allow_teleportation=False,
-        use_band_sparsity=True,
-        use_entry_and_exit_subgraphs=True,
-        contact_config=contact_config,
-        continuity_on_pusher_velocity=True,
-        non_collision_cost=non_collision_cost,
-    )
-
     planner = PlanarPushingPlanner(config)
-
-    solver_params = PlanarSolverParams(
-        measure_solve_time=True,
-        gcs_max_rounded_paths=20,
-        print_flows=False,
-        print_solver_output=debug,
-        save_solver_output=debug,
-        print_path=debug,
-        print_cost=debug,
-        assert_result=True,
-    )
 
     planner.config.start_and_goal = plan_spec
     planner.formulate_problem()
@@ -286,32 +293,40 @@ def create_plan(
         traj_rounded = None
 
     if save_traj:
-        filename = f"trajectories/{body_to_use}_pushing_{traj_name}.pkl"
+        filename = f"trajectories/{slider_type}_pushing_{traj_name}.pkl"
         traj_relaxed.save(filename)  # type: ignore
 
         if traj_rounded is not None:
-            filename = f"trajectories/{body_to_use}_pushing_{traj_name}_rounded.pkl"
+            filename = f"trajectories/{slider_type}_pushing_{traj_name}_rounded.pkl"
             traj_rounded.save(filename)  # type: ignore
 
     if save_analysis:
-        analyze_plan(planner.path, filename=f"{traj_name}_{body_to_use}")
+        analyze_plan(planner.path, filename=f"{traj_name}_{slider_type}")
 
         if traj_rounded is not None:
             analyze_plan(
                 planner.path,
-                filename=f"{traj_name}_{body_to_use}_rounded",
+                filename=f"{traj_name}_{slider_type}_rounded",
                 rounded=True,
             )
 
     make_traj_figure(
         traj_relaxed,
-        filename=f"{traj_name}_{body_to_use}",
+        filename=f"{traj_name}_{slider_type}",
+    )
+    plot_forces(
+        traj_relaxed,
+        filename=f"{traj_name}_{slider_type}_forces",
     )
     if traj_rounded is not None:
         make_traj_figure(
             traj_rounded,
-            filename=f"{traj_name}_{body_to_use}_rounded",
+            filename=f"{traj_name}_{slider_type}_rounded",
         )
+    plot_forces(
+        traj_relaxed,
+        filename=f"{traj_name}_{slider_type}_forces_rounded",
+    )
 
     if visualize:
         if debug:
@@ -321,13 +336,13 @@ def create_plan(
                 planner.config.start_and_goal,
                 save=True,
                 # show=True,
-                filename=f"{traj_name}_start_and_goal_{body_to_use}",
+                filename=f"{traj_name}_start_and_goal_{slider_type}",
             )
         ani = visualize_planar_pushing_trajectory(
             traj_relaxed,  # type: ignore
             save=True,
             # show=True,
-            filename=f"{traj_name}_{body_to_use}",
+            filename=f"{traj_name}_{slider_type}",
             visualize_knot_points=not interpolate_video,
             lims=animation_lims,
         )
@@ -337,9 +352,17 @@ def create_plan(
                 traj_rounded,  # type: ignore
                 save=True,
                 # show=True,
-                filename=f"{traj_name}_{body_to_use}_rounded",
+                filename=f"{traj_name}_{slider_type}_rounded",
                 visualize_knot_points=not interpolate_video,
                 lims=animation_lims,
+            )
+
+            compare_trajs(
+                traj_relaxed,
+                traj_rounded,
+                traj_a_legend="relaxed",
+                traj_b_legend="rounded",
+                filename=f"{traj_name}_{slider_type}_comparison",
             )
 
         return ani
@@ -385,7 +408,7 @@ if __name__ == "__main__":
             create_plan(
                 plans[traj_number],
                 debug=debug,
-                body_to_use=args.body,
+                slider_type=args.body,
                 traj_name=f"demo_{traj_number}",
                 visualize=True,
                 pusher_radius=pusher_radius,
@@ -403,7 +426,7 @@ if __name__ == "__main__":
                 create_plan(
                     plan,
                     debug=debug,
-                    body_to_use=args.body,
+                    slider_type=args.body,
                     traj_name=f"demo_{idx}",
                     visualize=True,
                     pusher_radius=pusher_radius,
@@ -419,14 +442,14 @@ if __name__ == "__main__":
     elif hardware_demos:
         lims = (0.5, 0.6, -0.15, 0.15)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, 0))
+        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, -0.04285714))
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
                 debug=debug,
-                body_to_use=args.body,
+                slider_type=args.body,
                 traj_name=f"hw_demo_C_{traj_number}",
-                visualize=False,
+                visualize=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
                 animation_output_dir="demos",
@@ -442,9 +465,9 @@ if __name__ == "__main__":
                 create_plan(
                     plan,
                     debug=debug,
-                    body_to_use=args.body,
+                    slider_type=args.body,
                     traj_name=f"hw_demo_C_{idx}",
-                    visualize=False,
+                    visualize=True,
                     pusher_radius=pusher_radius,
                     save_traj=True,
                     animation_output_dir="demos",
@@ -462,7 +485,7 @@ if __name__ == "__main__":
             plan_spec,
             debug=debug,
             pusher_radius=pusher_radius,
-            body_to_use=args.body,
+            slider_type=args.body,
             traj_name=str(traj_number),
             visualize=True,
             save_traj=True,
