@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq
+from pydrake.math import eq, le
 from pydrake.solvers import (
     Binding,
     L2NormCost,
@@ -486,14 +486,39 @@ class FaceContactMode(AbstractContactMode):
             self._add_workspace_constraints()
 
     def _add_workspace_constraints(self) -> None:
+        raise NotImplementedError(
+            "Workspace constraints not supported, as it slows down the planner by a very big amount"
+        )
+
         assert self.config.workspace is not None
         slider_workspace = self.config.workspace.slider
 
-        for idx in range(self.num_knot_points):
-            p_WB = self.variables.p_WBs[idx]
+        slider = self.config.dynamics_config.slider.geometry
+        p_Wv_is = self._get_slider_vertices(slider)
+
+        for k in range(self.num_knot_points):
+            p_Wvs_at_k = p_Wv_is[k]
 
             lb, ub = slider_workspace.bounds
-            self.prog_wrapper.add_bounding_box_constraint(idx, lb, ub, p_WB)
+            for p_Wv_i in p_Wvs_at_k:
+                self.prog_wrapper.add_linear_inequality_constraint(k, le(lb, p_Wv_i))
+                self.prog_wrapper.add_linear_inequality_constraint(k, le(p_Wv_i, ub))
+
+    def _get_slider_vertices(
+        self, slider: CollisionGeometry
+    ) -> List[List[npt.NDArray]]:
+        """
+        Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
+        are linear in the decision varibles of the program
+        """
+        p_Wv_is = [
+            [
+                slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
+                for vertex_idx in range(len(slider.vertices))
+            ]
+            for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
+        ]
+        return p_Wv_is
 
     def _define_costs(self) -> None:
         cost_config = self.config.contact_config.cost
@@ -505,13 +530,7 @@ class FaceContactMode(AbstractContactMode):
             # Arc length on keypoint trajectories
             if cost_config.keypoint_arc_length is not None:
                 slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = [
-                    [
-                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                        for vertex_idx in range(len(slider.vertices))
-                    ]
-                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-                ]
+                p_Wv_is = self._get_slider_vertices(slider)
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
@@ -592,13 +611,7 @@ class FaceContactMode(AbstractContactMode):
             # Keypoint velocity regularization
             if cost_config.keypoint_velocity_regularization is not None:
                 slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = [
-                    [
-                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                        for vertex_idx in range(len(slider.vertices))
-                    ]
-                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-                ]
+                p_Wv_is = self._get_slider_vertices(slider)
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
@@ -665,13 +678,7 @@ class FaceContactMode(AbstractContactMode):
 
         elif cost_config.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             slider = self.config.dynamics_config.slider.geometry
-            p_Wv_is = [
-                [
-                    slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                    for vertex_idx in range(len(slider.vertices))
-                ]
-                for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-            ]
+            p_Wv_is = self._get_slider_vertices(slider)
             for k in range(self.num_knot_points - 1):
                 for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     disp = vertex_k_next - vertex_k

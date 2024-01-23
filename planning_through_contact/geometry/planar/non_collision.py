@@ -487,7 +487,7 @@ class NonCollisionMode(AbstractContactMode):
         # TODO: Currently, some tests will fail if this is not enabled (as the sets are unbounded)
         # TODO: This will be handled soon
         if make_bounded:
-            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
+            BOUND = 1  # TODO(bernhardpg): this should not be hardcoded
             ub = np.full((temp_prog.num_vars(),), BOUND)
             temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
