@@ -496,10 +496,12 @@ class NonCollisionMode(AbstractContactMode):
 
         # Sets should automatically be bounded as we have to touch the object to move it
         # GCS requires the sets to be bounded
-        # if make_bounded:
-        #     BOUND = 1  # TODO(bernhardpg): this should not be hardcoded
-        #     ub = np.full((temp_prog.num_vars(),), BOUND)
-        # temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
+        # TODO: Currently, some tests will fail if this is not enabled (as the sets are unbounded)
+        # TODO: This will be handled soon
+        if make_bounded:
+            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
+            ub = np.full((temp_prog.num_vars(),), BOUND)
+            temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
         # NOTE: Here, we are using the Spectrahedron constructor, which is really creating a polyhedron,
         # because there is no PSD constraint. In the future, it is cleaner to use an interface for the HPolyhedron class.
