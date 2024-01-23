@@ -55,7 +55,7 @@ def check_finger_pose_in_contact_location(
 
 def find_first_matching_location(
     finger_pose: PlanarPose, config: PlanarPlanConfig
-) -> PolytopeContactLocation:
+) -> Optional[PolytopeContactLocation]:
     # we always add all non-collision modes, even when we don't add all contact modes
     # (think of maneuvering around the object etc)
     locations = [
