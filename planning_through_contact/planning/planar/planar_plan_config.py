@@ -112,6 +112,9 @@ class PlanarSolverParams:
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
+    # Flag to assert that all values on GCS path are not NaN, and that all non-path values are NaN
+    # (this can happen if the convex sets are not compact)
+    assert_nan_values: bool = True
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
