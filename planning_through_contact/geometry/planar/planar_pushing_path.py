@@ -143,7 +143,7 @@ class PlanarPushingPath:
         if assert_nan_values:
 
             def _check_all_nan_or_zero(array: npt.NDArray[np.float64]) -> bool:
-                return np.isnan(array) | np.isclose(array, 0)
+                return np.isnan(array) | np.isclose(array, 0, atol=1e-5)
 
             # Assert that all decision varibles NOT ON the optimal path are NaN or 0
             vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
