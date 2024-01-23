@@ -199,15 +199,10 @@ def get_plans_to_point(
     elif slider_type == "sugar_box":
         slider = get_sugar_box()
 
-    # TODO: Clean up this, lims are only used for setting pusher pose
-    x_min, x_max, y_min, y_max = lims
-    EPS = 0.01
-    pusher_pose = PlanarPose(
-        x_max + pusher_radius + EPS, y_max + pusher_radius + EPS, 0
-    )
+    # Hardcoded pusher start pose
+    pusher_pose = PlanarPose(0.61, 0.16, 0)
 
     plans = []
-
     for _ in range(num_plans):
         slider_initial_pose = _get_slider_pose_within_workspace(
             workspace, slider.geometry, limit_rotations
