@@ -260,11 +260,11 @@ def create_plan(
         config = get_default_plan_config(
             slider_type=slider_type,
             pusher_radius=pusher_radius,
-            integration_constant=0.4,
+            integration_constant=0.3,
             friction_coeff=0.05,
             lam_buffer=0.4,
         )
-        solver_params = get_default_solver_params(debug)
+        solver_params = get_default_solver_params(debug, clarabel=False)
 
     if debug:
         visualize_planar_pushing_start_and_goal(

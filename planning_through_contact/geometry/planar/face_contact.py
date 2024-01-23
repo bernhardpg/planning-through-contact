@@ -247,7 +247,7 @@ class FaceContactVariables(AbstractModeVariables):
     @property
     def f_c_Bs(self):
         return [
-            c_n * self.normal_vec + c_f * self.tangent_vec
+            0.01 * (c_n * self.normal_vec + c_f * self.tangent_vec)
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
