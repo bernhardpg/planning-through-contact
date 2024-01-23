@@ -46,6 +46,11 @@ class BoxWorkspace:
         ub = np.array([self.x_max, self.y_max], dtype=np.float64)
         return lb, ub
 
+    def new_workspace_with_buffer(self, extra_buffer: float) -> "BoxWorkspace":
+        return BoxWorkspace(
+            self.width, self.height, self.center, self.buffer + extra_buffer
+        )
+
 
 @dataclass
 class PlanarPushingWorkspace:

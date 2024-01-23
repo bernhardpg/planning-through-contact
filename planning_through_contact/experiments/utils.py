@@ -1,4 +1,3 @@
-from dataclasses import field
 from typing import Literal, Optional, Tuple
 
 import numpy as np
@@ -77,9 +76,7 @@ def get_default_plan_config(
     arc_length_weight: Optional[float] = None,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
-    workspace: PlanarPushingWorkspace = field(
-        default_factory=lambda: PlanarPushingWorkspace()
-    ),
+    workspace: Optional[PlanarPushingWorkspace] = None,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()

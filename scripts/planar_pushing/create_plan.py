@@ -14,6 +14,9 @@ from planning_through_contact.experiments.utils import (
     get_tee,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+)
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -136,9 +139,55 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
     )
 
 
+def _slider_within_workspace(
+    workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
+) -> bool:
+    R_WB = pose.two_d_rot_matrix()
+    p_WB = pose.pos()
+
+    p_Wv_s = [
+        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB).flatten()
+        for vertex_idx in range(len(slider.vertices))
+    ]
+
+    lb, ub = workspace.slider.bounds
+    vertices_within_workspace: bool = np.all([v <= ub for v in p_Wv_s]) and np.all(
+        [v >= lb for v in p_Wv_s]
+    )
+    return vertices_within_workspace
+
+
+def _get_slider_pose_within_workspace(
+    workspace: PlanarPushingWorkspace,
+    slider: CollisionGeometry,
+    limit_rotations: bool = False,
+) -> PlanarPose:
+    valid_pose = False
+
+    pose = None
+    while not valid_pose:
+        x_initial = np.random.uniform(workspace.slider.x_min, workspace.slider.x_max)
+        y_initial = np.random.uniform(workspace.slider.y_min, workspace.slider.y_max)
+        EPS = 0.01
+        if limit_rotations:
+            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+        else:
+            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
+
+        pose = PlanarPose(x_initial, y_initial, th_initial)
+
+        valid_pose = _slider_within_workspace(workspace, pose, slider)
+
+    assert pose is not None  # fix LSP errors
+
+    return pose
+
+
 def get_plans_to_point(
     num_plans: int,
+    slider_type: Literal["box", "sugar_box", "tee"],
     lims: Tuple[float, float, float, float],
+    workspace: PlanarPushingWorkspace,
     pusher_radius: float,
     point: Tuple[float, float] = (0, 0),  # Default is origin
     limit_rotations: bool = True,  # Use this to start with
@@ -146,6 +195,14 @@ def get_plans_to_point(
     # We want the plans to always be the same
     np.random.seed(1)
 
+    if slider_type == "box":
+        slider = get_box()
+    elif slider_type == "tee":
+        slider = get_tee()
+    elif slider_type == "sugar_box":
+        slider = get_sugar_box()
+
+    # TODO: Clean up this, lims are only used for setting pusher pose
     x_min, x_max, y_min, y_max = lims
     EPS = 0.01
     pusher_pose = PlanarPose(
@@ -153,15 +210,12 @@ def get_plans_to_point(
     )
 
     plans = []
-    for _ in range(num_plans):
-        x_initial = np.random.uniform(x_min, x_max)
-        y_initial = np.random.uniform(y_min, y_max)
-        if limit_rotations:
-            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
-        else:
-            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 
-        slider_initial_pose = PlanarPose(x_initial, y_initial, th_initial)
+    for _ in range(num_plans):
+        slider_initial_pose = _get_slider_pose_within_workspace(
+            workspace, slider.geometry, limit_rotations
+        )
+
         slider_target_pose = PlanarPose(point[0], point[1], 0)
 
         plans.append(
@@ -283,15 +337,6 @@ def create_plan(
             lam_buffer=0.4,
         )
         solver_params = get_default_solver_params(debug, clarabel=False)
-
-    config.workspace = PlanarPushingWorkspace(
-        slider=BoxWorkspace(
-            width=0.35,
-            height=0.5,
-            center=np.array([0.575, 0.0]),
-            buffer=pusher_radius * 2,
-        ),
-    )
 
     if debug:
         visualize_planar_pushing_start_and_goal(
@@ -448,9 +493,20 @@ if __name__ == "__main__":
                     do_rounding=rounding,
                 )
     elif hardware_demos:
+        workspace = PlanarPushingWorkspace(
+            slider=BoxWorkspace(
+                width=0.35,
+                height=0.5,
+                center=np.array([0.575, 0.0]),
+                buffer=pusher_radius * 2,
+            ),
+        )
+
         lims = (0.5, 0.6, -0.15, 0.15)
         animation_lims = (np.array(lims) * 1.3).tolist()
-        plans = get_plans_to_point(10, lims, pusher_radius, (0.575, -0.04285714))
+        plans = get_plans_to_point(
+            10, args.body, lims, workspace, pusher_radius, (0.575, -0.04285714)
+        )
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
