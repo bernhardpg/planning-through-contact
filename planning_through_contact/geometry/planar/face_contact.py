@@ -78,7 +78,7 @@ class FaceContactVariables(AbstractModeVariables):
         num_knot_points: int,
         time_in_mode: float,
         pusher_radius: float,
-        force_scale: float,
+        force_scale: float = 0.01,
         define_theta_dots: bool = True,
     ) -> "FaceContactVariables":
         # Contact positions
