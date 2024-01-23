@@ -316,20 +316,20 @@ def plot_planar_pushing_trajectory(
     axes[0].plot(actual.t, desired.c_n, linestyle="--", label="Desired")
     axes[0].set_title("c_n")
     axes[0].legend()
-    axes[0].set_ylim(-max_force_change, max_force_change)
+    # axes[0].set_ylim(-max_force_change, max_force_change)
 
     axes[1].plot(actual.t, actual.c_f, label="Actual")
     axes[1].plot(actual.t, desired.c_f, linestyle="--", label="Desired")
     axes[1].set_title("c_f")
     axes[1].legend()
-    axes[1].set_ylim(-max_force_change, max_force_change)
+    # axes[1].set_ylim(-max_force_change, max_force_change)
 
     max_lam_dot_change = max(np.ptp(actual.lam_dot), MIN_AXIS_SIZE) * 1.3  # type: ignore
     axes[2].plot(actual.t, actual.lam_dot, label="Actual")
     axes[2].plot(actual.t, desired.lam_dot, linestyle="--", label="Desired")
     axes[2].set_title("lam_dot")
     axes[2].legend()
-    axes[2].set_ylim(-max_lam_dot_change, max_lam_dot_change)
+    # axes[2].set_ylim(-max_lam_dot_change, max_lam_dot_change)
 
     # Adjust layout
     plt.tight_layout()

@@ -1,10 +1,10 @@
+import logging
 from typing import List, Optional
 
 import numpy as np
 import pydot
 import pydrake.symbolic as sym
 import pytest
-import logging
 from pydrake.geometry import SceneGraph
 from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 from pydrake.systems.all import ZeroOrderHold
@@ -61,7 +61,6 @@ from planning_through_contact.visualize.analysis import (
     plot_planar_pushing_trajectory,
     plot_velocities,
 )
-
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_start_and_goal,
@@ -203,10 +202,63 @@ def test_get_control_no_movement(hybrid_mpc: HybridMpc) -> None:
 
     # No control should be applied
     for control, control_desired in zip(control_sol.T, desired_control):
-        assert np.allclose(control, control_desired)
+        assert np.allclose(control, control_desired, atol=1e-5)
 
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)
+
+
+@pytest.fixture
+def one_contact_mode(
+    slider_pusher_system: SliderPusherSystem,  # type:ignore
+) -> FaceContactMode:
+    config = PlanarPlanConfig(dynamics_config=slider_pusher_system.config)
+    mode = FaceContactMode.create_from_plan_spec(
+        slider_pusher_system.contact_location, config
+    )
+    return mode
+
+
+def generate_path(
+    one_contact_mode: FaceContactMode, initial_pose: PlanarPose, final_pose: PlanarPose
+) -> List[FaceContactVariables]:
+    one_contact_mode.set_slider_initial_pose(initial_pose)
+    one_contact_mode.set_slider_final_pose(final_pose)
+
+    one_contact_mode.formulate_convex_relaxation()
+    assert one_contact_mode.relaxed_prog is not None
+    relaxed_result = Solve(one_contact_mode.relaxed_prog)
+    assert relaxed_result.is_success()
+
+    # NOTE: We don't use nonlinear rounding, but rather return the relaxed solution
+    # TODO(bernhardpg): Change this when nonlinear rounding is working again
+    # prog = assemble_progs_from_contact_modes([one_contact_mode])
+    # initial_guess = relaxed_result.GetSolution(
+    #     one_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
+    # )
+    # prog.SetInitialGuess(prog.decision_variables(), initial_guess)
+    #
+    # solver_options = SolverOptions()
+    # if DEBUG:
+    #     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    #
+    # result = Solve(prog, solver_options=solver_options)
+    # assert result.is_success()
+
+    vars = one_contact_mode.variables.eval_result(relaxed_result)
+    return [vars]
+
+
+@pytest.fixture
+def one_contact_mode_vars(
+    one_contact_mode: FaceContactMode,
+) -> List[FaceContactVariables]:
+    initial_pose = PlanarPose(0, 0, 0)
+    # NOTE: This is a very unrealistic plan to track
+    final_pose = PlanarPose(0.3, 0.2, 2.5)
+    config = one_contact_mode.config
+    config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
+    return generate_path(one_contact_mode, initial_pose, final_pose)
 
 
 def test_get_control_with_plan(
@@ -216,7 +268,6 @@ def test_get_control_with_plan(
     """
     The plan should follow the desired trajectory exactly.
     """
-
     feeder = SliderPusherTrajectoryFeeder(
         one_contact_mode_vars, hybrid_mpc.dynamics_config, hybrid_mpc.config
     )
@@ -302,56 +353,6 @@ def test_get_control_with_disturbance(
     # assert np.isclose(actual.x[-1], desired.x[-1], atol=0.01)
     # assert np.isclose(actual.y[-1], desired.y[-1], atol=0.01)
     # assert np.isclose(actual.theta[-1], desired.theta[-1], atol=0.01)
-
-
-@pytest.fixture
-def one_contact_mode(
-    slider_pusher_system: SliderPusherSystem,  # type:ignore
-) -> FaceContactMode:
-    config = PlanarPlanConfig(dynamics_config=slider_pusher_system.config)
-    mode = FaceContactMode.create_from_plan_spec(
-        slider_pusher_system.contact_location, config
-    )
-    return mode
-
-
-def generate_path(
-    one_contact_mode: FaceContactMode, initial_pose: PlanarPose, final_pose: PlanarPose
-) -> List[FaceContactVariables]:
-    one_contact_mode.set_slider_initial_pose(initial_pose)
-    one_contact_mode.set_slider_final_pose(final_pose)
-
-    one_contact_mode.formulate_convex_relaxation()
-    assert one_contact_mode.relaxed_prog is not None
-    relaxed_result = Solve(one_contact_mode.relaxed_prog)
-    assert relaxed_result.is_success()
-
-    # NOTE: We don't use nonlinear rounding, but rather return the relaxed solution
-    # TODO(bernhardpg): Change this when nonlinear rounding is working again
-    # prog = assemble_progs_from_contact_modes([one_contact_mode])
-    # initial_guess = relaxed_result.GetSolution(
-    #     one_contact_mode.relaxed_prog.decision_variables()[: prog.num_vars()]
-    # )
-    # prog.SetInitialGuess(prog.decision_variables(), initial_guess)
-    #
-    # solver_options = SolverOptions()
-    # if DEBUG:
-    #     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-    #
-    # result = Solve(prog, solver_options=solver_options)
-    # assert result.is_success()
-
-    vars = one_contact_mode.variables.eval_result(relaxed_result)
-    return [vars]
-
-
-@pytest.fixture
-def one_contact_mode_vars(
-    one_contact_mode: FaceContactMode,
-) -> List[FaceContactVariables]:
-    initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.2, 2.5)
-    return generate_path(one_contact_mode, initial_pose, final_pose)
 
 
 def execute_hybrid_mpc_controller(

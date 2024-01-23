@@ -1,7 +1,8 @@
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
-import logging
+
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
@@ -16,9 +17,7 @@ from pydrake.systems.framework import (
     OutputPort,
     System,
 )
-from pydrake.systems.primitives import (
-    AffineSystem,
-)
+from pydrake.systems.primitives import AffineSystem
 
 from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
@@ -47,7 +46,9 @@ class HybridMpcConfig:
     R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
     # Max magnitude of control input [c_n, c_f, lam_dot]
     u_max_magnitude: npt.NDArray[np.float64] = field(
-        default_factory=lambda: np.array([0.3, 0.3, 0.05])
+        # NOTE: The force variables are scaled to give a better posed optimization problem
+        # hence, the values for c_n and c_f are multiplied by (1/config.force_scale) (which defaults to 100)
+        default_factory=lambda: np.array([30, 30, 0.05])
     )
 
 
