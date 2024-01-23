@@ -5,8 +5,6 @@ import numpy as np
 
 from planning_through_contact.experiments.utils import (
     get_box,
-    get_default_contact_cost,
-    get_default_non_collision_cost,
     get_default_plan_config,
     get_default_solver_params,
     get_sugar_box,
@@ -18,12 +16,14 @@ from planning_through_contact.geometry.planar.face_contact import FaceContactMod
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
+    BoxWorkspace,
     ContactConfig,
     ContactCost,
     ContactCostType,
     NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
+    PlanarPushingWorkspace,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
@@ -265,6 +265,15 @@ def create_plan(
             lam_buffer=0.4,
         )
         solver_params = get_default_solver_params(debug, clarabel=False)
+
+    config.workspace = PlanarPushingWorkspace(
+        slider=BoxWorkspace(
+            width=0.35,
+            height=0.5,
+            center=np.array([0.575, 0.0]),
+            buffer=pusher_radius * 2,
+        ),
+    )
 
     if debug:
         visualize_planar_pushing_start_and_goal(

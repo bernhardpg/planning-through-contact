@@ -482,6 +482,19 @@ class FaceContactMode(AbstractContactMode):
                 eq(v_c_B.flatten(), np.zeros((2,)))
             )
 
+        if self.config.workspace is not None:
+            self._add_workspace_constraints()
+
+    def _add_workspace_constraints(self) -> None:
+        assert self.config.workspace is not None
+        slider_workspace = self.config.workspace.slider
+
+        for idx in range(self.num_knot_points):
+            p_WB = self.variables.p_WBs[idx]
+
+            lb, ub = slider_workspace.bounds
+            self.prog_wrapper.add_bounding_box_constraint(idx, lb, ub, p_WB)
+
     def _define_costs(self) -> None:
         cost_config = self.config.contact_config.cost
 
