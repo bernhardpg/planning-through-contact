@@ -67,6 +67,7 @@ class FaceContactVariables(AbstractModeVariables):
     pv2: npt.NDArray[np.float64]
     normal_vec: npt.NDArray[np.float64]
     tangent_vec: npt.NDArray[np.float64]
+    force_scale: float
 
     @classmethod
     def from_prog(
@@ -77,6 +78,7 @@ class FaceContactVariables(AbstractModeVariables):
         num_knot_points: int,
         time_in_mode: float,
         pusher_radius: float,
+        force_scale: float,
         define_theta_dots: bool = True,
     ) -> "FaceContactVariables":
         # Contact positions
@@ -161,6 +163,7 @@ class FaceContactVariables(AbstractModeVariables):
             pv2,
             normal_vec,
             tangent_vec,
+            force_scale,
         )
 
     def eval_result(self, result: MathematicalProgramResult) -> "FaceContactVariables":
@@ -194,6 +197,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
+            self.force_scale,
         )
 
     def from_reduced_prog(
@@ -228,6 +232,7 @@ class FaceContactVariables(AbstractModeVariables):
             self.pv2,
             self.normal_vec,
             self.tangent_vec,
+            self.force_scale,
         )
 
     @property
@@ -246,8 +251,10 @@ class FaceContactVariables(AbstractModeVariables):
 
     @property
     def f_c_Bs(self):
+        # We scale the force components to make the optimization program better posed
+        # With this scaling, the values should be approx same OoM as 1
         return [
-            0.01 * (c_n * self.normal_vec + c_f * self.tangent_vec)
+            self.force_scale * (c_n * self.normal_vec + c_f * self.tangent_vec)
             for c_n, c_f in zip(self.normal_forces, self.friction_forces)
         ]
 
@@ -326,6 +333,7 @@ class FaceContactMode(AbstractContactMode):
             self.num_knot_points,
             self.time_in_mode,
             self.dynamics_config.pusher_radius,
+            self.dynamics_config.force_scale,
             define_theta_dots=self.config.use_approx_exponential_map,
         )
         self.constraints = {
@@ -887,6 +895,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.pv2,
             self.variables.normal_vec,
             self.variables.tangent_vec,
+            self.dynamics_config.force_scale,
         )
 
     def get_variable_solutions(
@@ -925,6 +934,7 @@ class FaceContactMode(AbstractContactMode):
             self.variables.pv2,
             self.variables.normal_vec,
             self.variables.tangent_vec,
+            self.dynamics_config.force_scale,
         )
 
     def get_continuity_vars(
