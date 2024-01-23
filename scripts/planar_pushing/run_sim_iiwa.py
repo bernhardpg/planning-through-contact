@@ -85,7 +85,7 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=6,
-        closed_loop=False,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_0_rounded.pkl",
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
         # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,
