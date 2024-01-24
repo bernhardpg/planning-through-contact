@@ -246,8 +246,10 @@ def get_plans_to_point(
 
     slider = config.slider_geometry
 
-    # Hardcoded pusher start pose
-    pusher_pose = PlanarPose(0.61, 0.16, 0)
+    # Hardcoded pusher start pose to be at top edge
+    # of workspace
+    ws = workspace.slider.new_workspace_with_buffer(new_buffer=0)
+    pusher_pose = PlanarPose(ws.center[0], ws.y_max, 0)
 
     plans = []
     for _ in range(num_plans):
@@ -506,8 +508,7 @@ if __name__ == "__main__":
                 width=0.35,
                 height=0.5,
                 center=np.array([0.575, 0.0]),
-                # buffer=pusher_radius * 2, # too small
-                buffer=0.15,
+                buffer=-pusher_radius * 4,  # too small
             ),
         )
 
