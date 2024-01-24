@@ -1188,28 +1188,33 @@ numpy = {version = "*", markers = "python_version < \"3.12\""}
 
 [[package]]
 name = "manipulation"
-version = "2023.11.8"
+version = "2024.01.01"
 description = "MIT 6.421 - Robotic Manipulation"
 optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "manipulation-2023.11.8-py3-none-any.whl", hash = "sha256:dfb36927bc50d57445a2e7d24dd01bfc268665b2c2de9936b40ef131f92c83d8"},
-    {file = "manipulation-2023.11.8.tar.gz", hash = "sha256:2b57007d1b89a01a96005d87c140a2f66f6dfb43c73d671ed677b6e75732dbb5"},
-]
+python-versions = "<3.12,>=3.10"
+files = []
+develop = false
 
 [package.dependencies]
 cloudpickle = "2.2.1"
-drake = ">=1.22.0"
+drake = ">=1.24.0"
 gradescope-utils = ">=0.4.0"
 mpld3 = ">=0.5.6"
 nevergrad = ">=0.4.3"
-psutil = ">=5.9"
+psutil = ">=5.9.*"
 pyzmq = ">=25.0.0"
+scipy = ">=1.10.0"
 stable-baselines3 = ">=2.0.0"
 timeout-decorator = ">=0.4.1"
 torch = ">=2.0.1"
 torchvision = ">=0.10.1"
 trimesh = {version = ">=4.0.0", extras = ["recommend"]}
+
+[package.source]
+type = "git"
+url = "https://github.com/RussTedrake/manipulation.git"
+reference = "HEAD"
+resolved_reference = "64476616dea847da27fa1a6d86faa0dbe18b777f"
 
 [[package]]
 name = "markdown-it-py"
@@ -3191,4 +3196,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.11"
-content-hash = "9f2af2b43ff232db3ce71ab41126381ea11fa82d63f0f094d87a8fcf1e87b7c5"
+content-hash = "4dec501fa15c099aab6db52ef166bae17821505284bf77076c0c714e8f0be273"

@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -41,9 +41,16 @@ def evaluate_np_expressions_array(
     return solutions
 
 
-def calc_displacements(vars) -> List[npt.NDArray[np.float64]]:
+def calc_displacements(
+    vars, dt: Optional[float] = None
+) -> List[npt.NDArray[np.float64]]:
+    if dt is not None:
+        scale = 1 / dt
+    else:
+        scale = 1
+
     displacements = [
-        (var_next - var_curr) for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
+        (var_next - var_curr) * scale for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
     ]
     return displacements
 

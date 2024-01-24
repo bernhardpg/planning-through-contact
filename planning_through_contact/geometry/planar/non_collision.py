@@ -142,9 +142,7 @@ class NonCollisionVariables(AbstractModeVariables):
 
     @property
     def v_BPs(self):
-        # TODO(bernhardpg): Not really velocities, right now these are just
-        # time-independent displacements
-        return calc_displacements(self.p_BPs)
+        return calc_displacements(self.p_BPs, self.dt)
 
     @property
     def p_WB(self):
@@ -243,6 +241,7 @@ class NonCollisionMode(AbstractContactMode):
         )
 
         self.l2_norm_costs = []
+        self.distance_to_object_socp_costs = []
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
@@ -283,6 +282,11 @@ class NonCollisionMode(AbstractContactMode):
         return exprs
 
     def _define_cost(self) -> None:
+        if self.num_knot_points == 1 and not self.terminal_cost:
+            # If we have only one knot point we are either a source or target mode, in that
+            # case we don't add any cost (unless explicitly specified)
+            return
+
         self.cost_config = self.config.non_collision_cost
 
         if self.cost_config.pusher_velocity_regularization is not None:
@@ -337,7 +341,29 @@ class NonCollisionMode(AbstractContactMode):
                     np.sum(squared_dists), is_convex=True
                 )
 
-            if self.cost_config.distance_to_object_socp_single_mode:
+            if self.cost_config.distance_to_object_socp is not None:
+                # TODO(bernhardpg): Clean up this part
+                planes = self.slider_geometry.get_contact_planes(
+                    self.contact_location.idx
+                )
+                for plane in planes:
+                    for p_BP in self.variables.p_BPs:
+                        # A = [a^T; 0]
+                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
+                        NUM_DIMS = 2
+                        A = np.zeros((NUM_VARS, NUM_DIMS))
+                        A[0, :] = plane.a.T * self.cost_config.distance_to_object_socp
+                        # b = [b; 1]
+                        b = np.ones((NUM_VARS, 1))
+                        b[0] = plane.b
+                        b = b * self.cost_config.distance_to_object_socp
+
+                        # z = [a^T x + b; 1]
+                        cost = PerspectiveQuadraticCost(A, b)
+                        binding = self.prog.AddCost(cost, p_BP)
+                        self.distance_to_object_socp_costs.append(binding)
+
+            if self.cost_config.distance_to_object_socp_single_mode is not None:
                 # TODO: Can probably get rid of this
 
                 # NOTE: Only a research feature for adding socp costs on a single mode (i.e. not in GCS)
@@ -468,9 +494,12 @@ class NonCollisionMode(AbstractContactMode):
             vars = x[idxs]
             temp_prog.AddConstraint(c.evaluator(), vars)
 
+        # Sets should automatically be bounded as we have to touch the object to move it
         # GCS requires the sets to be bounded
+        # TODO: Currently, some tests will fail if this is not enabled (as the sets are unbounded)
+        # TODO: This will be handled soon
         if make_bounded:
-            BOUND = 1  # TODO(bernhardpg): this should not be hardcoded
+            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
             ub = np.full((temp_prog.num_vars(),), BOUND)
             temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
@@ -560,9 +589,6 @@ class NonCollisionMode(AbstractContactMode):
                     binding = Binding[L2NormCost](evaluator, vars)
                     vertex.AddCost(binding)
 
-            # The code for adding cost for avoiding the slider is kind of hacky
-            # to avoid spending time on generalizing it to the case where we
-            # just want to test one mode.
             if self.cost_config.distance_to_object_quadratic is not None:
                 var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
                 vars = vertex.x()[var_idxs]
@@ -570,27 +596,8 @@ class NonCollisionMode(AbstractContactMode):
                 vertex.AddCost(binding)
 
             if self.cost_config.distance_to_object_socp:
-                # TODO(bernhardpg): Clean up this part
-                planes = self.slider_geometry.get_contact_planes(
-                    self.contact_location.idx
-                )
-                for plane in planes:
-                    for p_BP in self.variables.p_BPs:
-                        # A = [a^T; 0]
-                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
-                        NUM_DIMS = 2
-                        A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = plane.a.T * self.cost_config.distance_to_object_socp
-                        # b = [b; 1]
-                        b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b
-                        b = b * self.cost_config.distance_to_object_socp
-
-                        # z = [a^T x + b; 1]
-                        cost = PerspectiveQuadraticCost(A, b)
-                        vars_in_vertex = vertex.x()[
-                            self.prog.FindDecisionVariableIndices(p_BP)
-                        ]
-                        vertex.AddCost(
-                            Binding[PerspectiveQuadraticCost](cost, vars_in_vertex)
-                        )
+                for binding in self.distance_to_object_socp_costs:
+                    var_idxs, evaluator = self._get_cost_terms(binding)
+                    vars = vertex.x()[var_idxs]
+                    binding = Binding[PerspectiveQuadraticCost](evaluator, vars)
+                    vertex.AddCost(binding)

@@ -1,13 +1,10 @@
 # From https://github1s.com/nepfaff/iiwa_setup/blob/main/iiwa_setup/sensors/opitrack.py
 
-from dataclasses import dataclass
 import logging
-
 from copy import copy
 from typing import List, Optional
 
 import numpy as np
-
 from optitrack import optitrack_frame_t, optitrack_rigid_body_t
 from pydrake.all import (
     AbstractValue,
@@ -29,13 +26,10 @@ from pydrake.all import (
     State,
 )
 
-from planning_through_contact.simulation.state_estimators.state_estimator import StateEstimator
+from planning_through_contact.simulation.state_estimators.state_estimator import (
+    StateEstimator,
+)
 
-@dataclass
-class OptitrackConfig:
-    iiwa_id: int
-    slider_id: int
-    X_optitrackBody_plantBody: RigidTransform
 
 class OptitrackFrameSource(LeafSystem):
     def __init__(

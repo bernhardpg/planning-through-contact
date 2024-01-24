@@ -11,6 +11,7 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
@@ -70,23 +71,9 @@ DEBUG = False
 
 
 def test_rounding_one_mode() -> None:
-    cost_config = ContactCost(
-        cost_type=ContactCostType.OPTIMAL_CONTROL,
-        force_regularization=5.0,
-    )
-    contact_config = ContactConfig(
-        cost=cost_config,
-        delta_vel_max=0.15,
-        delta_theta_max=0.4,
-    )
-    config = PlanarPlanConfig(
-        dynamics_config=SliderPusherSystemConfig(),
-        contact_config=contact_config,
-        num_knot_points_contact=6,
-        use_band_sparsity=True,
-    )
+    config = get_default_plan_config()
     initial_pose = PlanarPose(0, 0, 0)
-    final_pose = PlanarPose(0.3, 0.3, 0.4)
+    final_pose = PlanarPose(0.2, 0.05, 0.4)
     config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
     contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
     mode = FaceContactMode.create_from_plan_spec(
@@ -103,6 +90,7 @@ def test_rounding_one_mode() -> None:
 
     relaxed_result = MosekSolver().Solve(mode.relaxed_prog)  # type: ignore
     assert relaxed_result.is_success()
+    relaxed_vars = mode.variables.eval_result(relaxed_result)
 
     if DEBUG:
         relaxed_vars = mode.variables.eval_result(relaxed_result)
@@ -140,6 +128,8 @@ def test_rounding_one_mode() -> None:
         )
         make_traj_figure(traj, filename="debug_file_rounded")
         # (num_knot_points, 2): first col cosines, second col sines
+        rs_relaxed = np.vstack([R_WB[:, 0] for R_WB in relaxed_vars.R_WBs])
+        plot_cos_sine_trajs(rs_relaxed, filename="debug_cos_sin")
         rs = np.vstack([R_WB[:, 0] for R_WB in vars.R_WBs])
         plot_cos_sine_trajs(rs, filename="debug_cos_sin_rounded")
 

@@ -1,22 +1,23 @@
-from typing import Optional
 import logging
+from typing import Optional
 
+import numpy as np
 from pydrake.all import (
+    ConstantVectorSource,
+    Demultiplexer,
     DiagramBuilder,
-    Simulator,
     LogVectorOutput,
     Meshcat,
-    Demultiplexer,
-    ConstantVectorSource,
+    Simulator,
 )
-import numpy as np
+
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
 from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
     IiwaHardwareStation,
 )
-
 from planning_through_contact.simulation.controllers.robot_system_base import (
     RobotSystemBase,
 )
@@ -26,8 +27,7 @@ from planning_through_contact.simulation.controllers.teleop_position_source impo
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.simulation.sensors.optitrack import OptitrackConfig, OptitrackObjectTransformUpdaterDiagram
+from planning_through_contact.simulation.sensors.optitrack_config import OptitrackConfig
 from planning_through_contact.simulation.state_estimators.state_estimator import (
     StateEstimator,
 )
@@ -35,11 +35,12 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
     RigidTransformToPlanarPoseVectorSystem,
 )
 from planning_through_contact.visualize.analysis import (
-    plot_planar_pushing_logs_from_pose_vectors,
     plot_joint_state_logs,
+    plot_planar_pushing_logs_from_pose_vectors,
 )
 
 logger = logging.getLogger(__name__)
+
 
 class TableEnvironment:
     def __init__(
@@ -82,16 +83,19 @@ class TableEnvironment:
         self._meshcat = self._robot_system._meshcat
 
         if sim_config.use_hardware:
-            optitrack_object_transform_updater: OptitrackObjectTransformUpdaterDiagram = (
-                builder.AddNamedSystem(
-                    "OptitrackTransformUpdater",
-                    OptitrackObjectTransformUpdaterDiagram(
-                        state_estimator=self._state_estimator,
-                        optitrack_iiwa_id=optitrack_config.iiwa_id,
-                        optitrack_body_id=optitrack_config.slider_id,
-                        X_optitrackBody_plantBody=optitrack_config.X_optitrackBody_plantBody,
-                    ),
-                )
+            from planning_through_contact.simulation.sensors.optitrack import (
+                OptitrackConfig,
+                OptitrackObjectTransformUpdaterDiagram,
+            )
+
+            optitrack_object_transform_updater: OptitrackObjectTransformUpdaterDiagram = builder.AddNamedSystem(
+                "OptitrackTransformUpdater",
+                OptitrackObjectTransformUpdaterDiagram(
+                    state_estimator=self._state_estimator,
+                    optitrack_iiwa_id=optitrack_config.iiwa_id,
+                    optitrack_body_id=optitrack_config.slider_id,
+                    X_optitrackBody_plantBody=optitrack_config.X_optitrackBody_plantBody,
+                ),
             )
 
         ## Connect systems

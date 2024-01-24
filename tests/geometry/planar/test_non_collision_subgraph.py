@@ -225,7 +225,12 @@ def test_subgraph_planning(
     pairs["target"] = subgraph.target
 
     traj = PlanarPushingPath.from_result(
-        subgraph.gcs, result, subgraph.source.vertex, subgraph.target.vertex, pairs
+        subgraph.gcs,
+        result,
+        subgraph.source.vertex,
+        subgraph.target.vertex,
+        pairs,
+        assert_nan_values=True,
     ).to_traj()
 
     assert isinstance(subgraph.source.mode, NonCollisionMode)

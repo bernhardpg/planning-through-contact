@@ -103,7 +103,7 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: 
     c_f = 0.0
     lam = 0.5
     w = slider_pusher_system._get_wrench(lam, c_n, c_f)
-    assert w[0] == 1  # should be a generalized force along the positive x-axis
+    assert w[0] == 0.01  # should be a generalized force along the positive x-axis
     assert w[1] == 0
     assert w[2] == 0  # shouldn't be any torque
 
@@ -112,8 +112,8 @@ def test_get_wrench(slider_pusher_system: SliderPusherSystem) -> None:  # type: 
     lam = 0.5
     w = slider_pusher_system._get_wrench(lam, c_n, c_f)
     assert w[2] >= 0  # should be a positive torque
-    assert w[0] == 1  # should be a generalized force along the positive x-axis
-    assert w[1] == -0.5  # should be a generalized force along the negative y-axis
+    assert w[0] == 0.01  # should be a generalized force along the positive x-axis
+    assert w[1] == -0.005  # should be a generalized force along the negative y-axis
 
     c_n = 1.0
     c_f = 0.5

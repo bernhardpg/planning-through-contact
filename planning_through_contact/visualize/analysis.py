@@ -9,6 +9,9 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.primitives import VectorLog
 
+from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
+    SingleRunResult,
+)
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
@@ -23,6 +26,7 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
+from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarSolverParams,
 )
@@ -315,20 +319,20 @@ def plot_planar_pushing_trajectory(
     axes[0].plot(actual.t, desired.c_n, linestyle="--", label="Desired")
     axes[0].set_title("c_n")
     axes[0].legend()
-    axes[0].set_ylim(-max_force_change, max_force_change)
+    # axes[0].set_ylim(-max_force_change, max_force_change)
 
     axes[1].plot(actual.t, actual.c_f, label="Actual")
     axes[1].plot(actual.t, desired.c_f, linestyle="--", label="Desired")
     axes[1].set_title("c_f")
     axes[1].legend()
-    axes[1].set_ylim(-max_force_change, max_force_change)
+    # axes[1].set_ylim(-max_force_change, max_force_change)
 
     max_lam_dot_change = max(np.ptp(actual.lam_dot), MIN_AXIS_SIZE) * 1.3  # type: ignore
     axes[2].plot(actual.t, actual.lam_dot, label="Actual")
     axes[2].plot(actual.t, desired.lam_dot, linestyle="--", label="Desired")
     axes[2].set_title("lam_dot")
     axes[2].legend()
-    axes[2].set_ylim(-max_lam_dot_change, max_lam_dot_change)
+    # axes[2].set_ylim(-max_lam_dot_change, max_lam_dot_change)
 
     # Adjust layout
     plt.tight_layout()
@@ -762,7 +766,11 @@ def plot_constraint_violation(
         plt.show()
 
 
-def analyze_plan(path: PlanarPushingPath, filename: str, rounded: bool = False) -> None:
+def analyze_plan(
+    path: PlanarPushingPath,
+    filename: Optional[str] = None,
+    rounded: bool = False,
+) -> None:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
@@ -814,23 +822,31 @@ def analyze_plan(path: PlanarPushingPath, filename: str, rounded: bool = False) 
         constraint_violations[key] = np.array(item)  # type: ignore
 
     num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
-    ref_theta_vel = np.mean(
-        np.concatenate(
-            [
-                points.delta_omega_WBs
-                for points in path_knot_points
-                if isinstance(points, FaceContactVariables)
-            ]
-        )
+    MIN_REF_THETA_VEL = np.pi / 15
+    ref_theta_vel = max(
+        np.mean(
+            np.concatenate(
+                [
+                    points.delta_omega_WBs
+                    for points in path_knot_points
+                    if isinstance(points, FaceContactVariables)
+                ]
+            )
+        ),
+        MIN_REF_THETA_VEL,
     )
-    ref_vel = np.mean(
-        np.concatenate(
-            [
-                [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
-                for points in path_knot_points
-                if isinstance(points, FaceContactVariables)
-            ]
-        )
+    MIN_REF_VEL = 0.05  # m/s
+    ref_vel = max(
+        np.mean(
+            np.concatenate(
+                [
+                    [np.linalg.norm(v_WB) for v_WB in points.v_WBs]
+                    for points in path_knot_points
+                    if isinstance(points, FaceContactVariables)
+                ]
+            )
+        ),
+        MIN_REF_VEL,
     )
     ref_vals = {
         "SO2": 1,
@@ -857,39 +873,41 @@ def analyze_mode_result(
     mode: FaceContactMode,
     traj: PlanarPushingTrajectory,
     result: MathematicalProgramResult,
+    rank_analysis: bool = True,
 ) -> None:
-    Xs = mode.get_Xs()
+    if rank_analysis:
+        Xs = mode.get_Xs()
 
-    if len(Xs) == 1:
-        X_sol = result.GetSolution(Xs[0])
+        if len(Xs) == 1:
+            X_sol = result.GetSolution(Xs[0])
 
-        eigs, _ = np.linalg.eig(X_sol)
-        norms = np.abs(eigs)
+            eigs, _ = np.linalg.eig(X_sol)
+            norms = np.abs(eigs)
 
-        plt.bar(range(len(norms)), norms)
-        plt.xlabel("Index of Eigenvalue")
-        plt.ylabel("Norm of Eigenvalue")
-        plt.title("Norms of the Eigenvalues of the Matrix")
-        plt.show()
-    else:
-        X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
+            plt.bar(range(len(norms)), norms)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Norm of Eigenvalue")
+            plt.title("Norms of the Eigenvalues of the Matrix")
+            plt.show()
+        else:
+            X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
 
-        eigs, _ = zip(*[np.linalg.eig(X_sol) for X_sol in X_sols])
-        norms = [np.abs(eig) for eig in eigs]
+            eigs, _ = zip(*[np.linalg.eig(X_sol) for X_sol in X_sols])
+            norms = [np.abs(eig) for eig in eigs]
 
-        data = [
-            [norm[i] if i < len(norm) else 0 for norm in norms]
-            for i in range(len(norms[0]))
-        ]
+            data = [
+                [norm[i] if i < len(norm) else 0 for norm in norms]
+                for i in range(len(norms[0]))
+            ]
 
-        means = [np.mean(sublist) for sublist in data]
-        std_devs = [np.std(sublist) for sublist in data]
+            means = [np.mean(sublist) for sublist in data]
+            std_devs = [np.std(sublist) for sublist in data]
 
-        plt.bar(range(len(means)), means, yerr=std_devs)
-        plt.xlabel("Index of Eigenvalue")
-        plt.ylabel("Norm of Eigenvalue")
-        plt.title("Norms of the Eigenvalues of the Matrix")
-        plt.show()
+            plt.bar(range(len(means)), means, yerr=std_devs)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Norm of Eigenvalue")
+            plt.title("Norms of the Eigenvalues of the Matrix")
+            plt.show()
 
     keys = mode.constraints.keys()
     constraint_violations = {key: [] for key in keys}

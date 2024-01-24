@@ -51,6 +51,11 @@ class TPusher2d(CollisionGeometry):
     def from_drake(cls, drake_shape: DrakeShape):
         raise NotImplementedError()
 
+    @property
+    def com_offset(self) -> npt.NDArray[np.float64]:
+        y_offset = -0.04285714
+        return np.array([0, y_offset]).reshape((-1, 1))
+
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
         """
@@ -76,7 +81,11 @@ class TPusher2d(CollisionGeometry):
         v6 = box_2_center + self.box_2.vertices[0]
 
         v7 = self.box_1.vertices[3]
-        return [v0, v1, v2, v3, v4, v5, v6, v7]
+        vs = [v0, v1, v2, v3, v4, v5, v6, v7]
+
+        # Calculated COM for Tee
+        vs_offset = [v - self.com_offset for v in vs]
+        return vs_offset
 
     @property
     def num_vertices(self) -> int:
@@ -350,11 +359,12 @@ class TPusher2d(CollisionGeometry):
         self, z_value: float = 0.0
     ) -> Tuple[List[Box2d], List[RigidTransform]]:
         box_1 = self.box_1
-        transform_1 = RigidTransform(
-            RotationMatrix.Identity(), np.array([0, 0, z_value])  # type: ignore
-        )
+        box_1_center = np.array([0, 0, z_value])
+        box_1_center[:2] -= self.com_offset.flatten()
+        transform_1 = RigidTransform(RotationMatrix.Identity(), box_1_center)  # type: ignore
         box_2 = self.box_2
         box_2_center = np.array([0, -self.box_1.height / 2 - self.box_2.height / 2, 0])
+        box_2_center[:2] -= self.com_offset.flatten()
         transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)
 
         return [box_1, box_2], [transform_1, transform_2]

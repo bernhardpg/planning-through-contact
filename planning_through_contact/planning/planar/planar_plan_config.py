@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -73,6 +73,9 @@ class SliderPusherSystemConfig:
     friction_coeff_slider_pusher: float = 0.5
     grav_acc: float = 9.81
     integration_constant: float = 0.6
+    force_scale: float = (
+        0.01  # Scaling of the forces to make the optimization program better posed
+    )
 
     @cached_property
     def f_max(self) -> float:
@@ -109,11 +112,15 @@ class PlanarSolverParams:
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
+    # Flag to assert that all values on GCS path are not NaN, and that all non-path values are NaN
+    # (this can happen if the convex sets are not compact)
+    assert_nan_values: bool = True
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
     print_path: bool = False
     print_cost: bool = False
+    solver: Literal["mosek", "clarabel"] = "mosek"
     get_rounded_and_original_traj: bool = False
     nonl_round_major_feas_tol: float = (
         1e-3  # Feasibility treshold for nonlinear rounding

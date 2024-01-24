@@ -69,8 +69,9 @@ def SliderPusherSystem_(T):
             NUM_INPUTS = 3  # f_n, f_t, lam_dot
             self.input = self.DeclareVectorInputPort("u", NUM_INPUTS)
 
-            c = self.config.limit_surface_const
-            self.D = np.diag([1, 1, c])
+            c_f = self.config.f_max**-2
+            c_tau = self.config.tau_max**-2
+            self.D = np.diag([c_f, c_f, c_tau])
 
         def _construct_copy(self, other, converter=None):
             Impl._construct(
@@ -101,7 +102,9 @@ def SliderPusherSystem_(T):
             return J_p
 
         def _get_contact_force(self, c_n: float, c_f: float) -> npt.NDArray[np.float64]:
-            return self.normal_vec * c_n + self.tangent_vec * c_f
+            return self.config.force_scale * (
+                self.normal_vec * c_n + self.tangent_vec * c_f
+            )
 
         def _get_wrench(
             self, lam: float, c_n: float, c_f: float
