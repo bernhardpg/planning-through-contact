@@ -84,7 +84,6 @@ class TableEnvironment:
 
         if sim_config.use_hardware:
             from planning_through_contact.simulation.sensors.optitrack import (
-                OptitrackConfig,
                 OptitrackObjectTransformUpdaterDiagram,
             )
 
