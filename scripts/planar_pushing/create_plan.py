@@ -513,7 +513,9 @@ if __name__ == "__main__":
         )
 
         num_demos = 20
-        plans = get_plans_to_point(num_demos, workspace, config, (0.575, -0.04285714))
+        plans = get_plans_to_point(
+            num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
+        )
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
