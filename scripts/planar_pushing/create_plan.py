@@ -3,6 +3,9 @@ from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
+from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
+    do_one_run_get_path,
+)
 from planning_through_contact.experiments.utils import (
     get_box,
     get_default_contact_cost,
@@ -179,7 +182,6 @@ def create_plan(
     time_in_contact: float = 7,
     do_rounding: bool = True,
     time_in_non_collision: float = 7,
-    animation_output_dir: str = "",
     interpolate_video: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
     save_traj: bool = False,
@@ -187,8 +189,24 @@ def create_plan(
     debug: bool = False,
     use_old_params: bool = False,
 ):
-    if animation_output_dir != "":
-        traj_name = animation_output_dir + "/" + traj_name
+    # Set up folders
+    import os
+    from datetime import datetime
+
+    def _get_time_as_str() -> str:
+        current_time = datetime.now()
+        # For example, YYYYMMDDHHMMSS format
+        formatted_time = current_time.strftime("%Y%m%d%H%M%S")
+        return formatted_time
+
+    output_dir = "demos"
+    os.makedirs(output_dir, exist_ok=True)
+    folder_name = f"{output_dir}/{traj_name}_{slider_type}_{_get_time_as_str()}"
+    os.makedirs(folder_name, exist_ok=True)
+    trajectory_folder = f"{folder_name}/trajectory"
+    os.makedirs(trajectory_folder, exist_ok=True)
+    analysis_folder = f"{folder_name}/analysis"
+    os.makedirs(analysis_folder, exist_ok=True)
 
     if use_old_params:
         if slider_type == "box":
@@ -273,76 +291,59 @@ def create_plan(
             plan_spec,
             # show=True,
             save=True,
-            filename=f"{traj_name}_start_and_goal_{slider_type}",
+            filename=f"{folder_name}/start_and_goal",
         )
 
-    planner = PlanarPushingPlanner(config)
-
-    planner.config.start_and_goal = plan_spec
-    planner.formulate_problem()
-
     if debug:
-        planner.create_graph_diagram("graph")
+        solve_data, path = do_one_run_get_path(
+            config, solver_params, start_and_goal=plan_spec
+        )
+    else:
+        planner = PlanarPushingPlanner(config)
+        planner.config.start_and_goal = plan_spec
+        planner.formulate_problem()
+        path = planner.plan_path(solver_params)
+        solve_data = None
 
-    plan = planner.plan_path(solver_params)
-    traj_relaxed = plan.to_traj()
+    traj_relaxed = path.to_traj()
 
     if do_rounding:
-        traj_rounded = plan.to_traj(do_rounding=True, solver_params=solver_params)
+        traj_rounded = path.to_traj(do_rounding=True, solver_params=solver_params)
     else:
         traj_rounded = None
 
     if save_traj:
-        filename = f"trajectories/{slider_type}_pushing_{traj_name}.pkl"
-        traj_relaxed.save(filename)  # type: ignore
+        traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
 
         if traj_rounded is not None:
-            filename = f"trajectories/{slider_type}_pushing_{traj_name}_rounded.pkl"
-            traj_rounded.save(filename)  # type: ignore
+            traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")  # type: ignore
+
+        if debug and solve_data is not None:
+            solve_data.save(f"{analysis_folder}/solve_data.pkl")
+            solve_data.save_as_text(f"{analysis_folder}/solve_data.txt")
 
     if save_analysis:
-        analyze_plan(planner.path, filename=f"{traj_name}_{slider_type}")
+        analyze_plan(path, filename=f"{analysis_folder}/relaxed")
 
         if traj_rounded is not None:
             analyze_plan(
-                planner.path,
-                filename=f"{traj_name}_{slider_type}_rounded",
+                path,
+                filename=f"{analysis_folder}/rounded",
                 rounded=True,
             )
 
-    make_traj_figure(
-        traj_relaxed,
-        filename=f"{traj_name}_{slider_type}",
-    )
-    plot_forces(
-        traj_relaxed,
-        filename=f"{traj_name}_{slider_type}_forces",
-    )
+    make_traj_figure(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj")
+    plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
     if traj_rounded is not None:
-        make_traj_figure(
-            traj_rounded,
-            filename=f"{traj_name}_{slider_type}_rounded",
-        )
-    plot_forces(
-        traj_relaxed,
-        filename=f"{traj_name}_{slider_type}_forces_rounded",
-    )
+        make_traj_figure(traj_rounded, filename=f"{analysis_folder}/rounded_traj")
+        plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
 
     if visualize:
-        if debug:
-            visualize_planar_pushing_start_and_goal(
-                config.slider_geometry,
-                config.pusher_radius,
-                planner.config.start_and_goal,
-                save=True,
-                # show=True,
-                filename=f"{traj_name}_start_and_goal_{slider_type}",
-            )
         ani = visualize_planar_pushing_trajectory(
             traj_relaxed,  # type: ignore
             save=True,
             # show=True,
-            filename=f"{traj_name}_{slider_type}",
+            filename=f"{analysis_folder}/relaxed_traj",
             visualize_knot_points=not interpolate_video,
             lims=animation_lims,
         )
@@ -352,7 +353,7 @@ def create_plan(
                 traj_rounded,  # type: ignore
                 save=True,
                 # show=True,
-                filename=f"{traj_name}_{slider_type}_rounded",
+                filename=f"{analysis_folder}/rounded_traj",
                 visualize_knot_points=not interpolate_video,
                 lims=animation_lims,
             )
@@ -362,7 +363,7 @@ def create_plan(
                 traj_rounded,
                 traj_a_legend="relaxed",
                 traj_b_legend="rounded",
-                filename=f"{traj_name}_{slider_type}_comparison",
+                filename=f"{analysis_folder}/comparison",
             )
 
         return ani
@@ -413,7 +414,6 @@ if __name__ == "__main__":
                 visualize=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
-                animation_output_dir="demos",
                 animation_lims=animation_lims,
                 time_in_contact=2.0,
                 time_in_non_collision=1.0,
@@ -431,7 +431,6 @@ if __name__ == "__main__":
                     visualize=True,
                     pusher_radius=pusher_radius,
                     save_traj=True,
-                    animation_output_dir="demos",
                     animation_lims=animation_lims,
                     time_in_contact=2.0,
                     time_in_non_collision=1.0,
@@ -448,11 +447,10 @@ if __name__ == "__main__":
                 plans[traj_number],
                 debug=debug,
                 slider_type=args.body,
-                traj_name=f"hw_demo_C_{traj_number}",
+                traj_name=f"hw_demo_{traj_number}",
                 visualize=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
-                animation_output_dir="demos",
                 animation_lims=None,
                 time_in_contact=6.0,
                 time_in_non_collision=2.0,
@@ -466,11 +464,10 @@ if __name__ == "__main__":
                     plan,
                     debug=debug,
                     slider_type=args.body,
-                    traj_name=f"hw_demo_C_{idx}",
+                    traj_name=f"hw_demo_{idx}",
                     visualize=True,
                     pusher_radius=pusher_radius,
                     save_traj=True,
-                    animation_output_dir="demos",
                     animation_lims=None,
                     time_in_contact=4.0,
                     time_in_non_collision=2.0,
