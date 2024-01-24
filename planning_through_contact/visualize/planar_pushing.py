@@ -325,10 +325,10 @@ def plot_forces(
         if isinstance(knot_points, FaceContactVariables)
     ]
 
-    normal_forces = np.array(
+    normal_forces = np.concatenate(
         [knot_point.normal_forces for knot_point in face_knot_points]
     )
-    friction_forces = np.array(
+    friction_forces = np.concatenate(
         [knot_point.friction_forces for knot_point in face_knot_points]
     )
 
