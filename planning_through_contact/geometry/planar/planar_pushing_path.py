@@ -5,15 +5,10 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.solvers import (
-    Binding,
     CommonSolverOption,
-    Constraint,
-    IpoptSolver,
-    LinearConstraint,
     MathematicalProgram,
     MathematicalProgramResult,
     SnoptSolver,
-    Solve,
     SolverOptions,
 )
 
@@ -33,12 +28,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarPlanConfig,
     PlanarSolverParams,
-)
-from planning_through_contact.tools.gcs_tools import (
-    get_gcs_solution_path_edges,
-    get_gcs_solution_path_vertices,
 )
 from planning_through_contact.tools.types import NpVariableArray
 
@@ -133,12 +123,11 @@ class PlanarPushingPath:
         source_vertex: GcsVertex,
         target_vertex: GcsVertex,
         all_pairs: Dict[str, VertexModePair],
-        flow_treshold: float = 0.55,
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
-        edges = gcs.GetSolutionPath(source_vertex, target_vertex, result)
-        vertex_path = [e.u() for e in edges]
-        vertex_path.append(edges[-1].v())
+        edge_path = gcs.GetSolutionPath(source_vertex, target_vertex, result)
+        vertex_path = [e.u() for e in edge_path]
+        vertex_path.append(edge_path[-1].v())
 
         if assert_nan_values:
 
@@ -159,9 +148,6 @@ class PlanarPushingPath:
             )
             assert np.all(~np.isnan(vertex_vars_on_path))
 
-        edge_path = get_gcs_solution_path_edges(
-            gcs, result, source_vertex, target_vertex, flow_treshold
-        )
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
