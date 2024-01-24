@@ -309,27 +309,26 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
-            # Divide this value by the number of planes so that the cost has the same magnitude for
-            # regions, independently on number of faces
-            dists_for_each_plane = [
-                [plane.dist_to(p_BF) / len(planes) for p_BF in self.variables.p_BPs]
-                for plane in planes
-            ]
 
             if self.cost_config.distance_to_object_quadratic is not None:
-                squared_dists = [
-                    self.cost_config.distance_to_object_quadratic
-                    * (
+                for k in range(self.num_knot_points):
+                    # Divide this value by the number of planes so that the cost has the same magnitude for
+                    # regions, independently on number of faces
+                    p_BP = self.variables.p_BPs[k]
+                    dist_for_each_plane = [plane.dist_to(p_BP) for plane in planes]
+                    deviations_from_pref_dist = [
                         d
                         - self.cost_config.distance_to_object_quadratic_preferred_distance
+                        for d in dist_for_each_plane
+                    ]
+                    normalized_total_deviation = np.sum(
+                        deviations_from_pref_dist
+                    ) / len(planes)
+
+                    c = self.cost_config.distance_to_object_quadratic
+                    self.quadratic_distance_cost = self.prog.AddQuadraticCost(
+                        c * normalized_total_deviation**2, is_convex=True
                     )
-                    ** 2
-                    for dist in dists_for_each_plane
-                    for d in dist
-                ]
-                self.quadratic_distance_cost = self.prog.AddQuadraticCost(
-                    np.sum(squared_dists), is_convex=True
-                )
 
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
