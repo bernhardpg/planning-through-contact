@@ -73,10 +73,12 @@ def run_sim(
         horizon=35,
         num_sliding_steps=1,
         rate_Hz=50,
-        Q=np.diag([3, 3, 1, 0]) * 100,
+        Q=np.diag([3, 3, 0.1, 0]) * 100,
         Q_N=np.diag([3, 3, 1, 0]) * 2000,
         R=np.diag([1, 1, 0]) * 0.5,
-        u_max_magnitude=[0.4, 0.4, 0.2],
+        u_max_magnitude=[4, 4, 1],
+        lam_max=0.8,
+        lam_min=0.2,
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -90,7 +92,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=6,
+        delay_before_execution=4,
         closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
@@ -151,7 +153,7 @@ def run_sim(
         state_estimator_meshcat=state_estimator_meshcat,
     )
     recording_name = (
-        plan.split(".")[0] + f"_cl{sim_config.closed_loop}" + ".html"
+        plan.split(".")[0] + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}" + ".html"
         if save_recording
         else None
     )
@@ -223,7 +225,7 @@ if __name__ == "__main__":
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        plan="trajectories/tee_pushing_demos/hw_demo_C_6_rounded.pkl",
+        plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_8/trajectory/traj_rounded.pkl",
         # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,

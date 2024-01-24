@@ -50,6 +50,8 @@ class HybridMpcConfig:
         # hence, the values for c_n and c_f are multiplied by (1/config.force_scale) (which defaults to 100)
         default_factory=lambda: np.array([30, 30, 0.05])
     )
+    lam_max: float = 1.0
+    lam_min: float = 0.0
 
 
 class HybridModes(Enum):
@@ -222,8 +224,8 @@ class HybridMpc:
         # State constraints
         for state in x.T:
             lam = state[3]
-            prog.AddLinearConstraint(lam >= 0)
-            prog.AddLinearConstraint(lam <= 1)
+            prog.AddLinearConstraint(lam >= self.config.lam_min)
+            prog.AddLinearConstraint(lam <= self.config.lam_max)
 
         Q = self.config.Q
         R = self.config.R

@@ -299,9 +299,9 @@ class PusherPoseController(LeafSystem):
                 mode_traj,
                 pusher_pose_cmd_state=pusher_pose_cmd_state,
             )
-            next_pusher_pose = self._clamp_next_pusher_pose(
-                pusher_planar_pose, next_pusher_pose
-            )
+            # next_pusher_pose = self._clamp_next_pusher_pose(
+            #     pusher_planar_pose, next_pusher_pose
+            # )
             output.set_value(next_pusher_pose.pos())
 
         elif state == PusherPoseControllerState.RETURN_TO_CONTACT:
@@ -313,7 +313,7 @@ class PusherPoseController(LeafSystem):
                 pusher_planar_pose,
                 mode_traj,
             )
-            next_pusher_pose = self._clamp_next_pusher_pose(
-                pusher_planar_pose, next_pusher_pose
-            )
+            # next_pusher_pose = self._clamp_next_pusher_pose(
+            #     pusher_planar_pose, next_pusher_pose
+            # )
             output.set_value(next_pusher_pose.pos())
