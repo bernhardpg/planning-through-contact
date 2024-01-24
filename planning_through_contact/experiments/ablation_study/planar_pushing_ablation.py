@@ -43,7 +43,7 @@ class SingleRunResult:
     relaxed_mean_determinant: float
     rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal
-    integration_constant: float
+    config: PlanarPlanConfig
 
     @property
     def optimality_gap(self) -> float:
@@ -70,14 +70,14 @@ class SingleRunResult:
             return pickle.load(file)
 
     def __str__(self):
-        field_strings = [
-            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
-        ]
-
         # Manually add property strings
         property_strings = [
             f"optimality_gap: {self.optimality_gap}",
             f"sdp_optimality_gap: {self.sdp_optimality_gap}",
+        ]
+
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
         ]
 
         # Combine field and property strings
@@ -179,7 +179,7 @@ def do_one_run_get_path(
                 np.inf,
                 np.inf,
                 start_and_goal,
-                plan_config.dynamics_config.integration_constant,
+                plan_config,
             ),
             None,
         )
@@ -218,7 +218,7 @@ def do_one_run_get_path(
             relaxed_mean_determinant,
             rounded_mean_determinant,
             start_and_goal,
-            plan_config.dynamics_config.integration_constant,
+            plan_config,
         ),
         path,
     )

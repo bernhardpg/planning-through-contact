@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import Enum
 from functools import cached_property
 from typing import Literal, Optional, Tuple
@@ -149,6 +149,12 @@ class NonCollisionCost:
             or self.distance_to_object_socp_single_mode is not None
         )
 
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
+
 
 class ContactCostType(Enum):
     # TODO(bernhardpg): All these costs are experimental and will probably be removed
@@ -180,6 +186,12 @@ class ContactCost:
             assert self.lin_displacements is not None
             assert self.ang_displacements is not None
 
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
+
 
 # TODO: Refactor this
 @dataclass
@@ -210,6 +222,12 @@ class PlanarPushingStartAndGoal:
             self.pusher_initial_pose,
             self.pusher_target_pose,
         )
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
 
 
 @dataclass
@@ -246,3 +264,9 @@ class PlanarPlanConfig:
     @property
     def pusher_radius(self) -> float:
         return self.dynamics_config.pusher_radius
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
