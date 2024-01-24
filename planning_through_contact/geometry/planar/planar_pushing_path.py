@@ -248,8 +248,7 @@ class PlanarPushingPath:
 
             for vertex, mode in self.pairs:
                 if isinstance(mode, NonCollisionMode):
-                    # _scale_rot_vec(mode.variables.cos_th, mode.variables.sin_th)
-                    ...
+                    _scale_rot_vec(mode.variables.cos_th, mode.variables.sin_th)
                 elif isinstance(mode, FaceContactMode):
                     for k in range(mode.num_knot_points):
                         _scale_rot_vec(
