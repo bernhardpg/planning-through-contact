@@ -9,6 +9,9 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.primitives import VectorLog
 
+from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
+    SingleRunResult,
+)
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
@@ -764,7 +767,9 @@ def plot_constraint_violation(
 
 
 def analyze_plan(
-    path: PlanarPushingPath, filename: Optional[str] = None, rounded: bool = False
+    path: PlanarPushingPath,
+    filename: Optional[str] = None,
+    rounded: bool = False,
 ) -> None:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
