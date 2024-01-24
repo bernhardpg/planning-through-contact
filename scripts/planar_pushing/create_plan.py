@@ -204,7 +204,7 @@ def _get_slider_pose_within_workspace(
     pusher_pose: PlanarPose,
     config: PlanarPlanConfig,
     limit_rotations: bool = False,
-    enforce_entire_slider_within_workspace: bool = False,
+    enforce_entire_slider_within_workspace: bool = True,
 ) -> PlanarPose:
     valid_pose = False
 
@@ -223,7 +223,6 @@ def _get_slider_pose_within_workspace(
         collides_with_pusher = _check_collision(pusher_pose, slider_pose, config)
         within_workspace = _slider_within_workspace(workspace, slider_pose, slider)
 
-        # Enforcing that the entire slider is within the workspace is too conservative
         if enforce_entire_slider_within_workspace:
             valid_pose = within_workspace and not collides_with_pusher
         else:
