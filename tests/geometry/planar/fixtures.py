@@ -221,11 +221,6 @@ def subgraph(
 def planner(
     plan_config: PlanarPlanConfig, t_pusher: RigidBody, request: FixtureRequest
 ) -> PlanarPushingPlanner:
-    plan_config.workspace.slider = BoxWorkspace(
-        width=2, height=2, center=np.array([0.0, 0.35])
-    )
-    plan_config.workspace.pusher = BoxWorkspace(width=2, height=2)
-
     body_to_use = request.param.get("body", "rigid_body_box")
     if body_to_use == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
