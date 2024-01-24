@@ -1,5 +1,7 @@
 import argparse
-from typing import List, Literal, Optional, Tuple
+import os
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -258,7 +260,7 @@ def get_plans_to_point(
 
 def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
-    slider_type: Literal["box", "tee", "sugar_box"] = "sugar_box",
+    output_dir: str = "",
     traj_name: str = "Untitled_traj",
     visualize: bool = False,
     pusher_radius: float = 0.035,
@@ -270,18 +272,7 @@ def create_plan(
     debug: bool = False,
 ):
     # Set up folders
-    import os
-    from datetime import datetime
-
-    def _get_time_as_str() -> str:
-        current_time = datetime.now()
-        # For example, YYYYMMDDHHMMSS format
-        formatted_time = current_time.strftime("%Y%m%d%H%M%S")
-        return formatted_time
-
-    output_dir = "demos"
-    os.makedirs(output_dir, exist_ok=True)
-    folder_name = f"{output_dir}/{traj_name}_{slider_type}_{_get_time_as_str()}"
+    folder_name = f"{output_dir}/{traj_name}"
     os.makedirs(folder_name, exist_ok=True)
     trajectory_folder = f"{folder_name}/trajectory"
     os.makedirs(trajectory_folder, exist_ok=True)
@@ -371,6 +362,13 @@ def create_plan(
             )
 
         return ani
+
+
+def _get_time_as_str() -> str:
+    current_time = datetime.now()
+    # For example, YYYYMMDDHHMMSS format
+    formatted_time = current_time.strftime("%Y%m%d%H%M%S")
+    return formatted_time
 
 
 if __name__ == "__main__":
@@ -488,6 +486,11 @@ if __name__ == "__main__":
         solver_params = get_default_solver_params(debug, clarabel=False)
 
     if hardware_demos:
+        output_dir = "demos"
+        os.makedirs(output_dir, exist_ok=True)
+        folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
+        os.makedirs(folder_name, exist_ok=True)
+
         workspace = PlanarPushingWorkspace(
             slider=BoxWorkspace(
                 width=0.35,
@@ -502,7 +505,7 @@ if __name__ == "__main__":
             create_plan(
                 plans[traj_number],
                 debug=debug,
-                slider_type=args.body,
+                output_dir=folder_name,
                 traj_name=f"hw_demo_{traj_number}",
                 visualize=True,
                 pusher_radius=pusher_radius,
@@ -516,8 +519,8 @@ if __name__ == "__main__":
             for idx, plan in enumerate(plans):
                 create_plan(
                     plan,
+                    output_dir=folder_name,
                     debug=debug,
-                    slider_type=args.body,
                     traj_name=f"hw_demo_{idx}",
                     visualize=True,
                     pusher_radius=pusher_radius,
