@@ -372,13 +372,13 @@ class PlanarPushingPlanner:
             mosek = MosekSolver()
             options.solver = mosek
             options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-6
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-5
             )
             options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-6
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-5
             )
             options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-6
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-5
             )
         else:  # clarabel
             clarabel = ClarabelSolver()
