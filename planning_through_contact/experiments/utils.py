@@ -58,11 +58,11 @@ def get_default_contact_cost() -> ContactCost:
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
         distance_to_object_quadratic=0.05,
-        distance_to_object_quadratic_preferred_distance=0.075,
+        distance_to_object_quadratic_preferred_distance=0.1,
         # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
         distance_to_object_socp=None,
-        pusher_velocity_regularization=0.002,
-        pusher_arc_length=0.002,
+        pusher_velocity_regularization=0.001,
+        pusher_arc_length=0.005,
     )
     return non_collision_cost
 
@@ -109,7 +109,7 @@ def get_default_plan_config(
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,
         num_knot_points_contact=3,
-        num_knot_points_non_collision=3,
+        num_knot_points_non_collision=4,
         use_band_sparsity=True,
         contact_config=contact_config,
         non_collision_cost=non_collision_cost,

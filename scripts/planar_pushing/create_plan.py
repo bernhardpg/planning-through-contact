@@ -492,7 +492,7 @@ if __name__ == "__main__":
             pusher_radius=pusher_radius,
             integration_constant=0.3,
             friction_coeff=0.05,
-            lam_buffer=0.4,
+            lam_buffer=0.25,
         )
         solver_params = get_default_solver_params(debug, clarabel=False)
 
@@ -507,7 +507,7 @@ if __name__ == "__main__":
                 width=0.35,
                 height=0.5,
                 center=np.array([0.575, 0.0]),
-                buffer=-pusher_radius * 4,  # too small
+                buffer=-pusher_radius * 2,  # too small
             ),
         )
 
