@@ -300,68 +300,70 @@ def create_plan(
         path = planner.plan_path(solver_params)
         solve_data = None
 
-    traj_relaxed = path.to_traj()
+    if debug and solve_data is not None:
+        solve_data.save(f"{analysis_folder}/solve_data.pkl")
+        solve_data.save_as_text(f"{analysis_folder}/solve_data.txt")
 
-    if do_rounding:
-        traj_rounded = path.to_traj(do_rounding=True, solver_params=solver_params)
-    else:
-        traj_rounded = None
+    # We may get infeasible
+    if path is not None:
+        traj_relaxed = path.to_traj()
 
-    if save_traj:
-        traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
+        if do_rounding:
+            traj_rounded = path.to_traj(do_rounding=True, solver_params=solver_params)
+        else:
+            traj_rounded = None
 
+        if save_traj:
+            traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
+
+            if traj_rounded is not None:
+                traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")  # type: ignore
+
+        if save_analysis:
+            analyze_plan(path, filename=f"{analysis_folder}/relaxed")
+
+            if traj_rounded is not None:
+                analyze_plan(
+                    path,
+                    filename=f"{analysis_folder}/rounded",
+                    rounded=True,
+                )
+
+        make_traj_figure(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj")
+        plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
         if traj_rounded is not None:
-            traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")  # type: ignore
+            make_traj_figure(traj_rounded, filename=f"{analysis_folder}/rounded_traj")
+            plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
 
-        if debug and solve_data is not None:
-            solve_data.save(f"{analysis_folder}/solve_data.pkl")
-            solve_data.save_as_text(f"{analysis_folder}/solve_data.txt")
-
-    if save_analysis:
-        analyze_plan(path, filename=f"{analysis_folder}/relaxed")
-
-        if traj_rounded is not None:
-            analyze_plan(
-                path,
-                filename=f"{analysis_folder}/rounded",
-                rounded=True,
-            )
-
-    make_traj_figure(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj")
-    plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
-    if traj_rounded is not None:
-        make_traj_figure(traj_rounded, filename=f"{analysis_folder}/rounded_traj")
-        plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
-
-    if visualize:
-        ani = visualize_planar_pushing_trajectory(
-            traj_relaxed,  # type: ignore
-            save=True,
-            # show=True,
-            filename=f"{analysis_folder}/relaxed_traj",
-            visualize_knot_points=not interpolate_video,
-            lims=animation_lims,
-        )
-
-        if traj_rounded is not None:
+        if visualize:
             ani = visualize_planar_pushing_trajectory(
-                traj_rounded,  # type: ignore
+                traj_relaxed,  # type: ignore
                 save=True,
                 # show=True,
-                filename=f"{analysis_folder}/rounded_traj",
+                filename=f"{analysis_folder}/relaxed_traj",
                 visualize_knot_points=not interpolate_video,
                 lims=animation_lims,
             )
 
-            compare_trajs(
-                traj_relaxed,
-                traj_rounded,
-                traj_a_legend="relaxed",
-                traj_b_legend="rounded",
-                filename=f"{analysis_folder}/comparison",
-            )
+            if traj_rounded is not None:
+                ani = visualize_planar_pushing_trajectory(
+                    traj_rounded,  # type: ignore
+                    save=True,
+                    # show=True,
+                    filename=f"{analysis_folder}/rounded_traj",
+                    visualize_knot_points=not interpolate_video,
+                    lims=animation_lims,
+                )
 
-        return ani
+                compare_trajs(
+                    traj_relaxed,
+                    traj_rounded,
+                    traj_a_legend="relaxed",
+                    traj_b_legend="rounded",
+                    filename=f"{analysis_folder}/comparison",
+                )
+
+            return ani
 
 
 def _get_time_as_str() -> str:

@@ -128,7 +128,7 @@ def get_default_solver_params(
 ) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
         measure_solve_time=debug,
-        gcs_max_rounded_paths=20,
+        gcs_max_rounded_paths=100,
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
@@ -136,6 +136,7 @@ def get_default_solver_params(
         print_path=False,
         print_cost=debug,
         assert_result=False,
+        assert_nan_values=True,
     )
     return solver_params
 

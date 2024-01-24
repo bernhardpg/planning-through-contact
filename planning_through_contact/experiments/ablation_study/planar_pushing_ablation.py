@@ -2,7 +2,7 @@ import pickle
 import time
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -130,82 +130,11 @@ class AblationStudy:
         return cls(results)
 
 
-def do_one_run(
-    plan_config: PlanarPlanConfig,
-    solver_params: PlanarSolverParams,
-    start_and_goal: PlanarPushingStartAndGoal,
-):
-    plan_config.start_and_goal = start_and_goal
-
-    planner = PlanarPushingPlanner(plan_config)
-    planner.formulate_problem()
-
-    # Store this value as we need to set it to 0 to run GCS without rounding!
-    max_rounded_paths = solver_params.gcs_max_rounded_paths
-
-    start_time = time.time()
-    solver_params.gcs_max_rounded_paths = 0
-    relaxed_result = planner._solve(solver_params)
-    relaxed_elapsed_time = time.time() - start_time
-    relaxed_cost = relaxed_result.get_optimal_cost()
-
-    solver_params.gcs_max_rounded_paths = max_rounded_paths
-    start_time = time.time()
-    sdp_result = planner._solve(solver_params)
-    sdp_elapsed_time = time.time() - start_time
-    sdp_cost = sdp_result.get_optimal_cost()
-
-    if not sdp_result.is_success():
-        visualize_planar_pushing_start_and_goal(
-            plan_config.dynamics_config.slider.geometry,
-            plan_config.dynamics_config.pusher_radius,
-            start_and_goal,
-            # show=True,
-            save=True,
-            filename=f"infeasible_trajectory",
-        )
-
-    assert planner.source is not None  # avoid typing errors
-    assert planner.target is not None  # avoid typing errors
-    path = PlanarPushingPath.from_result(
-        planner.gcs,
-        sdp_result,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
-    start_time = time.time()
-    rounding_result = path._do_nonlinear_rounding(solver_params)
-    rounding_elapsed_time = time.time() - start_time
-    rounded_cost = rounding_result.get_optimal_cost()
-
-    relaxed_mean_determinant: float = np.mean(path.get_determinants())
-
-    path.rounded_result = rounding_result
-    rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
-
-    return SingleRunResult(
-        sdp_cost,
-        rounded_cost,
-        relaxed_cost,
-        sdp_elapsed_time,
-        rounding_elapsed_time,
-        relaxed_elapsed_time,
-        sdp_result.is_success(),
-        relaxed_result.is_success(),
-        rounding_result.is_success(),
-        relaxed_mean_determinant,
-        rounded_mean_determinant,
-        start_and_goal,
-        plan_config.dynamics_config.integration_constant,
-    )
-
-
 def do_one_run_get_path(
     plan_config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
     start_and_goal: PlanarPushingStartAndGoal,
-):
+) -> Tuple[SingleRunResult, Optional[PlanarPushingPath]]:
     plan_config.start_and_goal = start_and_goal
 
     planner = PlanarPushingPlanner(plan_config)
@@ -236,6 +165,25 @@ def do_one_run_get_path(
             filename=f"infeasible_trajectory",
         )
 
+        return (
+            SingleRunResult(
+                np.inf,
+                np.inf,
+                relaxed_cost,
+                sdp_elapsed_time,
+                np.inf,
+                relaxed_elapsed_time,
+                sdp_result.is_success(),
+                relaxed_result.is_success(),
+                False,
+                np.inf,
+                np.inf,
+                start_and_goal,
+                plan_config.dynamics_config.integration_constant,
+            ),
+            None,
+        )
+
     assert planner.source is not None  # avoid typing errors
     assert planner.target is not None  # avoid typing errors
     path = PlanarPushingPath.from_result(
@@ -244,6 +192,7 @@ def do_one_run_get_path(
         planner.source.vertex,
         planner.target.vertex,
         planner._get_all_vertex_mode_pairs(),
+        assert_nan_values=solver_params.assert_nan_values,
     )
     start_time = time.time()
     rounding_result = path._do_nonlinear_rounding(solver_params)
@@ -273,6 +222,15 @@ def do_one_run_get_path(
         ),
         path,
     )
+
+
+def do_one_run(
+    plan_config: PlanarPlanConfig,
+    solver_params: PlanarSolverParams,
+    start_and_goal: PlanarPushingStartAndGoal,
+):
+    run, _ = do_one_run_get_path(plan_config, solver_params, start_and_goal)
+    return run
 
 
 def run_ablation(

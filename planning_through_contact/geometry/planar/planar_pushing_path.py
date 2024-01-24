@@ -136,9 +136,9 @@ class PlanarPushingPath:
         flow_treshold: float = 0.55,
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
-        vertex_path = get_gcs_solution_path_vertices(
-            gcs, result, source_vertex, target_vertex, flow_treshold
-        )
+        edges = gcs.GetSolutionPath(source_vertex, target_vertex, result)
+        vertex_path = [e.u() for e in edges]
+        vertex_path.append(edges[-1].v())
 
         if assert_nan_values:
 
