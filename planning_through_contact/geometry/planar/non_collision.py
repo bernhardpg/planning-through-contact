@@ -309,8 +309,10 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
+            # Divide this value by the number of planes so that the cost has the same magnitude for
+            # regions, independently on number of faces
             dists_for_each_plane = [
-                [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
+                [plane.dist_to(p_BF) / len(planes) for p_BF in self.variables.p_BPs]
                 for plane in planes
             ]
 
