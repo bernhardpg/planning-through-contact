@@ -149,6 +149,9 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
 def _slider_within_workspace(
     workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
 ) -> bool:
+    """
+    Checks whether the entire slider is within the workspace
+    """
     R_WB = pose.two_d_rot_matrix()
     p_WB = pose.pos()
 
@@ -201,6 +204,7 @@ def _get_slider_pose_within_workspace(
     pusher_pose: PlanarPose,
     config: PlanarPlanConfig,
     limit_rotations: bool = False,
+    enforce_entire_slider_within_workspace: bool = False,
 ) -> PlanarPose:
     valid_pose = False
 
@@ -219,7 +223,11 @@ def _get_slider_pose_within_workspace(
         collides_with_pusher = _check_collision(pusher_pose, slider_pose, config)
         within_workspace = _slider_within_workspace(workspace, slider_pose, slider)
 
-        valid_pose = within_workspace and not collides_with_pusher
+        # Enforcing that the entire slider is within the workspace is too conservative
+        if enforce_entire_slider_within_workspace:
+            valid_pose = within_workspace and not collides_with_pusher
+        else:
+            valid_pose = not collides_with_pusher
 
     assert slider_pose is not None  # fix LSP errors
 
@@ -498,11 +506,13 @@ if __name__ == "__main__":
                 width=0.35,
                 height=0.5,
                 center=np.array([0.575, 0.0]),
-                buffer=pusher_radius * 2,
+                # buffer=pusher_radius * 2, # too small
+                buffer=0.15,
             ),
         )
 
-        plans = get_plans_to_point(10, workspace, config, (0.575, -0.04285714))
+        num_demos = 20
+        plans = get_plans_to_point(num_demos, workspace, config, (0.575, -0.04285714))
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
