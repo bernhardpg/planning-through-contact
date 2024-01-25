@@ -315,11 +315,11 @@ class PlanarPushingPath:
         #     "Minor Optimality Tolerance",
         #     solver_params.nonl_round_opt_tol,
         # )
-        # solver_options.SetOption(
-        #     snopt.solver_id(),
-        #     "Major iterations limit",
-        #     solver_params.nonl_round_major_iter_limit,
-        # )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major iterations limit",
+            solver_params.nonl_round_major_iter_limit,
+        )
 
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
