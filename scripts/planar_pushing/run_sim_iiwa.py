@@ -1,4 +1,5 @@
 import logging
+from typing import List, Optional
 
 import numpy as np
 from pydrake.all import (
@@ -93,7 +94,7 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=4,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -184,20 +185,28 @@ def run_sim(
 
 
 def run_multiple(
-    start: int,
-    end: int,
+    start: Optional[int]=None,
+    end: Optional[int]=None,
+    incl: Optional[List[int]]=None,
     station_meshcat=None,
     state_estimator_meshcat=None,
-    run_non_rounded=False,
+    run_rounded=True,
+    run_relaxed=False,
 ):
-    plans = [
-        f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl"
-        for i in range(start, end + 1)
-    ]
-    if run_non_rounded:
+    if incl is not None:
+        plan_indices = incl
+    else:
+        plan_indices = list(range(start, end + 1))
+    plans=[]
+    if run_rounded:
+        plans = [
+            f"trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_{i}/trajectory/traj_rounded.pkl"
+            for i in plan_indices
+        ]
+    if run_relaxed:
         plans += [
-            f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl"
-            for i in range(start, end + 1)
+            f"trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_{i}/trajectory/traj_relaxed.pkl"
+            for i in plan_indices
         ]
     print(f"Running {len(plans)} plans\n{plans}")
     for plan in plans:
@@ -218,18 +227,19 @@ if __name__ == "__main__":
     station_meshcat = StartMeshcat()
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
-    # run_multiple(
-    #     0,
-    #     9,
-    #     station_meshcat=station_meshcat,
-    #     state_estimator_meshcat=state_estimator_meshcat,
-    # )
-    run_sim(
-        plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_8/trajectory/traj_rounded.pkl",
-        # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
-        save_recording=True,
-        debug=True,
+    run_multiple(
+        incl=[1,2,5,7,8,9,10,13,14,16],
+        run_rounded=False,
+        run_relaxed=True,
         station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
     )
+    # run_sim(
+    #     plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_8/trajectory/traj_rounded.pkl",
+    #     # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
+    #     save_recording=True,
+    #     debug=True,
+    #     station_meshcat=station_meshcat,
+    #     state_estimator_meshcat=state_estimator_meshcat,
+    # )
     # run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
