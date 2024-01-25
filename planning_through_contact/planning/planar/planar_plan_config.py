@@ -203,6 +203,12 @@ class ContactConfig:
     delta_theta_max: Optional[float] = None
     delta_vel_max: Optional[float] = None
 
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
+
 
 @dataclass
 class PlanarPushingStartAndGoal:

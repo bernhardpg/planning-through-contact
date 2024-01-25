@@ -511,7 +511,7 @@ if __name__ == "__main__":
             ),
         )
 
-        num_demos = 20
+        num_demos = 200
         plans = get_plans_to_point(
             num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
         )

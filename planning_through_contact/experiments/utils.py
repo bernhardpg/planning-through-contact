@@ -57,12 +57,12 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.1,
-        distance_to_object_quadratic_preferred_distance=0.1,
+        distance_to_object_quadratic=0.15,
+        distance_to_object_quadratic_preferred_distance=0.075,
         # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
         distance_to_object_socp=None,
-        pusher_velocity_regularization=0.001,
-        pusher_arc_length=0.005,
+        pusher_velocity_regularization=0.002,
+        pusher_arc_length=0.004,
     )
     return non_collision_cost
 
