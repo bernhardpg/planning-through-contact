@@ -26,6 +26,8 @@ ffmpeg = "^1.4"
 ffmpeg-python = "^0.2.0"
 pygame = "^2.5.1"
 manipulation = {git = "https://github.com/RussTedrake/manipulation.git"}
+pyrealsense2 = ^2.54.2.5684
+opencv-python = ^4.9.0.80
 
 [tool.poetry.dev-dependencies]
 
