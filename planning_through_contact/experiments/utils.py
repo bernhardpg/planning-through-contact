@@ -57,10 +57,10 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.15,
-        distance_to_object_quadratic_preferred_distance=0.075,
-        # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
-        distance_to_object_socp=None,
+        # distance_to_object_quadratic=0.15,
+        # distance_to_object_quadratic_preferred_distance=0.075,
+        # distance_to_object_socp=None,
+        distance_to_object_socp=0.00003,  # this sometimes cause numerical problems
         pusher_velocity_regularization=0.002,
         pusher_arc_length=0.004,
     )
@@ -69,8 +69,8 @@ def get_default_non_collision_cost() -> NonCollisionCost:
 
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee"] = "box",
-    pusher_radius: float = 0.035,
-    integration_constant: float = 0.6,
+    pusher_radius: float = 0.015,
+    integration_constant: float = 0.3,
     friction_coeff: float = 0.4,
     lam_buffer: float = 0.2,
     arc_length_weight: Optional[float] = None,
