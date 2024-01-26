@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-import matplotlib.patches as mpatches
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -771,6 +771,7 @@ def plot_constraint_violation_for_trajs(
     violations: List[Dict[str, float]],
     filename: Optional[str] = None,
     legends: Optional[List[str]] = None,
+    bar_titles: Optional[List[str]] = None,
 ) -> None:
     # Preparing the plot
     num_groups = len(violations[0])
@@ -786,17 +787,24 @@ def plot_constraint_violation_for_trajs(
     # Number of plots
     n = len(data)
     fig, axs = plt.subplots(
-        1, n, figsize=(n * 3, 4)
+        1, n, figsize=(n * 3, 3)
     )  # Adjust the figure size as needed
 
     for i, (key, values) in enumerate(data.items()):
         # Create bar plot for each key
         axs[i].bar(range(len(values)), values, color=colors[:n])
-        axs[i].set_title(f"{key}")
+
+        # Remove x-axis ticks
+        axs[i].set_xticks([])
+
+        if bar_titles is not None:
+            axs[i].set_title(f"{bar_titles[i]}")
+        else:
+            axs[i].set_title(f"{key}")
 
     # Adjust layout and show the plot
     plt.tight_layout()
-    
+
     # Create a list of patches to use as legend handles
     if legends is not None:
         custom_patches = [
@@ -817,7 +825,7 @@ def _get_constraint_violation(
     result: MathematicalProgramResult,
     rounded: bool = False,
     compute_mean: bool = False,
-    merge_trans_viol: bool = False,
+    keys_to_merge: Optional[List[Tuple[str, str]]] = None,
 ) -> Dict[str, List]:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
@@ -868,10 +876,21 @@ def _get_constraint_violation(
         for key, item in constraint_violations.items():
             constraint_violations[key] = np.mean(item)  # type: ignore
 
-    if merge_trans_viol:
-        new_keys = list(keys)[:-1]
-        new_constraint_violations = {key: [] for key in new_keys}
-        raise NotImplentedError  # TODO
+    if keys_to_merge is not None:
+        all_keys_to_merge = [key for key_pair in keys_to_merge for key in key_pair]
+        new_constraint_violations = {
+            key: value
+            for key, value in constraint_violations.items()
+            if key not in all_keys_to_merge
+        }
+        for key_1, key_2 in keys_to_merge:
+            key = key_1  # NOTE: we just pick key 1
+            value = np.mean(
+                (constraint_violations[key_1], constraint_violations[key_2])
+            )
+            new_constraint_violations[key] = value  # type: ignore
+
+            return new_constraint_violations
 
     return constraint_violations
 
@@ -891,10 +910,21 @@ def analyze_plans(
         path_knot_points = [path.get_vars() for path in paths]
 
     constraint_violations = [
-        _get_constraint_violation(path, result, rounded, compute_mean=True, merge_trans_viol=False)  # type: ignore
+        _get_constraint_violation(path, result, rounded, compute_mean=True, keys_to_merge=[("translational_dynamics", "translational_dynamics_red")])  # type: ignore
         for path, result in zip(paths, results)
     ]
-    plot_constraint_violation_for_trajs(constraint_violations, filename, legends)
+    import matplotlib as mpl
+
+    # Enable LaTeX in Matplotlib
+    mpl.rcParams["text.usetex"] = True
+    bar_titles = [
+        "$(14)$",
+        "$(11)$ (Rotational part)",
+        "$(11)$ (Translational part)",
+    ]
+    plot_constraint_violation_for_trajs(
+        constraint_violations, filename, legends, bar_titles
+    )
 
 
 def analyze_plan(
