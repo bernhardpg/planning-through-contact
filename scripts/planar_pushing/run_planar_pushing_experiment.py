@@ -59,7 +59,11 @@ def main(cfg: OmegaConf) -> None:
     os.system(f"cp -r {plan_folder} {full_log_dir}")
 
     # Set up config data structures
-    traj = PlanarPushingTrajectory.load(traj_file)
+    try:
+        traj = PlanarPushingTrajectory.load(traj_file)
+    except FileNotFoundError:
+        logger.error(f"Trajectory file {traj_file} not found")
+        return
     mpc_config: HybridMpcConfig = instantiate(cfg.mpc_config)
     optitrack_config: OptitrackConfig = instantiate(cfg.optitrack_config)
 
