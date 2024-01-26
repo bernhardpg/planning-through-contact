@@ -9,8 +9,8 @@ sim_config:
   use_hardware: False
   closed_loop: True
 
-trajectory_set_name: "hw_demos_20240125152221_tee_quadratic_cost"
-trajectory_index: 2
+trajectory_set_name: "hw_demos_20240125152221_tee_socp"
+trajectory_index: 0
 use_rounded: True
 # override_duration: 5
 

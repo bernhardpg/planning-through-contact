@@ -5,15 +5,9 @@ import numpy as np
 import cv2
 import logging
 
+from planning_through_contact.simulation.sensors.realsense_camera_config import RealsenseCameraConfig
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RealsenseCameraConfig:
-    width: int = 640
-    height: int = 480
-    fps: int = 30
-    output_dir: str = "/tmp"
 
 
 class RealsenseCamera:

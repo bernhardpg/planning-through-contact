@@ -29,10 +29,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.sensors.optitrack_config import OptitrackConfig
-from planning_through_contact.simulation.sensors.realsense import (
-    RealsenseCamera,
-    RealsenseCameraConfig,
-)
+from planning_through_contact.simulation.sensors.realsense_camera_config import RealsenseCameraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +46,18 @@ def main(cfg: OmegaConf) -> None:
         cfg.log_dir = os.path.relpath(full_log_dir, get_original_cwd() + "/outputs")
 
     logger.info(OmegaConf.to_yaml(cfg))
-    traj_name = f"traj_{'rounded' if cfg.use_rounded else 'relaxed'}"
-    plan = (
-        f"trajectories/{cfg.trajectory_set_name}/"
-        + f"hw_demo_{cfg.trajectory_index}/trajectory/"
-        + f"{traj_name}.pkl"
+
+    plan_folder = (
+        f"trajectories/{cfg.trajectory_set_name}/" + f"hw_demo_{cfg.trajectory_index}"
     )
+    traj_name = f"traj_{'rounded' if cfg.use_rounded else 'relaxed'}"
+    traj_file = f"{plan_folder}/trajectory/" + f"{traj_name}.pkl"
+
+    # Copy plan folder to log dir
+    os.system(f"cp -r {plan_folder} {full_log_dir}")
+
     # Set up config data structures
-    traj = PlanarPushingTrajectory.load(plan)
+    traj = PlanarPushingTrajectory.load(traj_file)
     mpc_config: HybridMpcConfig = instantiate(cfg.mpc_config)
     optitrack_config: OptitrackConfig = instantiate(cfg.optitrack_config)
 
@@ -94,6 +95,7 @@ def main(cfg: OmegaConf) -> None:
 
     try:
         if sim_config.use_hardware and cfg.realsense_config.should_record:
+            from planning_through_contact.simulation.sensors.realsense import RealsenseCamera
             # Initialize cameras
             camera_config: RealsenseCameraConfig = instantiate(
                 cfg.realsense_config.realsense_camera_config
@@ -138,8 +140,9 @@ def main(cfg: OmegaConf) -> None:
             camera2.stop_recording()
     except KeyboardInterrupt:
         environment.save_logs(recording_name, full_log_dir)
-        camera1.stop_recording()
-        camera2.stop_recording()
+        if sim_config.use_hardware and cfg.realsense_config.should_record:
+            camera1.stop_recording()
+            camera2.stop_recording()
 
 
 def reset_experiment(
