@@ -29,7 +29,9 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.sensors.optitrack_config import OptitrackConfig
-from planning_through_contact.simulation.sensors.realsense_camera_config import RealsenseCameraConfig
+from planning_through_contact.simulation.sensors.realsense_camera_config import (
+    RealsenseCameraConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,10 @@ def main(cfg: OmegaConf) -> None:
 
     try:
         if sim_config.use_hardware and cfg.realsense_config.should_record:
-            from planning_through_contact.simulation.sensors.realsense import RealsenseCamera
+            from planning_through_contact.simulation.sensors.realsense import (
+                RealsenseCamera,
+            )
+
             # Initialize cameras
             camera_config: RealsenseCameraConfig = instantiate(
                 cfg.realsense_config.realsense_camera_config

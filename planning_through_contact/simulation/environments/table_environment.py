@@ -313,6 +313,15 @@ class TableEnvironment:
             control_log = self._control_logger.FindLog(self.context)
             control_desired_log = self._control_desired_logger.FindLog(self.context)
 
+            last_planar_pose = slider_pose_log.data()[:, -1]
+            last_desired_planar_pose = slider_pose_desired_log.data()[:, -1]
+            error = last_planar_pose - last_desired_planar_pose
+            error_norm = np.linalg.norm(error)
+            logger.info(
+                f"\nSUMMARY:\n last planar pose: {last_planar_pose}"
+                f"\n last desired planar pose: {last_desired_planar_pose}"
+                f"\n error: {error}\n error norm: {error_norm:.4f}"
+            )
             plot_and_save_planar_pushing_logs_from_sim(
                 pusher_pose_log,
                 slider_pose_log,

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class RealsenseCameraConfig:
     width: int = 640

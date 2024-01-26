@@ -5,7 +5,9 @@ import numpy as np
 import cv2
 import logging
 
-from planning_through_contact.simulation.sensors.realsense_camera_config import RealsenseCameraConfig
+from planning_through_contact.simulation.sensors.realsense_camera_config import (
+    RealsenseCameraConfig,
+)
 
 logger = logging.getLogger(__name__)
 

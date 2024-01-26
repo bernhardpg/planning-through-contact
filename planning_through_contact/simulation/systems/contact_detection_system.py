@@ -14,7 +14,6 @@ class ContactDetectionSystem(LeafSystem):
         # print(f"ContactDetectionSystem: geometry_A_name {geometry_A_name}, geometry_B_names {geometry_B_names}")
 
     def DoCalcOutput(self, context, output):
-        
         query_object = self._query_object.Eval(context)
         inspector = query_object.inspector()
         bodyB_geometry_ids = []
