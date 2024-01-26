@@ -12,6 +12,12 @@ sim_config:
 trajectory_set_name: "hw_demos_20240125152221_tee_socp"
 trajectory_index: 9
 use_rounded: True
-# override_duration: 5
+override_duration: 5
 
 save_experiment_data: True
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      trajectory_index: 1, 2, 3
