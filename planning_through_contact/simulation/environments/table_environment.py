@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 import numpy as np
@@ -36,7 +37,7 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 )
 from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
-    plot_planar_pushing_logs_from_pose_vectors,
+    plot_and_save_planar_pushing_logs_from_sim,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ class TableEnvironment:
                 self._state_estimator.GetOutputPort("pusher_pose_estimated"),
                 pusher_pose_to_vector.get_input_port(),
             )
-            pusher_pose_logger = LogVectorOutput(
+            self._pusher_pose_logger = LogVectorOutput(
                 pusher_pose_to_vector.get_output_port(), builder
             )
             slider_pose_to_vector = builder.AddSystem(
@@ -183,17 +184,18 @@ class TableEnvironment:
                 self._state_estimator.GetOutputPort("slider_pose_estimated"),
                 slider_pose_to_vector.get_input_port(),
             )
-            slider_pose_logger = LogVectorOutput(
+            self._slider_pose_logger = LogVectorOutput(
                 slider_pose_to_vector.get_output_port(), builder
             )
+
             # Desired State Loggers
             # "desired_pusher_planar_pose_vector" is the reference trajectory
             # "planar_position_command" is the commanded trajectory (e.g. after passing through MPC if closed loop or just the reference trajectory if open loop)
-            pusher_pose_desired_logger = LogVectorOutput(
+            self._pusher_pose_desired_logger = LogVectorOutput(
                 self._desired_position_source.GetOutputPort("planar_position_command"),
                 builder,
             )
-            slider_pose_desired_logger = LogVectorOutput(
+            self._slider_pose_desired_logger = LogVectorOutput(
                 self._desired_position_source.GetOutputPort(
                     "desired_slider_planar_pose_vector"
                 ),
@@ -202,11 +204,15 @@ class TableEnvironment:
             self._joint_state_logger = LogVectorOutput(
                 self._robot_system.GetOutputPort("robot_state_measured"), builder
             )
-
-            self._pusher_pose_logger = pusher_pose_logger
-            self._slider_pose_logger = slider_pose_logger
-            self._pusher_pose_desired_logger = pusher_pose_desired_logger
-            self._slider_pose_desired_logger = slider_pose_desired_logger
+            # Actual command logger
+            self._control_logger = LogVectorOutput(
+                self._desired_position_source.GetOutputPort("mpc_control"), builder
+            )
+            # Desired command logger
+            self._control_desired_logger = LogVectorOutput(
+                self._desired_position_source.GetOutputPort("mpc_control_desired"),
+                builder,
+            )
 
         diagram = builder.Build()
         self._diagram = diagram
@@ -240,42 +246,47 @@ class TableEnvironment:
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self._plant.SetPositions(self.mbp_context, self._slider, q)
 
-    def simulate(self, timeout=1e8, save_recording_as: Optional[str] = None) -> None:
+    def simulate(
+        self,
+        timeout=1e8,
+        recording_file: Optional[str] = None,
+        save_dir: str = "",
+        for_reset: bool = False,
+    ) -> None:
         """
         :return: Returns a tuple of (success, simulation_time_s).
         """
-        if save_recording_as:
+        if recording_file:
             self._state_estimator.meshcat.StartRecording()
             self._meshcat.StartRecording()
         time_step = self._sim_config.time_step * 10
+        if for_reset:
+            self._state_estimator.meshcat.AddButton("Reset Done!")
+            t = 0
+            while (
+                self._state_estimator.meshcat.GetButtonClicks("Reset Done!") < 1
+                and t < timeout
+            ):
+                t += time_step
+                self._simulator.AdvanceTo(t)
+                self._visualize_desired_slider_pose(t)
+            self._state_estimator.meshcat.DeleteAddedControls()
+            return
         if not isinstance(self._desired_position_source, TeleopPositionSource):
             for t in np.append(np.arange(0, timeout, time_step), timeout):
                 self._simulator.AdvanceTo(t)
-                # Visualizing the desired slider pose
-                context = self._desired_position_source.GetMyContextFromRoot(
-                    self.context
-                )
-                slider_desired_pose_vec = self._desired_position_source.GetOutputPort(
-                    "desired_slider_planar_pose_vector"
-                ).Eval(context)
-                self._state_estimator._visualize_desired_slider_pose(
-                    PlanarPose(*slider_desired_pose_vec),
-                    time_in_recording=t,
-                )
-                pusher_desired_pose_vec = self._desired_position_source.GetOutputPort(
-                    "planar_position_command"
-                ).Eval(context)
-                self._state_estimator._visualize_desired_pusher_pose(
-                    PlanarPose(*pusher_desired_pose_vec, 0),
-                    time_in_recording=t,
-                )
+                self._visualize_desired_slider_pose(t)
                 # Print the time every 5 seconds
                 if t % 5 == 0:
                     logger.info(f"t={t}")
 
         else:
             self._simulator.AdvanceTo(timeout)
-        if save_recording_as:
+
+        self.save_logs(recording_file, save_dir)
+
+    def save_logs(self, recording_file: Optional[str], save_dir: str):
+        if recording_file:
             self._meshcat.StopRecording()
             self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
             self._meshcat.PublishRecording()
@@ -285,8 +296,11 @@ class TableEnvironment:
             )
             self._state_estimator.meshcat.PublishRecording()
             res = self._state_estimator.meshcat.StaticHtml()
-            with open(save_recording_as, "w") as f:
+            if save_dir:
+                recording_file = os.path.join(save_dir, recording_file)
+            with open(recording_file, "w") as f:
                 f.write(res)
+
         if self._sim_config.save_plots:
             pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
             slider_pose_log = self._slider_pose_logger.FindLog(self.context)
@@ -296,13 +310,38 @@ class TableEnvironment:
             slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
                 self.context
             )
-            plot_planar_pushing_logs_from_pose_vectors(
+            control_log = self._control_logger.FindLog(self.context)
+            control_desired_log = self._control_desired_logger.FindLog(self.context)
+
+            plot_and_save_planar_pushing_logs_from_sim(
                 pusher_pose_log,
                 slider_pose_log,
+                control_log,
+                control_desired_log,
                 pusher_pose_desired_log,
                 slider_pose_desired_log,
+                save_dir=save_dir,
             )
             plot_joint_state_logs(
                 self._joint_state_logger.FindLog(self.context),
                 self._robot_system.robot.num_positions(),
+                save_dir=save_dir,
             )
+
+    def _visualize_desired_slider_pose(self, t):
+        # Visualizing the desired slider pose
+        context = self._desired_position_source.GetMyContextFromRoot(self.context)
+        slider_desired_pose_vec = self._desired_position_source.GetOutputPort(
+            "desired_slider_planar_pose_vector"
+        ).Eval(context)
+        self._state_estimator._visualize_desired_slider_pose(
+            PlanarPose(*slider_desired_pose_vec),
+            time_in_recording=t,
+        )
+        pusher_desired_pose_vec = self._desired_position_source.GetOutputPort(
+            "planar_position_command"
+        ).Eval(context)
+        self._state_estimator._visualize_desired_pusher_pose(
+            PlanarPose(*pusher_desired_pose_vec, 0),
+            time_in_recording=t,
+        )

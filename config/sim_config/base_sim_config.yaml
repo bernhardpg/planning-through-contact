@@ -1,0 +1,19 @@
+visualize_desired: True
+draw_frames: True
+time_step: 1e-3
+use_realtime: False
+delay_before_execution: 4
+closed_loop: False
+save_plots: True
+scene_directive_name: "planar_pushing_iiwa_plant_hydroelastic.yaml"
+use_hardware: False
+pusher_z_offset: 0.03
+default_joint_positions: [
+    0.0776,
+    1.0562,
+    0.3326,
+    -1.3048,
+    2.7515,
+    -0.8441,
+    0.5127,
+]

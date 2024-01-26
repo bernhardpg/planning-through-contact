@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import pickle
 from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
@@ -65,7 +66,11 @@ class PlanarPushingLog:
         x = state_np_array[0, :]
         y = state_np_array[1, :]
         theta = state_np_array[2, :]
-        lam = state_np_array[3, :]
+        if state_np_array.shape[0] == 3:
+            # Padding state since we didn't log lam
+            lam = np.zeros_like(x)
+        else:
+            lam = state_np_array[3, :]
 
         c_n = control_np_array[0, :]
         c_f = control_np_array[1, :]
@@ -106,6 +111,14 @@ class PlanarPushingLog:
             )
         control_np_array = np.ones((3, len(t))) * PAD_VAL
         return cls.from_np(t, state_np_array, control_np_array)
+
+
+@dataclass
+class CombinedPlanarPushingLogs:
+    pusher_actual: PlanarPushingLog
+    slider_actual: PlanarPushingLog
+    pusher_desired: PlanarPushingLog
+    slider_desired: PlanarPushingLog
 
 
 def plot_planar_pushing_logs(
@@ -201,29 +214,62 @@ def plot_velocities(
     plt.savefig(f"planar_pushing_velocities{suffix}.png")
 
 
-def plot_planar_pushing_logs_from_pose_vectors(
+def plot_and_save_planar_pushing_logs_from_sim(
     pusher_pose_vector_log: VectorLog,
     slider_pose_vector_log: VectorLog,
+    control_log: VectorLog,
+    control_desired_log: VectorLog,
     pusher_pose_vector_log_desired: VectorLog,
     slider_pose_vector_log_desired: VectorLog,
+    save_dir: Optional[str] = None,
 ) -> None:
-    actual_pusher = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log)
-    actual_slider = PlanarPushingLog.from_pose_vector_log(slider_pose_vector_log)
-    desired_pusher = PlanarPushingLog.from_pose_vector_log(
+    pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_vector_log)
+    slider_actual = PlanarPushingLog.from_log(slider_pose_vector_log, control_log)
+    pusher_desired = PlanarPushingLog.from_pose_vector_log(
         pusher_pose_vector_log_desired
     )
-    desired_slider = PlanarPushingLog.from_pose_vector_log(
-        slider_pose_vector_log_desired
+    slider_desired = PlanarPushingLog.from_log(
+        slider_pose_vector_log_desired,
+        control_desired_log,
     )
-    plot_planar_pushing_trajectory(actual_slider, desired_slider, suffix="_slider")
-    plot_planar_pushing_trajectory(actual_pusher, desired_pusher, suffix="_pusher")
+    # Save the logs
+    combined = CombinedPlanarPushingLogs(
+        pusher_actual=pusher_actual,
+        slider_actual=slider_actual,
+        pusher_desired=pusher_desired,
+        slider_desired=slider_desired,
+    )
+
+    with open(f"{save_dir}/combined_planar_pushing_logs.pkl", "wb") as f:
+        pickle.dump(combined, f)
+
+    plot_planar_pushing_trajectory(
+        slider_actual,
+        slider_desired,
+        suffix="_slider",
+        plot_lam=False,
+        save_dir=save_dir,
+    )
+    plot_planar_pushing_trajectory(
+        pusher_actual,
+        pusher_desired,
+        suffix="_pusher",
+        plot_lam=False,
+        plot_control=False,
+        save_dir=save_dir,
+    )
 
 
 def plot_planar_pushing_trajectory(
-    actual: PlanarPushingLog, desired: PlanarPushingLog, suffix: str = ""
+    actual: PlanarPushingLog,
+    desired: PlanarPushingLog,
+    plot_control: bool = True,
+    plot_lam: bool = True,
+    suffix: str = "",
+    save_dir: Optional[str] = None,
 ) -> None:
     # State plot
-    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
+    fig, axes = plt.subplots(nrows=4 if plot_lam else 3, ncols=1, figsize=(8, 8))
     MIN_AXIS_SIZE = 0.1
 
     pos = np.vstack((actual.x, actual.y))
@@ -251,17 +297,20 @@ def plot_planar_pushing_trajectory(
     axes[2].legend()
     # axes[2].set_ylim(-th_change, th_change)
 
-    axes[3].plot(actual.t, actual.lam, label="Actual")
-    axes[3].plot(actual.t, desired.lam, linestyle="--", label="Desired")
-    axes[3].set_title("lam")
-    axes[3].legend()
-    axes[3].set_ylim(0, 1)
+    if plot_lam:
+        axes[3].plot(actual.t, actual.lam, label="Actual")
+        axes[3].plot(actual.t, desired.lam, linestyle="--", label="Desired")
+        axes[3].set_title("lam")
+        axes[3].legend()
+        axes[3].set_ylim(0, 1)
 
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_states{suffix}.pdf")
+    file_name = f"planar_pushing_states{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
     # State Error plot
-    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
+    fig, axes = plt.subplots(nrows=4 if plot_lam else 3, ncols=1, figsize=(8, 8))
     MIN_AXIS_SIZE = 0.1
 
     x_error = actual.x - desired.x
@@ -292,15 +341,21 @@ def plot_planar_pushing_trajectory(
     axes[2].legend()
     axes[2].set_ylim(-th_change, th_change)
 
-    lam_error = actual.lam - desired.lam
-    axes[3].plot(actual.t, lam_error, label="Error")
-    axes[3].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
-    axes[3].set_title("lam")
-    axes[3].legend()
-    axes[3].set_ylim(0, 1)
+    if plot_lam:
+        lam_error = actual.lam - desired.lam
+        axes[3].plot(actual.t, lam_error, label="Error")
+        axes[3].plot(actual.t, np.zeros_like(actual.t), linestyle="--", label="0")
+        axes[3].set_title("lam")
+        axes[3].legend()
+        axes[3].set_ylim(0, 1)
 
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_states_error{suffix}.pdf")
+    file_name = f"planar_pushing_states_error{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
+
+    if not plot_control:
+        return
 
     # Control input
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 8))
@@ -336,10 +391,12 @@ def plot_planar_pushing_trajectory(
 
     # Adjust layout
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_control{suffix}.pdf")
+    file_name = f"planar_pushing_control{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
-def plot_joint_state_logs(joint_state_log, num_positions, suffix=""):
+def plot_joint_state_logs(joint_state_log, num_positions, suffix="", save_dir=""):
     num_velocities = joint_state_log.data().shape[0] - num_positions
     # Split the data into positions and velocities
     data = joint_state_log.data()
@@ -368,7 +425,9 @@ def plot_joint_state_logs(joint_state_log, num_positions, suffix=""):
 
     # Adjust layout
     plt.tight_layout()
-    plt.savefig(f"joint_states{suffix}.pdf")
+    file_name = f"joint_states{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
 PLOT_WIDTH_INCH = 7

@@ -163,7 +163,7 @@ def run_sim(
     # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(
         traj.end_time + sim_config.delay_before_execution + 0.5,
-        save_recording_as=recording_name,
+        recording_file=recording_name,
     )
     # environment.simulate(
     #     sim_config.delay_before_execution+0.5,

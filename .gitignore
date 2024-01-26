@@ -1,6 +1,7 @@
 # Generated files
 demos/
 trajectories/
+outputs/
 
 # Vim
 *.swp

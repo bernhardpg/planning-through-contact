@@ -87,7 +87,7 @@ class IiwaHardwareStation(RobotSystemBase):
 
         # Iiwa Planer
         # Delay between starting the simulation and the iiwa starting to go to the home position
-        INITIAL_DELAY = 1.0
+        INITIAL_DELAY = 0.5
         # Delay between the iiwa reaching the home position and the pusher starting to follow the planned pushing trajectory
         WAIT_PUSH_DELAY = 1.0
         assert sim_config.delay_before_execution > INITIAL_DELAY + WAIT_PUSH_DELAY

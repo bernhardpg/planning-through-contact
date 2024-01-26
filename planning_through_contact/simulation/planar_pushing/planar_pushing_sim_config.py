@@ -8,6 +8,9 @@ from pydrake.multibody.plant import (
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     SliderPusherSystemConfig,
@@ -15,12 +18,11 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
 
-# TODO(bernhardpg): Move to planar_pushing_sim.py
 @dataclass
 class PlanarPushingSimConfig:
     dynamics_config: SliderPusherSystemConfig
     slider: RigidBody
-    contact_model: ContactModel = ContactModel.kHydroelasticWithFallback
+    contact_model: ContactModel = ContactModel.kHydroelastic
     visualize_desired: bool = False
     slider_goal_pose: Optional[PlanarPose] = None
     pusher_start_pose: PlanarPose = field(
@@ -44,3 +46,14 @@ class PlanarPushingSimConfig:
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
+
+    @classmethod
+    def from_traj(cls, trajectory: PlanarPushingTrajectory, **kwargs):
+        return cls(
+            dynamics_config=trajectory.config.dynamics_config,
+            slider=trajectory.config.dynamics_config.slider,
+            pusher_start_pose=trajectory.initial_pusher_planar_pose,
+            slider_start_pose=trajectory.initial_slider_planar_pose,
+            slider_goal_pose=trajectory.target_slider_planar_pose,
+            **kwargs
+        )

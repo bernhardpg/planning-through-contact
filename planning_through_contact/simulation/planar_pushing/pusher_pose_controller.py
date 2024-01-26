@@ -58,6 +58,7 @@ class PusherPoseController(LeafSystem):
         self.closed_loop = closed_loop
 
         self._clamped_last_step = False
+        self._last_hybrid_mpc_time = 0
 
         # Internal state
         self._fsm_state_idx = int(
@@ -116,6 +117,13 @@ class PusherPoseController(LeafSystem):
 
         self.output = self.DeclareVectorOutputPort("translation", 2, self.DoCalcOutput)
 
+        # For logging MPC control outputs
+        self._mpc_control_index = self.DeclareDiscreteState(3)
+        self.DeclareVectorOutputPort("mpc_control", 3, self.RetrieveMpcControl)
+        self._mpc_control_desired_index = self.DeclareDiscreteState(3)
+        self.DeclareVectorOutputPort(
+            "mpc_control_desired", 3, self.RetrieveDesiredMpcControl
+        )
         # Run FSM logic before every trajectory-advancing step
         self.DeclarePerStepUnrestrictedUpdateEvent(self._run_fsm_logic)
 
@@ -131,20 +139,37 @@ class PusherPoseController(LeafSystem):
 
         mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
         curr_mode_desired = mode_traj[0]
+        EPS = 5e-3
 
         if fsm_state_value == PusherPoseControllerState.CFREE_MPC:
+            signed_dist = self._pusher_slider_contact.Eval(context)
             if curr_mode_desired != PlanarPushingContactMode.NO_CONTACT:
                 mutable_fsm_state.set_value(PusherPoseControllerState.HYBRID_MPC)
                 self._hybrid_mpc_count = 0
                 logger.debug(f"Transitioning to HYBRID_MPC state at time {time}")
+
+            # Unintended collision detection
+            in_very_close_contact = signed_dist <= -1e-3
+            time_since_last_hybrid_mpc = time - self._last_hybrid_mpc_time
+            if (
+                all(
+                    [
+                        current_mode == PlanarPushingContactMode.NO_CONTACT
+                        for current_mode in mode_traj
+                    ]
+                )
+                and time_since_last_hybrid_mpc > 0.3
+                and in_very_close_contact
+            ):
+                logger.warn(f"PUSHER SLIDER UNINTENDED COLLISION at time {time}")
 
         elif fsm_state_value == PusherPoseControllerState.HYBRID_MPC:
             if curr_mode_desired == PlanarPushingContactMode.NO_CONTACT:
                 mutable_fsm_state.set_value(PusherPoseControllerState.CFREE_MPC)
                 logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
                 return
-
-            in_contact = self._pusher_slider_contact.Eval(context)
+            signed_dist = self._pusher_slider_contact.Eval(context)
+            in_contact = signed_dist <= EPS
             if not in_contact:
                 mutable_fsm_state.set_value(PusherPoseControllerState.RETURN_TO_CONTACT)
                 logger.debug(f"Transitioning to RETURN_TO_CONTACT state at time {time}")
@@ -156,7 +181,8 @@ class PusherPoseController(LeafSystem):
                 logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
                 return
 
-            in_contact = self._pusher_slider_contact.Eval(context)
+            signed_dist = self._pusher_slider_contact.Eval(context)
+            in_contact = signed_dist <= EPS
             if in_contact:
                 mutable_fsm_state.set_value(PusherPoseControllerState.HYBRID_MPC)
                 self._hybrid_mpc_count = 0
@@ -181,7 +207,9 @@ class PusherPoseController(LeafSystem):
         pusher_pose_traj: List[PlanarPose],
         contact_force_traj: List[npt.NDArray[np.float64]],
         mode_traj: List[PlanarPushingContactMode],
-        pusher_pose_cmd_state: Optional[AbstractStateIndex] = None,
+        pusher_pose_cmd_state: AbstractStateIndex,
+        mpc_control_state: AbstractStateIndex,
+        mpc_control_desired_state: AbstractStateIndex,
     ) -> PlanarPose:
         mode = mode_traj[0]
         controller = self._get_mpc_for_mode(mode)
@@ -220,8 +248,11 @@ class PusherPoseController(LeafSystem):
         x_dot_curr, u_input, pusher_vel = controller.compute_control(
             x_curr, x_traj[: N + 1], u_traj[:N]
         )
+
         next_pusher_pose = PlanarPose(*(pusher_pose_acc.pos() + h * pusher_vel), 0)
         pusher_pose_cmd_state.set_value(next_pusher_pose)
+        mpc_control_state.set_value(u_input)
+        mpc_control_desired_state.set_value(u_traj[0])
 
         return next_pusher_pose
 
@@ -236,32 +267,17 @@ class PusherPoseController(LeafSystem):
         x_desired = system.get_state_from_planar_poses_by_projection(
             slider_pose=curr_slider_pose, pusher_pose=curr_pusher_pose
         )
-        next_pusher_pos = system.get_p_WP_from_state(x_desired, buffer=-1e-3)
+        next_pusher_pos = system.get_p_WP_from_state(x_desired, buffer=-1e-4)
         next_pusher_pose = PlanarPose(next_pusher_pos[0], next_pusher_pos[1], 0)
-        return next_pusher_pose
-
-    def _clamp_next_pusher_pose(
-        self,
-        curr_pusher_pose: PlanarPose,
-        next_pusher_pose: PlanarPose,
-    ) -> Tuple[PlanarPose, bool]:
-        MAX_MAGNITUDE = 0.02
-        did_clamp = False
-        diff = next_pusher_pose.pos() - curr_pusher_pose.pos()
-        magnitude = np.linalg.norm(diff)
-        if magnitude > MAX_MAGNITUDE:
-            logger.warn(f"magnitude of pusher pose change: {magnitude}, clamping")
-            next_pusher_pose = curr_pusher_pose + PlanarPose(
-                *(diff / magnitude * MAX_MAGNITUDE), 0
-            )
-            did_clamp = True
-        self._clamped_last_step = did_clamp
         return next_pusher_pose
 
     def DoCalcOutput(self, context: Context, output):
         pusher_planar_pose_traj: List[PlanarPose] = self.pusher_planar_pose_traj.Eval(context)  # type: ignore
         state = context.get_abstract_state(int(self._fsm_state_idx)).get_value()
-
+        mpc_control_state = context.get_mutable_discrete_state(self._mpc_control_index)
+        mpc_control_desired_state = context.get_mutable_discrete_state(
+            self._mpc_control_desired_index
+        )
         if state == PusherPoseControllerState.OPEN_LOOP:
             curr_planar_pose = pusher_planar_pose_traj[0]
             output.set_value(curr_planar_pose.pos())
@@ -279,6 +295,8 @@ class PusherPoseController(LeafSystem):
         if state == PusherPoseControllerState.CFREE_MPC:
             curr_planar_pose = pusher_planar_pose_traj[0]
             output.set_value(curr_planar_pose.pos())
+            mpc_control_state.SetFromVector([0, 0, 0])
+            mpc_control_desired_state.SetFromVector([0, 0, 0])
 
         elif state == PusherPoseControllerState.HYBRID_MPC:
             mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
@@ -298,10 +316,10 @@ class PusherPoseController(LeafSystem):
                 contact_force_traj,
                 mode_traj,
                 pusher_pose_cmd_state=pusher_pose_cmd_state,
+                mpc_control_state=mpc_control_state,
+                mpc_control_desired_state=mpc_control_desired_state,
             )
-            # next_pusher_pose = self._clamp_next_pusher_pose(
-            #     pusher_planar_pose, next_pusher_pose
-            # )
+
             output.set_value(next_pusher_pose.pos())
 
         elif state == PusherPoseControllerState.RETURN_TO_CONTACT:
@@ -313,7 +331,16 @@ class PusherPoseController(LeafSystem):
                 pusher_planar_pose,
                 mode_traj,
             )
-            # next_pusher_pose = self._clamp_next_pusher_pose(
-            #     pusher_planar_pose, next_pusher_pose
-            # )
+            mpc_control_state.set_value([0, 0, 0])
+
             output.set_value(next_pusher_pose.pos())
+
+    def RetrieveMpcControl(self, context: Context, output):
+        mpc_control_state = context.get_discrete_state(self._mpc_control_index)
+        output.SetFromVector(mpc_control_state.get_value())
+
+    def RetrieveDesiredMpcControl(self, context: Context, output):
+        mpc_control_desired_state = context.get_discrete_state(
+            self._mpc_control_desired_index
+        )
+        output.SetFromVector(mpc_control_desired_state.get_value())

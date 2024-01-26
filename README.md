@@ -58,6 +58,14 @@ The repo is setup to do automatic linting and code checking on every commit thro
 ```
 poetry run pre-commit run --all-files
 ```
+## Running a single experiment
+Create a config file specifying the experiment in `config` and run it using the following command:
+
+```
+python3 scripts/planar_pushing/run_planar_pushing_experiment.py --config-name single_experiment
+```
+
+where `single_experiment` should be replaced with your config name.
 
 ## Running hardware simulations
 Make sure to download `lcm` and build it to a desired directory: [lcm](https://github.com/lcm-proj/lcm). Then, add `lcm` to the pythonpath:

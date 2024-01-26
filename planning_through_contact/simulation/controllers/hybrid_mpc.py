@@ -40,10 +40,14 @@ class HybridMpcConfig:
     Q: npt.NDArray[np.float64] = field(
         default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 10
     )
+    # Note scaling factor is only applied if Q is not a numpy array
+    Q_scaling: float = 1.0
     Q_N: npt.NDArray[np.float64] = field(
         default_factory=lambda: np.diag([3, 3, 0.1, 0]) * 2000
     )
+    Q_N_scaling: float = 1.0
     R: npt.NDArray[np.float64] = field(default_factory=lambda: np.diag([1, 1, 0]) * 0.5)
+    R_scaling: float = 1.0
     # Max magnitude of control input [c_n, c_f, lam_dot]
     u_max_magnitude: npt.NDArray[np.float64] = field(
         # NOTE: The force variables are scaled to give a better posed optimization problem
@@ -52,6 +56,14 @@ class HybridMpcConfig:
     )
     lam_max: float = 1.0
     lam_min: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.Q, np.ndarray):
+            self.Q = np.diag(self.Q) * self.Q_scaling
+        if not isinstance(self.Q_N, np.ndarray):
+            self.Q_N = np.diag(self.Q_N) * self.Q_N_scaling
+        if not isinstance(self.R, np.ndarray):
+            self.R = np.diag(self.R) * self.R_scaling
 
 
 class HybridModes(Enum):
