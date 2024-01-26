@@ -1,3 +1,5 @@
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -6,6 +8,66 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
     SingleRunResult,
 )
 from planning_through_contact.visualize.colors import GRAY, GRAY1
+
+
+def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
+    study = studies[0]
+    color = "blue"
+
+    # Creating a 1x2 subplot
+    fig = plt.figure(figsize=(10, 5))
+
+    det_min = min(
+        min(study.rounded_mean_determinants), min(study.relaxed_mean_determinants)
+    )
+
+    ax1 = fig.add_subplot(121)
+    scatter1 = ax1.scatter(
+        study.thetas,
+        study.optimality_gaps,
+        alpha=0.7,
+        c=color,
+        vmin=det_min,
+        vmax=1.0,
+    )
+    ax1.set_xlabel("Rotation [rad]")
+    ax1.set_ylabel("Optimality gap [%]")
+    ax1.set_ylim((0, 110))
+    ax1.set_xlim((-np.pi, np.pi))
+    ax1.hlines(
+        [100],
+        xmin=-np.pi,
+        xmax=np.pi,
+        linestyles="--",
+        color=GRAY.diffuse(),
+    )
+    ax1.set_title("Rounding")
+
+    ax2 = fig.add_subplot(122)
+    scatter2 = ax2.scatter(
+        study.thetas,
+        study.sdp_optimality_gaps,
+        alpha=0.7,
+        c=color,
+        vmin=det_min,
+        vmax=1.0,
+    )
+    ax2.set_xlabel("Rotation [rad]")
+    ax2.set_ylabel("Optimality gap [%]")
+    ax2.set_ylim((0, 110))
+    ax2.set_xlim((-np.pi, np.pi))
+    ax2.hlines(
+        [100],
+        xmin=-np.pi,
+        xmax=np.pi,
+        linestyles="--",
+        color=GRAY.diffuse(),
+    )
+    ax2.set_title("SDP relaxation")
+
+    fig.tight_layout()
+
+    plt.show()
 
 
 def visualize_ablation_optimality_gaps(study: AblationStudy) -> None:

@@ -65,7 +65,7 @@ class SingleRunResult:
             pickle.dump(self, file)
 
     @staticmethod
-    def load(filename: str) -> "AblationStudy":
+    def load(filename: str) -> "SingleRunResult":
         with open(Path(filename), "rb") as file:
             return pickle.load(file)
 
