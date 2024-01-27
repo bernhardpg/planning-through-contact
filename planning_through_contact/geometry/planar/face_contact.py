@@ -814,7 +814,7 @@ class FaceContactMode(AbstractContactMode):
                 idx, a[0] * cos_th + a[1] * sin_th >= b
             )
 
-    def add_so2_cut_from_boundary_conds(self) -> None:
+    def add_so2_cut_from_boundary_conds(self, add_as_independent: bool = False) -> None:
         """
         This function only works when the slider initial pose and final pose are constant values.
         It is not yet clear how to implement something like this in the GCS case.
@@ -841,9 +841,16 @@ class FaceContactMode(AbstractContactMode):
         for idx, (cos_th, sin_th) in enumerate(
             zip(self.variables.cos_ths, self.variables.sin_ths)
         ):
-            self.prog_wrapper.add_linear_inequality_constraint(
-                idx, a[0] * cos_th + a[1] * sin_th >= b
-            )
+            # This is just to demonstrate the effect of adding this as
+            # a constraint that gets multiplied vs. not
+            if add_as_independent:
+                self.prog_wrapper.add_independent_constraint(
+                    a[0] * cos_th + a[1] * sin_th >= b
+                )
+            else:
+                self.prog_wrapper.add_linear_inequality_constraint(
+                    idx, a[0] * cos_th + a[1] * sin_th >= b
+                )
 
     def formulate_convex_relaxation(self, add_l2_norm_cost: bool = False) -> None:
         # TODO: This part of the code is outdated and will most likely not work correctly
