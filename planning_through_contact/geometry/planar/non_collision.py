@@ -311,24 +311,23 @@ class NonCollisionMode(AbstractContactMode):
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
 
             if self.cost_config.distance_to_object_quadratic is not None:
+                c = self.cost_config.distance_to_object_quadratic
                 for k in range(self.num_knot_points):
                     # Divide this value by the number of planes so that the cost has the same magnitude for
                     # regions, independently on number of faces
                     p_BP = self.variables.p_BPs[k]
-                    dist_for_each_plane = [plane.dist_to(p_BP) for plane in planes]
-                    deviations_from_pref_dist = [
-                        d
-                        - self.cost_config.distance_to_object_quadratic_preferred_distance
-                        for d in dist_for_each_plane
-                    ]
-                    normalized_total_deviation = np.sum(
-                        deviations_from_pref_dist
-                    ) / len(planes)
-
-                    c = self.cost_config.distance_to_object_quadratic
-                    self.quadratic_distance_cost = self.prog.AddQuadraticCost(
-                        c * normalized_total_deviation**2, is_convex=True
-                    )
+                    for plane in planes:
+                        dist = plane.dist_to(p_BP)
+                        deviation_from_pref_dist = (
+                            dist
+                            - self.cost_config.distance_to_object_quadratic_preferred_distance
+                        )
+                        normalized_total_deviation = deviation_from_pref_dist / len(
+                            planes
+                        )
+                        self.quadratic_distance_cost = self.prog.AddQuadraticCost(
+                            c * normalized_total_deviation**2, is_convex=True
+                        )
 
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
@@ -341,11 +340,15 @@ class NonCollisionMode(AbstractContactMode):
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = plane.a.T * self.cost_config.distance_to_object_socp
+                        A[0, :] = (
+                            plane.a.T
+                            * self.cost_config.distance_to_object_socp
+                            / len(planes)
+                        )
                         # b = [b; 1]
                         b = np.ones((NUM_VARS, 1))
                         b[0] = plane.b
-                        b = b * self.cost_config.distance_to_object_socp
+                        b = b * self.cost_config.distance_to_object_socp / len(planes)
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)
