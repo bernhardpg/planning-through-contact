@@ -42,10 +42,10 @@ def get_sugar_box() -> RigidBody:
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
-        keypoint_arc_length=10.0,
+        keypoint_arc_length=5.0,
         linear_arc_length=None,
         angular_arc_length=None,
-        force_regularization=0.01,
+        force_regularization=1.0,
         keypoint_velocity_regularization=None,
         ang_velocity_regularization=10.0,
         lin_velocity_regularization=2.0,
@@ -60,7 +60,7 @@ def get_default_non_collision_cost() -> NonCollisionCost:
         # distance_to_object_quadratic=0.15,
         # distance_to_object_quadratic_preferred_distance=0.075,
         # distance_to_object_socp=None,
-        distance_to_object_socp=0.00003,  # this sometimes cause numerical problems
+        distance_to_object_socp=0.00006,  # this sometimes cause numerical problems
         pusher_velocity_regularization=0.002,
         pusher_arc_length=0.004,
     )
