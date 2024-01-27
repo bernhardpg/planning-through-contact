@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -560,7 +560,8 @@ def make_traj_figure(
     show_workspace: bool = False,
     start_end_legend: bool = False,
     plot_forces: bool = True,
-    slider_color: Optional = None,
+    slider_color: Optional[Any] = None,
+    split_on_mode_type: bool = False,
 ) -> None:
     # We need to add the first vertex again to close the polytope
     vertices = np.hstack(
@@ -584,20 +585,39 @@ def make_traj_figure(
     START_TRANSPARENCY = 1.0
 
     segment_groups = []
-    idx = 0
-    while idx < len(traj.path_knot_points):
-        group = []
-        no_face_contact = True
-        while no_face_contact and idx < len(traj.path_knot_points):
-            curr_segment = traj.traj_segments[idx]
-            curr_knot_points = traj.path_knot_points[idx]
-            group.append((curr_segment, curr_knot_points))
-            idx += 1
+    if split_on_mode_type:
+        prev_mode = traj.path_knot_points[0]
+        idx = 0
+        while idx < len(traj.path_knot_points):
+            group = []
+            new_mode_type = False
+            while not new_mode_type and idx < len(traj.path_knot_points):
+                curr_segment = traj.traj_segments[idx]
+                curr_knot_points = traj.path_knot_points[idx]
 
-            if isinstance(curr_knot_points, FaceContactVariables):
-                no_face_contact = False
+                if not isinstance(curr_knot_points, type(prev_mode)):
+                    new_mode_type = True
+                    prev_mode = curr_knot_points
+                else:
+                    group.append((curr_segment, curr_knot_points))
+                    idx += 1
 
-        segment_groups.append(group)
+            segment_groups.append(group)
+    else:
+        idx = 0
+        while idx < len(traj.path_knot_points):
+            group = []
+            no_face_contact = True
+            while no_face_contact and idx < len(traj.path_knot_points):
+                curr_segment = traj.traj_segments[idx]
+                curr_knot_points = traj.path_knot_points[idx]
+                group.append((curr_segment, curr_knot_points))
+                idx += 1
+
+                if isinstance(curr_knot_points, FaceContactVariables):
+                    no_face_contact = False
+
+            segment_groups.append(group)
 
     fig_height = 5
     fig, axs = plt.subplots(
