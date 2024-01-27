@@ -678,10 +678,6 @@ def make_traj_figure(
                 # (this is to avoid plotting multiple frames on top of each other)
                 if idx + 1 < knot_points.num_knot_points:
                     next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[:2, :2]  # 2x2 matrix
-
-                    # This is to get the knot point value which can have determinant < 1
-                    next_R_WB = traj_segment.R_WB.Rs[idx + 1]
-
                     next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
                     next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
                 else:

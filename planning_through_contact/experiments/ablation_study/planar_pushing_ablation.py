@@ -1,3 +1,5 @@
+import fnmatch
+import os
 import pickle
 import time
 from dataclasses import dataclass, fields
@@ -27,6 +29,15 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_start_and_goal,
 )
+
+
+def _find_files(directory, pattern):
+    matches = []
+    for root, dirs, files in os.walk(directory):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                matches.append(os.path.join(root, name))
+    return matches
 
 
 @dataclass
@@ -141,6 +152,33 @@ class AblationStudy:
             for res in self.results
         ]
 
+    @property
+    def num_success(self) -> int:
+        return len([r for r in self.results if r.sdp_is_success])
+
+    @property
+    def num_not_success(self) -> int:
+        return len(self) - self.num_success
+
+    @property
+    def num_rounded_success(self) -> int:
+        return len([r for r in self.results if r.rounded_is_success])
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    @property
+    def num_rounded_not_success(self) -> int:
+        return len(self) - self.num_rounded_success
+
+    @property
+    def percentage_success(self) -> float:
+        return (self.num_success / len(self)) * 100
+
+    @property
+    def percentage_rounded_success(self) -> float:
+        return (self.num_rounded_success / len(self)) * 100
+
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
             pickle.dump(self.results, file)
@@ -150,6 +188,13 @@ class AblationStudy:
         with open(Path(filename), "rb") as file:
             results = pickle.load(file)
         return cls(results)
+
+    @classmethod
+    def load_from_folder(cls, folder_name: str) -> "AblationStudy":
+        data_files = _find_files(folder_name, pattern="solve_data.pkl")
+
+        results = [SingleRunResult.load(filename) for filename in data_files]
+        return AblationStudy(results)
 
 
 def do_one_run_get_path(

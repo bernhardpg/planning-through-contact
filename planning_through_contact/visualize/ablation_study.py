@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,20 +40,17 @@ def visualize_ablation_as_histogram(study: AblationStudy) -> None:
     plt.show()
 
 
-def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
-    study = studies[0]
-    color = "blue"
+def visualize_multiple_ablation_studies(
+    studies: List[AblationStudy], colors: Optional[List] = None
+) -> None:
+    # Colors for each subplot
+    if colors is None:
+        colors = ["red", "blue", "green", "purple", "orange"]
 
     # Creating a 1x2 subplot
     fig = plt.figure(figsize=(10, 5))
 
     ax1 = fig.add_subplot(121)
-    scatter1 = ax1.scatter(
-        study.thetas,
-        study.optimality_gaps,
-        alpha=0.7,
-        c=color,
-    )
     ax1.set_xlabel("Rotation [rad]")
     ax1.set_ylabel("Optimality gap [%]")
     ax1.set_ylim((0, 110))
@@ -68,12 +65,6 @@ def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
     ax1.set_title("Rounding")
 
     ax2 = fig.add_subplot(122)
-    scatter2 = ax2.scatter(
-        study.thetas,
-        study.sdp_optimality_gaps,
-        alpha=0.7,
-        c=color,
-    )
     ax2.set_xlabel("Rotation [rad]")
     ax2.set_ylabel("Optimality gap [%]")
     ax2.set_ylim((0, 110))
@@ -86,6 +77,23 @@ def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
         color=GRAY.diffuse(),
     )
     ax2.set_title("SDP relaxation")
+
+    for idx, study in enumerate(studies):
+        color = colors[idx]
+
+        scatter1 = ax1.scatter(
+            study.thetas,
+            study.optimality_percentages,
+            alpha=0.7,
+            c=color,
+        )
+
+        scatter2 = ax2.scatter(
+            study.thetas,
+            study.sdp_optimality_percentages,
+            alpha=0.7,
+            c=color,
+        )
 
     fig.tight_layout()
 
