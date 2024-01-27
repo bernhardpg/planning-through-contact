@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -41,63 +42,130 @@ def visualize_ablation_as_histogram(study: AblationStudy) -> None:
 
 
 def visualize_multiple_ablation_studies(
-    studies: List[AblationStudy], colors: Optional[List] = None
+    studies: List[AblationStudy],
+    colors: Optional[List] = None,
+    legends: Optional[List[str]] = None,
+    show_sdp_and_rounded: bool = False,
+    filename: Optional[str] = None,
 ) -> None:
     # Colors for each subplot
     if colors is None:
         colors = ["red", "blue", "green", "purple", "orange"]
 
-    # Creating a 1x2 subplot
-    fig = plt.figure(figsize=(10, 5))
+    if show_sdp_and_rounded:
+        # Creating a 1x2 subplot
+        fig = plt.figure(figsize=(10, 5))
 
-    ax1 = fig.add_subplot(121)
-    ax1.set_xlabel("Rotation [rad]")
-    ax1.set_ylabel("Optimality gap [%]")
-    ax1.set_ylim((0, 110))
-    ax1.set_xlim((-np.pi, np.pi))
-    ax1.hlines(
-        [100],
-        xmin=-np.pi,
-        xmax=np.pi,
-        linestyles="--",
-        color=GRAY.diffuse(),
-    )
-    ax1.set_title("Rounding")
+        ax1 = fig.add_subplot(121)
+        ax1.set_xlabel("Rotation [rad]")
+        ax1.set_ylabel("Optimality gap [%]")
+        ax1.set_ylim((0, 110))
+        ax1.set_xlim((-np.pi, np.pi))
+        ax1.hlines(
+            [100],
+            xmin=-np.pi,
+            xmax=np.pi,
+            linestyles="--",
+            color=GRAY.diffuse(),
+        )
+        ax1.set_title("Rounding")
 
-    ax2 = fig.add_subplot(122)
-    ax2.set_xlabel("Rotation [rad]")
-    ax2.set_ylabel("Optimality gap [%]")
-    ax2.set_ylim((0, 110))
-    ax2.set_xlim((-np.pi, np.pi))
-    ax2.hlines(
-        [100],
-        xmin=-np.pi,
-        xmax=np.pi,
-        linestyles="--",
-        color=GRAY.diffuse(),
-    )
-    ax2.set_title("SDP relaxation")
+        ax2 = fig.add_subplot(122)
+        ax2.set_xlabel("Rotation [rad]")
+        ax2.set_ylabel("Optimality gap [%]")
+        ax2.set_ylim((0, 110))
+        ax2.set_xlim((-np.pi, np.pi))
+        ax2.hlines(
+            [100],
+            xmin=-np.pi,
+            xmax=np.pi,
+            linestyles="--",
+            color=GRAY.diffuse(),
+        )
+        ax2.set_title("SDP relaxation")
 
-    for idx, study in enumerate(studies):
-        color = colors[idx]
+        for idx, study in enumerate(studies):
+            color = colors[idx]
 
-        scatter1 = ax1.scatter(
-            study.thetas,
-            study.optimality_percentages,
-            alpha=0.7,
-            c=color,
+            ax1.scatter(
+                study.thetas,
+                study.optimality_percentages,
+                alpha=0.7,
+                c=color,
+            )
+
+            ax2.scatter(
+                study.thetas,
+                study.sdp_optimality_percentages,
+                alpha=0.7,
+                c=color,
+            )
+
+    else:  # only show rounded
+        fig = plt.figure(figsize=(10, 3))
+
+        ax1 = fig.add_subplot(111)
+        ax1.set_xlabel("Total trajectory rotation [rad]")
+        ax1.set_ylabel("Optimality [%]")
+        ax1.set_ylim((-10, 100))
+        ax1.set_xlim((0, np.pi))
+        ax1.hlines(
+            [0],
+            xmin=0,
+            xmax=np.pi,
+            linestyles="--",
+            color=GRAY.diffuse(),
         )
 
-        scatter2 = ax2.scatter(
-            study.thetas,
-            study.sdp_optimality_percentages,
-            alpha=0.7,
-            c=color,
-        )
+        for idx, study in enumerate(studies):
+            theta_success = [
+                th
+                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                if is_success
+            ]
+            optimality_gaps_success = [
+                gap
+                for gap, is_success in zip(
+                    study.optimality_gaps, study.rounded_is_success
+                )
+                if is_success
+            ]
+            color = colors[idx]
+
+            ax1.scatter(
+                np.abs(theta_success),
+                optimality_gaps_success,
+                alpha=0.7,
+                c=color,
+            )
+            theta_not_success = [
+                th
+                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                if not is_success
+            ]
+            ax1.scatter(
+                theta_not_success,
+                -10 * np.ones(len(theta_not_success)),
+                alpha=0.7,
+                c=color,
+                marker="x",
+            )
+
+    # Create a list of patches to use as legend handles
+    if legends is not None:
+        custom_patches = [
+            mpatches.Patch(color=color, label=label)
+            for label, color in zip(legends, colors)
+        ]
+        # Creating the custom legend
+        plt.legend(handles=custom_patches)
 
     fig.tight_layout()
 
-    plt.show()
+    if filename:
+        fig.savefig(filename + f"_ablation.pdf")  # type: ignore
+    else:
+        plt.show()
 
 
 def visualize_ablation_optimality_percentages(study: AblationStudy) -> None:

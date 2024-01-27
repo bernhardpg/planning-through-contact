@@ -130,9 +130,21 @@ class AblationStudy:
 
     @property
     def optimality_gaps(self) -> List[float]:
-        return [
-            res.optimality_gap if res.rounded_is_success else 0 for res in self.results
-        ]
+        return [res.optimality_gap for res in self.results]
+
+    @property
+    def mean_optimality_gap(self) -> List[float]:
+        return np.mean(
+            [res.optimality_gap for res in self.results if res.rounded_is_success]
+        )
+
+    @property
+    def rounded_is_success(self) -> List[float]:
+        return [res.rounded_is_success for res in self.results]
+
+    @property
+    def sdp_is_success(self) -> List[float]:
+        return [res.sdp_is_success for res in self.results]
 
     @property
     def optimality_percentages(self) -> List[float]:
@@ -148,7 +160,7 @@ class AblationStudy:
     @property
     def sdp_optimality_percentages(self) -> List[float]:
         return [
-            res.sdp_optimality_percentage if res.rounded_is_success else 0
+            res.sdp_optimality_percentage if res.sdp_is_success else 0
             for res in self.results
         ]
 

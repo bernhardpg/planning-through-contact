@@ -672,7 +672,10 @@ def make_traj_figure(
                 p_WP = traj_segment.get_p_WP(ts[idx])
 
                 # This is to get the knot point value which can have determinant < 1
-                R_WB = traj_segment.R_WB.Rs[idx]
+                if len(traj_segment.R_WB.Rs) > 1:
+                    R_WB = traj_segment.R_WB.Rs[idx]
+                else:
+                    R_WB = traj_segment.R_WB.Rs[0]
 
                 # We only plot the current frame if it will change next frame
                 # (this is to avoid plotting multiple frames on top of each other)
