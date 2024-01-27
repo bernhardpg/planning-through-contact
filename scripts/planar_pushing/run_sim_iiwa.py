@@ -1,4 +1,5 @@
 import logging
+from typing import List, Optional
 
 import numpy as np
 from pydrake.all import (
@@ -73,10 +74,12 @@ def run_sim(
         horizon=35,
         num_sliding_steps=1,
         rate_Hz=50,
-        Q=np.diag([3, 3, 1, 0]) * 100,
+        Q=np.diag([3, 3, 0.1, 0]) * 100,
         Q_N=np.diag([3, 3, 1, 0]) * 2000,
-        R=np.diag([1, 1, 0]) * 0.5,
-        u_max_magnitude=[0.4, 0.4, 0.2],
+        R=np.diag([1, 1, 0.1]) * 0.5,
+        u_max_magnitude=[4, 4, 2],
+        lam_max=0.8,
+        lam_min=0.2,
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
@@ -90,7 +93,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=True,
-        delay_before_execution=6,
+        delay_before_execution=4,
         closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
@@ -151,14 +154,16 @@ def run_sim(
         state_estimator_meshcat=state_estimator_meshcat,
     )
     recording_name = (
-        plan.split(".")[0] + f"_cl{sim_config.closed_loop}" + ".html"
+        plan.split(".")[0]
+        + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}"
+        + ".html"
         if save_recording
         else None
     )
     # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(
         traj.end_time + sim_config.delay_before_execution + 0.5,
-        save_recording_as=recording_name,
+        recording_file=recording_name,
     )
     # environment.simulate(
     #     sim_config.delay_before_execution+0.5,
@@ -182,20 +187,28 @@ def run_sim(
 
 
 def run_multiple(
-    start: int,
-    end: int,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    incl: Optional[List[int]] = None,
     station_meshcat=None,
     state_estimator_meshcat=None,
-    run_non_rounded=False,
+    run_rounded=True,
+    run_relaxed=False,
 ):
-    plans = [
-        f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl"
-        for i in range(start, end + 1)
-    ]
-    if run_non_rounded:
+    if incl is not None:
+        plan_indices = incl
+    else:
+        plan_indices = list(range(start, end + 1))
+    plans = []
+    if run_rounded:
+        plans = [
+            f"trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_{i}/trajectory/traj_rounded.pkl"
+            for i in plan_indices
+        ]
+    if run_relaxed:
         plans += [
-            f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl"
-            for i in range(start, end + 1)
+            f"trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_{i}/trajectory/traj_relaxed.pkl"
+            for i in plan_indices
         ]
     print(f"Running {len(plans)} plans\n{plans}")
     for plan in plans:
@@ -217,13 +230,14 @@ if __name__ == "__main__":
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
     # run_multiple(
-    #     0,
-    #     9,
+    #     incl=[1,2,5,7,8,9,10,13,14,16],
+    #     run_rounded=False,
+    #     run_relaxed=True,
     #     station_meshcat=station_meshcat,
     #     state_estimator_meshcat=state_estimator_meshcat,
     # )
     run_sim(
-        plan="trajectories/tee_pushing_demos/hw_demo_C_6_rounded.pkl",
+        plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_9/trajectory/traj_rounded.pkl",
         # plan="trajectories/box_pushing_demos/hw_demo_C_3_rounded.pkl",
         save_recording=True,
         debug=True,

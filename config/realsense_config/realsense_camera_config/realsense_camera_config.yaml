@@ -1,0 +1,5 @@
+_target_: planning_through_contact.simulation.sensors.realsense_camera_config.RealsenseCameraConfig
+
+width: 640
+height: 480
+fps: 30

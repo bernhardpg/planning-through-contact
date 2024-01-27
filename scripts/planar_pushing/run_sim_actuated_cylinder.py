@@ -112,7 +112,7 @@ def run_sim(
         else None
     )
     # environment.export_diagram("environment_diagram.pdf")
-    environment.simulate(traj.end_time + 0.5, save_recording_as=recording_name)
+    environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
 
     if debug and isinstance(position_source, MPCPositionSource):

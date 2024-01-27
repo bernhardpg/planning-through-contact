@@ -87,7 +87,7 @@ class IiwaHardwareStation(RobotSystemBase):
 
         # Iiwa Planer
         # Delay between starting the simulation and the iiwa starting to go to the home position
-        INITIAL_DELAY = 1.0
+        INITIAL_DELAY = 0.5
         # Delay between the iiwa reaching the home position and the pusher starting to follow the planned pushing trajectory
         WAIT_PUSH_DELAY = 1.0
         assert sim_config.delay_before_execution > INITIAL_DELAY + WAIT_PUSH_DELAY
@@ -114,7 +114,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # True velocity limits for the IIWA14
         # (in rad, rounded down to the first decimal)
         IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 0.45
+        velocity_limit_factor = 0.4
         ik_params.set_joint_velocity_limits(
             (
                 -velocity_limit_factor * IIWA14_VELOCITY_LIMITS,

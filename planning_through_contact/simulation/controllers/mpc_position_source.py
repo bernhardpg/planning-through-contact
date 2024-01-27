@@ -85,7 +85,7 @@ class MPCPositionSource(DesiredPlanarPositionSourceBase):
         )
 
         builder.Connect(
-            self._pusher_pose_controller.get_output_port(),
+            self._pusher_pose_controller.GetOutputPort("translation"),
             self._zero_order_hold.get_input_port(),
         )
 
@@ -136,6 +136,16 @@ class MPCPositionSource(DesiredPlanarPositionSourceBase):
         builder.ExportOutput(
             self._planar_pose_pub.GetOutputPort("desired_slider_planar_pose_vector"),
             "desired_slider_planar_pose_vector",
+        )
+
+        # For logging only
+        builder.ExportOutput(
+            self._pusher_pose_controller.GetOutputPort("mpc_control"),
+            "mpc_control",
+        )
+        builder.ExportOutput(
+            self._pusher_pose_controller.GetOutputPort("mpc_control_desired"),
+            "mpc_control_desired",
         )
 
         builder.BuildInto(self)

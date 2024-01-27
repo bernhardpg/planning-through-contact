@@ -1,0 +1,10 @@
+_target_: planning_through_contact.simulation.sensors.optitrack_config.OptitrackConfig
+
+iiwa_id: 4
+slider_id: 10
+p_W_pB: [0.3, -0.04285714, 0.019528]
+# Rotation defined in terms of RPY
+R_W_oB: [0.0014019521180919092,
+         0.0017132056231440778,
+         2.5206443933848894]
+p_W_oB: [0.30213178, -0.05107934, 0.02950026]
