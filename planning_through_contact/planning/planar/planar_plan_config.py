@@ -167,7 +167,7 @@ class ContactCostType(Enum):
 
 @dataclass
 class ContactCost:
-    cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    cost_type: ContactCostType = ContactCostType.STANDARD
     keypoint_arc_length: Optional[float] = None
     linear_arc_length: Optional[float] = None
     angular_arc_length: Optional[float] = None
@@ -178,8 +178,8 @@ class ContactCost:
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
     # TODO(bernhardpg): Remove these terms
-    lin_displacements: Optional[float] = 1.0
-    ang_displacements: Optional[float] = 1.0
+    lin_displacements: Optional[float] = None
+    ang_displacements: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:

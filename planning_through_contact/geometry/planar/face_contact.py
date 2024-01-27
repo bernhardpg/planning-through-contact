@@ -600,12 +600,20 @@ class FaceContactMode(AbstractContactMode):
             if cost_config.force_regularization is not None:
                 for k, c_n in enumerate(self.variables.normal_forces):
                     self.prog_wrapper.add_quadratic_cost(
-                        k, k, cost_config.force_regularization * c_n**2
+                        k,
+                        k,
+                        cost_config.force_regularization
+                        * c_n**2
+                        * self.dynamics_config.force_scale**2,
                     )
 
                 for k, c_f in enumerate(self.variables.friction_forces):
                     self.prog_wrapper.add_quadratic_cost(
-                        k, k, cost_config.force_regularization * c_f**2
+                        k,
+                        k,
+                        cost_config.force_regularization
+                        * c_f**2
+                        * self.dynamics_config.force_scale**2,
                     )
 
             # Keypoint velocity regularization
