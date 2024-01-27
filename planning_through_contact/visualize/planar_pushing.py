@@ -43,6 +43,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.visualize.colors import (
     BLACK,
+    CADMIUMORANGE,
     COLORS,
     CRIMSON,
     DARKORCHID2,
@@ -556,6 +557,10 @@ def make_traj_figure(
     filename: Optional[str] = None,
     plot_lims: Optional[Tuple[float, float, float, float]] = (0.3, 0.85, -0.35, 0.35),
     plot_knot_points: bool = True,
+    show_workspace: bool = False,
+    start_end_legend: bool = False,
+    plot_forces: bool = True,
+    slider_color: Optional = None,
 ) -> None:
     # We need to add the first vertex again to close the polytope
     vertices = np.hstack(
@@ -564,8 +569,12 @@ def make_traj_figure(
 
     get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
 
-    SLIDER_COLOR = COLORS["aquamarine4"].diffuse()
+    if slider_color is None:
+        slider_color = COLORS["aquamarine4"].diffuse()
+
     PUSHER_COLOR = COLORS["firebrick3"].diffuse()
+    # PUSHER_COLOR = CADMIUMORANGE.diffuse()
+
     LINE_COLOR = BLACK.diffuse()
 
     GOAL_COLOR = EMERALDGREEN.diffuse()
@@ -636,17 +645,18 @@ def make_traj_figure(
             + start_transparency
         )
 
-        # Plot workspace
-        ws_rect = plt.Rectangle(
-            (0.4, -0.25),
-            0.35,
-            0.5,
-            linewidth=1,
-            edgecolor="grey",
-            facecolor="none",
-            linestyle="--",
-        )
-        ax.add_patch(ws_rect)
+        if show_workspace:
+            # Plot workspace
+            ws_rect = plt.Rectangle(
+                (0.4, -0.25),
+                0.35,
+                0.5,
+                linewidth=1,
+                edgecolor="grey",
+                facecolor="none",
+                linestyle="--",
+            )
+            ax.add_patch(ws_rect)
 
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
             ts = np.linspace(
@@ -658,12 +668,20 @@ def make_traj_figure(
             for idx in range(knot_points.num_knot_points):
                 R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
                 p_WB = traj_segment.get_p_WB(ts[idx])
+
                 p_WP = traj_segment.get_p_WP(ts[idx])
+
+                # This is to get the knot point value which can have determinant < 1
+                R_WB = traj_segment.R_WB.Rs[idx]
 
                 # We only plot the current frame if it will change next frame
                 # (this is to avoid plotting multiple frames on top of each other)
                 if idx + 1 < knot_points.num_knot_points:
                     next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[:2, :2]  # 2x2 matrix
+
+                    # This is to get the knot point value which can have determinant < 1
+                    next_R_WB = traj_segment.R_WB.Rs[idx + 1]
+
                     next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
                     next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
                 else:
@@ -694,36 +712,37 @@ def make_traj_figure(
                         vertices_W[0, :],
                         vertices_W[1, :],
                         alpha=fill_transparency,
-                        color=SLIDER_COLOR,
+                        color=slider_color,
                     )
 
                 # Plot pusher
                 if np.any(next_p_WP != p_WP) or element_idx == len(segment_group) - 1:
                     ax.add_patch(make_circle(p_WP, fill_transparency))
 
-                # Plot forces
-                FORCE_SCALE = 1.0
-                # only N-1 inputs
-                if (idx < knot_points.num_knot_points - 1) and (
-                    isinstance(knot_points, FaceContactVariables)
-                ):
-                    f_W = traj_segment.get_f_W(ts[idx]).flatten()
-                    p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
-                    ax.arrow(
-                        p_Wc[0],
-                        p_Wc[1],
-                        f_W[0],
-                        f_W[1],
-                        color=LINE_COLOR,
-                        fill=True,
-                        zorder=99999,
-                        alpha=line_transparency,
-                        joinstyle="round",
-                        linewidth=0.0,
-                        width=0.008,
-                    )
+                if plot_forces:
+                    # Plot forces
+                    FORCE_SCALE = 0.5
+                    # only N-1 inputs
+                    if (idx < knot_points.num_knot_points - 1) and (
+                        isinstance(knot_points, FaceContactVariables)
+                    ):
+                        f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+                        p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
+                        ax.arrow(
+                            p_Wc[0],
+                            p_Wc[1],
+                            f_W[0],
+                            f_W[1],
+                            color=LINE_COLOR,
+                            fill=True,
+                            zorder=99999,
+                            alpha=line_transparency,
+                            joinstyle="round",
+                            linewidth=0.0,
+                            width=0.008,
+                        )
 
-                frame_count += 1
+                    frame_count += 1
 
         if not plot_knot_points:
             raise NotImplementedError(
@@ -781,6 +800,15 @@ def make_traj_figure(
                 linestyle="--",
             )
             ax.add_patch(circle)
+
+        if start_end_legend:
+            # Create a list of patches to use as legend handles
+            custom_patches = [
+                mpatches.Patch(color=color, label=label)
+                for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
+            ]
+            # Creating the custom legend
+            plt.legend(handles=custom_patches)
 
     fig.tight_layout()
     if filename:

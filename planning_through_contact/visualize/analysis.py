@@ -17,6 +17,7 @@ from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
+from planning_through_contact.geometry.planar.abstract_mode import GcsVertex
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -772,6 +773,8 @@ def plot_constraint_violation_for_trajs(
     filename: Optional[str] = None,
     legends: Optional[List[str]] = None,
     bar_titles: Optional[List[str]] = None,
+    min_y_ax: Optional[float] = None,
+    colors: Optional[List[str]] = None,
 ) -> None:
     # Preparing the plot
     num_groups = len(violations[0])
@@ -780,7 +783,8 @@ def plot_constraint_violation_for_trajs(
     max_bars = len(violations)
 
     # Colors for each subplot
-    colors = ["red", "blue", "green", "purple", "orange"]
+    if colors is None:
+        colors = ["red", "blue", "green", "purple", "orange"]
 
     data = {name: [violation[name] for violation in violations] for name in group_names}
 
@@ -796,6 +800,10 @@ def plot_constraint_violation_for_trajs(
 
         # Remove x-axis ticks
         axs[i].set_xticks([])
+
+        if min_y_ax is not None:
+            min_y = max(max(values) * 1.3, min_y_ax)
+            axs[i].set_ylim(0, min_y)
 
         if bar_titles is not None:
             axs[i].set_title(f"{bar_titles[i]}")
@@ -815,9 +823,60 @@ def plot_constraint_violation_for_trajs(
         plt.legend(handles=custom_patches)
 
     if filename is not None:
-        fig.savefig(filename + "_constraints.png")  # type: ignore
+        fig.savefig(filename + "_constraints.pdf")  # type: ignore
     else:
         plt.show()
+
+
+def get_constraint_violation_for_face_mode(
+    mode: FaceContactMode,
+    result: MathematicalProgramResult,
+    compute_mean: bool = False,
+    keys_to_merge: Optional[List[Tuple[str, str]]] = None,
+) -> Dict[str, List]:
+    keys = mode.constraints.keys()
+    constraint_violations = {key: [] for key in keys}
+    for key in keys:
+        for constraints in mode.constraints[key]:
+            if not isinstance(constraints, type(np.array([]))):  # only one constraint
+                constraint_violations[key].append(
+                    mode.eval_binding(constraints, result)
+                )
+            else:
+                constraint_violations[key].append(
+                    [
+                        mode.eval_binding(constraint, result)
+                        for constraint in constraints
+                    ]
+                )
+
+    # NOTE: This is super hacky
+    for key, item in constraint_violations.items():
+        temp = np.array(item)  # type: ignore
+        constraint_violations[key] = np.abs(temp)  # type: ignore
+
+    if compute_mean:
+        # NOTE: This is super hacky
+        for key, item in constraint_violations.items():
+            constraint_violations[key] = np.mean(item)  # type: ignore
+
+    if keys_to_merge is not None:
+        all_keys_to_merge = [key for key_pair in keys_to_merge for key in key_pair]
+        new_constraint_violations = {
+            key: value
+            for key, value in constraint_violations.items()
+            if key not in all_keys_to_merge
+        }
+        for key_1, key_2 in keys_to_merge:
+            key = key_1  # NOTE: we just pick key 1
+            value = np.mean(
+                (constraint_violations[key_1], constraint_violations[key_2])
+            )
+            new_constraint_violations[key] = value  # type: ignore
+
+            return new_constraint_violations
+
+    return constraint_violations
 
 
 def _get_constraint_violation(
@@ -997,10 +1056,12 @@ def analyze_mode_result(
     traj: PlanarPushingTrajectory,
     result: MathematicalProgramResult,
     rank_analysis: bool = True,
+    filename: Optional[str] = None,
 ) -> None:
     if rank_analysis:
         Xs = mode.get_Xs()
 
+        fig = plt.figure()
         if len(Xs) == 1:
             X_sol = result.GetSolution(Xs[0])
 
@@ -1011,7 +1072,6 @@ def analyze_mode_result(
             plt.xlabel("Index of Eigenvalue")
             plt.ylabel("Norm of Eigenvalue")
             plt.title("Norms of the Eigenvalues of the Matrix")
-            plt.show()
         else:
             X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
 
@@ -1030,27 +1090,13 @@ def analyze_mode_result(
             plt.xlabel("Index of Eigenvalue")
             plt.ylabel("Norm of Eigenvalue")
             plt.title("Norms of the Eigenvalues of the Matrix")
+
+        if filename is not None:
+            fig.savefig(filename + "_eigvals.png")  # type: ignore
+        else:
             plt.show()
 
-    keys = mode.constraints.keys()
-    constraint_violations = {key: [] for key in keys}
-    for key in keys:
-        for constraints in mode.constraints[key]:
-            if not isinstance(constraints, type(np.array([]))):  # only one constraint
-                constraint_violations[key].append(
-                    mode.eval_binding(constraints, result)
-                )
-            else:
-                constraint_violations[key].append(
-                    [
-                        mode.eval_binding(constraint, result)
-                        for constraint in constraints
-                    ]
-                )
-
-    # NOTE: This is super hacky
-    for key, item in constraint_violations.items():
-        constraint_violations[key] = np.array(item)
+    constraint_violations = get_constraint_violation_for_face_mode(mode, result)
 
     ref_vals = {
         "SO2": 1,
@@ -1060,9 +1106,9 @@ def analyze_mode_result(
     }
     if traj.path_knot_points[0].theta_dots is not None:
         ref_vals["exponential_map"] = np.mean(traj.path_knot_points[0].theta_dots)
-    plot_constraint_violation(constraint_violations, ref_vals)
+    plot_constraint_violation(constraint_violations, ref_vals, filename=filename)
 
     # (num_knot_points, 2): first col cosines, second col sines
 
     rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])
-    plot_cos_sine_trajs(rs)
+    plot_cos_sine_trajs(rs, filename=filename)
