@@ -10,6 +10,36 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
 from planning_through_contact.visualize.colors import GRAY, GRAY1
 
 
+def visualize_ablation_as_histogram(study: AblationStudy) -> None:
+    color = "blue"
+
+    # Creating a 1x2 subplot
+    fig = plt.figure(figsize=(10, 5))
+
+    print(f"Mean optimality gap: {np.mean(study.optimality_gaps)}%")
+    print(f"Mean SDP optimality gap: {np.nanmean(study.sdp_optimality_gaps)}%")
+
+    ax1 = fig.add_subplot(121)
+    ax1.hist(study.optimality_gaps, bins=40, color="blue", edgecolor="black")
+    ax1.set_ylim(0, 100)
+    ax1.set_xlim(0, 30)
+    ax1.set_ylabel("Problem instances [%]")
+    ax1.set_xlabel("Optimality gap [%]")
+    ax1.set_title("Rounding")
+
+    ax2 = fig.add_subplot(122)
+    ax2.hist(study.sdp_optimality_gaps, bins=40, color="blue", edgecolor="black")
+    ax2.set_ylim(0, 100)
+    ax2.set_xlim(0, 30)
+    ax2.set_ylabel("Problem instances [%]")
+    ax2.set_xlabel("Optimality gap [%]")
+    ax2.set_title("SDP Relaxation")
+
+    fig.tight_layout()
+
+    plt.show()
+
+
 def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
     study = studies[0]
     color = "blue"
@@ -17,18 +47,12 @@ def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
     # Creating a 1x2 subplot
     fig = plt.figure(figsize=(10, 5))
 
-    det_min = min(
-        min(study.rounded_mean_determinants), min(study.relaxed_mean_determinants)
-    )
-
     ax1 = fig.add_subplot(121)
     scatter1 = ax1.scatter(
         study.thetas,
         study.optimality_gaps,
         alpha=0.7,
         c=color,
-        vmin=det_min,
-        vmax=1.0,
     )
     ax1.set_xlabel("Rotation [rad]")
     ax1.set_ylabel("Optimality gap [%]")
@@ -49,8 +73,6 @@ def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
         study.sdp_optimality_gaps,
         alpha=0.7,
         c=color,
-        vmin=det_min,
-        vmax=1.0,
     )
     ax2.set_xlabel("Rotation [rad]")
     ax2.set_ylabel("Optimality gap [%]")
@@ -70,7 +92,7 @@ def visualize_multiple_ablation_studies(studies: List[AblationStudy]) -> None:
     plt.show()
 
 
-def visualize_ablation_optimality_gaps(study: AblationStudy) -> None:
+def visualize_ablation_optimality_percentages(study: AblationStudy) -> None:
     # Creating a 1x2 subplot
     fig = plt.figure(figsize=(10, 5))
 
@@ -81,7 +103,7 @@ def visualize_ablation_optimality_gaps(study: AblationStudy) -> None:
     ax1 = fig.add_subplot(121)
     scatter1 = ax1.scatter(
         study.thetas,
-        study.optimality_gaps,
+        study.optimality_percentages,
         alpha=0.7,
         c=study.rounded_mean_determinants,
         vmin=det_min,
@@ -103,7 +125,7 @@ def visualize_ablation_optimality_gaps(study: AblationStudy) -> None:
     ax2 = fig.add_subplot(122)
     scatter2 = ax2.scatter(
         study.thetas,
-        study.sdp_optimality_gaps,
+        study.sdp_optimality_percentages,
         alpha=0.7,
         c=study.relaxed_mean_determinants,
         vmin=det_min,

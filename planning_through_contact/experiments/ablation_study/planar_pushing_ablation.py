@@ -47,11 +47,19 @@ class SingleRunResult:
 
     @property
     def optimality_gap(self) -> float:
-        return (self.relaxed_cost / self.rounded_cost) * 100
+        return ((self.rounded_cost - self.relaxed_cost) / self.relaxed_cost) * 100
 
     @property
     def sdp_optimality_gap(self) -> float:
-        return (self.relaxed_cost / self.sdp_cost) * 100
+        return ((self.sdp_cost - self.relaxed_cost) / self.sdp_cost) * 100
+
+    @property
+    def optimality_percentage(self) -> float:
+        return 100 - self.optimality_gap
+
+    @property
+    def sdp_optimality_percentage(self) -> float:
+        return 100 - self.optimality_gap
 
     @property
     def distance(self) -> float:
@@ -116,8 +124,22 @@ class AblationStudy:
         ]
 
     @property
+    def optimality_percentages(self) -> List[float]:
+        return [
+            res.optimality_percentage if res.rounded_is_success else 0
+            for res in self.results
+        ]
+
+    @property
     def sdp_optimality_gaps(self) -> List[float]:
         return [res.sdp_optimality_gap for res in self.results]
+
+    @property
+    def sdp_optimality_percentages(self) -> List[float]:
+        return [
+            res.sdp_optimality_percentage if res.rounded_is_success else 0
+            for res in self.results
+        ]
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
