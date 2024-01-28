@@ -57,48 +57,99 @@ def visualize_multiple_ablation_studies(
         fig = plt.figure(figsize=(10, 5))
 
         ax1 = fig.add_subplot(121)
-        ax1.set_xlabel("Rotation [rad]")
-        ax1.set_ylabel("Optimality gap [%]")
-        ax1.set_ylim((0, 110))
-        ax1.set_xlim((-np.pi, np.pi))
+        ax1.set_xlabel("Total trajectory rotation [rad]")
+        ax1.set_ylabel("Optimality [%]")
+        ax1.set_ylim((-10, 100))
+        ax1.set_title("Rounded")
+        ax1.set_xlim((0, np.pi))
         ax1.hlines(
-            [100],
-            xmin=-np.pi,
+            [0],
+            xmin=0,
             xmax=np.pi,
             linestyles="--",
             color=GRAY.diffuse(),
         )
-        ax1.set_title("Rounding")
 
         ax2 = fig.add_subplot(122)
-        ax2.set_xlabel("Rotation [rad]")
-        ax2.set_ylabel("Optimality gap [%]")
-        ax2.set_ylim((0, 110))
-        ax2.set_xlim((-np.pi, np.pi))
+        ax2.set_xlabel("Total trajectory rotation [rad]")
+        ax2.set_ylabel("Optimality [%]")
+        ax2.set_title("SDP")
+        ax2.set_ylim((-10, 100))
+        ax2.set_xlim((0, np.pi))
         ax2.hlines(
-            [100],
-            xmin=-np.pi,
+            [0],
+            xmin=0,
             xmax=np.pi,
             linestyles="--",
             color=GRAY.diffuse(),
         )
-        ax2.set_title("SDP relaxation")
 
+        # Rounded
         for idx, study in enumerate(studies):
+            theta_success = [
+                th
+                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                if is_success
+            ]
+            optimality_gaps_success = [
+                gap
+                for gap, is_success in zip(
+                    study.optimality_gaps, study.rounded_is_success
+                )
+                if is_success
+            ]
             color = colors[idx]
 
             ax1.scatter(
-                study.thetas,
-                study.optimality_percentages,
+                np.abs(theta_success),
+                optimality_gaps_success,
                 alpha=0.7,
                 c=color,
             )
-
-            ax2.scatter(
-                study.thetas,
-                study.sdp_optimality_percentages,
+            theta_not_success = [
+                th
+                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                if not is_success
+            ]
+            ax1.scatter(
+                theta_not_success,
+                -10 * np.ones(len(theta_not_success)),
                 alpha=0.7,
                 c=color,
+                marker="x",
+            )
+
+        # SDP
+        for idx, study in enumerate(studies):
+            theta_success = [
+                th
+                for th, is_success in zip(study.thetas, study.sdp_is_success)
+                if is_success
+            ]
+            optimality_gaps_success = [
+                gap
+                for gap, is_success in zip(study.optimality_gaps, study.sdp_is_success)
+                if is_success
+            ]
+            color = colors[idx]
+
+            ax2.scatter(
+                np.abs(theta_success),
+                optimality_gaps_success,
+                alpha=0.7,
+                c=color,
+            )
+            theta_not_success = [
+                th
+                for th, is_success in zip(study.thetas, study.sdp_is_success)
+                if not is_success
+            ]
+            ax2.scatter(
+                theta_not_success,
+                -10 * np.ones(len(theta_not_success)),
+                alpha=0.7,
+                c=color,
+                marker="x",
             )
 
     else:  # only show rounded

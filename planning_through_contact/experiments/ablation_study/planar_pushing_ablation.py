@@ -129,6 +129,14 @@ class AblationStudy:
         return [res.distance for res in self.results]
 
     @property
+    def mean_solve_time_sdp(self) -> float:
+        return np.mean([res.sdp_elapsed_time for res in self.results])
+
+    @property
+    def mean_solve_time_rounding(self) -> float:
+        return np.mean([res.rounding_elapsed_time for res in self.results])
+
+    @property
     def optimality_gaps(self) -> List[float]:
         return [res.optimality_gap for res in self.results]
 

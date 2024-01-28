@@ -38,6 +38,7 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     OldPlanarPushingTrajectory,
 )
+from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingStartAndGoal,
 )
