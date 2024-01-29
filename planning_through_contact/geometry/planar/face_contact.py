@@ -668,7 +668,7 @@ class FaceContactMode(AbstractContactMode):
                 self.prog_wrapper.add_quadratic_cost(
                     idx,
                     idx + 1,
-                    cost_config.lin_displacements * term,
+                    cost_config.lin_velocity_regularization * term,
                 )
             # TODO(bernhardpg): Remove
             if self.config.use_approx_exponential_map:
@@ -676,7 +676,7 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k,
-                        cost_config.ang_displacements * th_dot**2,
+                        cost_config.ang_velocity_regularization * th_dot**2,
                     )
             else:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -685,7 +685,7 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k + 1,
-                        cost_config.ang_displacements
+                        cost_config.ang_velocity_regularization
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 

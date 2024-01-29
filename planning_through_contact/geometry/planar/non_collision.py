@@ -317,7 +317,7 @@ class NonCollisionMode(AbstractContactMode):
 
             if self.cost_config.distance_to_object_quadratic is not None:
                 c = self.cost_config.distance_to_object_quadratic
-                for k in range(self.num_knot_points):
+                for k in range(1, self.num_knot_points - 1):
                     # Divide this value by the number of planes so that the cost has the same magnitude for
                     # regions, independently on number of faces
                     p_BP = self.variables.p_BPs[k]
@@ -340,7 +340,7 @@ class NonCollisionMode(AbstractContactMode):
                     self.contact_location.idx
                 )
                 for plane in planes:
-                    for p_BP in self.variables.p_BPs:
+                    for p_BP in self.variables.p_BPs[1:-1]:
                         # A = [a^T; 0]
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
