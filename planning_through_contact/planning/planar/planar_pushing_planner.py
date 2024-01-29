@@ -380,6 +380,12 @@ class PlanarPushingPlanner:
             options.solver_options.SetOption(
                 mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-5
             )
+
+            options.solver_options.SetOption(
+                mosek.solver_id(),
+                "MSK_DPAR_OPTIMIZER_MAX_TIME",
+                300.0,
+            )
         else:  # clarabel
             clarabel = ClarabelSolver()
             options.solver = clarabel
