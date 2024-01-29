@@ -30,9 +30,13 @@ study_folder_9 = "hw_demos_20240128184254_sugar_box"
 study_folder_10 = "hw_demos_20240128204456_sugar_box"
 study_folder_11 = "hw_demos_20240128223337_tee"
 study_folder_12 = "hw_demos_20240129095609_box"
+study_folder_13 = "hw_demos_20240129102356_box"
+study_folder_14 = "hw_demos_20240129103445_box"
+study_folder_15 = "hw_demos_20240129104800_box"
+study_folder_16 = "hw_demos_20240129115732_tee"
 
 # folders = [study_folder_7, study_folder_1]
-folders = [study_folder_12]
+folders = [study_folder_16]
 study_folders = [main_folder + folder for folder in folders]
 studies = [AblationStudy.load_from_folder(folder) for folder in study_folders]
 

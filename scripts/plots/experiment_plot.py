@@ -7,10 +7,24 @@ def time_to_frame_index(time_sec, fps):
     return int(time_sec * fps)
 
 
-video_path = "front_camera.mp4"  # Replace with your video path
+video_paths = [
+    "front_camera_1.mp4",
+    "front_camera_2.mp4",
+    "front_camera_1.mp4",
+    "front_camera_2.mp4",
+    "front_camera_1.mp4",
+]
+# Specify the times (in seconds) at which you want to extract frames
+times_per_video = [
+    [10, 35, 50, 70, 86.5, 95],
+    [10, 29, 32, 53, 57, 79, 84, 92],
+    [10, 35, 50, 70, 86.5, 95],
+    [10, 29, 32, 53, 57, 79, 84, 92],
+    [10, 35, 50, 70, 86.5, 95],
+]
 
 
-def make_frames(video_path):
+def make_frames(video_path, times):
     # Read the video file
     cap = cv2.VideoCapture(video_path)
 
@@ -21,9 +35,6 @@ def make_frames(video_path):
 
     # Get the frame rate of the video
     fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # Specify the times (in seconds) at which you want to extract frames
-    times = [10, 35, 50, 70, 86.5, 95]  # Example times in seconds
 
     # Extract and overlay frames
     frames = []
@@ -60,34 +71,34 @@ def make_frames(video_path):
     return frames
 
 
-frames_1 = make_frames("front_camera.mp4")
-
-frames_per_row = len(frames_1)
+frames_per_video = [
+    make_frames(path, times) for path, times in zip(video_paths, times_per_video)
+]
+frames_per_row = max([len(frame) for frame in frames_per_video])
+num_seqs = len(frames_per_video)
 
 # Create the figure with two rows of subplots
 fig, axes = plt.subplots(
-    1, frames_per_row, figsize=(20, 10)
+    num_seqs, frames_per_row, figsize=(20, 2 * num_seqs)
 )  # Adjust the size as needed
 
-for col, frame in enumerate(frames_1):
-    axes[col].imshow(frame)
-    axes[col].axis("off")
+if num_seqs == 1:
+    frames = frames_per_video[0]
+    for col, frame in enumerate(frames):
+        axes[col].imshow(frame)
+        axes[col].axis("off")
 
-# frames_1 = make_frames("front_camera.mp4")
-# frames_2 = make_frames("front_camera.mp4")
-#
-# frames_per_row = len(frames_1)
-#
-# # Create the figure with two rows of subplots
-# fig, axes = plt.subplots(
-#     2, frames_per_row, figsize=(20, 10)
-# )  # Adjust the size as needed
-#
-# for row, frames in enumerate([frames_1, frames_2]):
-#     for col, frame in enumerate(frames):
-#         axes[row, col].imshow(frame)
-#         axes[row, col].axis("off")
-#
-#
+else:
+    for row, frames in enumerate(frames_per_video):
+        for col, frame in enumerate(frames):
+            axes[row, col].imshow(frame)
+
+        # Make sure to turn of axis for ALL subplots, including
+        # where there is no video frame
+        for col in range(frames_per_row):
+            axes[row, col].axis("off")
+
+# Adjust subplot parameters to remove padding
+plt.subplots_adjust(wspace=0, hspace=1.2)
 plt.tight_layout()
 plt.show()
