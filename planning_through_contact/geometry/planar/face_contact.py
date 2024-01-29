@@ -526,6 +526,11 @@ class FaceContactMode(AbstractContactMode):
         if cost_config.mode_transition_cost is not None:
             self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
 
+        if cost_config.time is not None:
+            self.prog_wrapper.add_independent_cost(
+                cost_config.time * self.config.time_in_contact
+            )
+
         if cost_config.cost_type == ContactCostType.STANDARD:
             # Arc length on keypoint trajectories
             if cost_config.keypoint_arc_length is not None:

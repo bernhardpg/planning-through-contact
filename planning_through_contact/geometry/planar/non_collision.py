@@ -277,6 +277,11 @@ class NonCollisionMode(AbstractContactMode):
 
         self.cost_config = self.config.non_collision_cost
 
+        if self.cost_config.time is not None:
+            self.prog.AddLinearCost(
+                self.cost_config.time * self.config.time_non_collision
+            )
+
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
                 position_diffs = [

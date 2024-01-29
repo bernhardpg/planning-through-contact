@@ -50,7 +50,8 @@ def get_default_contact_cost() -> ContactCost:
         ang_velocity_regularization=10.0,
         lin_velocity_regularization=2.0,
         trace=None,
-        mode_transition_cost=3.0,
+        mode_transition_cost=None,
+        time=0.5,
     )
     return contact_cost
 
@@ -63,6 +64,7 @@ def get_default_non_collision_cost() -> NonCollisionCost:
         distance_to_object_socp=0.00006,  # this sometimes cause numerical problems
         pusher_velocity_regularization=0.002,
         pusher_arc_length=0.004,
+        time=None,
     )
     return non_collision_cost
 

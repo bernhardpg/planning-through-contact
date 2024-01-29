@@ -140,6 +140,7 @@ class NonCollisionCost:
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
     pusher_arc_length: Optional[float] = None
+    time: Optional[float] = None
 
     @property
     def avoid_object(self) -> bool:
@@ -177,14 +178,7 @@ class ContactCost:
     lin_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
-    # TODO(bernhardpg): Remove these terms
-    lin_displacements: Optional[float] = None
-    ang_displacements: Optional[float] = None
-
-    def __post_init__(self) -> None:
-        if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
-            assert self.lin_displacements is not None
-            assert self.ang_displacements is not None
+    time: Optional[float] = None
 
     def __str__(self) -> str:
         field_strings = [
