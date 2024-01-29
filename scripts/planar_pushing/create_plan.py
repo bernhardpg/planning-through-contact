@@ -339,19 +339,22 @@ def create_plan(
                     rounded=True,
                 )
 
-        if slider_type == "box":
-            slider_color = COLORS["deepskyblue4"].diffuse()
-        elif slider_type == "sugar_box":
-            slider_color = COLORS["goldenrod2"].diffuse()
-        elif slider_type == "tee":
-            slider_color = COLORS["aquamarine4"].diffuse()
-        else:
-            raise NotImplementedError(f"Slider type {slider_type} not supported.")
+        # if slider_type == "box":
+        #     slider_color = COLORS["deepskyblue4"].diffuse()
+        # elif slider_type == "sugar_box":
+        #     slider_color = COLORS["goldenrod2"].diffuse()
+        # elif slider_type == "tee":
+        #     slider_color = COLORS["aquamarine4"].diffuse()
+        # else:
+        #     raise NotImplementedError(f"Slider type {slider_type} not supported.")
+
+        slider_color = COLORS["aquamarine4"].diffuse()
 
         make_traj_figure(
             traj_relaxed,
             filename=f"{analysis_folder}/relaxed_traj",
             slider_color=slider_color,
+            split_on_mode_type=True,
         )
         plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
         if traj_rounded is not None:
@@ -359,6 +362,7 @@ def create_plan(
                 traj_rounded,
                 filename=f"{analysis_folder}/rounded_traj",
                 slider_color=slider_color,
+                split_on_mode_type=True,
             )
             plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
 
