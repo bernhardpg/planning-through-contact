@@ -4,9 +4,9 @@ step_size: 0.03
 horizon: 35
 num_sliding_steps: 1
 rate_Hz: 50
-Q: [3, 3, 0.1, 0]
+Q: [3, 3, 0.01, 0]
 Q_scaling: 100
-Q_N: [3, 3, 1, 0]
+Q_N: [3, 3, 0.01, 0]
 Q_N_scaling: 2000
 R: [1, 1, 0.1]
 R_scaling: 0.5

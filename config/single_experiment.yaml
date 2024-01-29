@@ -6,7 +6,7 @@ defaults:
   - hydra: base_hydra
 
 sim_config:
-  use_hardware: False
+  use_hardware: True
   closed_loop: True
 
 trajectory_set_name: "hw_demos_20240125152221_tee_socp"
