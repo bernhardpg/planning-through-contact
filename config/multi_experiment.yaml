@@ -7,11 +7,12 @@ defaults:
 
 sim_config:
   use_hardware: False
-  closed_loop: True
+  closed_loop: False
 
-trajectory_set_name: "hw_demos_20240125152221_tee_socp"
+trajectory_set_name: "hw_demos_20240129115732_tee"
+trajectory_index: 1
 use_rounded: True
-override_duration: 5
+# override_duration: 5
 
 save_experiment_data: True
 
@@ -19,4 +20,7 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      trajectory_index: 9, 10
+      trajectory_index: 0, 1, 2, 3, 9
+      sim_config.closed_loop: False, True
+# 1, 2, 3, 5, 6, 7, 8
+# 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
