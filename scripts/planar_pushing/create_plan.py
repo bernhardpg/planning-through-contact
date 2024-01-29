@@ -47,6 +47,7 @@ from planning_through_contact.visualize.analysis import (
     analyze_mode_result,
     analyze_plan,
 )
+from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar_pushing import (
     compare_trajs,
     make_traj_figure,
@@ -338,10 +339,27 @@ def create_plan(
                     rounded=True,
                 )
 
-        make_traj_figure(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj")
+        if slider_type == "box":
+            slider_color = COLORS["deepskyblue4"].diffuse()
+        elif slider_type == "sugar_box":
+            slider_color = COLORS["goldenrod2"].diffuse()
+        elif slider_type == "tee":
+            slider_color = COLORS["aquamarine4"].diffuse()
+        else:
+            raise NotImplementedError(f"Slider type {slider_type} not supported.")
+
+        make_traj_figure(
+            traj_relaxed,
+            filename=f"{analysis_folder}/relaxed_traj",
+            slider_color=slider_color,
+        )
         plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
         if traj_rounded is not None:
-            make_traj_figure(traj_rounded, filename=f"{analysis_folder}/rounded_traj")
+            make_traj_figure(
+                traj_rounded,
+                filename=f"{analysis_folder}/rounded_traj",
+                slider_color=slider_color,
+            )
             plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
 
         if visualize:

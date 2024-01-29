@@ -22,9 +22,17 @@ study_folder_4 = "hw_demos_20240125152221_tee_socp"
 study_folder_2 = "hw_demos_20240126183148_tee_socp_higher"
 study_folder_5 = "hw_demos_20240127182809_box"
 study_folder_6 = "hw_demos_20240127224039_tee_socp_too_big"
+study_folder_7 = "hw_demos_20240128101451_box_quadratic"
+study_folder_8 = "hw_demos_20240128165501_sugar_box"
 
-# folders = [study_folder_1, study_folder_2, study_folder_3]
-folders = [study_folder_1]
+
+study_folder_9 = "hw_demos_20240128184254_sugar_box"
+study_folder_10 = "hw_demos_20240128204456_sugar_box"
+study_folder_11 = "hw_demos_20240128223337_tee"
+study_folder_12 = "hw_demos_20240129095609_box"
+
+# folders = [study_folder_7, study_folder_1]
+folders = [study_folder_12]
 study_folders = [main_folder + folder for folder in folders]
 studies = [AblationStudy.load_from_folder(folder) for folder in study_folders]
 
@@ -33,20 +41,38 @@ for study in studies:
     print(f"Num trajs: {len(study)}")
     print(f"Success rate: {study.percentage_success}%")
     print(f"Success rate rounding: {study.percentage_rounded_success}%")
-    print(f"Mean optimality gap: {study.mean_optimality_gap}")
-    print(f"Mean solve time SDP: {study.mean_solve_time_sdp}")
-    print(f"Mean solve time rounding: {study.mean_solve_time_rounding}")
+    print(
+        f"Mean optimality gap: {np.mean([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
+    )
+    print(
+        f"Std optimality gap: {np.std([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
+    )
+    print("#####")
+    print(f"Mean solve time SDP: {np.mean(study.solve_times_sdp)}")
+    print(f"Std solve time SDP: {np.std(study.solve_times_sdp)}")
+    print(f"Median solve time SDP: {np.median(study.solve_times_sdp)}")
+    print(f"Max solve time SDP: {np.max(study.solve_times_sdp)}")
+    print(f"Min solve time SDP: {np.min(study.solve_times_sdp)}")
+    print("#####")
+    print(f"Mean solve time rounding: {np.mean(study.solve_times_rounding)}")
+    print(f"Std solve time rounding: {np.std(study.solve_times_rounding)}")
+    print(f"Median solve time rounding: {np.median(study.solve_times_rounding)}")
+    print(f"Max solve time rounding: {np.max(study.solve_times_rounding)}")
+    print(f"Min solve time rounding: {np.min(study.solve_times_rounding)}")
 
 colors = [
-    BROWN2.diffuse(),
-    AQUAMARINE4.diffuse(),
-    DODGERBLUE2.diffuse(),
+    "blue",
+    "green",
+    # BROWN2.diffuse(),
+    # AQUAMARINE4.diffuse(),
+    # DODGERBLUE2.diffuse(),
 ]
 
 visualize_multiple_ablation_studies(
     studies,
     colors=colors,
-    legends=["Box", "Triangle", "Tee"],
+    # legends=["Box", "Triangle", "Tee"],
+    legends=["Box", "Tee"],
     filename="box_triangle_tee",
     show_sdp_and_rounded=True,
 )

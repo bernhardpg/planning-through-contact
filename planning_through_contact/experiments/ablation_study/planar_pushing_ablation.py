@@ -129,22 +129,18 @@ class AblationStudy:
         return [res.distance for res in self.results]
 
     @property
-    def mean_solve_time_sdp(self) -> float:
-        return np.mean([res.sdp_elapsed_time for res in self.results])
+    def solve_times_sdp(self) -> List[float]:
+        return [res.sdp_elapsed_time for res in self.results if res.sdp_is_success]
 
     @property
-    def mean_solve_time_rounding(self) -> float:
-        return np.mean([res.rounding_elapsed_time for res in self.results])
+    def solve_times_rounding(self) -> List[float]:
+        return [
+            res.rounding_elapsed_time for res in self.results if res.rounded_is_success
+        ]
 
     @property
     def optimality_gaps(self) -> List[float]:
         return [res.optimality_gap for res in self.results]
-
-    @property
-    def mean_optimality_gap(self) -> List[float]:
-        return np.mean(
-            [res.optimality_gap for res in self.results if res.rounded_is_success]
-        )
 
     @property
     def rounded_is_success(self) -> List[float]:

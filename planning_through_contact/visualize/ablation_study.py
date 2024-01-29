@@ -47,6 +47,7 @@ def visualize_multiple_ablation_studies(
     legends: Optional[List[str]] = None,
     show_sdp_and_rounded: bool = False,
     filename: Optional[str] = None,
+    ALPHA: float = 0.5,
 ) -> None:
     # Colors for each subplot
     if colors is None:
@@ -59,7 +60,7 @@ def visualize_multiple_ablation_studies(
         ax1 = fig.add_subplot(121)
         ax1.set_xlabel("Total trajectory rotation [rad]")
         ax1.set_ylabel("Optimality [%]")
-        ax1.set_ylim((-10, 100))
+        ax1.set_ylim((-15, 100))
         ax1.set_title("Rounded")
         ax1.set_xlim((0, np.pi))
         ax1.hlines(
@@ -74,7 +75,7 @@ def visualize_multiple_ablation_studies(
         ax2.set_xlabel("Total trajectory rotation [rad]")
         ax2.set_ylabel("Optimality [%]")
         ax2.set_title("SDP")
-        ax2.set_ylim((-10, 100))
+        ax2.set_ylim((-15, 100))
         ax2.set_xlim((0, np.pi))
         ax2.hlines(
             [0],
@@ -103,7 +104,7 @@ def visualize_multiple_ablation_studies(
             ax1.scatter(
                 np.abs(theta_success),
                 optimality_gaps_success,
-                alpha=0.7,
+                alpha=ALPHA,
                 c=color,
             )
             theta_not_success = [
@@ -114,7 +115,7 @@ def visualize_multiple_ablation_studies(
             ax1.scatter(
                 theta_not_success,
                 -10 * np.ones(len(theta_not_success)),
-                alpha=0.7,
+                alpha=ALPHA,
                 c=color,
                 marker="x",
             )
@@ -136,7 +137,7 @@ def visualize_multiple_ablation_studies(
             ax2.scatter(
                 np.abs(theta_success),
                 optimality_gaps_success,
-                alpha=0.7,
+                alpha=ALPHA,
                 c=color,
             )
             theta_not_success = [
@@ -147,7 +148,7 @@ def visualize_multiple_ablation_studies(
             ax2.scatter(
                 theta_not_success,
                 -10 * np.ones(len(theta_not_success)),
-                alpha=0.7,
+                alpha=ALPHA,
                 c=color,
                 marker="x",
             )
@@ -158,7 +159,7 @@ def visualize_multiple_ablation_studies(
         ax1 = fig.add_subplot(111)
         ax1.set_xlabel("Total trajectory rotation [rad]")
         ax1.set_ylabel("Optimality [%]")
-        ax1.set_ylim((-10, 100))
+        ax1.set_ylim((-15, 100))
         ax1.set_xlim((0, np.pi))
         ax1.hlines(
             [0],
