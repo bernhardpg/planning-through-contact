@@ -48,6 +48,7 @@ def visualize_multiple_ablation_studies(
     show_sdp_and_rounded: bool = False,
     filename: Optional[str] = None,
     ALPHA: float = 0.5,
+    next_to_each_other: bool = False,
 ) -> None:
     # Colors for each subplot
     if colors is None:
@@ -154,54 +155,110 @@ def visualize_multiple_ablation_studies(
             )
 
     else:  # only show rounded
-        fig = plt.figure(figsize=(10, 3))
+        if next_to_each_other:
+            num_plots = len(studies)
 
-        ax1 = fig.add_subplot(111)
-        ax1.set_xlabel("Total trajectory rotation [rad]")
-        ax1.set_ylabel("Optimality [%]")
-        ax1.set_ylim((-15, 100))
-        ax1.set_xlim((0, np.pi))
-        ax1.hlines(
-            [0],
-            xmin=0,
-            xmax=np.pi,
-            linestyles="--",
-            color=GRAY.diffuse(),
-        )
+            fig, axes = plt.subplots(
+                1, num_plots, figsize=(10, 3)
+            )  # Adjust the size as needed
 
-        for idx, study in enumerate(studies):
-            theta_success = [
-                th
-                for th, is_success in zip(study.thetas, study.rounded_is_success)
-                if is_success
-            ]
-            optimality_gaps_success = [
-                gap
-                for gap, is_success in zip(
-                    study.optimality_gaps, study.rounded_is_success
+            for ax in axes:
+                ax.set_xlabel("Total trajectory rotation [rad]")
+                ax.set_ylabel("Optimality [%]")
+                ax.set_ylim((-15, 100))
+                ax.set_xlim((0, np.pi))
+                ax.hlines(
+                    [0],
+                    xmin=0,
+                    xmax=np.pi,
+                    linestyles="--",
+                    color=GRAY.diffuse(),
                 )
-                if is_success
-            ]
-            color = colors[idx]
 
-            ax1.scatter(
-                np.abs(theta_success),
-                optimality_gaps_success,
-                alpha=0.7,
-                c=color,
+            for idx, study in enumerate(studies):
+                theta_success = [
+                    th
+                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    if is_success
+                ]
+                optimality_gaps_success = [
+                    gap
+                    for gap, is_success in zip(
+                        study.optimality_gaps, study.rounded_is_success
+                    )
+                    if is_success
+                ]
+                color = colors[idx]
+
+                ax = axes[idx]
+                ax.scatter(
+                    np.abs(theta_success),
+                    optimality_gaps_success,
+                    alpha=0.7,
+                    c=color,
+                )
+                theta_not_success = [
+                    th
+                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    if not is_success
+                ]
+                ax.scatter(
+                    theta_not_success,
+                    -10 * np.ones(len(theta_not_success)),
+                    alpha=0.7,
+                    c=color,
+                    marker="x",
+                )
+
+        else:
+            fig = plt.figure(figsize=(10, 3))
+
+            ax1 = fig.add_subplot(111)
+            ax1.set_xlabel("Total trajectory rotation [rad]")
+            ax1.set_ylabel("Optimality [%]")
+            ax1.set_ylim((-15, 100))
+            ax1.set_xlim((0, np.pi))
+            ax1.hlines(
+                [0],
+                xmin=0,
+                xmax=np.pi,
+                linestyles="--",
+                color=GRAY.diffuse(),
             )
-            theta_not_success = [
-                th
-                for th, is_success in zip(study.thetas, study.rounded_is_success)
-                if not is_success
-            ]
-            ax1.scatter(
-                theta_not_success,
-                -10 * np.ones(len(theta_not_success)),
-                alpha=0.7,
-                c=color,
-                marker="x",
-            )
+
+            for idx, study in enumerate(studies):
+                theta_success = [
+                    th
+                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    if is_success
+                ]
+                optimality_gaps_success = [
+                    gap
+                    for gap, is_success in zip(
+                        study.optimality_gaps, study.rounded_is_success
+                    )
+                    if is_success
+                ]
+                color = colors[idx]
+
+                ax1.scatter(
+                    np.abs(theta_success),
+                    optimality_gaps_success,
+                    alpha=0.7,
+                    c=color,
+                )
+                theta_not_success = [
+                    th
+                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    if not is_success
+                ]
+                ax1.scatter(
+                    theta_not_success,
+                    -10 * np.ones(len(theta_not_success)),
+                    alpha=0.7,
+                    c=color,
+                    marker="x",
+                )
 
     # Create a list of patches to use as legend handles
     if legends is not None:
