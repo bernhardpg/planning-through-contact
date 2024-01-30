@@ -116,6 +116,45 @@ class PlanarPushingPath:
         self.config = pairs_on_path[0].mode.config
 
     @classmethod
+    def from_path(
+        cls,
+        gcs: opt.GraphOfConvexSets,
+        result: MathematicalProgramResult,
+        edge_path: List[GcsEdge],
+        all_pairs: Dict[str, VertexModePair],
+        assert_nan_values: bool = True,
+    ) -> "PlanarPushingPath":
+        """
+        Picks a deterministic path.
+        """
+        vertex_path = [e.u() for e in edge_path]
+        vertex_path.append(edge_path[-1].v())
+
+        if assert_nan_values:
+            # We need a result to do this
+            assert result is not None
+
+            def _check_all_nan_or_zero(array: npt.NDArray[np.float64]) -> bool:
+                return np.isnan(array) | np.isclose(array, 0, atol=1e-5)
+
+            # Assert that all decision varibles NOT ON the optimal path are NaN or 0
+            vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
+            if len(vertices_not_on_path) > 0:
+                vertex_vars_not_on_path = np.concatenate(
+                    [result.GetSolution(v.x()) for v in vertices_not_on_path]
+                )
+                assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
+
+            # Assert that all decision varibles ON the optimal path are not NaN
+            vertex_vars_on_path = np.concatenate(
+                [result.GetSolution(v.x()) for v in vertex_path]
+            )
+            assert np.all(~np.isnan(vertex_vars_on_path))
+
+        pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
+        return cls(pairs_on_path, edge_path, result)
+
+    @classmethod
     def from_result(
         cls,
         gcs: opt.GraphOfConvexSets,
@@ -125,6 +164,9 @@ class PlanarPushingPath:
         all_pairs: Dict[str, VertexModePair],
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
+        """
+        Picks a deterministic path.
+        """
         edge_path = gcs.GetSolutionPath(source_vertex, target_vertex, result)
         vertex_path = [e.u() for e in edge_path]
         vertex_path.append(edge_path[-1].v())
@@ -159,9 +201,15 @@ class PlanarPushingPath:
         if do_rounding:
             assert solver_params is not None
             self.do_rounding(solver_params)
-            return PlanarPushingTrajectory(self.config, self.get_rounded_vars())
+            return PlanarPushingTrajectory(
+                self.config,
+                self.get_rounded_vars(),
+                self.rounded_result.get_optimal_cost(),
+            )
         else:
-            return PlanarPushingTrajectory(self.config, self.get_vars())
+            return PlanarPushingTrajectory(
+                self.config, self.get_vars(), self.result.get_optimal_cost()
+            )
 
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [

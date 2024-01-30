@@ -365,8 +365,9 @@ class PlanarPushingPlanner:
 
         options.convex_relaxation = solver_params.gcs_convex_relaxation
         if solver_params.gcs_convex_relaxation:
-            options.preprocessing = True  # TODO(bernhardpg): should this be changed?
-            options.max_rounded_paths = solver_params.gcs_max_rounded_paths
+            options.preprocessing = True
+            # We want to solve only the convex relaxation first
+            options.max_rounded_paths = 0
 
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
@@ -417,19 +418,45 @@ class PlanarPushingPlanner:
         self,
         result: MathematicalProgramResult,
         solver_params: PlanarSolverParams,
-    ) -> PlanarPushingPath:
+    ) -> List[PlanarPushingPath]:
+        """
+        Returns N solution paths, sorted in increasing order based on optimal cost,
+        where N = solver_params.rounding_steps.
+        """
         assert self.source is not None
         assert self.target is not None
 
-        path = PlanarPushingPath.from_result(
-            self.gcs,
-            result,
-            self.source.vertex,
-            self.target.vertex,
-            self._get_all_vertex_mode_pairs(),
-            assert_nan_values=solver_params.assert_nan_values,
+        # TODO(bernhardpg): Clean this up
+        options = opt.GraphOfConvexSetsOptions()
+        options.max_rounded_paths = solver_params.rounding_steps
+        options.convex_relaxation = True
+        options.preprocessing = True
+
+        flow_vars = [e.phi() for e in self.gcs.Edges()]
+        flow_results = [result.GetSolution(phi) for phi in flow_vars]
+
+        paths, results = self.gcs.GetRandomizedSolutionPath(
+            self.source.vertex, self.target.vertex, result, options
         )
-        return path
+
+        # Sort the paths and results by optimal cost
+        paths_and_results = zip(paths, results)
+        filtered_res = [pair for pair in paths_and_results if pair[1].is_success()]
+        sorted_res = sorted(filtered_res, key=lambda pair: pair[1].get_optimal_cost())
+        paths, results = zip(*sorted_res)
+
+        paths = [
+            PlanarPushingPath.from_path(
+                self.gcs,
+                result,
+                path,
+                self._get_all_vertex_mode_pairs(),
+                assert_nan_values=solver_params.assert_nan_values,
+            )
+            for path, result in zip(paths, results)
+        ]
+
+        return paths
 
     def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
         assert self.source is not None
