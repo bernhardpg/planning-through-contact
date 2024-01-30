@@ -434,12 +434,14 @@ class PlanarPushingPlanner:
         # TODO(bernhardpg): Clean this up
         options = opt.GraphOfConvexSetsOptions()
         options.max_rounded_paths = solver_params.rounding_steps
+        options.max_rounding_trials = 10000
         options.convex_relaxation = True
         options.preprocessing = True
 
         paths, results = self.gcs.GetRandomizedSolutionPath(
             self.source.vertex, self.target.vertex, result, options
         )
+        flows = [result.GetSolution(e.phi()) for e in self.gcs.Edges()]
 
         # Sort the paths and results by optimal cost
         paths_and_results = zip(paths, results)
@@ -448,6 +450,7 @@ class PlanarPushingPlanner:
         ]
         if len(only_successful_res) == 0:
             raise RuntimeError("No trajectories rounded succesfully")
+
         sorted_res = sorted(
             only_successful_res, key=lambda pair: pair[1].get_optimal_cost()
         )

@@ -148,7 +148,7 @@ def get_default_plan_config(
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,
         num_knot_points_contact=3,
-        num_knot_points_non_collision=4,
+        num_knot_points_non_collision=3,
         use_band_sparsity=True,
         contact_config=contact_config,
         non_collision_cost=non_collision_cost,
@@ -171,7 +171,7 @@ def get_default_solver_params(
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
-        save_solver_output=debug,
+        save_solver_output=False,
         print_path=False,
         print_cost=debug,
         assert_result=False,
