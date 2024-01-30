@@ -9,6 +9,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     SnoptSolver,
+    SolutionResult,
     SolverOptions,
 )
 
@@ -392,7 +393,42 @@ class PlanarPushingPath:
 
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
-        end = time.time()
+        def _are_within_ranges_with_tolerance(
+            values, lower_bounds, upper_bounds, tolerance
+        ) -> npt.NDArray[np.bool_]:
+            close_to_lower = np.isclose(values, lower_bounds, atol=tolerance)
+            close_to_upper = np.isclose(values, upper_bounds, atol=tolerance)
+            within_bounds = (values > lower_bounds) & (values < upper_bounds)
+            return close_to_lower | close_to_upper | within_bounds
+
+        if not result.is_success():
+            # Sometimes SNOPT reports that it cannot proceed due to numerical errors, but the solution is still
+            # feasible. In that case we keep it (empirically it is often close to optimal).
+            if result.get_solution_result() == SolutionResult.kSolverSpecificError:
+                prog.SetInitialGuess(
+                    prog.decision_variables(),
+                    result.GetSolution(prog.decision_variables()),
+                )
+
+                TOL = 1e-4
+
+                def _is_binding_satisfied(binding) -> npt.NDArray[np.bool_]:
+                    val = prog.EvalBindingAtInitialGuess(binding)
+                    ub, lb = (
+                        binding.evaluator().upper_bound(),
+                        binding.evaluator().lower_bound(),
+                    )
+                    return _are_within_ranges_with_tolerance(val, lb, ub, TOL)
+
+                constraints_satisfied = np.concatenate(
+                    [
+                        _is_binding_satisfied(binding)
+                        for binding in prog.GetAllConstraints()
+                    ]
+                )
+                solution_feasible = np.all(constraints_satisfied)
+                if solution_feasible:
+                    result.set_solution_result(SolutionResult.kSolutionFound)
 
         if solver_params.assert_rounding_res:
             if not result.is_success():

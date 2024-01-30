@@ -506,6 +506,8 @@ class PlanarPushingPlanner:
                 else np.inf
                 for p in paths
             ]
+            # if np.isinf(np.min(rounded_costs)):
+            #     breakpoint()
             best_idx = np.argmin(rounded_costs)
             self.path = paths[best_idx]
 
