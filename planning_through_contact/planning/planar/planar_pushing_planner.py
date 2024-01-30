@@ -413,17 +413,6 @@ class PlanarPushingPlanner:
 
         return result
 
-    def get_vertex_solution_path(
-        self,
-        result: MathematicalProgramResult,
-    ) -> List[GcsVertex]:
-        """
-        Returns the vertices on the solution path in the correct order,
-        given a MathematicalProgramResult.
-        """
-        path = self.get_solution_paths(result)
-        return path.get_vertices()
-
     def get_solution_paths(
         self,
         result: MathematicalProgramResult,

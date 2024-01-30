@@ -35,11 +35,7 @@ from tests.geometry.planar.fixtures import (
     rigid_body_box,
     t_pusher,
 )
-from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
-    assert_initial_and_final_poses_LEGACY,
-    assert_planning_path_matches_target,
-)
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 DEBUG = False
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
