@@ -12,9 +12,9 @@ from pydrake.solvers import (
 )
 
 from planning_through_contact.experiments.utils import (
-    get_default_contact_cost,
-    get_default_non_collision_cost,
     get_default_plan_config,
+    get_hardware_contact_cost,
+    get_hardware_non_collision_cost,
 )
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,

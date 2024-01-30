@@ -449,6 +449,9 @@ if __name__ == "__main__":
         output_dir = "demos"
         os.makedirs(output_dir, exist_ok=True)
         folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
+        if traj_number is not None:
+            folder_name += f"_traj_{traj_number}"
+
         os.makedirs(folder_name, exist_ok=True)
 
         workspace = PlanarPushingWorkspace(
@@ -496,7 +499,9 @@ if __name__ == "__main__":
     else:
         output_dir = "trajectories"
         os.makedirs(output_dir, exist_ok=True)
-        folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
+        folder_name = f"{output_dir}/run_{_get_time_as_str()}_{slider_type}"
+        if traj_number is not None:
+            folder_name += f"_traj_{traj_number}"
         os.makedirs(folder_name, exist_ok=True)
 
         workspace = PlanarPushingWorkspace(
@@ -517,7 +522,7 @@ if __name__ == "__main__":
                 plans[traj_number],
                 debug=debug,
                 output_dir=folder_name,
-                traj_name=f"hw_demo_{traj_number}",
+                traj_name=f"run_{traj_number}",
                 visualize=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
@@ -532,7 +537,7 @@ if __name__ == "__main__":
                     plan,
                     output_dir=folder_name,
                     debug=debug,
-                    traj_name=f"hw_demo_{idx}",
+                    traj_name=f"run_{idx}",
                     visualize=True,
                     pusher_radius=pusher_radius,
                     save_traj=True,

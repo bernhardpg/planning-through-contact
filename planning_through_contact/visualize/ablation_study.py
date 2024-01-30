@@ -151,7 +151,7 @@ def visualize_multiple_ablation_studies(
                 if not is_success
             ]
             ax2.scatter(
-                theta_not_success,
+                np.abs(theta_not_success),
                 -10 * np.ones(len(theta_not_success)),
                 alpha=ALPHA,
                 c=color,
@@ -210,14 +210,14 @@ def visualize_multiple_ablation_studies(
                     if not is_success
                 ]
                 ax.scatter(
-                    theta_not_success,
+                    np.abs(theta_not_success),
                     -10 * np.ones(len(theta_not_success)),
                     alpha=0.7,
                     c=color,
                     marker="x",
                 )
 
-        else:
+        else:  # plot in the same figure
             fig = plt.figure(figsize=(10, 3))
 
             ax1 = fig.add_subplot(111)
@@ -260,7 +260,7 @@ def visualize_multiple_ablation_studies(
                     if not is_success
                 ]
                 ax1.scatter(
-                    theta_not_success,
+                    np.abs(theta_not_success),
                     -10 * np.ones(len(theta_not_success)),
                     alpha=0.7,
                     c=color,
