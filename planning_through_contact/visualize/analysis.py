@@ -396,6 +396,26 @@ def plot_planar_pushing_trajectory(
     plt.savefig(file_path)
 
 
+def plot_realtime_rate(
+    real_time_rate_log: List[float],
+    time_step: float,
+    suffix: str = "",
+    save_dir: Optional[str] = None,
+) -> None:
+    plt.figure()
+    plt.plot(real_time_rate_log)
+    plt.title("Realtime rate vs. timestep")
+    plt.xticks(np.arange(0, len(real_time_rate_log), 1 / time_step), rotation=90)
+    plt.xlabel("timestep")
+    plt.ylabel("Realtime rate")
+    # Add grid
+    plt.grid()
+    plt.tight_layout()
+    file_name = f"planar_pushing_realtime_rate{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
+
+
 def plot_joint_state_logs(joint_state_log, num_positions, suffix="", save_dir=""):
     num_velocities = joint_state_log.data().shape[0] - num_positions
     # Split the data into positions and velocities
