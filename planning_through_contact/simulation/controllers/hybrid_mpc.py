@@ -274,6 +274,11 @@ class HybridMpc:
             lam = state[3]
             prog.AddLinearConstraint(lam >= self.config.lam_min)
             prog.AddLinearConstraint(lam <= self.config.lam_max)
+        
+        if self._last_sols[mode] is not None:
+            # Warm start
+            prog.SetInitialGuess(x_bar, self._last_sols[mode]["x_bar"])
+            prog.SetInitialGuess(u_bar, self._last_sols[mode]["u_bar"])
 
         return prog, x, u  # type: ignore
 
@@ -288,6 +293,16 @@ class HybridMpc:
             *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
         )
         results = [Solve(prog) for prog in progs]  # type: ignore
+
+        # Save solutions to warmstart the next iteration
+        for mode, result in zip(HybridModes, results):
+            if result.is_success():
+                self._last_sols[mode] = {
+                    "x_bar": result.GetSolution(self._vars[mode]["x_bar"]),
+                    "u_bar": result.GetSolution(self._vars[mode]["u_bar"]),
+                }
+            else:
+                self._last_sols[mode] = None
 
         costs = [
             result.get_optimal_cost() if result.is_success() else np.inf

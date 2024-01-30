@@ -6,12 +6,12 @@ defaults:
   - hydra: base_hydra
 
 sim_config:
-  use_hardware: True
+  use_hardware: False
   closed_loop: True
 
-trajectory_set_name: "hw_demos_20240125152221_tee_socp"
-trajectory_index: 9
+trajectory_set_name: "hw_demos_20240129115732_tee"
+trajectory_index: 2
 use_rounded: True
-# override_duration: 5
+# override_duration: 17
 
 save_experiment_data: True
