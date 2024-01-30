@@ -473,11 +473,7 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
-        import time
-
-        start = time.time()
         gcs_result = self._solve(solver_params)
-        end = time.time()
 
         if solver_params.assert_result:
             assert gcs_result.is_success()
@@ -486,8 +482,9 @@ class PlanarPushingPlanner:
                 print("WARNING: Solver did not find a solution!")
 
         if solver_params.measure_solve_time:
-            elapsed_time = end - start
-            print(f"Total elapsed optimization time: {elapsed_time}")
+            print(
+                f"Total elapsed optimization time: {gcs_result.get_solver_details().optimizer_time}"
+            )
 
         if solver_params.print_cost:
             cost = gcs_result.get_optimal_cost()

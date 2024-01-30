@@ -53,17 +53,17 @@ for study in studies:
         f"Std optimality gap: {np.std([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
     )
     print("#####")
-    print(f"Mean solve time SDP: {np.mean(study.solve_times_sdp)}")
-    print(f"Std solve time SDP: {np.std(study.solve_times_sdp)}")
-    print(f"Median solve time SDP: {np.median(study.solve_times_sdp)}")
-    print(f"Max solve time SDP: {np.max(study.solve_times_sdp)}")
-    print(f"Min solve time SDP: {np.min(study.solve_times_sdp)}")
+    print(f"Mean solve time SDP: {np.mean(study.solve_times_binary_flows)}")
+    print(f"Std solve time SDP: {np.std(study.solve_times_binary_flows)}")
+    print(f"Median solve time SDP: {np.median(study.solve_times_binary_flows)}")
+    print(f"Max solve time SDP: {np.max(study.solve_times_binary_flows)}")
+    print(f"Min solve time SDP: {np.min(study.solve_times_binary_flows)}")
     print("#####")
-    print(f"Mean solve time rounding: {np.mean(study.solve_times_rounding)}")
-    print(f"Std solve time rounding: {np.std(study.solve_times_rounding)}")
-    print(f"Median solve time rounding: {np.median(study.solve_times_rounding)}")
-    print(f"Max solve time rounding: {np.max(study.solve_times_rounding)}")
-    print(f"Min solve time rounding: {np.min(study.solve_times_rounding)}")
+    print(f"Mean solve time rounding: {np.mean(study.solve_times_feasible)}")
+    print(f"Std solve time rounding: {np.std(study.solve_times_feasible)}")
+    print(f"Median solve time rounding: {np.median(study.solve_times_feasible)}")
+    print(f"Max solve time rounding: {np.max(study.solve_times_feasible)}")
+    print(f"Min solve time rounding: {np.min(study.solve_times_feasible)}")
 
 colors = [
     "blue",

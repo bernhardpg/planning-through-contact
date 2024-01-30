@@ -49,7 +49,7 @@ class SingleRunResult:
     binary_flows_time: float
     feasible_cost: float
     feasible_success: bool
-    feasible_time: float
+    feasible_time: Optional[float]
     relaxed_mean_determinant: float
     rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal

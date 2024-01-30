@@ -126,12 +126,16 @@ class PlanarPushingPath:
 
     @property
     def solve_time(self) -> float:
-        return self.result.get_solver_details().optimizer_time
+        # The field `optimizer_time` is Mosek specific
+        return self.result.get_solver_details().optimizer_time  # type: ignore
 
     @property
     def rounding_time(self) -> float:
         assert self.rounded_result is not None
-        return self.rounded_result.get_solver_details().optimizer_time
+        # The field `info` is Snopt specific
+        info = self.rounded_result.get_solver_details().info
+        # TODO(bernhardpg): How to get the SNOPT solver time?
+        return None
 
     @classmethod
     def from_path(
@@ -389,10 +393,6 @@ class PlanarPushingPath:
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
 
         end = time.time()
-
-        if solver_params.measure_solve_time:
-            elapsed_time = end - start
-            print(f"Total elapsed optimization time: {elapsed_time}")
 
         if solver_params.assert_rounding_res:
             if not result.is_success():

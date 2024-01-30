@@ -18,7 +18,7 @@ def visualize_ablation_as_histogram(study: AblationStudy) -> None:
     fig = plt.figure(figsize=(10, 5))
 
     print(f"Mean optimality gap: {np.mean(study.optimality_gaps)}%")
-    print(f"Mean SDP optimality gap: {np.nanmean(study.sdp_optimality_gaps)}%")
+    print(f"Mean SDP optimality gap: {np.nanmean(study.binary_flows_optimality_gaps)}%")
 
     ax1 = fig.add_subplot(121)
     ax1.hist(study.optimality_gaps, bins=40, color="blue", edgecolor="black")
@@ -29,7 +29,9 @@ def visualize_ablation_as_histogram(study: AblationStudy) -> None:
     ax1.set_title("Rounding")
 
     ax2 = fig.add_subplot(122)
-    ax2.hist(study.sdp_optimality_gaps, bins=40, color="blue", edgecolor="black")
+    ax2.hist(
+        study.binary_flows_optimality_gaps, bins=40, color="blue", edgecolor="black"
+    )
     ax2.set_ylim(0, 100)
     ax2.set_xlim(0, 30)
     ax2.set_ylabel("Problem instances [%]")
@@ -90,13 +92,13 @@ def visualize_multiple_ablation_studies(
         for idx, study in enumerate(studies):
             theta_success = [
                 th
-                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                for th, is_success in zip(study.thetas, study.feasible_is_success)
                 if is_success
             ]
             optimality_gaps_success = [
                 gap
                 for gap, is_success in zip(
-                    study.optimality_gaps, study.rounded_is_success
+                    study.optimality_gaps, study.feasible_is_success
                 )
                 if is_success
             ]
@@ -110,7 +112,7 @@ def visualize_multiple_ablation_studies(
             )
             theta_not_success = [
                 th
-                for th, is_success in zip(study.thetas, study.rounded_is_success)
+                for th, is_success in zip(study.thetas, study.feasible_is_success)
                 if not is_success
             ]
             ax1.scatter(
@@ -125,12 +127,14 @@ def visualize_multiple_ablation_studies(
         for idx, study in enumerate(studies):
             theta_success = [
                 th
-                for th, is_success in zip(study.thetas, study.sdp_is_success)
+                for th, is_success in zip(study.thetas, study.binary_flows_sucess)
                 if is_success
             ]
             optimality_gaps_success = [
                 gap
-                for gap, is_success in zip(study.optimality_gaps, study.sdp_is_success)
+                for gap, is_success in zip(
+                    study.optimality_gaps, study.binary_flows_sucess
+                )
                 if is_success
             ]
             color = colors[idx]
@@ -143,7 +147,7 @@ def visualize_multiple_ablation_studies(
             )
             theta_not_success = [
                 th
-                for th, is_success in zip(study.thetas, study.sdp_is_success)
+                for th, is_success in zip(study.thetas, study.binary_flows_sucess)
                 if not is_success
             ]
             ax2.scatter(
@@ -181,13 +185,13 @@ def visualize_multiple_ablation_studies(
             for idx, study in enumerate(studies):
                 theta_success = [
                     th
-                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    for th, is_success in zip(study.thetas, study.feasible_is_success)
                     if is_success
                 ]
                 optimality_gaps_success = [
                     gap
                     for gap, is_success in zip(
-                        study.optimality_gaps, study.rounded_is_success
+                        study.optimality_gaps, study.feasible_is_success
                     )
                     if is_success
                 ]
@@ -202,7 +206,7 @@ def visualize_multiple_ablation_studies(
                 )
                 theta_not_success = [
                     th
-                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    for th, is_success in zip(study.thetas, study.feasible_is_success)
                     if not is_success
                 ]
                 ax.scatter(
@@ -232,13 +236,13 @@ def visualize_multiple_ablation_studies(
             for idx, study in enumerate(studies):
                 theta_success = [
                     th
-                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    for th, is_success in zip(study.thetas, study.feasible_is_success)
                     if is_success
                 ]
                 optimality_gaps_success = [
                     gap
                     for gap, is_success in zip(
-                        study.optimality_gaps, study.rounded_is_success
+                        study.optimality_gaps, study.feasible_is_success
                     )
                     if is_success
                 ]
@@ -252,7 +256,7 @@ def visualize_multiple_ablation_studies(
                 )
                 theta_not_success = [
                     th
-                    for th, is_success in zip(study.thetas, study.rounded_is_success)
+                    for th, is_success in zip(study.thetas, study.feasible_is_success)
                     if not is_success
                 ]
                 ax1.scatter(
@@ -313,7 +317,7 @@ def visualize_ablation_optimality_percentages(study: AblationStudy) -> None:
     ax2 = fig.add_subplot(122)
     scatter2 = ax2.scatter(
         study.thetas,
-        study.sdp_optimality_percentages,
+        study.binary_flows_optimality_percentages,
         alpha=0.7,
         c=study.relaxed_mean_determinants,
         vmin=det_min,
@@ -386,7 +390,7 @@ def visualize_ablation_optimality_gap_thetas(study: AblationStudy) -> None:
 
 
 def visualize_ablation_sdp_optimality_gap_thetas(study: AblationStudy) -> None:
-    plt.scatter(study.thetas, study.sdp_optimality_gaps, alpha=0.7)
+    plt.scatter(study.thetas, study.binary_flows_optimality_gaps, alpha=0.7)
     plt.xlabel("Rotation [rad]")
     plt.ylabel("Optimality gap [%]")
     plt.hlines(
@@ -414,7 +418,9 @@ def visualize_ablation_sdp_optimality_gap_3d(study: AblationStudy) -> None:
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
 
-    ax.scatter(study.thetas, study.distances, study.sdp_optimality_gaps, alpha=0.7)
+    ax.scatter(
+        study.thetas, study.distances, study.binary_flows_optimality_gaps, alpha=0.7
+    )
     ax.set_xlabel("Rotation [rad]")
     ax.set_ylabel("Distance [m]")
     ax.set_zlabel("Optimality gap [%]")  # type: ignore
