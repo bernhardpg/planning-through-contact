@@ -1,7 +1,6 @@
 import fnmatch
 import os
 import pickle
-import time
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple
@@ -42,15 +41,15 @@ def _find_files(directory, pattern):
 
 @dataclass
 class SingleRunResult:
-    sdp_cost: float
-    rounded_cost: float
-    relaxed_cost: float
-    sdp_elapsed_time: float
-    rounding_elapsed_time: float
-    relaxed_elapsed_time: float
-    sdp_is_success: bool
-    relaxed_is_success: bool
-    rounded_is_success: bool
+    relaxed_gcs_cost: float
+    relaxed_gcs_success: bool
+    relaxed_gcs_time: float
+    binary_flows_cost: float
+    binary_flows_success: bool
+    binary_flows_time: float
+    feasible_cost: float
+    feasible_success: bool
+    feasible_time: float
     relaxed_mean_determinant: float
     rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal
@@ -58,18 +57,22 @@ class SingleRunResult:
 
     @property
     def optimality_gap(self) -> float:
-        return ((self.rounded_cost - self.relaxed_cost) / self.relaxed_cost) * 100
+        return (
+            (self.feasible_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
+        ) * 100
 
     @property
-    def sdp_optimality_gap(self) -> float:
-        return ((self.sdp_cost - self.relaxed_cost) / self.sdp_cost) * 100
+    def binary_flows_optimality_gap(self) -> float:
+        return (
+            (self.binary_flows_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
+        ) * 100
 
     @property
     def optimality_percentage(self) -> float:
         return 100 - self.optimality_gap
 
     @property
-    def sdp_optimality_percentage(self) -> float:
+    def binary_flows_optimality_percentage(self) -> float:
         return 100 - self.optimality_gap
 
     @property
@@ -92,7 +95,7 @@ class SingleRunResult:
         # Manually add property strings
         property_strings = [
             f"optimality_gap: {self.optimality_gap}",
-            f"sdp_optimality_gap: {self.sdp_optimality_gap}",
+            f"sdp_optimality_gap: {self.binary_flows_optimality_gap}",
         ]
 
         field_strings = [
@@ -129,71 +132,71 @@ class AblationStudy:
         return [res.distance for res in self.results]
 
     @property
-    def solve_times_sdp(self) -> List[float]:
-        return [res.sdp_elapsed_time for res in self.results if res.sdp_is_success]
+    def solve_times_binary_flows(self) -> List[float]:
+        return [
+            res.binary_flows_time for res in self.results if res.binary_flows_success
+        ]
 
     @property
-    def solve_times_rounding(self) -> List[float]:
-        return [
-            res.rounding_elapsed_time for res in self.results if res.rounded_is_success
-        ]
+    def solve_times_feasible(self) -> List[float]:
+        return [res.feasible_time for res in self.results if res.feasible_success]
 
     @property
     def optimality_gaps(self) -> List[float]:
         return [res.optimality_gap for res in self.results]
 
     @property
-    def rounded_is_success(self) -> List[float]:
-        return [res.rounded_is_success for res in self.results]
+    def feasible_is_success(self) -> List[float]:
+        return [res.feasible_success for res in self.results]
 
     @property
-    def sdp_is_success(self) -> List[float]:
-        return [res.sdp_is_success for res in self.results]
+    def binary_flows_success(self) -> List[float]:
+        return [res.binary_flows_success for res in self.results]
 
     @property
     def optimality_percentages(self) -> List[float]:
         return [
-            res.optimality_percentage if res.rounded_is_success else 0
+            res.optimality_percentage if res.feasible_success else 0
             for res in self.results
         ]
 
     @property
-    def sdp_optimality_gaps(self) -> List[float]:
-        return [res.sdp_optimality_gap for res in self.results]
+    def binary_flows_optimality_gaps(self) -> List[float]:
+        return [res.binary_flows_optimality_gap for res in self.results]
 
     @property
-    def sdp_optimality_percentages(self) -> List[float]:
+    def binary_flows_optimality_percentages(self) -> List[float]:
         return [
-            res.sdp_optimality_percentage if res.sdp_is_success else 0
+            res.binary_flows_optimality_percentage if res.binary_flows_success else 0
             for res in self.results
         ]
 
     @property
-    def num_success(self) -> int:
-        return len([r for r in self.results if r.sdp_is_success])
+    def num_binary_flows_success(self) -> int:
+        return len([r for r in self.results if r.binary_flows_success])
 
     @property
     def num_not_success(self) -> int:
-        return len(self) - self.num_success
+        return len(self) - self.num_binary_flows_success
 
     @property
-    def num_rounded_success(self) -> int:
-        return len([r for r in self.results if r.rounded_is_success])
+    def num_feasible_success(self) -> int:
+        return len([r for r in self.results if r.feasible_success])
 
     def __len__(self) -> int:
         return len(self.results)
 
     @property
     def num_rounded_not_success(self) -> int:
-        return len(self) - self.num_rounded_success
+        return len(self) - self.num_feasible_success
 
     @property
     def percentage_success(self) -> float:
-        return (self.num_success / len(self)) * 100
+        return (self.num_binary_flows_success / len(self)) * 100
 
     @property
     def percentage_rounded_success(self) -> float:
-        return (self.num_rounded_success / len(self)) * 100
+        return (self.num_feasible_success / len(self)) * 100
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
@@ -223,85 +226,31 @@ def do_one_run_get_path(
     planner = PlanarPushingPlanner(plan_config)
     planner.formulate_problem()
 
-    # Store this value as we need to set it to 0 to run GCS without rounding!
-    max_rounded_paths = solver_params.rounding_steps
-
-    start_time = time.time()
-    solver_params.rounding_steps = 0
-    relaxed_result = planner._solve(solver_params)
-    relaxed_elapsed_time = time.time() - start_time
-    relaxed_cost = relaxed_result.get_optimal_cost()
-
-    solver_params.rounding_steps = max_rounded_paths
-    start_time = time.time()
-    sdp_result = planner._solve(solver_params)
-    sdp_elapsed_time = time.time() - start_time
-    sdp_cost = sdp_result.get_optimal_cost()
-
-    if not sdp_result.is_success():
-        visualize_planar_pushing_start_and_goal(
-            plan_config.dynamics_config.slider.geometry,
-            plan_config.dynamics_config.pusher_radius,
-            start_and_goal,
-            # show=True,
-            save=True,
-            filename=f"infeasible_trajectory",
-        )
-
-        return (
-            SingleRunResult(
-                np.inf,
-                np.inf,
-                relaxed_cost,
-                sdp_elapsed_time,
-                np.inf,
-                relaxed_elapsed_time,
-                sdp_result.is_success(),
-                relaxed_result.is_success(),
-                False,
-                np.inf,
-                np.inf,
-                start_and_goal,
-                plan_config,
-            ),
-            None,
-        )
+    path = planner.plan_path(solver_params)
 
     assert planner.source is not None  # avoid typing errors
     assert planner.target is not None  # avoid typing errors
-    path = PlanarPushingPath.from_result(
-        planner.gcs,
-        sdp_result,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-        assert_nan_values=solver_params.assert_nan_values,
-    )
-    start_time = time.time()
-    rounding_result = path._do_nonlinear_rounding(solver_params)
-    rounding_elapsed_time = time.time() - start_time
-    rounded_cost = rounding_result.get_optimal_cost()
 
     relaxed_mean_determinant: float = np.mean(path.get_determinants())
-
-    path.rounded_result = rounding_result
     rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
 
+    assert planner.relaxed_gcs_result is not None
+    assert path.rounded_result is not None
     return (
         SingleRunResult(
-            sdp_cost,
-            rounded_cost,
-            relaxed_cost,
-            sdp_elapsed_time,
-            rounding_elapsed_time,
-            relaxed_elapsed_time,
-            sdp_result.is_success(),
-            relaxed_result.is_success(),
-            rounding_result.is_success(),
-            relaxed_mean_determinant,
-            rounded_mean_determinant,
-            start_and_goal,
-            plan_config,
+            relaxed_gcs_cost=planner.relaxed_gcs_result.get_optimal_cost(),
+            relaxed_gcs_success=planner.relaxed_gcs_result.is_success(),
+            relaxed_gcs_time=planner.relaxed_gcs_result.get_solver_details().optimizer_time,  # type: ignore
+            binary_flows_cost=path.relaxed_cost,
+            binary_flows_success=path.result.is_success(),
+            binary_flows_time=path.solve_time,
+            feasible_cost=path.rounded_cost,
+            feasible_success=path.rounded_result.is_success(),
+            feasible_time=path.rounding_time,
+            relaxed_mean_determinant=relaxed_mean_determinant,
+            rounded_mean_determinant=rounded_mean_determinant,
+            start_and_goal=start_and_goal,
+            config=plan_config,
         ),
         path,
     )

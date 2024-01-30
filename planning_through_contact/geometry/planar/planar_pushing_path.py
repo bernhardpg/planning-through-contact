@@ -115,6 +115,24 @@ class PlanarPushingPath:
         self.rounded_result = None
         self.config = pairs_on_path[0].mode.config
 
+    @property
+    def relaxed_cost(self) -> float:
+        return self.result.get_optimal_cost()
+
+    @property
+    def rounded_cost(self) -> float:
+        assert self.rounded_result is not None
+        return self.rounded_result.get_optimal_cost()
+
+    @property
+    def solve_time(self) -> float:
+        return self.result.get_solver_details().optimizer_time
+
+    @property
+    def rounding_time(self) -> float:
+        assert self.rounded_result is not None
+        return self.rounded_result.get_solver_details().optimizer_time
+
     @classmethod
     def from_path(
         cls,
