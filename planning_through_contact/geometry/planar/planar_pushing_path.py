@@ -410,7 +410,7 @@ class PlanarPushingPath:
                     result.GetSolution(prog.decision_variables()),
                 )
 
-                TOL = 1e-4
+                TOL = solver_params.nonl_round_major_feas_tol
 
                 def _is_binding_satisfied(binding) -> npt.NDArray[np.bool_]:
                     val = prog.EvalBindingAtInitialGuess(binding)
@@ -426,8 +426,20 @@ class PlanarPushingPath:
                         for binding in prog.GetAllConstraints()
                     ]
                 )
+
+                # if result.get_optimal_cost() <= self.result.get_optimal_cost():
+                #     # This should not happen
+                #     calculated_cost = np.sum(
+                #         [prog.EvalBindingAtInitialGuess(b) for b in prog.GetAllCosts()]
+                #     )
+                #     if not np.isclose(result.get_optimal_cost(), calculated_cost):
+                #         breakpoint()
+
+                cost_upper_bound = (
+                    result.get_optimal_cost() >= self.result.get_optimal_cost()
+                )
                 solution_feasible = np.all(constraints_satisfied)
-                if solution_feasible:
+                if solution_feasible and cost_upper_bound:
                     result.set_solution_result(SolutionResult.kSolutionFound)
 
         if solver_params.assert_rounding_res:

@@ -116,17 +116,18 @@ class PlanarSolverParams:
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
+    max_mosek_solve_time: float = 300.0
     print_path: bool = False
     print_cost: bool = False
     solver: Literal["mosek", "clarabel"] = "mosek"
     get_rounded_and_original_traj: bool = False
     nonl_round_major_feas_tol: float = (
-        1e-3  # Feasibility treshold for nonlinear rounding
+        1e-6  # Feasibility treshold for nonlinear rounding
     )
     nonl_round_minor_feas_tol: float = (
-        1e-4  # Feasibility treshold for nonlinear rounding
+        1e-6  # Feasibility treshold for nonlinear rounding
     )
-    nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    nonl_round_opt_tol: float = 1e-6  # Optimality treshold for nonlinear rounding
     nonl_round_major_iter_limit: int = 10000  # Max number of major iterations of snopt
     assert_rounding_res: bool = False  # We don't run rounding to optimality
 

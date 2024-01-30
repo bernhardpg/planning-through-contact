@@ -354,19 +354,40 @@ class PlanarPushingPlanner:
 
         return pair
 
+    def _get_mosek_params(
+        self, solver_params: PlanarSolverParams, tolerance: float = 1e-5
+    ) -> SolverOptions:
+        solver_options = SolverOptions()
+        if solver_params.print_solver_output:
+            # solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+        if solver_params.save_solver_output:
+            solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
+
+        mosek = MosekSolver()
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+        )
+
+        solver_options.SetOption(
+            mosek.solver_id(),
+            "MSK_DPAR_OPTIMIZER_MAX_TIME",
+            solver_params.max_mosek_solve_time,
+        )
+        return solver_options
+
     def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
         """
         Returns the relaxed GCS result, potentially with non-binary flow values.
         """
         options = opt.GraphOfConvexSetsOptions()
-        if solver_params.print_solver_output:
-            options.solver_options = SolverOptions()
-            # options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
-            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-
-        if solver_params.save_solver_output:
-            options.solver_options = SolverOptions()
-            options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
 
         options.convex_relaxation = solver_params.gcs_convex_relaxation
         if solver_params.gcs_convex_relaxation:
@@ -377,21 +398,7 @@ class PlanarPushingPlanner:
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
             options.solver = mosek
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-5
-            )
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-5
-            )
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-5
-            )
-
-            options.solver_options.SetOption(
-                mosek.solver_id(),
-                "MSK_DPAR_OPTIMIZER_MAX_TIME",
-                300.0,
-            )
+            options.solver_options = self._get_mosek_params(solver_params, 1e-3)
         else:  # clarabel
             clarabel = ClarabelSolver()
             options.solver = clarabel
@@ -437,6 +444,8 @@ class PlanarPushingPlanner:
         options.max_rounding_trials = 10000
         options.convex_relaxation = True
         options.preprocessing = True
+
+        options.solver_options = self._get_mosek_params(solver_params, 1e-6)
 
         paths, results = self.gcs.GetRandomizedSolutionPath(
             self.source.vertex, self.target.vertex, result, options
