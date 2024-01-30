@@ -41,8 +41,10 @@ from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGE
 
 main_folder = "trajectories/"
 study = "hw_demos_20240130115816_box"
-study = "run_20240130160321_box"
-study = "run_20240130161023_box"
+# study = "run_20240130160321_box"
+# study = "run_20240130161023_box"
+# study = "run_20240130173234_tee"
+study = "run_20240130174605_tee"
 study_names = [study]
 
 study_folders = [main_folder + folder for folder in study_names]
@@ -62,6 +64,15 @@ for study in studies:
     print(
         f"Std optimality gap: {np.std([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
     )
+    print("#####")
+    print(f"Mean solve time GCS relaxation: {np.mean(study.solve_times_gcs_relaxed)}")
+    print(f"Std solve time GCS relaxation: {np.std(study.solve_times_gcs_relaxed)}")
+    print(
+        f"Median solve time GCS relaxation: {np.median(study.solve_times_gcs_relaxed)}"
+    )
+    print(f"Max solve time GCS relaxation: {np.max(study.solve_times_gcs_relaxed)}")
+    print(f"Min solve time GCS relaxation: {np.min(study.solve_times_gcs_relaxed)}")
+    print("#####")
     print(f"Mean solve time binary flows: {np.mean(study.solve_times_binary_flows)}")
     print(f"Std solve time binary flows: {np.std(study.solve_times_binary_flows)}")
     print(

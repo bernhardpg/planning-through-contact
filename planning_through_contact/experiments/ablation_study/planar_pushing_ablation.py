@@ -47,7 +47,6 @@ def sorted_walk(top, topdown=True):
 def _find_files(directory, pattern):
     matches = []
     for root, dirs, files in sorted_walk(directory):
-        print(root)
         for name in files:
             if fnmatch.fnmatch(name, pattern):
                 matches.append(os.path.join(root, name))
@@ -148,6 +147,10 @@ class AblationStudy:
     @property
     def distances(self) -> List[float]:
         return [res.distance for res in self.results]
+
+    @property
+    def solve_times_gcs_relaxed(self) -> List[float]:
+        return [res.relaxed_gcs_time for res in self.results if res.relaxed_gcs_success]
 
     @property
     def solve_times_binary_flows(self) -> List[float]:

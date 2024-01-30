@@ -8,19 +8,28 @@ def time_to_frame_index(time_sec, fps):
 
 
 video_paths = [
-    "front_camera_1.mp4",
-    "front_camera_2.mp4",
-    "front_camera_1.mp4",
-    "front_camera_2.mp4",
-    "front_camera_1.mp4",
+    # "traj_14.mp4",  # the one from shao slack
+    # "3.mp4",
+    "5.mp4",
 ]
+main_folder = "videos/"
+
 # Specify the times (in seconds) at which you want to extract frames
 times_per_video = [
-    [10, 35, 50, 70, 86.5, 95],
-    [10, 29, 32, 53, 57, 79, 84, 92],
-    [10, 35, 50, 70, 86.5, 95],
-    [10, 29, 32, 53, 57, 79, 84, 92],
-    [10, 35, 50, 70, 86.5, 95],
+    # [10, 35, 50, 70, 86.5, 95],
+    # [15, 42.8, 61, 100, 118, 152],
+    [
+        15,
+        40,
+        61,
+        111,
+        133,
+        168,
+        188,
+        222,
+        246,
+        260,
+    ],
 ]
 
 
@@ -61,7 +70,7 @@ def make_frames(video_path, times):
 
         # Overlay the second frame on the first frame with transparency
         alpha = 0.5  # Transparency factor
-        overlay_frame = cv2.addWeighted(frame1, alpha, frame2, 1, 0)
+        overlay_frame = cv2.addWeighted(frame1, alpha, frame2, 0.8, 0)
 
         frames.append(overlay_frame)
 
@@ -72,21 +81,23 @@ def make_frames(video_path, times):
 
 
 frames_per_video = [
-    make_frames(path, times) for path, times in zip(video_paths, times_per_video)
+    make_frames(main_folder + path, times[:-1])  # skip last frame
+    for path, times in zip(video_paths, times_per_video)
 ]
 frames_per_row = max([len(frame) for frame in frames_per_video])
 num_seqs = len(frames_per_video)
 
-# Create the figure with two rows of subplots
-fig, axes = plt.subplots(
-    num_seqs, frames_per_row, figsize=(20, 2 * num_seqs)
-)  # Adjust the size as needed
+individual_plots = True
+if individual_plots:
+    for frames in frames_per_video:
+        frames_per_row = len(frames)
+        fig, axes = plt.subplots(
+            1, frames_per_row, figsize=(1.9 * frames_per_row, 1.7)
+        )  # Adjust the size as needed
 
-if num_seqs == 1:
-    frames = frames_per_video[0]
-    for col, frame in enumerate(frames):
-        axes[col].imshow(frame)
-        axes[col].axis("off")
+        for col, frame in enumerate(frames):
+            axes[col].imshow(frame)
+            axes[col].axis("off")
 
 else:
     for row, frames in enumerate(frames_per_video):

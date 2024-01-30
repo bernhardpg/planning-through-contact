@@ -398,7 +398,7 @@ class PlanarPushingPlanner:
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
             options.solver = mosek
-            options.solver_options = self._get_mosek_params(solver_params, 1e-3)
+            options.solver_options = self._get_mosek_params(solver_params, 1e-4)
         else:  # clarabel
             clarabel = ClarabelSolver()
             options.solver = clarabel
