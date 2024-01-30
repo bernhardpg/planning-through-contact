@@ -42,6 +42,38 @@ def get_sugar_box() -> RigidBody:
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
+        keypoint_arc_length=10.0,
+        linear_arc_length=None,
+        angular_arc_length=None,
+        force_regularization=1.0,
+        keypoint_velocity_regularization=None,
+        ang_velocity_regularization=10.0,
+        lin_velocity_regularization=1.0,
+        trace=None,
+        mode_transition_cost=None,
+        time=None,
+    )
+    return contact_cost
+
+
+def get_default_non_collision_cost() -> NonCollisionCost:
+    non_collision_cost = NonCollisionCost(
+        distance_to_object_socp=0.0001,  # this sometimes cause numerical problems
+        pusher_velocity_regularization=0.1,
+        pusher_arc_length=1.0,
+        time=None,
+    )
+    return non_collision_cost
+
+
+def get_hardware_contact_cost() -> ContactCost:
+    """
+    A custom cost for hardware,
+    which empically generates plans that respect robot velocity
+    limits etc.
+    """
+    contact_cost = ContactCost(
+        cost_type=ContactCostType.STANDARD,
         keypoint_arc_length=5.0,
         linear_arc_length=None,
         angular_arc_length=None,
@@ -56,7 +88,7 @@ def get_default_contact_cost() -> ContactCost:
     return contact_cost
 
 
-def get_default_non_collision_cost() -> NonCollisionCost:
+def get_hardware_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
         # distance_to_object_quadratic=0.15,
         # distance_to_object_quadratic_preferred_distance=0.075,
@@ -72,13 +104,10 @@ def get_default_non_collision_cost() -> NonCollisionCost:
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee"] = "box",
     pusher_radius: float = 0.015,
-    integration_constant: float = 0.3,
-    friction_coeff: float = 0.4,
-    lam_buffer: float = 0.2,
-    arc_length_weight: Optional[float] = None,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
+    hardware: bool = False,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -89,24 +118,32 @@ def get_default_plan_config(
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 
-    # Define slider-pusher system
-    slider_pusher_config = SliderPusherSystemConfig(
-        slider=slider,
-        pusher_radius=pusher_radius,
-        friction_coeff_slider_pusher=friction_coeff,
-        friction_coeff_table_slider=0.5,
-        integration_constant=integration_constant,
-    )
+    if hardware:
+        slider_pusher_config = SliderPusherSystemConfig(
+            slider=slider,
+            pusher_radius=pusher_radius,
+            friction_coeff_slider_pusher=0.05,
+            friction_coeff_table_slider=0.5,
+            integration_constant=0.3,
+        )
 
-    contact_cost = get_default_contact_cost()
-    if arc_length_weight is not None:
-        contact_cost.keypoint_arc_length = arc_length_weight
-
-    non_collision_cost = get_default_non_collision_cost()
-
-    contact_config = ContactConfig(
-        cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
-    )
+        contact_cost = get_hardware_contact_cost()
+        non_collision_cost = get_hardware_non_collision_cost()
+        lam_buffer = 0.25
+        contact_config = ContactConfig(
+            cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
+        )
+    else:
+        slider_pusher_config = SliderPusherSystemConfig(
+            slider=slider,
+            pusher_radius=pusher_radius,
+            friction_coeff_slider_pusher=0.05,
+            friction_coeff_table_slider=0.5,
+            integration_constant=0.3,
+        )
+        contact_cost = get_default_contact_cost()
+        non_collision_cost = get_default_non_collision_cost()
+        contact_config = ContactConfig(cost=contact_cost)
 
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,

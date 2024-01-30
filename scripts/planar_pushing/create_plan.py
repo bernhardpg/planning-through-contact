@@ -433,16 +433,15 @@ if __name__ == "__main__":
     slider_type = args.body
 
     pusher_radius = 0.015
-
     time_in_contact = 6.0
     time_in_non_collision = 2.0
 
     config = get_default_plan_config(
         slider_type=slider_type,
         pusher_radius=pusher_radius,
-        integration_constant=0.3,
-        friction_coeff=0.05,
-        lam_buffer=0.25,
+        hardware=hardware_demos,
+        time_contact=time_in_contact,
+        time_non_collision=time_in_non_collision,
     )
     solver_params = get_default_solver_params(debug, clarabel=False)
 
@@ -495,16 +494,50 @@ if __name__ == "__main__":
                     do_rounding=rounding,
                 )
     else:
-        plan_spec = get_predefined_plan(traj_number)
+        output_dir = "trajectories"
+        os.makedirs(output_dir, exist_ok=True)
+        folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
+        os.makedirs(folder_name, exist_ok=True)
 
-        create_plan(
-            plan_spec,
-            debug=debug,
-            pusher_radius=pusher_radius,
-            slider_type=args.body,
-            traj_name=str(traj_number),
-            visualize=True,
-            save_traj=True,
-            save_analysis=True,
-            do_rounding=rounding,
+        workspace = PlanarPushingWorkspace(
+            slider=BoxWorkspace(
+                width=0.35,
+                height=0.5,
+                center=np.array([0.575, 0.0]),
+                buffer=0,
+            ),
         )
+
+        num_demos = 200
+        plans = get_plans_to_point(
+            num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
+        )
+        if traj_number is not None:
+            create_plan(
+                plans[traj_number],
+                debug=debug,
+                output_dir=folder_name,
+                traj_name=f"hw_demo_{traj_number}",
+                visualize=True,
+                pusher_radius=pusher_radius,
+                save_traj=True,
+                animation_lims=None,
+                interpolate_video=interpolate,
+                save_analysis=True,
+                do_rounding=rounding,
+            )
+        else:
+            for idx, plan in enumerate(plans):
+                create_plan(
+                    plan,
+                    output_dir=folder_name,
+                    debug=debug,
+                    traj_name=f"hw_demo_{idx}",
+                    visualize=True,
+                    pusher_radius=pusher_radius,
+                    save_traj=True,
+                    animation_lims=None,
+                    interpolate_video=interpolate,
+                    save_analysis=True,
+                    do_rounding=rounding,
+                )
