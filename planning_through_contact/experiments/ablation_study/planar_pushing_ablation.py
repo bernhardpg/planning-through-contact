@@ -30,9 +30,24 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 
 
+def sorted_walk(top, topdown=True):
+    dirs, nondirs = [], []
+    for name in sorted(os.listdir(top)):
+        (dirs if os.path.isdir(os.path.join(top, name)) else nondirs).append(name)
+    if topdown:
+        yield top, dirs, nondirs
+    for name in dirs:
+        path = os.path.join(top, name)
+        for x in sorted_walk(path, topdown):
+            yield x
+    if not topdown:
+        yield top, dirs, nondirs
+
+
 def _find_files(directory, pattern):
     matches = []
-    for root, dirs, files in os.walk(directory):
+    for root, dirs, files in sorted_walk(directory):
+        print(root)
         for name in files:
             if fnmatch.fnmatch(name, pattern):
                 matches.append(os.path.join(root, name))
@@ -54,6 +69,7 @@ class SingleRunResult:
     rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
+    name: Optional[str] = None
 
     @property
     def optimality_gap(self) -> float:
@@ -89,7 +105,9 @@ class SingleRunResult:
     @staticmethod
     def load(filename: str) -> "SingleRunResult":
         with open(Path(filename), "rb") as file:
-            return pickle.load(file)
+            run_result = pickle.load(file)
+            run_result.name = filename
+            return run_result
 
     def __str__(self):
         # Manually add property strings
@@ -138,7 +156,7 @@ class AblationStudy:
         ]
 
     @property
-    def solve_times_feasible(self) -> List[float]:
+    def solve_times_feasible(self) -> List[float | None]:
         return [res.feasible_time for res in self.results if res.feasible_success]
 
     @property
@@ -191,12 +209,15 @@ class AblationStudy:
         return len(self) - self.num_feasible_success
 
     @property
-    def percentage_success(self) -> float:
+    def percentage_binary_flows_success(self) -> float:
         return (self.num_binary_flows_success / len(self)) * 100
 
     @property
-    def percentage_rounded_success(self) -> float:
+    def percentage_feasible_success(self) -> float:
         return (self.num_feasible_success / len(self)) * 100
+
+    def get_infeasible_idxs(self) -> List[str | None]:
+        return [res.name for res in self.results if not res.feasible_success]
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
