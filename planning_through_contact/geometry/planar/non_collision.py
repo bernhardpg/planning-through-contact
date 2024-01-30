@@ -348,12 +348,15 @@ class NonCollisionMode(AbstractContactMode):
                         A[0, :] = (
                             plane.a.T
                             * self.cost_config.distance_to_object_socp
-                            / len(planes)
+                            # TODO(bernhardpg): Why does this cause a bug?
+                            # / len(planes)
                         )
                         # b = [b; 1]
                         b = np.ones((NUM_VARS, 1))
                         b[0] = plane.b
-                        b = b * self.cost_config.distance_to_object_socp / len(planes)
+                        b = b * self.cost_config.distance_to_object_socp
+                        # TODO(bernhardpg): Why does this cause a bug?
+                        # / len(planes)
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)
