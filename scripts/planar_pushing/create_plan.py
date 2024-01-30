@@ -419,7 +419,6 @@ if __name__ == "__main__":
         default="box",
     )
     parser.add_argument("--round", help="Do nonlinear rounding", action="store_true")
-    parser.add_argument("--demos", help="Generate demos", action="store_true")
     parser.add_argument("--hardware_demos", help="Generate demos", action="store_true")
     parser.add_argument("--debug", help="Debug mode", action="store_true")
     parser.add_argument(
@@ -427,7 +426,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     traj_number = args.traj
-    make_demos = args.demos
     hardware_demos = args.hardware_demos
     debug = args.debug
     rounding = args.round
@@ -439,84 +437,14 @@ if __name__ == "__main__":
     time_in_contact = 6.0
     time_in_non_collision = 2.0
 
-    use_old_params = False
-    if use_old_params:
-        if slider_type == "box":
-            slider = get_box()
-        elif slider_type == "tee":
-            slider = get_tee()
-        elif slider_type == "sugar_box":
-            slider = get_sugar_box()
-        else:
-            raise NotImplementedError("")
-
-        dynamics_config = SliderPusherSystemConfig(
-            pusher_radius=pusher_radius,
-            slider=slider,
-            friction_coeff_slider_pusher=0.25,
-            friction_coeff_table_slider=0.5,
-            integration_constant=0.02,
-        )
-
-        # Configure contact cost
-        contact_cost = ContactCost(
-            cost_type=ContactCostType.OPTIMAL_CONTROL,
-            force_regularization=5.0,
-            ang_displacements=1.0,
-            lin_displacements=1.0,
-            mode_transition_cost=None,
-        )
-
-        contact_config = ContactConfig(
-            cost=contact_cost,
-            lam_min=0.47,
-            lam_max=0.53,
-            delta_vel_max=0.05 * 2,
-            delta_theta_max=0.4 * 2,
-        )
-
-        # Configure non-collision cost
-        non_collision_cost = NonCollisionCost(
-            distance_to_object_quadratic=None,
-            distance_to_object_socp=1.0,
-            pusher_velocity_regularization=1.0,
-            pusher_arc_length=None,
-        )
-
-        config = PlanarPlanConfig(
-            dynamics_config=dynamics_config,
-            time_in_contact=time_in_contact,
-            time_non_collision=time_in_non_collision,
-            num_knot_points_contact=4,
-            num_knot_points_non_collision=4,
-            allow_teleportation=False,
-            use_band_sparsity=True,
-            use_entry_and_exit_subgraphs=True,
-            contact_config=contact_config,
-            continuity_on_pusher_velocity=True,
-            non_collision_cost=non_collision_cost,
-        )
-
-        solver_params = PlanarSolverParams(
-            measure_solve_time=True,
-            rounding_steps=20,
-            print_flows=False,
-            print_solver_output=debug,
-            save_solver_output=False,
-            print_path=debug,
-            print_cost=debug,
-            assert_result=True,
-        )
-
-    else:
-        config = get_default_plan_config(
-            slider_type=slider_type,
-            pusher_radius=pusher_radius,
-            integration_constant=0.3,
-            friction_coeff=0.05,
-            lam_buffer=0.25,
-        )
-        solver_params = get_default_solver_params(debug, clarabel=False)
+    config = get_default_plan_config(
+        slider_type=slider_type,
+        pusher_radius=pusher_radius,
+        integration_constant=0.3,
+        friction_coeff=0.05,
+        lam_buffer=0.25,
+    )
+    solver_params = get_default_solver_params(debug, clarabel=False)
 
     if hardware_demos:
         output_dir = "demos"
