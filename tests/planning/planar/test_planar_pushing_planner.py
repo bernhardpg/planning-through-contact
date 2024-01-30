@@ -216,7 +216,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     result = planner._solve(solver_params)
     assert result.is_success()
 
-    path = planner.get_solution_paths(result, solver_params)
+    path = planner.plan_path(solver_params)
     traj = path.to_traj()
     assert_initial_and_final_poses(
         traj,
@@ -297,7 +297,7 @@ def test_make_plan(
     result = planner._solve(solver_params)
     assert result.is_success()
 
-    path = planner.get_solution_paths(result, solver_params)
+    path = planner.plan_path(solver_params)
     traj = path.to_traj()
     assert_initial_and_final_poses(
         traj,
@@ -372,9 +372,8 @@ def test_make_plan_band_sparsity_box(
     result = planner._solve(solver_params)
     assert result.is_success()
 
-    paths = planner.get_solution_paths(result, solver_params)
-    trajs = [path.to_traj() for path in paths]
-    traj = trajs[0]
+    path = planner.plan_path(solver_params)
+    traj = path.to_traj()
 
     assert_initial_and_final_poses(
         traj,
@@ -437,7 +436,7 @@ def test_make_plan_band_sparsity_t_pusher(
     result = planner._solve(solver_params)
     assert result.is_success()
 
-    path = planner.get_solution_paths(result, solver_params)
+    path = planner.plan_path(solver_params)
     traj = path.to_traj()
 
     assert_initial_and_final_poses(
@@ -490,7 +489,7 @@ def test_planner_standard_cost(
     result = planner._solve(solver_params)
     assert result.is_success()
 
-    paths = planner.get_solution_paths(result, solver_params)
+    path = planner.plan_path(solver_params)
     traj = path.to_traj()
 
     assert_initial_and_final_poses(
@@ -541,7 +540,7 @@ def test_planner_plan_path(
 ) -> None:
     solver_params = PlanarSolverParams(save_solver_output=DEBUG)
     path = planner.plan_path(solver_params)
-    traj = path.to_traj(rounded=True, solver_params=solver_params)
+    traj = path.to_traj(rounded=True)
 
     assert_initial_and_final_poses(
         traj,

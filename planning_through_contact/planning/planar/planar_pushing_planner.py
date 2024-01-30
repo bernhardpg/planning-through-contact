@@ -62,6 +62,7 @@ class PlanarPushingPlanner:
 
         self.source = None
         self.target = None
+        self.relaxed_gcs_result = None
 
         if (
             self.config.non_collision_cost.avoid_object
@@ -354,6 +355,9 @@ class PlanarPushingPlanner:
         return pair
 
     def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
+        """
+        Returns the relaxed GCS result, potentially with non-binary flow values.
+        """
         options = opt.GraphOfConvexSetsOptions()
         if solver_params.print_solver_output:
             options.solver_options = SolverOptions()
@@ -472,13 +476,13 @@ class PlanarPushingPlanner:
         import time
 
         start = time.time()
-        result = self._solve(solver_params)
+        gcs_result = self._solve(solver_params)
         end = time.time()
 
         if solver_params.assert_result:
-            assert result.is_success()
+            assert gcs_result.is_success()
         else:
-            if not result.is_success():
+            if not gcs_result.is_success():
                 print("WARNING: Solver did not find a solution!")
 
         if solver_params.measure_solve_time:
@@ -486,12 +490,12 @@ class PlanarPushingPlanner:
             print(f"Total elapsed optimization time: {elapsed_time}")
 
         if solver_params.print_cost:
-            cost = result.get_optimal_cost()
+            cost = gcs_result.get_optimal_cost()
             print(f"Cost: {cost}")
 
         # Get N paths from GCS rounding, pick the best one
         paths = self.get_solution_paths(
-            result,
+            gcs_result,
             solver_params,
         )
         # Do nonlinear rounding on each traj, pick the best one
@@ -513,6 +517,8 @@ class PlanarPushingPlanner:
 
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
+
+        self.relaxed_gcs_result = gcs_result
 
         return self.path
 

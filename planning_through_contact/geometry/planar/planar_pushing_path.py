@@ -125,7 +125,7 @@ class PlanarPushingPath:
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
         """
-        Picks a deterministic path.
+        Creates a Planar Pushing path from a given set of edges.
         """
         vertex_path = [e.u() for e in edge_path]
         vertex_path.append(edge_path[-1].v())
@@ -165,7 +165,8 @@ class PlanarPushingPath:
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
         """
-        Picks a deterministic path.
+        Create a PlanarPushingPath from a relaxed GCS result, which then picks
+        a deterministic graph path using gcs.GetSolutionPath(...).
         """
         edge_path = gcs.GetSolutionPath(source_vertex, target_vertex, result)
         vertex_path = [e.u() for e in edge_path]
@@ -381,10 +382,5 @@ class PlanarPushingPath:
                     f"Solution was not successfull. Solution result: {result.get_solution_result()} "
                 )
                 raise RuntimeError("Rounding was not succesfull.")
-        else:
-            if not result.is_success():
-                print(
-                    "Warning, rounding did not return is_success() == True, and might not have converged"
-                )
 
         return result
