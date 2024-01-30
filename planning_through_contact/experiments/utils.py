@@ -42,12 +42,12 @@ def get_sugar_box() -> RigidBody:
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
-        keypoint_arc_length=10.0,
+        keypoint_arc_length=1.0,
         linear_arc_length=None,
         angular_arc_length=None,
         force_regularization=1.0,
         keypoint_velocity_regularization=None,
-        ang_velocity_regularization=10.0,
+        ang_velocity_regularization=1.0,
         lin_velocity_regularization=1.0,
         trace=None,
         mode_transition_cost=None,
@@ -58,9 +58,9 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_socp=0.0001,  # this sometimes cause numerical problems
+        distance_to_object_socp=1e-3,  # this sometimes cause numerical problems
         pusher_velocity_regularization=0.1,
-        pusher_arc_length=1.0,
+        pusher_arc_length=0.1,
         time=None,
     )
     return non_collision_cost
@@ -137,7 +137,7 @@ def get_default_plan_config(
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
             pusher_radius=pusher_radius,
-            friction_coeff_slider_pusher=0.05,
+            friction_coeff_slider_pusher=0.1,
             friction_coeff_table_slider=0.5,
             integration_constant=0.3,
         )
@@ -171,7 +171,7 @@ def get_default_solver_params(
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
-        save_solver_output=False,
+        save_solver_output=debug,
         print_path=False,
         print_cost=debug,
         assert_result=False,
