@@ -1,6 +1,7 @@
 from itertools import combinations
 from typing import Dict, List, Literal, Optional, Tuple
 
+import numpy as np
 import pydot
 import pydrake.geometry.optimization as opt
 from pydrake.geometry.optimization import Point
@@ -459,6 +460,9 @@ class PlanarPushingPlanner:
         return paths
 
     def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
+        """
+        Plans a path.
+        """
         assert self.source is not None
         assert self.target is not None
 
@@ -482,10 +486,27 @@ class PlanarPushingPlanner:
             cost = result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        self.path = self.get_solution_paths(
+        # Get N paths from GCS rounding, pick the best one
+        paths = self.get_solution_paths(
             result,
             solver_params,
         )
+        # Do nonlinear rounding on each traj, pick the best one
+        if solver_params.rounding_steps > 0:
+            for path in paths:
+                path.do_rounding(solver_params)
+
+            rounded_costs = [
+                p.rounded_result.get_optimal_cost()
+                if p.rounded_result.is_success()
+                else np.inf
+                for p in paths
+            ]
+            best_idx = np.argmin(rounded_costs)
+            self.path = paths[best_idx]
+
+        else:
+            raise NotImplementedError("Must enable rounding steps")
 
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")

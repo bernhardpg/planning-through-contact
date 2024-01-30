@@ -24,6 +24,7 @@ from planning_through_contact.planning.planar.planar_pushing_planner import (
 )
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
     visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
@@ -513,4 +514,57 @@ def test_planner_standard_cost(
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
         visualize_planar_pushing_trajectory(
             traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [
+        {
+            "avoid_object": True,
+            "boundary_conds": {
+                "finger_initial_pose": PlanarPose(x=0, y=-0.3, theta=0.0),
+                "finger_target_pose": PlanarPose(x=-0.3, y=0, theta=0.0),
+                "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
+                "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
+            },
+            "use_band_sparsity": True,
+            "body": "box",
+            "standard_cost": True,
+        },
+    ],
+    indirect=["planner"],
+    ids=[1],
+)
+def test_planner_plan_path(
+    planner: PlanarPushingPlanner,
+) -> None:
+    solver_params = PlanarSolverParams(save_solver_output=DEBUG)
+    path = planner.plan_path(solver_params)
+    traj = path.to_traj(rounded=True, solver_params=solver_params)
+
+    assert_initial_and_final_poses(
+        traj,
+        planner.slider_pose_initial,
+        planner.pusher_pose_initial,
+        planner.slider_pose_target,
+        planner.pusher_pose_target,
+    )
+
+    # Make sure we are not leaving the object
+    assert np.all(
+        [
+            np.abs(p_BP) <= 1.0
+            for knot_point in traj.path_knot_points
+            for p_BP in knot_point.p_BPs  # type: ignore
+        ]
+    )
+
+    if DEBUG:
+        save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
+        visualize_planar_pushing_trajectory(
+            traj, visualize_knot_points=True, save=True, filename="debug_file"
+        )
+        make_traj_figure(
+            traj, plot_lims=(-0.5, 0.1, -0.5, 0.1), filename="debug_file_traj"
         )

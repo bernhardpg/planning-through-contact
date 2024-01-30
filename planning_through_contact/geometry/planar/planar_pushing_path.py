@@ -195,12 +195,12 @@ class PlanarPushingPath:
 
     def to_traj(
         self,
-        do_rounding: bool = False,
+        rounded: bool = False,
         solver_params: Optional[PlanarSolverParams] = None,
     ) -> PlanarPushingTrajectory:
-        if do_rounding:
+        if rounded:
             assert solver_params is not None
-            self.do_rounding(solver_params)
+            assert self.rounded_result is not None
             return PlanarPushingTrajectory(
                 self.config,
                 self.get_rounded_vars(),

@@ -68,7 +68,7 @@ class SliderPusherSystemConfig:
     )
     pusher_radius: float = 0.015
     friction_coeff_table_slider: float = 0.5
-    friction_coeff_slider_pusher: float = 0.5
+    friction_coeff_slider_pusher: float = 0.1
     grav_acc: float = 9.81
     integration_constant: float = 0.6
     force_scale: float = (

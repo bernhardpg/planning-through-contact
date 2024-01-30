@@ -319,7 +319,7 @@ def create_plan(
         traj_relaxed = path.to_traj()
 
         if do_rounding:
-            traj_rounded = path.to_traj(do_rounding=True, solver_params=solver_params)
+            traj_rounded = path.to_traj(rounded=True, solver_params=solver_params)
         else:
             traj_rounded = None
 
