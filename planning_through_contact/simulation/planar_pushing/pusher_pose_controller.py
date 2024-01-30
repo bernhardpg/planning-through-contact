@@ -158,12 +158,13 @@ class PusherPoseController(LeafSystem):
                         for current_mode in mode_traj
                     ]
                 )
-                and time_since_last_hybrid_mpc > 0.3
+                and time_since_last_hybrid_mpc > 0.2
                 and in_very_close_contact
             ):
                 logger.warn(f"PUSHER SLIDER UNINTENDED COLLISION at time {time}")
 
         elif fsm_state_value == PusherPoseControllerState.HYBRID_MPC:
+            self._last_hybrid_mpc_time = time
             if curr_mode_desired == PlanarPushingContactMode.NO_CONTACT:
                 mutable_fsm_state.set_value(PusherPoseControllerState.CFREE_MPC)
                 logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
@@ -229,16 +230,16 @@ class PusherPoseController(LeafSystem):
 
         modes_eq_to_curr = [m == mode for m in mode_traj]
         if not all(modes_eq_to_curr):
-            N = modes_eq_to_curr.index(False)
+            next_mode_idx = modes_eq_to_curr.index(False)
 
             # repeat last element of the trajectory that is still in contact
-            for idx in range(N, len(x_traj)):
-                x_traj[idx] = x_traj[N - 1]
+            for idx in range(next_mode_idx, len(x_traj)):
+                x_traj[idx] = x_traj[next_mode_idx - 1]
 
-            for idx in range(N, len(u_traj)):
-                u_traj[idx] = u_traj[N - 1]
-        else:
-            N = len(x_traj)
+            for idx in range(next_mode_idx, len(u_traj)):
+                u_traj[idx] = u_traj[next_mode_idx - 1]
+        # else:
+        N = len(x_traj)
 
         # Period between MPC steps
         h = 1 / self.mpc_config.rate_Hz
@@ -246,7 +247,7 @@ class PusherPoseController(LeafSystem):
         # Finite difference method based on pusher position
         pusher_pose_acc = pusher_pose_cmd_state.get_value()
         x_dot_curr, u_input, pusher_vel = controller.compute_control(
-            x_curr, x_traj[: N + 1], u_traj[:N]
+            x_curr, x_traj[:N], u_traj[: N - 1]
         )
 
         next_pusher_pose = PlanarPose(*(pusher_pose_acc.pos() + h * pusher_vel), 0)
@@ -302,7 +303,6 @@ class PusherPoseController(LeafSystem):
             mode_traj: List[PlanarPushingContactMode] = self.contact_mode_traj.Eval(context)  # type: ignore
             slider_planar_pose_traj: List[PlanarPose] = self.slider_planar_pose_traj.Eval(context)  # type: ignore
             contact_force_traj: List[npt.NDArray[np.float64]] = self.contact_force_traj.Eval(context)  # type: ignore
-
             if self._hybrid_mpc_count == 0:
                 logger.debug(f"Resetting accumulator at time {context.get_time()}")
                 pusher_pose_cmd_state.set_value(pusher_planar_pose)

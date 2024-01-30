@@ -88,6 +88,40 @@ class HybridMpc:
 
         self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
+        self._progs = {mode: MathematicalProgram() for mode in HybridModes}
+        # Formulate the problem in the local coordinates around the nominal trajectory
+        self._vars = {
+            mode: {
+                "x_bar": self._progs[mode].NewContinuousVariables(
+                    self.num_states, self.config.horizon, "x_bar"
+                ),
+                "u_bar": self._progs[mode].NewContinuousVariables(
+                    self.num_inputs, self.config.horizon - 1, "u_bar"
+                ),
+            }
+            for mode in HybridModes
+        }
+        self._last_sols = {mode: None for mode in HybridModes}
+
+        Q = self.config.Q
+        R = self.config.R
+        Q_N = self.config.Q_N
+
+        for mode, prog in self._progs.items():
+            x_bar = self._vars[mode]["x_bar"]
+            u_bar = self._vars[mode]["u_bar"]
+            N = self.config.horizon
+
+            # Cost
+            state_running_cost = sum(
+                [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
+            )
+            input_running_cost = sum(
+                [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
+            )
+            terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
+            prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
+
         self.control_log: List[npt.NDArray[np.float64]] = []
         self.cost_log: List[float] = []
         self.desired_velocity_log: List[npt.NDArray[np.float64]] = []
@@ -161,12 +195,14 @@ class HybridMpc:
         N = len(x_traj)
         h = self.config.step_size
         num_sliding_steps = self.config.num_sliding_steps
+        prog = self._progs[mode]
+        x_bar = self._vars[mode]["x_bar"]
+        u_bar = self._vars[mode]["u_bar"]
 
-        prog = MathematicalProgram()
-
-        # Formulate the problem in the local coordinates around the nominal trajectory
-        x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
-        u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
+        # Clear all previous constraints
+        all_constraints = prog.GetAllConstraints()
+        for constraint in all_constraints:
+            prog.RemoveConstraint(constraint)
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
@@ -238,19 +274,6 @@ class HybridMpc:
             lam = state[3]
             prog.AddLinearConstraint(lam >= self.config.lam_min)
             prog.AddLinearConstraint(lam <= self.config.lam_max)
-
-        Q = self.config.Q
-        R = self.config.R
-        Q_N = self.config.Q_N
-
-        state_running_cost = sum(
-            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
-        )
-        input_running_cost = sum(
-            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
-        )
-        terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
-        prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
 
         return prog, x, u  # type: ignore
 
