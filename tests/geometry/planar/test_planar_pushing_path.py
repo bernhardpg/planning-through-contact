@@ -161,7 +161,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
     result = planner._solve(solver_params)
     assert result.is_success()
-    path = planner.get_solution_path(result)
+    path = planner.get_solution_paths(result)
 
     # We should always have one more vertex than edge in a solution
     assert len(path.pairs) == len(path.edges) + 1
@@ -245,7 +245,7 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     relaxed_result = planner._solve(solver_params)
     assert relaxed_result.is_success()
 
-    path = planner.get_solution_path(relaxed_result)
+    path = planner.get_solution_paths(relaxed_result)
     traj_relaxed = path.to_traj()
 
     if DEBUG:

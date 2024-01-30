@@ -224,15 +224,15 @@ def do_one_run_get_path(
     planner.formulate_problem()
 
     # Store this value as we need to set it to 0 to run GCS without rounding!
-    max_rounded_paths = solver_params.gcs_max_rounded_paths
+    max_rounded_paths = solver_params.rounding_steps
 
     start_time = time.time()
-    solver_params.gcs_max_rounded_paths = 0
+    solver_params.rounding_steps = 0
     relaxed_result = planner._solve(solver_params)
     relaxed_elapsed_time = time.time() - start_time
     relaxed_cost = relaxed_result.get_optimal_cost()
 
-    solver_params.gcs_max_rounded_paths = max_rounded_paths
+    solver_params.rounding_steps = max_rounded_paths
     start_time = time.time()
     sdp_result = planner._solve(solver_params)
     sdp_elapsed_time = time.time() - start_time

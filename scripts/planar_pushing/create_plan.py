@@ -499,7 +499,7 @@ if __name__ == "__main__":
 
         solver_params = PlanarSolverParams(
             measure_solve_time=True,
-            gcs_max_rounded_paths=20,
+            rounding_steps=20,
             print_flows=False,
             print_solver_output=debug,
             save_solver_output=False,

@@ -105,7 +105,7 @@ class SliderPusherSystemConfig:
 
 @dataclass
 class PlanarSolverParams:
-    gcs_max_rounded_paths: int = 20
+    rounding_steps: int = 20
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
