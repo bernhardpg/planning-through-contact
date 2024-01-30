@@ -363,31 +363,6 @@ class NonCollisionMode(AbstractContactMode):
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
 
-            if self.cost_config.distance_to_object_socp_single_mode is not None:
-                # TODO: Can probably get rid of this
-
-                # NOTE: Only a research feature for adding socp costs on a single mode (i.e. not in GCS)
-                for dists in dists_for_each_plane:
-                    dists_except_first_and_last = dists[1:-1]
-                    slacks = self.prog.NewContinuousVariables(
-                        len(dists_except_first_and_last), "s"
-                    )
-                    for d, s in zip(dists_except_first_and_last, slacks):
-                        # Let d := dist >= 0
-                        # we want infinite cost for being close to object:
-                        #   minimize 1 / d
-                        # reformulate as:
-                        #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
-                        #   <=>
-                        #   minimize s s.t. s d >= 1, d >= 0
-                        # which is exactly a rotated Lorentz cone constraint:
-                        # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
-
-                        self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-                        self.prog.AddLinearCost(
-                            self.cost_config.distance_to_object_socp_single_mode * s
-                        )
-
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.
             assert self.config.start_and_goal is not None

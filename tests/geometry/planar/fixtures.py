@@ -68,9 +68,17 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
     contact_cost = ContactCost(
-        cost_type=ContactCostType.SQ_VELOCITIES, force_regularization=0.1
+        cost_type=ContactCostType.SQ_VELOCITIES,
+        keypoint_arc_length=1,
+        linear_arc_length=None,
+        angular_arc_length=None,
+        force_regularization=0.1,
+        keypoint_velocity_regularization=None,
+        ang_velocity_regularization=1.0,
+        lin_velocity_regularization=0.1,
+        trace=None,
     )
-    contact_config = ContactConfig(cost=contact_cost)
+    contact_config = ContactConfig(contact_cost)
     cfg = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         use_approx_exponential_map=False,
@@ -239,32 +247,9 @@ def planner(
 
     plan_config.dynamics_config.pusher_radius = 0.015
 
-    if request.param.get("standard_cost"):
-        contact_cost = ContactCost(
-            cost_type=ContactCostType.STANDARD,
-            keypoint_arc_length=1,
-            linear_arc_length=None,
-            angular_arc_length=None,
-            force_regularization=0.1,
-            keypoint_velocity_regularization=None,
-            ang_velocity_regularization=1.0,
-            lin_velocity_regularization=0.1,
-            trace=1e-5,
-        )
-        contact_config = ContactConfig(contact_cost)
-    else:
-        cost_config = ContactCost(
-            cost_type=ContactCostType.OPTIMAL_CONTROL,
-            force_regularization=5.0,
-            mode_transition_cost=None,
-        )
-        contact_config = ContactConfig(
-            cost=cost_config,
-            delta_vel_max=0.1,
-            delta_theta_max=0.8,
-        )
-
-    plan_config.contact_config = request.param.get("contact_config", contact_config)
+    plan_config.contact_config = request.param.get(
+        "contact_config", plan_config.contact_config
+    )
     plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)

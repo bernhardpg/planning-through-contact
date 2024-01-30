@@ -33,7 +33,6 @@ def get_gcs_solution_path_vertices(
         edge for edge, flow in zip(gcs.Edges(), flow_results) if flow >= flow_treshold
     ]
     edge_names = [f"{e.u().name()}_{e.v().name()}" for e in active_edges]
-    breakpoint()
     vertex_path = _gcs_find_path_to_target(active_edges, target_vertex, source_vertex)
     return vertex_path
 
