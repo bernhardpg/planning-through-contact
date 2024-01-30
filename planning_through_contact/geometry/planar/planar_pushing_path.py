@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import numpy.typing as npt
@@ -196,10 +196,8 @@ class PlanarPushingPath:
     def to_traj(
         self,
         rounded: bool = False,
-        solver_params: Optional[PlanarSolverParams] = None,
     ) -> PlanarPushingTrajectory:
         if rounded:
-            assert solver_params is not None
             assert self.rounded_result is not None
             return PlanarPushingTrajectory(
                 self.config,

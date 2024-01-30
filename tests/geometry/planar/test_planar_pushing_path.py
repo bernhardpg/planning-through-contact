@@ -11,7 +11,11 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
-from planning_through_contact.experiments.utils import get_default_plan_config
+from planning_through_contact.experiments.utils import (
+    get_default_contact_cost,
+    get_default_non_collision_cost,
+    get_default_plan_config,
+)
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
@@ -161,7 +165,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
     solver_params = PlanarSolverParams(print_solver_output=DEBUG)
     result = planner._solve(solver_params)
     assert result.is_success()
-    path = planner.get_solution_paths(result)
+    path = planner.get_solution_paths(result, solver_params)[0]
 
     # We should always have one more vertex than edge in a solution
     assert len(path.pairs) == len(path.edges) + 1
@@ -182,7 +186,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
     [
         PlanarPushingStartAndGoal(
             PlanarPose(x=0, y=0, theta=0.0),
-            PlanarPose(x=0.2, y=0, theta=0.0),
+            PlanarPose(x=0.0, y=0, theta=0.0),
             PlanarPose(x=-0.2, y=-0.2, theta=0.0),
             PlanarPose(x=-0.2, y=-0.2, theta=0.0),
         ),
@@ -203,35 +207,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
 )
 def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     slider = get_sugar_box()
-    dynamics_config = SliderPusherSystemConfig(
-        pusher_radius=0.035, slider=slider, friction_coeff_slider_pusher=0.25
-    )
-    contact_cost = ContactCost(
-        cost_type=ContactCostType.OPTIMAL_CONTROL,
-        force_regularization=5.0,
-        mode_transition_cost=1.0,
-    )
-    contact_config = ContactConfig(
-        cost=contact_cost,
-        delta_vel_max=0.1,
-        delta_theta_max=0.8,
-    )
-    non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.4,
-        pusher_velocity_regularization=1.0,
-    )
-    config = PlanarPlanConfig(
-        dynamics_config=dynamics_config,
-        non_collision_cost=non_collision_cost,
-        time_in_contact=2.0,
-        time_non_collision=1.0,
-        num_knot_points_contact=3,
-        num_knot_points_non_collision=3,
-        allow_teleportation=False,
-        use_band_sparsity=True,
-        use_entry_and_exit_subgraphs=True,
-        contact_config=contact_config,
-    )
+    config = get_default_plan_config(pusher_radius=0.035)
     planner = PlanarPushingPlanner(config)
     solver_params = PlanarSolverParams(
         measure_solve_time=DEBUG,
@@ -242,10 +218,7 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
     planner.config.start_and_goal = plan_spec
     planner.formulate_problem()
 
-    relaxed_result = planner._solve(solver_params)
-    assert relaxed_result.is_success()
-
-    path = planner.get_solution_paths(relaxed_result)
+    path = planner.plan_path(solver_params)
     traj_relaxed = path.to_traj()
 
     if DEBUG:
@@ -259,12 +232,11 @@ def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
         make_traj_figure(traj_relaxed, filename="debug_file_relaxed")
         analyze_plan(path, filename="debug_analysis_relaxed", rounded=False)
 
-    path.do_rounding(solver_params)
     assert path.rounded_result is not None
-    # we don't actually run the solver to optimality
-    # assert path.rounded_result.is_success()
+    assert path.rounded_result.is_success()
 
     traj_rounded = PlanarPushingTrajectory(planner.config, path.get_rounded_vars())
+    traj_rounded = path.to_traj(rounded=True)
 
     if DEBUG:
         visualize_planar_pushing_trajectory(

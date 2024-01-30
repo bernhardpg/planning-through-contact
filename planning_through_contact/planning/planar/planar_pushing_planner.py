@@ -433,17 +433,20 @@ class PlanarPushingPlanner:
         options.convex_relaxation = True
         options.preprocessing = True
 
-        flow_vars = [e.phi() for e in self.gcs.Edges()]
-        flow_results = [result.GetSolution(phi) for phi in flow_vars]
-
         paths, results = self.gcs.GetRandomizedSolutionPath(
             self.source.vertex, self.target.vertex, result, options
         )
 
         # Sort the paths and results by optimal cost
         paths_and_results = zip(paths, results)
-        filtered_res = [pair for pair in paths_and_results if pair[1].is_success()]
-        sorted_res = sorted(filtered_res, key=lambda pair: pair[1].get_optimal_cost())
+        only_successful_res = [
+            pair for pair in paths_and_results if pair[1].is_success()
+        ]
+        if len(only_successful_res) == 0:
+            raise RuntimeError("No trajectories rounded succesfully")
+        sorted_res = sorted(
+            only_successful_res, key=lambda pair: pair[1].get_optimal_cost()
+        )
         paths, results = zip(*sorted_res)
 
         paths = [
