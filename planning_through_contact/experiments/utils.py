@@ -13,6 +13,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
+    PlanarPushingWorkspace,
     PlanarSolverParams,
     SliderPusherSystemConfig,
 )
@@ -41,40 +42,43 @@ def get_sugar_box() -> RigidBody:
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
-        keypoint_arc_length=10.0,
+        keypoint_arc_length=5.0,
         linear_arc_length=None,
         angular_arc_length=None,
-        force_regularization=0.01,
+        force_regularization=1.0,
         keypoint_velocity_regularization=None,
         ang_velocity_regularization=10.0,
-        lin_velocity_regularization=1.0,
+        lin_velocity_regularization=2.0,
         trace=None,
-        mode_transition_cost=1.0,
+        mode_transition_cost=None,
+        time=0.35,
     )
     return contact_cost
 
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_quadratic=0.05,
-        distance_to_object_quadratic_preferred_distance=0.1,
-        # distance_to_object_socp=0.0003, # this sometimes cause numerical problems
-        distance_to_object_socp=None,
-        pusher_velocity_regularization=0.005,
-        pusher_arc_length=0.001,
+        # distance_to_object_quadratic=0.15,
+        # distance_to_object_quadratic_preferred_distance=0.075,
+        # distance_to_object_socp=None,
+        distance_to_object_socp=0.0001,  # this sometimes cause numerical problems
+        pusher_velocity_regularization=0.002,
+        pusher_arc_length=0.004,
+        time=None,
     )
     return non_collision_cost
 
 
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee"] = "box",
-    pusher_radius: float = 0.035,
-    integration_constant: float = 0.6,
+    pusher_radius: float = 0.015,
+    integration_constant: float = 0.3,
     friction_coeff: float = 0.4,
     lam_buffer: float = 0.2,
     arc_length_weight: Optional[float] = None,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
+    workspace: Optional[PlanarPushingWorkspace] = None,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -107,7 +111,7 @@ def get_default_plan_config(
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,
         num_knot_points_contact=3,
-        num_knot_points_non_collision=3,
+        num_knot_points_non_collision=4,
         use_band_sparsity=True,
         contact_config=contact_config,
         non_collision_cost=non_collision_cost,
@@ -115,6 +119,7 @@ def get_default_plan_config(
         allow_teleportation=False,
         time_in_contact=time_contact,
         time_non_collision=time_non_collision,
+        workspace=workspace,
     )
 
     return plan_cfg
@@ -125,7 +130,7 @@ def get_default_solver_params(
 ) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
         measure_solve_time=debug,
-        gcs_max_rounded_paths=20,
+        gcs_max_rounded_paths=100,
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
@@ -133,6 +138,7 @@ def get_default_solver_params(
         print_path=False,
         print_cost=debug,
         assert_result=False,
+        assert_nan_values=True,
     )
     return solver_params
 

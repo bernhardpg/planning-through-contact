@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq
+from pydrake.math import eq, le
 from pydrake.solvers import (
     Binding,
     L2NormCost,
@@ -482,23 +482,60 @@ class FaceContactMode(AbstractContactMode):
                 eq(v_c_B.flatten(), np.zeros((2,)))
             )
 
+        if self.config.workspace is not None:
+            self._add_workspace_constraints()
+
+    def _add_workspace_constraints(self) -> None:
+        raise NotImplementedError(
+            "Workspace constraints not supported, as it slows down the planner by a very big amount"
+        )
+
+        assert self.config.workspace is not None
+        slider_workspace = self.config.workspace.slider
+
+        slider = self.config.dynamics_config.slider.geometry
+        p_Wv_is = self._get_slider_vertices(slider)
+
+        for k in range(self.num_knot_points):
+            p_Wvs_at_k = p_Wv_is[k]
+
+            lb, ub = slider_workspace.bounds
+            for p_Wv_i in p_Wvs_at_k:
+                self.prog_wrapper.add_linear_inequality_constraint(k, le(lb, p_Wv_i))
+                self.prog_wrapper.add_linear_inequality_constraint(k, le(p_Wv_i, ub))
+
+    def _get_slider_vertices(
+        self, slider: CollisionGeometry
+    ) -> List[List[npt.NDArray]]:
+        """
+        Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
+        are linear in the decision varibles of the program
+        """
+        p_Wv_is = [
+            [
+                slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
+                for vertex_idx in range(len(slider.vertices))
+            ]
+            for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
+        ]
+        return p_Wv_is
+
     def _define_costs(self) -> None:
         cost_config = self.config.contact_config.cost
 
         if cost_config.mode_transition_cost is not None:
             self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
 
+        if cost_config.time is not None:
+            self.prog_wrapper.add_independent_cost(
+                cost_config.time * self.config.time_in_contact
+            )
+
         if cost_config.cost_type == ContactCostType.STANDARD:
             # Arc length on keypoint trajectories
             if cost_config.keypoint_arc_length is not None:
                 slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = [
-                    [
-                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                        for vertex_idx in range(len(slider.vertices))
-                    ]
-                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-                ]
+                p_Wv_is = self._get_slider_vertices(slider)
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
@@ -568,24 +605,26 @@ class FaceContactMode(AbstractContactMode):
             if cost_config.force_regularization is not None:
                 for k, c_n in enumerate(self.variables.normal_forces):
                     self.prog_wrapper.add_quadratic_cost(
-                        k, k, cost_config.force_regularization * c_n**2
+                        k,
+                        k,
+                        cost_config.force_regularization
+                        * c_n**2
+                        * self.dynamics_config.force_scale**2,
                     )
 
                 for k, c_f in enumerate(self.variables.friction_forces):
                     self.prog_wrapper.add_quadratic_cost(
-                        k, k, cost_config.force_regularization * c_f**2
+                        k,
+                        k,
+                        cost_config.force_regularization
+                        * c_f**2
+                        * self.dynamics_config.force_scale**2,
                     )
 
             # Keypoint velocity regularization
             if cost_config.keypoint_velocity_regularization is not None:
                 slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = [
-                    [
-                        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                        for vertex_idx in range(len(slider.vertices))
-                    ]
-                    for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-                ]
+                p_Wv_is = self._get_slider_vertices(slider)
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
@@ -629,7 +668,7 @@ class FaceContactMode(AbstractContactMode):
                 self.prog_wrapper.add_quadratic_cost(
                     idx,
                     idx + 1,
-                    cost_config.lin_displacements * term,
+                    cost_config.lin_velocity_regularization * term,
                 )
             # TODO(bernhardpg): Remove
             if self.config.use_approx_exponential_map:
@@ -637,7 +676,7 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k,
-                        cost_config.ang_displacements * th_dot**2,
+                        cost_config.ang_velocity_regularization * th_dot**2,
                     )
             else:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
@@ -646,19 +685,13 @@ class FaceContactMode(AbstractContactMode):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
                         k + 1,
-                        cost_config.ang_displacements
+                        cost_config.ang_velocity_regularization
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
 
         elif cost_config.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
             slider = self.config.dynamics_config.slider.geometry
-            p_Wv_is = [
-                [
-                    slider.get_p_Wv_i(vertex_idx, R_WB, p_WB)
-                    for vertex_idx in range(len(slider.vertices))
-                ]
-                for p_WB, R_WB in zip(self.variables.p_WBs, self.variables.R_WBs)
-            ]
+            p_Wv_is = self._get_slider_vertices(slider)
             for k in range(self.num_knot_points - 1):
                 for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     disp = vertex_k_next - vertex_k
@@ -786,7 +819,7 @@ class FaceContactMode(AbstractContactMode):
                 idx, a[0] * cos_th + a[1] * sin_th >= b
             )
 
-    def add_so2_cut_from_boundary_conds(self) -> None:
+    def add_so2_cut_from_boundary_conds(self, add_as_independent: bool = False) -> None:
         """
         This function only works when the slider initial pose and final pose are constant values.
         It is not yet clear how to implement something like this in the GCS case.
@@ -813,9 +846,16 @@ class FaceContactMode(AbstractContactMode):
         for idx, (cos_th, sin_th) in enumerate(
             zip(self.variables.cos_ths, self.variables.sin_ths)
         ):
-            self.prog_wrapper.add_linear_inequality_constraint(
-                idx, a[0] * cos_th + a[1] * sin_th >= b
-            )
+            # This is just to demonstrate the effect of adding this as
+            # a constraint that gets multiplied vs. not
+            if add_as_independent:
+                self.prog_wrapper.add_independent_constraint(
+                    a[0] * cos_th + a[1] * sin_th >= b
+                )
+            else:
+                self.prog_wrapper.add_linear_inequality_constraint(
+                    idx, a[0] * cos_th + a[1] * sin_th >= b
+                )
 
     def formulate_convex_relaxation(self, add_l2_norm_cost: bool = False) -> None:
         # TODO: This part of the code is outdated and will most likely not work correctly
