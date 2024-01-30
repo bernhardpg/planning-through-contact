@@ -162,6 +162,9 @@ def visualize_multiple_ablation_studies(
                 1, num_plots, figsize=(10, 3)
             )  # Adjust the size as needed
 
+            if num_plots == 1:
+                axes = [axes]
+
             for ax in axes:
                 ax.set_xlabel("Total trajectory rotation [rad]")
                 ax.set_ylabel("Optimality [%]")

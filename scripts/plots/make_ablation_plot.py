@@ -34,9 +34,10 @@ study_folder_13 = "hw_demos_20240129102356_box"
 study_folder_14 = "hw_demos_20240129103445_box"
 study_folder_15 = "hw_demos_20240129104800_box"
 study_folder_16 = "hw_demos_20240129115732_tee"
+study_folder_17 = "hw_demos_20240129135032_sugar_box"
 
-# folders = [study_folder_7, study_folder_1]
-folders = [study_folder_16]
+folders = [study_folder_17, study_folder_16]
+# folders = [study_folder_16]
 study_folders = [main_folder + folder for folder in folders]
 studies = [AblationStudy.load_from_folder(folder) for folder in study_folders]
 
@@ -78,7 +79,8 @@ visualize_multiple_ablation_studies(
     # legends=["Box", "Triangle", "Tee"],
     legends=["Box", "Tee"],
     filename="box_triangle_tee",
-    show_sdp_and_rounded=True,
+    show_sdp_and_rounded=False,
+    next_to_each_other=True,
 )
 # visualize_ablation_optimality_percentages(ablation_study)
 # visualize_ablation_as_histogram(ablation_study)
