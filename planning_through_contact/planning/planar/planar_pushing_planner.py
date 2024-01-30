@@ -425,7 +425,9 @@ class PlanarPushingPlanner:
         return path.get_vertices()
 
     def get_solution_paths(
-        self, result: MathematicalProgramResult
+        self,
+        result: MathematicalProgramResult,
+        solver_params: PlanarSolverParams,
     ) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
@@ -436,6 +438,7 @@ class PlanarPushingPlanner:
             self.source.vertex,
             self.target.vertex,
             self._get_all_vertex_mode_pairs(),
+            assert_nan_values=solver_params.assert_nan_values,
         )
         return path
 
@@ -463,14 +466,11 @@ class PlanarPushingPlanner:
             cost = result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        self.path = PlanarPushingPath.from_result(
-            self.gcs,
+        self.path = self.get_solution_paths(
             result,
-            self.source.vertex,
-            self.target.vertex,
-            self._get_all_vertex_mode_pairs(),
-            assert_nan_values=solver_params.assert_nan_values,
+            solver_params,
         )
+
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
 
