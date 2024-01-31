@@ -45,6 +45,9 @@ study = "hw_demos_20240130115816_box"
 # study = "run_20240130161023_box"
 # study = "run_20240130173234_tee"
 study = "run_20240130174605_tee"
+# study = "run_20240130222224_tee"
+# study = "run_20240131091107_box"
+# study = "run_20240131110644_tee"
 study_names = [study]
 
 study_folders = [main_folder + folder for folder in study_names]

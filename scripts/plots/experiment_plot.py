@@ -8,28 +8,17 @@ def time_to_frame_index(time_sec, fps):
 
 
 video_paths = [
-    # "traj_14.mp4",  # the one from shao slack
-    # "3.mp4",
-    "5.mp4",
+    # "traj_0_video.mp4",  # the one from shao slack
+    "traj_1_video.mp4",  # the one from shao slack
+    # "traj_14_video.mp4",  # the one from shao slack
 ]
 main_folder = "videos/"
 
 # Specify the times (in seconds) at which you want to extract frames
 times_per_video = [
+    # [20, 55, 72, 95, 111, 146, 162, 196, 209, 225],
+    [20, 56, 73, 109, 125, 160],
     # [10, 35, 50, 70, 86.5, 95],
-    # [15, 42.8, 61, 100, 118, 152],
-    [
-        15,
-        40,
-        61,
-        111,
-        133,
-        168,
-        188,
-        222,
-        246,
-        260,
-    ],
 ]
 
 
@@ -81,7 +70,8 @@ def make_frames(video_path, times):
 
 
 frames_per_video = [
-    make_frames(main_folder + path, times[:-1])  # skip last frame
+    # make_frames(main_folder + path, times[:-1])  # skip last frame
+    make_frames(main_folder + path, times)  # skip last frame
     for path, times in zip(video_paths, times_per_video)
 ]
 frames_per_row = max([len(frame) for frame in frames_per_video])
