@@ -58,7 +58,7 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_socp=1e-3,  # this sometimes cause numerical problems
+        distance_to_object_socp=0.001,  # this sometimes cause numerical problems
         pusher_velocity_regularization=0.1,
         pusher_arc_length=0.1,
         time=None,
@@ -143,7 +143,10 @@ def get_default_plan_config(
         )
         contact_cost = get_default_contact_cost()
         non_collision_cost = get_default_non_collision_cost()
-        contact_config = ContactConfig(cost=contact_cost)
+        lam_buffer = 0.0
+        contact_config = ContactConfig(
+            cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
+        )
 
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,
@@ -167,7 +170,7 @@ def get_default_solver_params(
 ) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
         measure_solve_time=debug,
-        rounding_steps=100,
+        rounding_steps=300,
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,

@@ -44,10 +44,16 @@ study = "hw_demos_20240130115816_box"
 # study = "run_20240130160321_box"
 # study = "run_20240130161023_box"
 # study = "run_20240130173234_tee"
-study = "run_20240130174605_tee"
+# study = "run_20240130174605_tee"
 # study = "run_20240130222224_tee"
 # study = "run_20240131091107_box"
 # study = "run_20240131110644_tee"
+# study = "run_20240131140048_tee"
+# study = "run_20240131153837_sugar_box"
+study = "run_20240131164250_box"
+main_folder = "demos/"
+study = "hw_demos_20240131170037_box"
+study = "hw_demos_20240131172730_box"
 study_names = [study]
 
 study_folders = [main_folder + folder for folder in study_names]
@@ -92,6 +98,7 @@ for study in studies:
     # print(f"Max solve time feasible: {np.max(study.solve_times_feasible)}")
     # print(f"Min solve time feasible: {np.min(study.solve_times_feasible)}")
 
+
 colors = [
     "blue",
     "green",
@@ -109,7 +116,7 @@ for study_name, study_folder in zip(study_names, study_folders):
         legends=["Box", "Tee"],
         filename=study_folder + "/0_" + study_name,
         show_sdp_and_rounded=False,
-        next_to_each_other=True,
+        next_to_each_other=False,
     )
 # visualize_ablation_optimality_percentages(ablation_study)
 # visualize_ablation_as_histogram(ablation_study)
