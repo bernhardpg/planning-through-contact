@@ -2,14 +2,14 @@ defaults:
   - sim_config: base_sim_config
   - mpc_config: base_mpc_config
   - optitrack_config: tee_optitrack_config
-  - realsense_config: top_front_realsense
+  - realsense_config: top_front_side_realsense
   - hydra: base_hydra
 
 sim_config:
-  use_hardware: False
-  closed_loop: False
+  use_hardware: True
+  closed_loop: True
 
-trajectory_set_name: "hw_demos_20240129115732_tee"
+trajectory_set_name: "hw_demos_20240129170214_tee" # "hw_demos_20240129170214_tee"
 trajectory_index: 1
 use_rounded: True
 # override_duration: 5
@@ -20,7 +20,9 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      trajectory_index: 0, 1, 2, 3, 9
-      sim_config.closed_loop: False, True
+      trajectory_index: 0, 1, 2, 9, 14, 15, 17, 22, 24, 25
+      # sim_config.closed_loop: False, True
+# 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
+# 0, 1, 2, 3, 9
 # 1, 2, 3, 5, 6, 7, 8
 # 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
