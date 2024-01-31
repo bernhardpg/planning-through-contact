@@ -120,8 +120,14 @@ def main(cfg: OmegaConf) -> None:
                 serial_number=cfg.realsense_config.camera2_serial_number,
                 config=camera_config,
             )
+            camera3 = RealsenseCamera(
+                name=cfg.realsense_config.camera3_name,
+                serial_number=cfg.realsense_config.camera3_serial_number,
+                config=camera_config,
+            )
             camera1.start_recording()
             camera2.start_recording()
+            camera3.start_recording()
 
         recording_name = os.path.join(
             full_log_dir,
@@ -147,11 +153,13 @@ def main(cfg: OmegaConf) -> None:
         if sim_config.use_hardware and cfg.realsense_config.should_record:
             camera1.stop_recording()
             camera2.stop_recording()
+            camera3.stop_recording()
     except KeyboardInterrupt:
         environment.save_logs(recording_name, full_log_dir)
         if sim_config.use_hardware and cfg.realsense_config.should_record:
             camera1.stop_recording()
             camera2.stop_recording()
+            camera3.stop_recording()
 
 
 def reset_experiment(
