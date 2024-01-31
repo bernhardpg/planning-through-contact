@@ -127,13 +127,13 @@ def visualize_multiple_ablation_studies(
         for idx, study in enumerate(studies):
             theta_success = [
                 th
-                for th, is_success in zip(study.thetas, study.binary_flows_sucess)
+                for th, is_success in zip(study.thetas, study.binary_flows_success)
                 if is_success
             ]
             optimality_gaps_success = [
                 gap
                 for gap, is_success in zip(
-                    study.optimality_gaps, study.binary_flows_sucess
+                    study.optimality_gaps, study.binary_flows_success
                 )
                 if is_success
             ]
@@ -147,7 +147,7 @@ def visualize_multiple_ablation_studies(
             )
             theta_not_success = [
                 th
-                for th, is_success in zip(study.thetas, study.binary_flows_sucess)
+                for th, is_success in zip(study.thetas, study.binary_flows_success)
                 if not is_success
             ]
             ax2.scatter(

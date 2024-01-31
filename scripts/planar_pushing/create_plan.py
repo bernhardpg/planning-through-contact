@@ -504,6 +504,15 @@ if __name__ == "__main__":
             folder_name += f"_traj_{traj_number}"
         os.makedirs(folder_name, exist_ok=True)
 
+        # workspace = PlanarPushingWorkspace(
+        #     slider=BoxWorkspace(
+        #         width=0.5,
+        #         height=0.5,
+        #         center=np.array([0.0, 0.0]),
+        #         buffer=0,
+        #     ),
+        # )
+
         workspace = PlanarPushingWorkspace(
             slider=BoxWorkspace(
                 width=0.35,

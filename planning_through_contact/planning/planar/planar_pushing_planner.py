@@ -457,8 +457,8 @@ class PlanarPushingPlanner:
         only_successful_res = [
             pair for pair in paths_and_results if pair[1].is_success()
         ]
-        if len(only_successful_res) == 0:
-            raise RuntimeError("No trajectories rounded succesfully")
+        # if len(only_successful_res) == 0:
+        #     raise RuntimeError("No trajectories rounded succesfully")
 
         sorted_res = sorted(
             only_successful_res, key=lambda pair: pair[1].get_optimal_cost()
@@ -507,6 +507,7 @@ class PlanarPushingPlanner:
             gcs_result,
             solver_params,
         )
+        print(f"num rounded paths: {len(paths)}")
         # Do nonlinear rounding on each traj, pick the best one
         if solver_params.rounding_steps > 0:
             for path in paths:
@@ -518,6 +519,10 @@ class PlanarPushingPlanner:
                 else np.inf
                 for p in paths
             ]
+
+            print(
+                f"num rounded feasible paths: {len([p for p in paths if p.rounded_result.is_success()])}"
+            )
             # if np.isinf(np.min(rounded_costs)):
             #     breakpoint()
             best_idx = np.argmin(rounded_costs)
