@@ -503,6 +503,9 @@ class PlanarPushingPlanner:
             if not gcs_result.is_success():
                 print("WARNING: Solver did not find a solution!")
 
+        if not gcs_result.is_success():
+            return None
+
         if solver_params.measure_solve_time:
             print(
                 f"Total elapsed optimization time: {gcs_result.get_solver_details().optimizer_time}"

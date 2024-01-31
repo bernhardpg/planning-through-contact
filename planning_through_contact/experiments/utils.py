@@ -133,6 +133,8 @@ def get_default_plan_config(
         contact_config = ContactConfig(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
         )
+        time_contact = 2.0
+        time_non_collision = 4.0
     else:
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
