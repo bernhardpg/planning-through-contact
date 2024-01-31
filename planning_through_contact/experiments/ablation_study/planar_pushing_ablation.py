@@ -58,37 +58,49 @@ class SingleRunResult:
     relaxed_gcs_cost: float
     relaxed_gcs_success: bool
     relaxed_gcs_time: float
-    binary_flows_cost: float
+    binary_flows_cost: Optional[float]
     binary_flows_success: bool
-    binary_flows_time: float
-    feasible_cost: float
-    feasible_success: bool
+    binary_flows_time: Optional[float]
+    feasible_cost: Optional[float]
+    feasible_success: Optional[bool]
     feasible_time: Optional[float]
-    relaxed_mean_determinant: float
-    rounded_mean_determinant: float
+    relaxed_mean_determinant: Optional[float]
+    rounded_mean_determinant: Optional[float]
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
     name: Optional[str] = None
 
     @property
-    def optimality_gap(self) -> float:
-        return (
-            (self.feasible_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
-        ) * 100
+    def optimality_gap(self) -> Optional[float]:
+        if self.feasible_cost is None:
+            return None
+        else:
+            return (
+                (self.feasible_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
+            ) * 100
 
     @property
-    def binary_flows_optimality_gap(self) -> float:
-        return (
-            (self.binary_flows_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
-        ) * 100
+    def binary_flows_optimality_gap(self) -> Optional[float]:
+        if self.binary_flows_cost is None:
+            return None
+        else:
+            return (
+                (self.binary_flows_cost - self.relaxed_gcs_cost) / self.relaxed_gcs_cost
+            ) * 100
 
     @property
-    def optimality_percentage(self) -> float:
-        return 100 - self.optimality_gap
+    def optimality_percentage(self) -> Optional[float]:
+        if self.optimality_gap is None:
+            return None
+        else:
+            return 100 - self.optimality_gap
 
     @property
-    def binary_flows_optimality_percentage(self) -> float:
-        return 100 - self.optimality_gap
+    def binary_flows_optimality_percentage(self) -> Optional[float]:
+        if self.binary_flows_optimality_gap is None:
+            return None
+        else:
+            return 100 - self.binary_flows_optimality_gap
 
     @property
     def distance(self) -> float:
@@ -251,6 +263,26 @@ def do_one_run_get_path(
     planner.formulate_problem()
 
     path = planner.plan_path(solver_params)
+
+    if path is None:
+        return (
+            SingleRunResult(
+                relaxed_gcs_cost=planner.relaxed_gcs_result.get_optimal_cost(),
+                relaxed_gcs_success=planner.relaxed_gcs_result.is_success(),
+                relaxed_gcs_time=planner.relaxed_gcs_result.get_solver_details().optimizer_time,  # type: ignore
+                binary_flows_cost=None,
+                binary_flows_success=None,
+                binary_flows_time=None,
+                feasible_cost=None,
+                feasible_success=None,
+                feasible_time=None,
+                relaxed_mean_determinant=None,
+                rounded_mean_determinant=None,
+                start_and_goal=start_and_goal,
+                config=plan_config,
+            ),
+            path,
+        )
 
     assert planner.source is not None  # avoid typing errors
     assert planner.target is not None  # avoid typing errors

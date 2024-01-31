@@ -401,46 +401,47 @@ class PlanarPushingPath:
             within_bounds = (values > lower_bounds) & (values < upper_bounds)
             return close_to_lower | close_to_upper | within_bounds
 
-        if not result.is_success():
-            # Sometimes SNOPT reports that it cannot proceed due to numerical errors, but the solution is still
-            # feasible. In that case we keep it (empirically it is often close to optimal).
-            if result.get_solution_result() == SolutionResult.kSolverSpecificError:
-                prog.SetInitialGuess(
-                    prog.decision_variables(),
-                    result.GetSolution(prog.decision_variables()),
-                )
-
-                TOL = solver_params.nonl_round_major_feas_tol
-
-                def _is_binding_satisfied(binding) -> npt.NDArray[np.bool_]:
-                    val = prog.EvalBindingAtInitialGuess(binding)
-                    ub, lb = (
-                        binding.evaluator().upper_bound(),
-                        binding.evaluator().lower_bound(),
+        if True:
+            if not result.is_success():
+                # Sometimes SNOPT reports that it cannot proceed due to numerical errors, but the solution is still
+                # feasible. In that case we keep it (empirically it is often close to optimal).
+                if result.get_solution_result() == SolutionResult.kSolverSpecificError:
+                    prog.SetInitialGuess(
+                        prog.decision_variables(),
+                        result.GetSolution(prog.decision_variables()),
                     )
-                    return _are_within_ranges_with_tolerance(val, lb, ub, TOL)
 
-                constraints_satisfied = np.concatenate(
-                    [
-                        _is_binding_satisfied(binding)
-                        for binding in prog.GetAllConstraints()
-                    ]
-                )
+                    TOL = solver_params.nonl_round_major_feas_tol
 
-                # if result.get_optimal_cost() <= self.result.get_optimal_cost():
-                #     # This should not happen
-                #     calculated_cost = np.sum(
-                #         [prog.EvalBindingAtInitialGuess(b) for b in prog.GetAllCosts()]
-                #     )
-                #     if not np.isclose(result.get_optimal_cost(), calculated_cost):
-                #         breakpoint()
+                    def _is_binding_satisfied(binding) -> npt.NDArray[np.bool_]:
+                        val = prog.EvalBindingAtInitialGuess(binding)
+                        ub, lb = (
+                            binding.evaluator().upper_bound(),
+                            binding.evaluator().lower_bound(),
+                        )
+                        return _are_within_ranges_with_tolerance(val, lb, ub, TOL)
 
-                cost_upper_bound = (
-                    result.get_optimal_cost() >= self.result.get_optimal_cost()
-                )
-                solution_feasible = np.all(constraints_satisfied)
-                if solution_feasible and cost_upper_bound:
-                    result.set_solution_result(SolutionResult.kSolutionFound)
+                    constraints_satisfied = np.concatenate(
+                        [
+                            _is_binding_satisfied(binding)
+                            for binding in prog.GetAllConstraints()
+                        ]
+                    )
+
+                    # if result.get_optimal_cost() <= self.result.get_optimal_cost():
+                    #     # This should not happen
+                    #     calculated_cost = np.sum(
+                    #         [prog.EvalBindingAtInitialGuess(b) for b in prog.GetAllCosts()]
+                    #     )
+                    #     if not np.isclose(result.get_optimal_cost(), calculated_cost):
+                    #         breakpoint()
+
+                    cost_upper_bound = (
+                        result.get_optimal_cost() >= self.result.get_optimal_cost()
+                    )
+                    solution_feasible = np.all(constraints_satisfied)
+                    if solution_feasible and cost_upper_bound:
+                        result.set_solution_result(SolutionResult.kSolutionFound)
 
         if solver_params.assert_rounding_res:
             if not result.is_success():
