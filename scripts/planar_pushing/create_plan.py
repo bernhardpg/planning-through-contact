@@ -301,7 +301,7 @@ def create_plan(
 
     if debug:
         solve_data, path = do_one_run_get_path(
-            config, solver_params, start_and_goal=plan_spec
+            config, solver_params, start_and_goal=plan_spec, save_cost_vals=True
         )
     else:
         planner = PlanarPushingPlanner(config)
@@ -433,8 +433,8 @@ if __name__ == "__main__":
     slider_type = args.body
 
     pusher_radius = 0.015
-    time_in_contact = 6.0
-    time_in_non_collision = 2.0
+    time_in_contact = 2.0
+    time_in_non_collision = 4.0
 
     config = get_default_plan_config(
         slider_type=slider_type,

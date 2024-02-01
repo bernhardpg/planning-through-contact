@@ -40,7 +40,8 @@ from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGE
 # folders = [study_folder_16]
 
 main_folder = "trajectories/"
-study = "hw_demos_20240130115816_box"
+# study = "hw_demos_20240130115816_box"
+study = "run_20240131211332_box"
 # study = "run_20240130160321_box"
 # study = "run_20240130161023_box"
 # study = "run_20240130173234_tee"
@@ -50,10 +51,14 @@ study = "hw_demos_20240130115816_box"
 # study = "run_20240131110644_tee"
 # study = "run_20240131140048_tee"
 # study = "run_20240131153837_sugar_box"
-study = "run_20240131164250_box"
-main_folder = "demos/"
-study = "hw_demos_20240131170037_box"
-study = "hw_demos_20240131172730_box"
+# study = "run_20240131164250_box"
+study = "run_20240201102145_box"
+# main_folder = "demos/"
+# study = "hw_demos_20240131170037_box"
+# study = "hw_demos_20240131172730_box"
+# study = "hw_demos_20240131194747_box"
+# study = "hw_demos_20240131200249_box"
+# study = "hw_demos_20240131212709_tee"  # This one is the best one so far
 study_names = [study]
 
 study_folders = [main_folder + folder for folder in study_names]

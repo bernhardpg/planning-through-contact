@@ -3,7 +3,7 @@ import os
 import pickle
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -69,6 +69,7 @@ class SingleRunResult:
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
     name: Optional[str] = None
+    cost_term_vals: Optional[Dict[str, float]] = None
 
     @property
     def optimality_gap(self) -> Optional[float]:
@@ -256,6 +257,7 @@ def do_one_run_get_path(
     plan_config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
     start_and_goal: PlanarPushingStartAndGoal,
+    save_cost_vals: bool = False,
 ) -> Tuple[SingleRunResult, Optional[PlanarPushingPath]]:
     plan_config.start_and_goal = start_and_goal
 
@@ -291,7 +293,9 @@ def do_one_run_get_path(
     rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
 
     assert planner.relaxed_gcs_result is not None
+
     assert path.rounded_result is not None
+
     return (
         SingleRunResult(
             relaxed_gcs_cost=planner.relaxed_gcs_result.get_optimal_cost(),
@@ -307,6 +311,7 @@ def do_one_run_get_path(
             rounded_mean_determinant=rounded_mean_determinant,
             start_and_goal=start_and_goal,
             config=plan_config,
+            cost_term_vals=path.get_cost_terms() if save_cost_vals else None,
         ),
         path,
     )

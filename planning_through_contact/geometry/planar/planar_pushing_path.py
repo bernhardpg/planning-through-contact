@@ -217,6 +217,50 @@ class PlanarPushingPath:
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
+    def get_cost_terms(self) -> Dict[str, float]:
+        contact_mode_costs = {
+            "keypoint_arc": [],
+            "angular_vel_reg": [],
+            "translational_vel_reg": [],
+            "force_reg": [],
+            "time": [],
+        }
+
+        non_collision_costs = {
+            "pusher_arc_length": [],
+            "pusher_vel_reg": [],
+            "object_avoidance_socp": [],
+            "object_avoidance_quad": [],
+            "time": [],
+        }
+
+        def _get_cost_vals(mode, vertex, costs):
+            cost_var_idxs = [
+                mode.get_variable_indices_in_gcs_vertex(c.variables()) for c in costs
+            ]
+            cost_vars = [vertex.x()[idx] for idx in cost_var_idxs]
+            cost_var_vals = [self.result.GetSolution(vars) for vars in cost_vars]
+            cost_vals = [
+                cost.evaluator().Eval(vals) for cost, vals in zip(costs, cost_var_vals)
+            ]
+            return cost_vals
+
+        for key in contact_mode_costs.keys():
+            for vertex, mode in self.pairs:
+                if isinstance(mode, FaceContactMode):
+                    contact_mode_costs[key].append(
+                        np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
+                    )
+
+        for key in non_collision_costs.keys():
+            for vertex, mode in self.pairs:
+                if isinstance(mode, NonCollisionMode):
+                    non_collision_costs[key].append(
+                        np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
+                    )
+
+        return contact_mode_costs | non_collision_costs
+
     def to_traj(
         self,
         rounded: bool = False,
