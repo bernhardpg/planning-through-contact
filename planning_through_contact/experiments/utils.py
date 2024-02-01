@@ -21,7 +21,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 
 def get_box() -> RigidBody:
     mass = 0.1
-    box_geometry = Box2d(width=0.07, height=0.07)
+    box_geometry = Box2d(width=0.2, height=0.2)
     slider = RigidBody("box", box_geometry, mass)
     return slider
 
