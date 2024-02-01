@@ -70,13 +70,13 @@ for study in studies:
     print(f"Binary flows success rate: {study.percentage_binary_flows_success}%")
     print(f"Feasible success rate: {study.percentage_feasible_success}%")
     print(
-        f"Mean optimality gap: {np.mean([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
+        f"Mean optimality gap: {np.mean([gap for gap in study.optimality_gaps if gap is not None])}"
     )
     print(
-        f"Median optimality gap: {np.median([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
+        f"Median optimality gap: {np.median([gap for gap in study.optimality_gaps if gap is not None])}"
     )
     print(
-        f"Std optimality gap: {np.std([gap for gap in study.optimality_gaps if not np.isinf(gap)])}"
+        f"Std optimality gap: {np.std([gap for gap in study.optimality_gaps if gap is not None])}"
     )
     print("#####")
     print(f"Mean solve time GCS relaxation: {np.mean(study.solve_times_gcs_relaxed)}")

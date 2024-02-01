@@ -341,7 +341,8 @@ class FaceContactMode(AbstractContactMode):
             "angular_vel_reg": [],
             "translational_vel_reg": [],
             "force_reg": [],
-            "time": [],
+            "contact_time": [],
+            "mode_cost": [],
         }
         self.constraints = {
             "SO2": [],
@@ -531,7 +532,8 @@ class FaceContactMode(AbstractContactMode):
         cost_config = self.config.contact_config.cost
 
         if cost_config.mode_transition_cost is not None:
-            self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
+            cost = self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
+            self.costs["mode_cost"].append(cost)
 
         if cost_config.time is not None:
             cost = self.prog_wrapper.add_independent_cost(

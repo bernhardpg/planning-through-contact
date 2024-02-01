@@ -223,7 +223,8 @@ class PlanarPushingPath:
             "angular_vel_reg": [],
             "translational_vel_reg": [],
             "force_reg": [],
-            "time": [],
+            "contact_time": [],
+            "mode_cost": [],
         }
 
         non_collision_costs = {
@@ -231,7 +232,7 @@ class PlanarPushingPath:
             "pusher_vel_reg": [],
             "object_avoidance_socp": [],
             "object_avoidance_quad": [],
-            "time": [],
+            "non_contact_time": [],
         }
 
         def _get_cost_vals(mode, vertex, costs):

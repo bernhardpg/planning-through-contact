@@ -50,7 +50,7 @@ def get_default_contact_cost() -> ContactCost:
         ang_velocity_regularization=10.0,
         lin_velocity_regularization=100.0,
         trace=None,
-        mode_transition_cost=None,
+        mode_transition_cost=3,
         time=None,
     )
     return contact_cost

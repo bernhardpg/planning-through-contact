@@ -251,7 +251,7 @@ class NonCollisionMode(AbstractContactMode):
             "pusher_vel_reg": [],
             "object_avoidance_socp": [],
             "object_avoidance_quad": [],
-            "time": [],
+            "non_contact_time": [],
         }
 
         self._define_constraints()
@@ -290,7 +290,7 @@ class NonCollisionMode(AbstractContactMode):
             cost = self.prog.AddLinearCost(
                 self.cost_config.time * self.config.time_non_collision
             )
-            self.costs["time"].append(cost)
+            self.costs["non_contact_time"].append(cost)
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
