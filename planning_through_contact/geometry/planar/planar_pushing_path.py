@@ -283,7 +283,7 @@ class PlanarPushingPath:
         add_edge_constraints_to_prog(self.edges, prog, self.pairs)
         return prog
 
-    def _get_initial_guess(
+    def _get_initial_guess_as_orig_variables(
         self, scale_rot_values: bool = True
     ) -> npt.NDArray[np.float64]:
         original_decision_var_idxs_in_vertices = [
@@ -344,7 +344,7 @@ class PlanarPushingPath:
 
         start = time.time()
 
-        initial_guess = self._get_initial_guess()
+        initial_guess = self._get_initial_guess_as_orig_variables()
 
         solver_options = SolverOptions()
 
