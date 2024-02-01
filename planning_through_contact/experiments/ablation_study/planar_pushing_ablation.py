@@ -69,7 +69,7 @@ class SingleRunResult:
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
     name: Optional[str] = None
-    cost_term_vals: Optional[Dict[str, float]] = None
+    cost_term_vals: Optional[Dict[str, Dict]] = None
 
     @property
     def optimality_gap(self) -> Optional[float]:

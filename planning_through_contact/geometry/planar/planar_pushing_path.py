@@ -217,14 +217,25 @@ class PlanarPushingPath:
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
-    def get_cost_terms(self) -> Dict[str, float]:
+    def get_cost_terms(self) -> Dict[str, Dict]:
         contact_mode_costs = {
             "keypoint_arc": [],
+            "keypoint_reg": [],
             "angular_vel_reg": [],
             "translational_vel_reg": [],
             "force_reg": [],
             "contact_time": [],
             "mode_cost": [],
+        }
+
+        contact_mode_sums = {
+            "keypoint_arc": float,
+            "keypoint_reg": float,
+            "angular_vel_reg": float,
+            "translational_vel_reg": float,
+            "force_reg": float,
+            "contact_time": float,
+            "mode_cost": float,
         }
 
         non_collision_costs = {
@@ -233,6 +244,14 @@ class PlanarPushingPath:
             "object_avoidance_socp": [],
             "object_avoidance_quad": [],
             "non_contact_time": [],
+        }
+
+        non_collision_sums = {
+            "pusher_arc_length": float,
+            "pusher_vel_reg": float,
+            "object_avoidance_socp": float,
+            "object_avoidance_quad": float,
+            "non_contact_time": float,
         }
 
         def _get_cost_vals(mode, vertex, costs):
@@ -253,6 +272,9 @@ class PlanarPushingPath:
                         np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
                     )
 
+        for key in contact_mode_sums.keys():
+            contact_mode_sums[key] = np.sum(contact_mode_costs[key])
+
         for key in non_collision_costs.keys():
             for vertex, mode in self.pairs:
                 if isinstance(mode, NonCollisionMode):
@@ -260,7 +282,17 @@ class PlanarPushingPath:
                         np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
                     )
 
-        return contact_mode_costs | non_collision_costs
+        for key in non_collision_sums.keys():
+            non_collision_sums[key] = np.sum(non_collision_costs[key])
+
+        res = {
+            "contact_mode_costs": contact_mode_costs,
+            "contact_mode_sums": contact_mode_sums,
+            "non_collision_costs": non_collision_costs,
+            "non_collision_sums": non_collision_sums,
+        }
+
+        return res
 
     def to_traj(
         self,

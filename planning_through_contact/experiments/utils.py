@@ -133,6 +133,8 @@ def get_default_plan_config(
         contact_config = ContactConfig(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
         )
+        # time_in_contact = 6.0
+        # time_in_non_collision = 2.0
         time_contact = 2.0
         time_non_collision = 4.0
     else:
@@ -181,6 +183,7 @@ def get_default_solver_params(
         print_cost=debug,
         assert_result=False,
         assert_nan_values=True,
+        # sol_retrieval="eigenvec",
     )
     return solver_params
 
