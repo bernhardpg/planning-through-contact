@@ -46,12 +46,12 @@ def get_default_contact_cost() -> ContactCost:
         linear_arc_length=None,
         angular_arc_length=None,
         force_regularization=100000.0,
-        keypoint_velocity_regularization=None,
-        ang_velocity_regularization=10.0,
-        lin_velocity_regularization=100.0,
+        keypoint_velocity_regularization=100.0,
+        ang_velocity_regularization=None,
+        lin_velocity_regularization=None,
         trace=None,
-        mode_transition_cost=3,
-        time=None,
+        mode_transition_cost=None,
+        time=1.0,
     )
     return contact_cost
 

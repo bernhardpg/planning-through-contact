@@ -398,7 +398,7 @@ class PlanarPushingPlanner:
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
             options.solver = mosek
-            options.solver_options = self._get_mosek_params(solver_params, 1e-5)
+            options.solver_options = self._get_mosek_params(solver_params, 1e-4)
         else:  # clarabel
             clarabel = ClarabelSolver()
             options.solver = clarabel
@@ -441,8 +441,8 @@ class PlanarPushingPlanner:
         # TODO(bernhardpg): Clean this up
         options = opt.GraphOfConvexSetsOptions()
         options.max_rounded_paths = solver_params.rounding_steps
-        # options.max_rounding_trials = 10000
-        options.max_rounding_trials = 100
+        options.max_rounding_trials = 10000
+        # options.max_rounding_trials = 100
 
         options.convex_relaxation = True
         options.preprocessing = True

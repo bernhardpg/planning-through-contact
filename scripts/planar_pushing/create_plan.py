@@ -242,14 +242,14 @@ def get_plans_to_point(
     limit_rotations: bool = True,  # Use this to start with
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
-    np.random.seed(1)
+    np.random.seed(2)
 
     slider = config.slider_geometry
 
     # Hardcoded pusher start pose to be at top edge
     # of workspace
     ws = workspace.slider.new_workspace_with_buffer(new_buffer=0)
-    pusher_pose = PlanarPose(ws.center[0], ws.y_max, 0)
+    pusher_pose = PlanarPose(ws.x_min, 0, 0)
 
     plans = []
     for _ in range(num_plans):
@@ -504,27 +504,32 @@ if __name__ == "__main__":
             folder_name += f"_traj_{traj_number}"
         os.makedirs(folder_name, exist_ok=True)
 
-        # workspace = PlanarPushingWorkspace(
-        #     slider=BoxWorkspace(
-        #         width=0.5,
-        #         height=0.5,
-        #         center=np.array([0.0, 0.0]),
-        #         buffer=0,
-        #     ),
-        # )
-
         workspace = PlanarPushingWorkspace(
             slider=BoxWorkspace(
-                width=0.35,
-                height=0.5,
-                center=np.array([0.575, 0.0]),
+                width=0.6,
+                height=0.6,
+                center=np.array([0.0, 0.0]),
                 buffer=0,
             ),
         )
 
+        # workspace = PlanarPushingWorkspace(
+        #     slider=BoxWorkspace(
+        #         width=0.35,
+        #         height=0.5,
+        #         center=np.array([0.575, 0.0]),
+        #         buffer=0,
+        #     ),
+        # )
+
         num_demos = 200
         plans = get_plans_to_point(
-            num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
+            # num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
+            num_demos,
+            workspace,
+            config,
+            (0.0, 0.0),
+            limit_rotations=False,
         )
         if traj_number is not None:
             create_plan(

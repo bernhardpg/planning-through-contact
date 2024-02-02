@@ -338,6 +338,7 @@ class FaceContactMode(AbstractContactMode):
         )
         self.costs = {
             "keypoint_arc": [],
+            "keypoint_reg": [],
             "angular_vel_reg": [],
             "translational_vel_reg": [],
             "force_reg": [],
@@ -539,7 +540,7 @@ class FaceContactMode(AbstractContactMode):
             cost = self.prog_wrapper.add_independent_cost(
                 cost_config.time * self.config.time_in_contact
             )
-            self.costs["time"].append(cost)
+            self.costs["contact_time"].append(cost)
 
         if cost_config.cost_type == ContactCostType.STANDARD:
             # Arc length on keypoint trajectories
@@ -643,13 +644,14 @@ class FaceContactMode(AbstractContactMode):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                         disp = vertex_k_next - vertex_k
                         sq_disp = (disp.T @ disp).item()
-                        self.prog_wrapper.add_quadratic_cost(
+                        cost = self.prog_wrapper.add_quadratic_cost(
                             k,
                             k + 1,
                             cost_config.keypoint_velocity_regularization
                             * (1 / num_keypoints)
                             * sq_disp,
                         )
+                        self.costs["keypoint_reg"].append(cost)
 
             # Linear velocity regularization
             if cost_config.lin_velocity_regularization is not None:
