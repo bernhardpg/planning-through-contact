@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import pickle
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -412,6 +412,24 @@ def plot_realtime_rate(
     plt.grid()
     plt.tight_layout()
     file_name = f"planar_pushing_realtime_rate{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
+
+def plot_mpc_solve_times(
+        solve_times_log: Dict[str, List[float]],
+        suffix: str = "",
+        save_dir: Optional[str] = None,
+) -> None:
+    fig, ax = plt.subplots()
+    for key, solve_times in solve_times_log.items():
+        ax.plot(solve_times, label=key)
+    ax.set_title("MPC solve times vs. timestep")
+    ax.set_xlabel("timestep")
+    ax.set_ylabel("Solve times")
+    ax.legend()
+    ax.grid()
+    plt.tight_layout()
+    file_name = f"planar_pushing_mpc_solve_times{suffix}.png"
     file_path = f"{save_dir}/{file_name}" if save_dir else file_name
     plt.savefig(file_path)
 
