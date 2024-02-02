@@ -127,7 +127,7 @@ def plot_planar_pushing_logs(
     plot_planar_pushing_trajectory(actual, desired)
 
 
-def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -> None:
+def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "", save_dir: Optional[str] = None) -> None:
     # Convert the list to a numpy array for easier manipulation
     control_log_array = np.array(control_log)
 
@@ -173,17 +173,22 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -
 
     # Show plot
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_control_sols{suffix}.png")
+    file_name = f"planar_pushing_control_sols{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
-def plot_cost(cost_log: List[float], suffix: str = "") -> None:
+def plot_cost(cost_log: List[float], suffix: str = "", save_dir: Optional[str] = None) -> None:
     plt.figure()
     plt.plot(cost_log)
     plt.title("Cost vs. timestep")
     plt.xlabel("timestep")
     plt.ylabel("Cost")
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_cost{suffix}.png")
+
+    file_name = f"planar_pushing_cost{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
 def plot_velocities(
