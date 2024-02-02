@@ -11,66 +11,14 @@ from planning_through_contact.visualize.ablation_study import (
 )
 from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGERBLUE2
 
-# main_folder = "demos/"
-# # tee_folder = "hw_demos_20240125001442_tee_wrong_distance"
-# study_folder_3 = "hw_demos_20240125001442_tee_wrong_distance"
-# # tee_folder = "hw_demos_20240124130732_tee_lam_buff_04"
-# # tee_folder = "hw_demos_20240124150815_tee_lam_buff_04_full_rot"
-# study_folder_1 = "hw_demos_20240125085656_tee_full_rot_25"
-# # tee_folder = "hw_demos_20240126183148_tee"
-# study_folder_4 = "hw_demos_20240125152221_tee_socp"
-# study_folder_2 = "hw_demos_20240126183148_tee_socp_higher"
-# study_folder_5 = "hw_demos_20240127182809_box"
-# study_folder_6 = "hw_demos_20240127224039_tee_socp_too_big"
-# study_folder_7 = "hw_demos_20240128101451_box_quadratic"
-# study_folder_8 = "hw_demos_20240128165501_sugar_box"
-#
-#
-# study_folder_9 = "hw_demos_20240128184254_sugar_box"
-# study_folder_10 = "hw_demos_20240128204456_sugar_box"
-# study_folder_11 = "hw_demos_20240128223337_tee"
-# study_folder_12 = "hw_demos_20240129095609_box"
-# study_folder_13 = "hw_demos_20240129102356_box"
-# study_folder_14 = "hw_demos_20240129103445_box"
-# study_folder_15 = "hw_demos_20240129104800_box"
-# study_folder_16 = "hw_demos_20240129115732_tee"
-# study_folder_17 = "hw_demos_20240129135032_sugar_box"
-#
-# folders = [study_folder_17, study_folder_16]
-# folders = [study_folder_16]
-
 main_folder = "trajectories/"
-# study = "hw_demos_20240130115816_box"
-# study = "run_20240131211332_box"
-# study = "run_20240130160321_box"
-# study = "run_20240130161023_box"
-# study = "run_20240130173234_tee"
-# study = "run_20240130174605_tee"
-# study = "run_20240130222224_tee"
-# study = "run_20240131091107_box"
-# study = "run_20240131110644_tee"
-# study = "run_20240131140048_tee"
-# study = "run_20240131153837_sugar_box"
-# study = "run_20240131164250_box"
-# study = "run_20240201102145_box"
-# study = "run_20240201153823_box"  # tuned magnitudes
-# study = "run_20240201225301_tee"
-# study = "run_20240201184004_tee_keypoint_reg"
-# study = "run_20240201190626_tee"
-# study = "run_20240201192206_box"
-# study = "run_20240201194934_box"
-# study = "run_20240201200842_tee"
-# study = "run_20240201215042_tee"  # last one
-# study = "run_20240201221116_tee"  # one I run overnig
-study = "run_20240201221116_tee_FINAL"
-# study = "run_20240202064957_sugar_box"
-# main_folder = "demos/"
-# study = "hw_demos_20240131170037_box"
-# study = "hw_demos_20240131172730_box"
-# study = "hw_demos_20240131194747_box"
-# study = "hw_demos_20240131200249_box"
-# study = "hw_demos_20240131212709_tee"  # This one is the best one so far
-study_names = [study]
+study_tee = "run_20240201221116_tee_FINAL"
+# study_sugar_box = "run_20240202064957_sugar_box_FINAL"
+# study_sugar_box = "run_20240202080034_sugar_box"
+# study_tee = "run_20240202094838_tee"
+
+# study_names = [study_sugar_box]
+study_names = [study_tee]
 
 num_trajs = 100
 study_folders = [main_folder + folder for folder in study_names]
@@ -106,6 +54,10 @@ for study in studies:
     )
     print(f"Max solve time binary flows: {np.max(study.solve_times_binary_flows)}")
     print(f"Min solve time binary flows: {np.min(study.solve_times_binary_flows)}")
+    print("#####")
+    # print(f"Mean rounding time: {np.mean(study.total_rounding_times)}")
+    # print(f"Std rounding time: {np.std(study.total_rounding_times)}")
+    # print(f"Median rounding time: {np.median(study.total_rounding_times)}")
     print(f"Infeasible runs::")
     for name in study.get_infeasible_idxs():
         print(name)

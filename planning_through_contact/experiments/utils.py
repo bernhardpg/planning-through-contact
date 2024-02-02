@@ -45,7 +45,7 @@ def get_default_contact_cost() -> ContactCost:
         keypoint_arc_length=10.0,
         linear_arc_length=None,
         angular_arc_length=None,
-        force_regularization=100000.0,
+        force_regularization=100000.0,  # NOTE: This is multiplied by 1e-4 because we have forces in other units in the optimization problem
         keypoint_velocity_regularization=100.0,
         ang_velocity_regularization=None,
         lin_velocity_regularization=None,
@@ -183,6 +183,9 @@ def get_default_solver_params(
         print_cost=debug,
         assert_result=False,
         assert_nan_values=True,
+        nonl_round_major_feas_tol=1e-5,
+        nonl_round_minor_feas_tol=1e-5,
+        nonl_round_opt_tol=1e-5,
         # sol_retrieval="eigenvec",
     )
     return solver_params

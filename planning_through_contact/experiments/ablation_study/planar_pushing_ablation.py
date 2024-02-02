@@ -72,6 +72,13 @@ class SingleRunResult:
     cost_term_vals: Optional[Dict[str, Dict]] = None
 
     @property
+    def total_rounding_time(self) -> Optional[float]:
+        if self.binary_flows_time is None or self.feasible_time is None:
+            return None
+        else:
+            return self.binary_flows_time + self.feasible_time
+
+    @property
     def optimality_gap(self) -> Optional[float]:
         if self.feasible_cost is None or self.numerical_difficulties:
             return None
@@ -190,9 +197,18 @@ class AblationStudy:
         ]
 
     @property
-    def optimality_gaps(self) -> List[float]:
+    def total_rounding_times(self) -> List[float]:
         return [
-            res.optimality_gap for res in self.results if res.optimality_gap is not None
+            res.total_rounding_time
+            for res in self.results
+            # if res.total_rounding_time is not None
+        ]
+
+    @property
+    def optimality_gaps(self) -> List[float | None]:
+        return [
+            res.optimality_gap if res.optimality_gap is not None else None
+            for res in self.results
         ]
 
     @property

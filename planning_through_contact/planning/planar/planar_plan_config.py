@@ -137,6 +137,7 @@ class PlanarSolverParams:
     # nonl_round_opt_tol: float = 1e-6  # Optimality treshold for nonlinear rounding
     nonl_round_major_iter_limit: int = 10000  # Max number of major iterations of snopt
     assert_rounding_res: bool = False  # We don't run rounding to optimality
+    sol_retrieval: Literal["first_row", "eigenvec"] = "first_row"
 
 
 @dataclass

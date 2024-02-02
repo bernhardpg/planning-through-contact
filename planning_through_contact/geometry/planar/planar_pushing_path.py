@@ -130,13 +130,13 @@ class PlanarPushingPath:
         # The field `optimizer_time` is Mosek specific
         return self.result.get_solver_details().optimizer_time  # type: ignore
 
-    @property
-    def rounding_time(self) -> float:
-        assert self.rounded_result is not None
-        # The field `info` is Snopt specific
-        info = self.rounded_result.get_solver_details().info
-        # TODO(bernhardpg): How to get the SNOPT solver time?
-        return None
+    # @property
+    # def rounding_time(self) -> float:
+    #     assert self.rounded_result is not None
+    #     # The field `info` is Snopt specific
+    #     info = self.rounded_result.get_solver_details().info
+    #     # TODO(bernhardpg): How to get the SNOPT solver time?
+    #     return None
 
     @classmethod
     def from_path(
@@ -468,7 +468,10 @@ class PlanarPushingPath:
             solver_params.nonl_round_major_iter_limit,
         )
 
+        start = time.time()
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
+        end = time.time()
+        self.rounding_time = end - start
 
         def _are_within_ranges_with_tolerance(
             values, lower_bounds, upper_bounds, tolerance
@@ -478,7 +481,8 @@ class PlanarPushingPath:
             within_bounds = (values > lower_bounds) & (values < upper_bounds)
             return close_to_lower | close_to_upper | within_bounds
 
-        if True:
+        # TODO(bernhardpg): Remove this, we don't use it.
+        if False:
             if not result.is_success():
                 # Sometimes SNOPT reports that it cannot proceed due to numerical errors, but the solution is still
                 # feasible. In that case we keep it (empirically it is often close to optimal).

@@ -355,7 +355,10 @@ class PlanarPushingPlanner:
         return pair
 
     def _get_mosek_params(
-        self, solver_params: PlanarSolverParams, tolerance: float = 1e-5
+        self,
+        solver_params: PlanarSolverParams,
+        tolerance: float = 1e-5,
+        presolve: bool = True,
     ) -> SolverOptions:
         solver_options = SolverOptions()
         if solver_params.print_solver_output:
@@ -381,6 +384,10 @@ class PlanarPushingPlanner:
             "MSK_DPAR_OPTIMIZER_MAX_TIME",
             solver_params.max_mosek_solve_time,
         )
+
+        if not presolve:
+            solver_options.SetOption(mosek.solver_id(), "MSK_IPAR_PRESOLVE_USE", 0)
+
         return solver_options
 
     def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
@@ -398,7 +405,9 @@ class PlanarPushingPlanner:
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
             options.solver = mosek
-            options.solver_options = self._get_mosek_params(solver_params, 1e-4)
+            options.solver_options = self._get_mosek_params(
+                solver_params, 1e-4, presolve=False
+            )
         else:  # clarabel
             clarabel = ClarabelSolver()
             options.solver = clarabel
