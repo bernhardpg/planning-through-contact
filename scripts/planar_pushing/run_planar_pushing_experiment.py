@@ -35,6 +35,8 @@ from planning_through_contact.simulation.sensors.realsense_camera_config import 
 
 logger = logging.getLogger(__name__)
 
+state_estimator_meshcat = StartMeshcat()
+logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
 
 @hydra.main(version_base=None, config_path="../../config", config_name="basic")
 def main(cfg: OmegaConf) -> None:
@@ -70,11 +72,12 @@ def main(cfg: OmegaConf) -> None:
     sim_config: PlanarPushingSimConfig = PlanarPushingSimConfig.from_traj(
         trajectory=traj, mpc_config=mpc_config, **cfg.sim_config
     )
-
-    station_meshcat = StartMeshcat()
-    state_estimator_meshcat = StartMeshcat()
-    logger.info(f"station meshcat url {station_meshcat.web_url()}")
-    logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
+    
+    # station_meshcat = StartMeshcat()
+    station_meshcat = None
+    state_estimator_meshcat.Delete()
+    # state_estimator_meshcat = StartMeshcat()
+    # logger.info(f"station meshcat url {station_meshcat.web_url()}")
 
     if sim_config.use_hardware:
         reset_experiment(
@@ -194,7 +197,7 @@ def reset_experiment(
         for_reset=True,
     )
 
-    station_meshcat.Delete()
+    # station_meshcat.Delete()
     state_estimator_meshcat.Delete()
 
 
