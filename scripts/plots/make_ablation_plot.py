@@ -60,7 +60,10 @@ main_folder = "trajectories/"
 # study = "run_20240201192206_box"
 # study = "run_20240201194934_box"
 # study = "run_20240201200842_tee"
-study = "run_20240201215042_tee"  # last one
+# study = "run_20240201215042_tee"  # last one
+# study = "run_20240201221116_tee"  # one I run overnig
+study = "run_20240201221116_tee_FINAL"
+# study = "run_20240202064957_sugar_box"
 # main_folder = "demos/"
 # study = "hw_demos_20240131170037_box"
 # study = "hw_demos_20240131172730_box"
@@ -69,8 +72,9 @@ study = "run_20240201215042_tee"  # last one
 # study = "hw_demos_20240131212709_tee"  # This one is the best one so far
 study_names = [study]
 
+num_trajs = 100
 study_folders = [main_folder + folder for folder in study_names]
-studies = [AblationStudy.load_from_folder(folder) for folder in study_folders]
+studies = [AblationStudy.load_from_folder(folder, 100) for folder in study_folders]
 
 
 for study in studies:
@@ -102,9 +106,14 @@ for study in studies:
     )
     print(f"Max solve time binary flows: {np.max(study.solve_times_binary_flows)}")
     print(f"Min solve time binary flows: {np.min(study.solve_times_binary_flows)}")
-    print(f"Infeasible:")
+    print(f"Infeasible runs::")
     for name in study.get_infeasible_idxs():
         print(name)
+
+    print(f"Numerical difficulties runs::")
+    for name in study.get_numerical_difficulties_idxs():
+        print(name)
+
     # print(f"Mean solve time feasible: {np.mean(study.solve_times_feasible)}")
     # print(f"Std solve time feasible: {np.std(study.solve_times_feasible)}")
     # print(f"Median solve time feasible: {np.median(study.solve_times_feasible)}")

@@ -73,7 +73,7 @@ class SingleRunResult:
 
     @property
     def optimality_gap(self) -> Optional[float]:
-        if self.feasible_cost is None:
+        if self.feasible_cost is None or self.numerical_difficulties:
             return None
         else:
             return (
@@ -109,6 +109,14 @@ class SingleRunResult:
         end = self.start_and_goal.slider_target_pose.pos()
         dist: float = np.linalg.norm(start - end)
         return dist
+
+    @property
+    def numerical_difficulties(self) -> Optional[bool]:
+        if self.feasible_cost is None or self.binary_flows_cost is None:
+            return None
+        else:
+            TOL = 1e-2
+            return self.feasible_cost < self.binary_flows_cost - TOL
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
@@ -168,42 +176,53 @@ class AblationStudy:
     @property
     def solve_times_binary_flows(self) -> List[float]:
         return [
-            res.binary_flows_time for res in self.results if res.binary_flows_success
+            res.binary_flows_time
+            for res in self.results
+            if res.binary_flows_success and not res.numerical_difficulties
         ]
 
     @property
     def solve_times_feasible(self) -> List[float | None]:
-        return [res.feasible_time for res in self.results if res.feasible_success]
+        return [
+            res.feasible_time
+            for res in self.results
+            if res.feasible_success and not res.numerical_difficulties
+        ]
 
     @property
     def optimality_gaps(self) -> List[float]:
-        return [res.optimality_gap for res in self.results]
+        return [
+            res.optimality_gap for res in self.results if res.optimality_gap is not None
+        ]
 
     @property
-    def feasible_is_success(self) -> List[float]:
-        return [res.feasible_success for res in self.results]
+    def feasible_is_success(self) -> List[bool | None]:
+        return [
+            res.feasible_success if not res.numerical_difficulties else False
+            for res in self.results
+        ]
 
     @property
     def binary_flows_success(self) -> List[float]:
         return [res.binary_flows_success for res in self.results]
 
-    @property
-    def optimality_percentages(self) -> List[float]:
-        return [
-            res.optimality_percentage if res.feasible_success else 0
-            for res in self.results
-        ]
+    # @property
+    # def optimality_percentages(self) -> List[float]:
+    #     return [
+    #         res.optimality_percentage if res.feasible_success else 0
+    #         for res in self.results
+    #     ]
 
     @property
     def binary_flows_optimality_gaps(self) -> List[float]:
         return [res.binary_flows_optimality_gap for res in self.results]
 
-    @property
-    def binary_flows_optimality_percentages(self) -> List[float]:
-        return [
-            res.binary_flows_optimality_percentage if res.binary_flows_success else 0
-            for res in self.results
-        ]
+    # @property
+    # def binary_flows_optimality_percentages(self) -> List[float]:
+    #     return [
+    #         res.binary_flows_optimality_percentage if res.binary_flows_success else 0
+    #         for res in self.results
+    #     ]
 
     @property
     def num_binary_flows_success(self) -> int:
@@ -211,11 +230,11 @@ class AblationStudy:
 
     @property
     def num_not_success(self) -> int:
-        return len(self) - self.num_binary_flows_success
+        return len(self) - self.num_feasible_success
 
     @property
     def num_feasible_success(self) -> int:
-        return len([r for r in self.results if r.feasible_success])
+        return np.sum(self.feasible_is_success)
 
     def __len__(self) -> int:
         return len(self.results)
@@ -235,6 +254,9 @@ class AblationStudy:
     def get_infeasible_idxs(self) -> List[str | None]:
         return [res.name for res in self.results if not res.feasible_success]
 
+    def get_numerical_difficulties_idxs(self) -> List[str | None]:
+        return [res.name for res in self.results if res.numerical_difficulties == True]
+
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
             pickle.dump(self.results, file)
@@ -246,10 +268,17 @@ class AblationStudy:
         return cls(results)
 
     @classmethod
-    def load_from_folder(cls, folder_name: str) -> "AblationStudy":
+    def load_from_folder(
+        cls, folder_name: str, num_to_load: Optional[int] = None
+    ) -> "AblationStudy":
         data_files = _find_files(folder_name, pattern="solve_data.pkl")
+        from natsort import natsorted
 
-        results = [SingleRunResult.load(filename) for filename in data_files]
+        data_files_sorted = natsorted(data_files)
+        if num_to_load:
+            data_files_sorted = data_files_sorted[:num_to_load]
+
+        results = [SingleRunResult.load(filename) for filename in data_files_sorted]
         return AblationStudy(results)
 
 
