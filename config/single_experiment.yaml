@@ -2,15 +2,15 @@ defaults:
   - sim_config: base_sim_config
   - mpc_config: base_mpc_config
   - optitrack_config: tee_optitrack_config
-  - realsense_config: top_front_realsense
+  - realsense_config: top_front_side_realsense
   - hydra: base_hydra
 
 sim_config:
-  use_hardware: False
+  use_hardware: True
   closed_loop: True
 
 trajectory_set_name: "hw_demos_20240129115732_tee"
-trajectory_index: 2
+trajectory_index: 1
 use_rounded: True
 # override_duration: 17
 

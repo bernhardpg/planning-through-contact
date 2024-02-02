@@ -8,7 +8,7 @@ Q: [3, 3, 0.01, 0]
 Q_scaling: 100
 Q_N: [3, 3, 0.01, 0]
 Q_N_scaling: 2000
-R: [1, 1, 0.1]
+R: [1, 1, 0.01]
 R_scaling: 0.5
 u_max_magnitude: [4, 4, 2]
 lam_max: 0.8
