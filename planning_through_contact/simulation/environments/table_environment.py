@@ -38,6 +38,7 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
     plot_and_save_planar_pushing_logs_from_sim,
+    plot_mpc_solve_times,
     plot_realtime_rate,
 )
 
@@ -299,7 +300,7 @@ class TableEnvironment:
             # self._meshcat.PublishRecording()
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty(
-                "/drake/contact_forces", "visible", True
+                "/drake/contact_forces", "visible", False
             )
             self._state_estimator.meshcat.PublishRecording()
             res = self._state_estimator.meshcat.StaticHtml()
@@ -346,6 +347,14 @@ class TableEnvironment:
             plot_realtime_rate(
                 self._realtime_rate, save_dir=save_dir, time_step=rtr_time_step
             )
+            # for (
+            #     contact_loc,
+            #     mpc,
+            # ) in self._desired_position_source._pusher_pose_controller.mpc_controllers.items():
+            #     if len(list(mpc._solve_time_log.values())[0]) > 0:
+            #         # plot_cost(mpc.cost_log, suffix=f"_{contact_loc}")
+            #         # plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
+            #         plot_mpc_solve_times(mpc._solve_time_log, suffix=f"_{contact_loc}")
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
