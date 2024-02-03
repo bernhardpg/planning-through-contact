@@ -8,16 +8,19 @@ def time_to_frame_index(time_sec, fps):
 
 
 video_paths = [
-    # "traj_0_video.mp4",  # the one from shao slack
-    "traj_1_video.mp4",  # the one from shao slack
+    # "traj_0_video.mp4",
+    # "traj_1_video.mp4",  # the one from shao slack
     # "traj_14_video.mp4",  # the one from shao slack
+    # "traj_0_video.mov",
+    "traj_1_video.mov",  # the one from shao slack
+    # "traj_14_video.mov",  # the one from shao slack
 ]
 main_folder = "videos/"
 
 # Specify the times (in seconds) at which you want to extract frames
 times_per_video = [
     # [20, 55, 72, 95, 111, 146, 162, 196, 209, 225],
-    [20, 56, 73, 109, 125, 160],
+    [20, 56, 73, 109, 125.4, 160],
     # [10, 35, 50, 70, 86.5, 95],
 ]
 

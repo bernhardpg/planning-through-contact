@@ -563,7 +563,14 @@ def make_traj_figure(
     plot_forces: bool = True,
     slider_color: Optional[Any] = None,
     split_on_mode_type: bool = False,
+    num_contact_frames: int = 5,
+    num_non_collision_frames: int = 5,
 ) -> None:
+    # Ensure a type 1 font is used
+    plt.rcParams["font.family"] = "Times"
+    plt.rcParams["ps.useafm"] = True
+    plt.rcParams["pdf.use14corefonts"] = True
+    plt.rcParams["text.usetex"] = False
     # NOTE(bernhardpg): This function is a mess!
     # We need to add the first vertex again to close the polytope
     vertices = np.hstack(
@@ -621,7 +628,7 @@ def make_traj_figure(
 
             segment_groups.append(group)
 
-    fig_height = 5
+    fig_height = 4
     fig, axs = plt.subplots(
         1, len(segment_groups), figsize=(fig_height * len(segment_groups), fig_height)
     )
@@ -699,7 +706,7 @@ def make_traj_figure(
                     continue
 
                 if isinstance(traj_segment, NonCollisionTrajSegment):
-                    num_frames_in_segment = 8
+                    num_frames_in_segment = num_non_collision_frames
 
                     if segment_idx < len(segment_groups) - 1:
                         num_frames_in_group = (
@@ -710,7 +717,7 @@ def make_traj_figure(
                             num_frames_in_segment * (len(segment_group) - 1) + 1
                         )
                 else:  # face contact
-                    num_frames_in_segment = 5
+                    num_frames_in_segment = num_contact_frames
                     # Only one face contact
                     num_frames_in_group = num_frames_in_segment
 
@@ -935,11 +942,13 @@ def make_traj_figure(
                 for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
             ]
             # Creating the custom legend
-            plt.legend(handles=custom_patches)
+            plt.legend(
+                handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+            )
 
     fig.tight_layout()
     if filename:
-        fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
+        fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
     else:
         plt.show()
 
