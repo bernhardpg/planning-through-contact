@@ -683,17 +683,14 @@ def make_traj_figure(
         # count how many frames we have plotted in this group
         frame_count = 0
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
-            if segment_idx < len(segment_groups) - 1:
-                # we don't plot the first mode (source)
-                num_segments_to_plot = len(
-                    [
-                        1
-                        for _, knot_points in segment_group
-                        if knot_points.num_knot_points > 1
-                    ]
-                )
-            else:  # last group, we plot last mode
-                num_segments_to_plot = len(segment_group)
+            # we don't plot the first mode (source)
+            num_segments_to_plot = len(
+                [
+                    1
+                    for _, knot_points in segment_group
+                    if knot_points.num_knot_points > 1
+                ]
+            )
 
             if not plot_knot_points:
                 if knot_points.num_knot_points == 1 and element_idx == 0:
@@ -703,17 +700,31 @@ def make_traj_figure(
 
                 if isinstance(traj_segment, NonCollisionTrajSegment):
                     num_frames_in_segment = 8
-                    num_frames_in_group = num_frames_in_segment * num_segments_to_plot
+
+                    if segment_idx < len(segment_groups) - 1:
+                        num_frames_in_group = (
+                            num_frames_in_segment * num_segments_to_plot
+                        )
+                    else:  # last group, we plot last mode
+                        num_frames_in_group = (
+                            num_frames_in_segment * (len(segment_group) - 1) + 1
+                        )
                 else:  # face contact
                     num_frames_in_segment = 5
                     # Only one face contact
                     num_frames_in_group = num_frames_in_segment
 
-                ts = np.linspace(
-                    traj_segment.start_time,
-                    traj_segment.end_time,
-                    num_frames_in_segment,
-                )
+                if (
+                    segment_idx == len(segment_groups) - 1
+                    and element_idx == len(segment_group) - 1
+                ):
+                    ts = [traj_segment.start_time]
+                else:
+                    ts = np.linspace(
+                        traj_segment.start_time,
+                        traj_segment.end_time,
+                        num_frames_in_segment,
+                    )
                 if element_idx < len(segment_group) - 1:
                     ts = ts[
                         :-1
