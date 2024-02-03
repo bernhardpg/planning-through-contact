@@ -659,7 +659,7 @@ def make_traj_figure(
         )
 
         start_transparency = 0.3
-        end_transparency = 0.9
+        end_transparency = 1.0
         get_transp_for_frame = (
             lambda idx, num_points: (end_transparency - start_transparency)
             * idx
@@ -680,14 +680,21 @@ def make_traj_figure(
             )
             ax.add_patch(ws_rect)
 
+        # count how many frames we have plotted in this group
+        frame_count = 0
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
-            num_plottable_segments_in_group = sum(
-                [
-                    1
-                    for _, knot_points in segment_group
-                    if knot_points.num_knot_points > 1
-                ]
-            )
+            if segment_idx < len(segment_groups) - 1:
+                # we don't plot the first mode (source)
+                num_segments_to_plot = len(
+                    [
+                        1
+                        for _, knot_points in segment_group
+                        if knot_points.num_knot_points > 1
+                    ]
+                )
+            else:  # last group, we plot last mode
+                num_segments_to_plot = len(segment_group)
+
             if not plot_knot_points:
                 if knot_points.num_knot_points == 1 and element_idx == 0:
                     # do not plot first mode (source vertex) as it
@@ -696,9 +703,10 @@ def make_traj_figure(
 
                 if isinstance(traj_segment, NonCollisionTrajSegment):
                     num_frames_in_segment = 8
-                    num_frames_in_group = num_frames_in_segment * num_frames_in_segment
+                    num_frames_in_group = num_frames_in_segment * num_segments_to_plot
                 else:  # face contact
-                    num_frames_in_segment = 5  # TODO(bernhardpg): Move
+                    num_frames_in_segment = 5
+                    # Only one face contact
                     num_frames_in_group = num_frames_in_segment
 
                 ts = np.linspace(
@@ -706,19 +714,18 @@ def make_traj_figure(
                     traj_segment.end_time,
                     num_frames_in_segment,
                 )
-                # if element_idx < len(segment_group) - 1:
-                #     ts = ts[
-                #         :-1
-                #     ]  # avoid plotting the last pusher of intermittent modes so we don't get double plots
+                if element_idx < len(segment_group) - 1:
+                    ts = ts[
+                        :-1
+                    ]  # avoid plotting the last pusher of intermittent modes so we don't get double plots
 
                 for idx, t in enumerate(ts):
                     p_WP = traj_segment.get_p_WP(t)
-                    print(
-                        f"frame_count: {frame_count}, num_frames_in_group: {num_frames_in_group}"
-                    )
                     transparency = get_transp_for_frame(
                         frame_count, num_frames_in_group
                     )
+                    if transparency > 1:
+                        breakpoint()
                     ax.add_patch(make_circle(p_WP, transparency))
 
                     # get the constant slider pose
