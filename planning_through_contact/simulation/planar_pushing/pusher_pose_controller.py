@@ -169,12 +169,13 @@ class PusherPoseController(LeafSystem):
                 mutable_fsm_state.set_value(PusherPoseControllerState.CFREE_MPC)
                 logger.debug(f"Transitioning to CFREE_MPC state at time {time}")
                 return
-            signed_dist = self._pusher_slider_contact.Eval(context)
-            in_contact = signed_dist <= EPS
-            if not in_contact:
-                mutable_fsm_state.set_value(PusherPoseControllerState.RETURN_TO_CONTACT)
-                logger.debug(f"Transitioning to RETURN_TO_CONTACT state at time {time}")
-                return
+            # Enable/Disable return to contact
+            # signed_dist = self._pusher_slider_contact.Eval(context)
+            # in_contact = signed_dist <= EPS
+            # if not in_contact:
+            #     mutable_fsm_state.set_value(PusherPoseControllerState.RETURN_TO_CONTACT)
+            #     logger.debug(f"Transitioning to RETURN_TO_CONTACT state at time {time}")
+            #     return
 
         elif fsm_state_value == PusherPoseControllerState.RETURN_TO_CONTACT:
             if curr_mode_desired == PlanarPushingContactMode.NO_CONTACT:

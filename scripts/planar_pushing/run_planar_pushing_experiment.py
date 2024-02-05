@@ -41,6 +41,19 @@ state_estimator_meshcat = StartMeshcat()
 station_meshcat = None
 # logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
 
+logging.basicConfig(level=logging.INFO)
+logging.getLogger(
+    "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.controllers.hybrid_mpc"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.planar_pushing.iiwa_planner"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.environments.table_environment"
+).setLevel(logging.DEBUG)
 
 @hydra.main(version_base=None, config_path="../../config", config_name="basic")
 def main(cfg: OmegaConf) -> None:

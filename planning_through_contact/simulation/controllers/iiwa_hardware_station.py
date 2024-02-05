@@ -118,7 +118,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # (in rad, rounded down to the first decimal)
         # IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
         IIWA7_VELOCITY_LIMITS = np.array([1.7, 1.7, 1.7, 2.2, 2.4, 3.1, 3.1])
-        velocity_limit_factor = 0.4
+        velocity_limit_factor = 0.25
         ik_params.set_joint_velocity_limits(
             (
                 -velocity_limit_factor * IIWA7_VELOCITY_LIMITS,
