@@ -44,7 +44,7 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     step = 0.05
     x_lim = [0, 1.2]
     y_lim = [-1, 1]
-    for z in [0.03]: #[0.03, 0.1, 0.2, 0.3]
+    for z in [0.03]:  # [0.03, 0.1, 0.2, 0.3]
         pass_coords = []
         fail_coords = []
         plt.figure()
@@ -89,4 +89,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl", save_recording=True, debug=True)
+    run_sim(
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        save_recording=True,
+        debug=True,
+    )

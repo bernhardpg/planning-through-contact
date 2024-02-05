@@ -53,7 +53,10 @@ class IiwaHardwareStation(RobotSystemBase):
         super().__init__()
         self._sim_config = sim_config
         self._meshcat = meshcat
-        scenario_name = "demo"
+        if sim_config.use_hardware:
+            scenario_name = "speed-optimized"
+        else:
+            scenario_name = "accuracy-optimized"
         scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
         scenario = LoadScenario(
             filename=scenario_file_name, scenario_name=scenario_name

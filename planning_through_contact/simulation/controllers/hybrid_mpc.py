@@ -207,7 +207,7 @@ class HybridMpc:
         for constraint in all_constraints:
             prog.RemoveConstraint(constraint)
 
-        ## DONT REUSE MATHEMATICAL PROGRAM
+        # # DONT REUSE MATHEMATICAL PROGRAM
         # prog = MathematicalProgram()
 
         # # Formulate the problem in the local coordinates around the nominal trajectory
@@ -225,7 +225,7 @@ class HybridMpc:
         # )
         # terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
         # prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
-        ## DONT REUSE MATHEMATICAL PROGRAM
+        # # DONT REUSE MATHEMATICAL PROGRAM
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
@@ -297,7 +297,7 @@ class HybridMpc:
             lam = state[3]
             prog.AddLinearConstraint(lam >= self.config.lam_min)
             prog.AddLinearConstraint(lam <= self.config.lam_max)
-        
+
         if self._last_sols[mode] is not None:
             # Warm start
             prog.SetInitialGuess(x_bar, self._last_sols[mode]["x_bar"])
@@ -340,7 +340,7 @@ class HybridMpc:
         control = controls[best_idx]
         result = results[best_idx]
         lowest_cost = costs[best_idx]
-        
+
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]
@@ -351,13 +351,13 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
 
-        self.cost_log.append(lowest_cost)
-        self.control_log.append(control_sol.T)
+        # self.cost_log.append(lowest_cost)
+        # self.control_log.append(control_sol.T)
 
-        if lowest_cost == np.inf:
-            logger.debug(
-                f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
-            )
+        # if lowest_cost == np.inf:
+        #     logger.debug(
+        #         f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
+        #     )
         u_next = control_sol[:, 0]
 
         # Finite difference method to get velocity of pusher

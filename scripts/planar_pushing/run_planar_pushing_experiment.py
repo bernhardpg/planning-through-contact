@@ -36,7 +36,11 @@ from planning_through_contact.simulation.sensors.realsense_camera_config import 
 logger = logging.getLogger(__name__)
 
 state_estimator_meshcat = StartMeshcat()
-logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
+# station_meshcat = StartMeshcat()
+# state_estimator_meshcat = None
+station_meshcat = None
+# logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
+
 
 @hydra.main(version_base=None, config_path="../../config", config_name="basic")
 def main(cfg: OmegaConf) -> None:
@@ -72,12 +76,9 @@ def main(cfg: OmegaConf) -> None:
     sim_config: PlanarPushingSimConfig = PlanarPushingSimConfig.from_traj(
         trajectory=traj, mpc_config=mpc_config, **cfg.sim_config
     )
-    
-    # station_meshcat = StartMeshcat()
-    station_meshcat = None
-    state_estimator_meshcat.Delete()
-    # state_estimator_meshcat = StartMeshcat()
-    # logger.info(f"station meshcat url {station_meshcat.web_url()}")
+
+    if state_estimator_meshcat is not None:
+        state_estimator_meshcat.Delete()
 
     if sim_config.use_hardware:
         reset_experiment(
@@ -87,9 +88,15 @@ def main(cfg: OmegaConf) -> None:
     # Initialize position source
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
 
+    if sim_config.visualize_desired:
+        station_meshcat_temp = station_meshcat
+        state_estimator_meshcat_temp = state_estimator_meshcat
+    else:
+        station_meshcat_temp = None
+        state_estimator_meshcat_temp = None
     # Initialize robot system
     position_controller = IiwaHardwareStation(
-        sim_config=sim_config, meshcat=station_meshcat
+        sim_config=sim_config, meshcat=station_meshcat_temp
     )
 
     # Initialize environment
@@ -98,8 +105,8 @@ def main(cfg: OmegaConf) -> None:
         robot_system=position_controller,
         sim_config=sim_config,
         optitrack_config=optitrack_config,
-        station_meshcat=station_meshcat,
-        state_estimator_meshcat=state_estimator_meshcat,
+        station_meshcat=station_meshcat_temp,
+        state_estimator_meshcat=state_estimator_meshcat_temp,
     )
 
     try:
