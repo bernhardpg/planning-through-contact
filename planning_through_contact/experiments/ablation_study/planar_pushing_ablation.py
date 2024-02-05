@@ -1,8 +1,10 @@
+import fnmatch
+import os
 import pickle
 import time
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -29,6 +31,15 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 
 
+def _find_files(directory, pattern):
+    matches = []
+    for root, dirs, files in os.walk(directory):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                matches.append(os.path.join(root, name))
+    return matches
+
+
 @dataclass
 class SingleRunResult:
     sdp_cost: float
@@ -43,15 +54,23 @@ class SingleRunResult:
     relaxed_mean_determinant: float
     rounded_mean_determinant: float
     start_and_goal: PlanarPushingStartAndGoal
-    integration_constant: float
+    config: PlanarPlanConfig
 
     @property
     def optimality_gap(self) -> float:
-        return (self.relaxed_cost / self.rounded_cost) * 100
+        return ((self.rounded_cost - self.relaxed_cost) / self.relaxed_cost) * 100
 
     @property
     def sdp_optimality_gap(self) -> float:
-        return (self.relaxed_cost / self.sdp_cost) * 100
+        return ((self.sdp_cost - self.relaxed_cost) / self.sdp_cost) * 100
+
+    @property
+    def optimality_percentage(self) -> float:
+        return 100 - self.optimality_gap
+
+    @property
+    def sdp_optimality_percentage(self) -> float:
+        return 100 - self.optimality_gap
 
     @property
     def distance(self) -> float:
@@ -65,19 +84,19 @@ class SingleRunResult:
             pickle.dump(self, file)
 
     @staticmethod
-    def load(filename: str) -> "AblationStudy":
+    def load(filename: str) -> "SingleRunResult":
         with open(Path(filename), "rb") as file:
             return pickle.load(file)
 
     def __str__(self):
-        field_strings = [
-            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
-        ]
-
         # Manually add property strings
         property_strings = [
             f"optimality_gap: {self.optimality_gap}",
             f"sdp_optimality_gap: {self.sdp_optimality_gap}",
+        ]
+
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
         ]
 
         # Combine field and property strings
@@ -110,14 +129,71 @@ class AblationStudy:
         return [res.distance for res in self.results]
 
     @property
-    def optimality_gaps(self) -> List[float]:
+    def solve_times_sdp(self) -> List[float]:
+        return [res.sdp_elapsed_time for res in self.results if res.sdp_is_success]
+
+    @property
+    def solve_times_rounding(self) -> List[float]:
         return [
-            res.optimality_gap if res.rounded_is_success else 0 for res in self.results
+            res.rounding_elapsed_time for res in self.results if res.rounded_is_success
+        ]
+
+    @property
+    def optimality_gaps(self) -> List[float]:
+        return [res.optimality_gap for res in self.results]
+
+    @property
+    def rounded_is_success(self) -> List[float]:
+        return [res.rounded_is_success for res in self.results]
+
+    @property
+    def sdp_is_success(self) -> List[float]:
+        return [res.sdp_is_success for res in self.results]
+
+    @property
+    def optimality_percentages(self) -> List[float]:
+        return [
+            res.optimality_percentage if res.rounded_is_success else 0
+            for res in self.results
         ]
 
     @property
     def sdp_optimality_gaps(self) -> List[float]:
         return [res.sdp_optimality_gap for res in self.results]
+
+    @property
+    def sdp_optimality_percentages(self) -> List[float]:
+        return [
+            res.sdp_optimality_percentage if res.sdp_is_success else 0
+            for res in self.results
+        ]
+
+    @property
+    def num_success(self) -> int:
+        return len([r for r in self.results if r.sdp_is_success])
+
+    @property
+    def num_not_success(self) -> int:
+        return len(self) - self.num_success
+
+    @property
+    def num_rounded_success(self) -> int:
+        return len([r for r in self.results if r.rounded_is_success])
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    @property
+    def num_rounded_not_success(self) -> int:
+        return len(self) - self.num_rounded_success
+
+    @property
+    def percentage_success(self) -> float:
+        return (self.num_success / len(self)) * 100
+
+    @property
+    def percentage_rounded_success(self) -> float:
+        return (self.num_rounded_success / len(self)) * 100
 
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
@@ -129,83 +205,19 @@ class AblationStudy:
             results = pickle.load(file)
         return cls(results)
 
+    @classmethod
+    def load_from_folder(cls, folder_name: str) -> "AblationStudy":
+        data_files = _find_files(folder_name, pattern="solve_data.pkl")
 
-def do_one_run(
-    plan_config: PlanarPlanConfig,
-    solver_params: PlanarSolverParams,
-    start_and_goal: PlanarPushingStartAndGoal,
-):
-    plan_config.start_and_goal = start_and_goal
-
-    planner = PlanarPushingPlanner(plan_config)
-    planner.formulate_problem()
-
-    # Store this value as we need to set it to 0 to run GCS without rounding!
-    max_rounded_paths = solver_params.gcs_max_rounded_paths
-
-    start_time = time.time()
-    solver_params.gcs_max_rounded_paths = 0
-    relaxed_result = planner._solve(solver_params)
-    relaxed_elapsed_time = time.time() - start_time
-    relaxed_cost = relaxed_result.get_optimal_cost()
-
-    solver_params.gcs_max_rounded_paths = max_rounded_paths
-    start_time = time.time()
-    sdp_result = planner._solve(solver_params)
-    sdp_elapsed_time = time.time() - start_time
-    sdp_cost = sdp_result.get_optimal_cost()
-
-    if not sdp_result.is_success():
-        visualize_planar_pushing_start_and_goal(
-            plan_config.dynamics_config.slider.geometry,
-            plan_config.dynamics_config.pusher_radius,
-            start_and_goal,
-            # show=True,
-            save=True,
-            filename=f"infeasible_trajectory",
-        )
-
-    assert planner.source is not None  # avoid typing errors
-    assert planner.target is not None  # avoid typing errors
-    path = PlanarPushingPath.from_result(
-        planner.gcs,
-        sdp_result,
-        planner.source.vertex,
-        planner.target.vertex,
-        planner._get_all_vertex_mode_pairs(),
-    )
-    start_time = time.time()
-    rounding_result = path._do_nonlinear_rounding(solver_params)
-    rounding_elapsed_time = time.time() - start_time
-    rounded_cost = rounding_result.get_optimal_cost()
-
-    relaxed_mean_determinant: float = np.mean(path.get_determinants())
-
-    path.rounded_result = rounding_result
-    rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
-
-    return SingleRunResult(
-        sdp_cost,
-        rounded_cost,
-        relaxed_cost,
-        sdp_elapsed_time,
-        rounding_elapsed_time,
-        relaxed_elapsed_time,
-        sdp_result.is_success(),
-        relaxed_result.is_success(),
-        rounding_result.is_success(),
-        relaxed_mean_determinant,
-        rounded_mean_determinant,
-        start_and_goal,
-        plan_config.dynamics_config.integration_constant,
-    )
+        results = [SingleRunResult.load(filename) for filename in data_files]
+        return AblationStudy(results)
 
 
 def do_one_run_get_path(
     plan_config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
     start_and_goal: PlanarPushingStartAndGoal,
-):
+) -> Tuple[SingleRunResult, Optional[PlanarPushingPath]]:
     plan_config.start_and_goal = start_and_goal
 
     planner = PlanarPushingPlanner(plan_config)
@@ -236,6 +248,25 @@ def do_one_run_get_path(
             filename=f"infeasible_trajectory",
         )
 
+        return (
+            SingleRunResult(
+                np.inf,
+                np.inf,
+                relaxed_cost,
+                sdp_elapsed_time,
+                np.inf,
+                relaxed_elapsed_time,
+                sdp_result.is_success(),
+                relaxed_result.is_success(),
+                False,
+                np.inf,
+                np.inf,
+                start_and_goal,
+                plan_config,
+            ),
+            None,
+        )
+
     assert planner.source is not None  # avoid typing errors
     assert planner.target is not None  # avoid typing errors
     path = PlanarPushingPath.from_result(
@@ -244,6 +275,7 @@ def do_one_run_get_path(
         planner.source.vertex,
         planner.target.vertex,
         planner._get_all_vertex_mode_pairs(),
+        assert_nan_values=solver_params.assert_nan_values,
     )
     start_time = time.time()
     rounding_result = path._do_nonlinear_rounding(solver_params)
@@ -269,10 +301,19 @@ def do_one_run_get_path(
             relaxed_mean_determinant,
             rounded_mean_determinant,
             start_and_goal,
-            plan_config.dynamics_config.integration_constant,
+            plan_config,
         ),
         path,
     )
+
+
+def do_one_run(
+    plan_config: PlanarPlanConfig,
+    solver_params: PlanarSolverParams,
+    start_and_goal: PlanarPushingStartAndGoal,
+):
+    run, _ = do_one_run_get_path(plan_config, solver_params, start_and_goal)
+    return run
 
 
 def run_ablation(

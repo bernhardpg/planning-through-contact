@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import Enum
 from functools import cached_property
 from typing import Literal, Optional, Tuple
@@ -22,22 +22,23 @@ class BoxWorkspace:
     center: npt.NDArray[np.float64] = field(
         default_factory=lambda: np.array([0.0, 0.0])
     )
+    buffer: float = 0.0
 
     @property
     def x_min(self) -> float:
-        return self.center[0] - self.width / 2
+        return self.center[0] - self.width / 2 - self.buffer
 
     @property
     def x_max(self) -> float:
-        return self.center[0] + self.width / 2
+        return self.center[0] + self.width / 2 + self.buffer
 
     @property
     def y_min(self) -> float:
-        return self.center[1] - self.height / 2
+        return self.center[1] - self.height / 2 - self.buffer
 
     @property
     def y_max(self) -> float:
-        return self.center[1] + self.height / 2
+        return self.center[1] + self.height / 2 + self.buffer
 
     @property
     def bounds(self) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -45,19 +46,16 @@ class BoxWorkspace:
         ub = np.array([self.x_max, self.y_max], dtype=np.float64)
         return lb, ub
 
+    def new_workspace_with_buffer(self, new_buffer: float) -> "BoxWorkspace":
+        return BoxWorkspace(self.width, self.height, self.center, new_buffer)
+
 
 @dataclass
 class PlanarPushingWorkspace:
-    # Currently we don't use the workspace constraints for the slider, because
-    # the full Semidefinite relaxation of the QCQP creates a ton of
-    # constraints, which really slows down the optimization!
     slider: BoxWorkspace = field(
         default_factory=lambda: BoxWorkspace(
-            width=1.0, height=1.0, center=np.array([0.4, 0.0])
+            width=1.0, height=1.0, center=np.array([0.0, 0.0]), buffer=0.0
         )
-    )
-    pusher: BoxWorkspace = field(
-        default_factory=lambda: BoxWorkspace(width=0.8, height=0.8)
     )
 
 
@@ -142,6 +140,7 @@ class NonCollisionCost:
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
     pusher_arc_length: Optional[float] = None
+    time: Optional[float] = None
 
     @property
     def avoid_object(self) -> bool:
@@ -150,6 +149,12 @@ class NonCollisionCost:
             or self.distance_to_object_socp is not None
             or self.distance_to_object_socp_single_mode is not None
         )
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
 
 
 class ContactCostType(Enum):
@@ -163,7 +168,7 @@ class ContactCostType(Enum):
 
 @dataclass
 class ContactCost:
-    cost_type: ContactCostType = ContactCostType.KEYPOINT_DISPLACEMENTS
+    cost_type: ContactCostType = ContactCostType.STANDARD
     keypoint_arc_length: Optional[float] = None
     linear_arc_length: Optional[float] = None
     angular_arc_length: Optional[float] = None
@@ -173,14 +178,13 @@ class ContactCost:
     lin_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
-    # TODO(bernhardpg): Remove these terms
-    lin_displacements: Optional[float] = 1.0
-    ang_displacements: Optional[float] = 1.0
+    time: Optional[float] = None
 
-    def __post_init__(self) -> None:
-        if self.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
-            assert self.lin_displacements is not None
-            assert self.ang_displacements is not None
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
 
 
 # TODO: Refactor this
@@ -192,6 +196,12 @@ class ContactConfig:
     lam_max: Optional[float] = 1.0
     delta_theta_max: Optional[float] = None
     delta_vel_max: Optional[float] = None
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
 
 
 @dataclass
@@ -213,6 +223,12 @@ class PlanarPushingStartAndGoal:
             self.pusher_target_pose,
         )
 
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
+
 
 @dataclass
 class PlanarPlanConfig:
@@ -229,9 +245,7 @@ class PlanarPlanConfig:
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False  # TODO: remove, not used
-    workspace: PlanarPushingWorkspace = field(
-        default_factory=lambda: PlanarPushingWorkspace()
-    )
+    workspace: Optional[PlanarPushingWorkspace] = None
     dynamics_config: SliderPusherSystemConfig = field(
         default_factory=lambda: SliderPusherSystemConfig()
     )
@@ -250,3 +264,9 @@ class PlanarPlanConfig:
     @property
     def pusher_radius(self) -> float:
         return self.dynamics_config.pusher_radius
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)

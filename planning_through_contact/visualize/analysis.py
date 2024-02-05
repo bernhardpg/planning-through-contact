@@ -3,6 +3,7 @@ from pathlib import Path
 import pickle
 from typing import List, Optional, Tuple
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +18,7 @@ from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
+from planning_through_contact.geometry.planar.abstract_mode import GcsVertex
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -825,24 +827,130 @@ def plot_constraint_violation(
         plt.show()
 
 
-def analyze_plan(
-    path: PlanarPushingPath,
+def plot_constraint_violation_for_trajs(
+    violations: List[Dict[str, float]],
     filename: Optional[str] = None,
-    rounded: bool = False,
+    legends: Optional[List[str]] = None,
+    bar_titles: Optional[List[str]] = None,
+    min_y_ax: Optional[float] = None,
+    colors: Optional[List[str]] = None,
 ) -> None:
+    # Preparing the plot
+    num_groups = len(violations[0])
+    fig, axs = plt.subplots(1, num_groups)
+    group_names = list(violations[0].keys())  # TODO: Change
+    max_bars = len(violations)
+
+    # Colors for each subplot
+    if colors is None:
+        colors = ["red", "blue", "green", "purple", "orange"]
+
+    data = {name: [violation[name] for violation in violations] for name in group_names}
+
+    # Number of plots
+    n = len(data)
+    fig, axs = plt.subplots(
+        1, n, figsize=(n * 3, 3)
+    )  # Adjust the figure size as needed
+
+    for i, (key, values) in enumerate(data.items()):
+        # Create bar plot for each key
+        axs[i].bar(range(len(values)), values, color=colors[:n])
+
+        # Remove x-axis ticks
+        axs[i].set_xticks([])
+
+        if min_y_ax is not None:
+            min_y = max(max(values) * 1.3, min_y_ax)
+            axs[i].set_ylim(0, min_y)
+
+        if bar_titles is not None:
+            axs[i].set_title(f"{bar_titles[i]}")
+        else:
+            axs[i].set_title(f"{key}")
+
+    # Adjust layout and show the plot
+    plt.tight_layout()
+
+    # Create a list of patches to use as legend handles
+    if legends is not None:
+        custom_patches = [
+            mpatches.Patch(color=color, label=label)
+            for label, color in zip(legends, colors)
+        ]
+        # Creating the custom legend
+        plt.legend(handles=custom_patches)
+
+    if filename is not None:
+        fig.savefig(filename + "_constraints.pdf")  # type: ignore
+    else:
+        plt.show()
+
+
+def get_constraint_violation_for_face_mode(
+    mode: FaceContactMode,
+    result: MathematicalProgramResult,
+    compute_mean: bool = False,
+    keys_to_merge: Optional[List[Tuple[str, str]]] = None,
+) -> Dict[str, List]:
+    keys = mode.constraints.keys()
+    constraint_violations = {key: [] for key in keys}
+    for key in keys:
+        for constraints in mode.constraints[key]:
+            if not isinstance(constraints, type(np.array([]))):  # only one constraint
+                constraint_violations[key].append(
+                    mode.eval_binding(constraints, result)
+                )
+            else:
+                constraint_violations[key].append(
+                    [
+                        mode.eval_binding(constraint, result)
+                        for constraint in constraints
+                    ]
+                )
+
+    # NOTE: This is super hacky
+    for key, item in constraint_violations.items():
+        temp = np.array(item)  # type: ignore
+        constraint_violations[key] = np.abs(temp)  # type: ignore
+
+    if compute_mean:
+        # NOTE: This is super hacky
+        for key, item in constraint_violations.items():
+            constraint_violations[key] = np.mean(item)  # type: ignore
+
+    if keys_to_merge is not None:
+        all_keys_to_merge = [key for key_pair in keys_to_merge for key in key_pair]
+        new_constraint_violations = {
+            key: value
+            for key, value in constraint_violations.items()
+            if key not in all_keys_to_merge
+        }
+        for key_1, key_2 in keys_to_merge:
+            key = key_1  # NOTE: we just pick key 1
+            value = np.mean(
+                (constraint_violations[key_1], constraint_violations[key_2])
+            )
+            new_constraint_violations[key] = value  # type: ignore
+
+            return new_constraint_violations
+
+    return constraint_violations
+
+
+def _get_constraint_violation(
+    path: PlanarPushingPath,
+    result: MathematicalProgramResult,
+    rounded: bool = False,
+    compute_mean: bool = False,
+    keys_to_merge: Optional[List[Tuple[str, str]]] = None,
+) -> Dict[str, List]:
     face_modes = [
         pair.mode for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
     face_vertices = [
         pair.vertex for pair in path.pairs if isinstance(pair.mode, FaceContactMode)
     ]
-    if rounded:
-        assert path.rounded_result is not None
-        result = path.rounded_result
-        path_knot_points = path.get_rounded_vars()
-    else:
-        result = path.result
-        path_knot_points = path.get_vars()
 
     keys = face_modes[0].constraints.keys()
     constraint_violations = {key: [] for key in keys}
@@ -878,7 +986,81 @@ def analyze_plan(
 
     # NOTE: This is super hacky
     for key, item in constraint_violations.items():
-        constraint_violations[key] = np.array(item)  # type: ignore
+        temp = np.array(item)  # type: ignore
+        constraint_violations[key] = np.abs(temp)  # type: ignore
+
+    if compute_mean:
+        # NOTE: This is super hacky
+        for key, item in constraint_violations.items():
+            constraint_violations[key] = np.mean(item)  # type: ignore
+
+    if keys_to_merge is not None:
+        all_keys_to_merge = [key for key_pair in keys_to_merge for key in key_pair]
+        new_constraint_violations = {
+            key: value
+            for key, value in constraint_violations.items()
+            if key not in all_keys_to_merge
+        }
+        for key_1, key_2 in keys_to_merge:
+            key = key_1  # NOTE: we just pick key 1
+            value = np.mean(
+                (constraint_violations[key_1], constraint_violations[key_2])
+            )
+            new_constraint_violations[key] = value  # type: ignore
+
+            return new_constraint_violations
+
+    return constraint_violations
+
+
+def analyze_plans(
+    paths: List[PlanarPushingPath],
+    rounded: bool = False,
+    filename: Optional[str] = None,
+    legends: Optional[List[str]] = None,
+) -> None:
+    if rounded:
+        assert all([path.rounded_result is not None for path in paths])
+        results = [path.rounded_result for path in paths]
+        path_knot_points = [path.get_rounded_vars() for path in paths]
+    else:
+        results = [path.result for path in paths]
+        path_knot_points = [path.get_vars() for path in paths]
+
+    constraint_violations = [
+        _get_constraint_violation(path, result, rounded, compute_mean=True, keys_to_merge=[("translational_dynamics", "translational_dynamics_red")])  # type: ignore
+        for path, result in zip(paths, results)
+    ]
+    import matplotlib as mpl
+
+    # Enable LaTeX in Matplotlib
+    mpl.rcParams["text.usetex"] = True
+    bar_titles = [
+        "$(14)$",
+        "$(11)$ (Rotational part)",
+        "$(11)$ (Translational part)",
+    ]
+    plot_constraint_violation_for_trajs(
+        constraint_violations, filename, legends, bar_titles
+    )
+
+
+def analyze_plan(
+    path: PlanarPushingPath,
+    filename: Optional[str] = None,
+    rounded: bool = False,
+) -> None:
+    if rounded:
+        assert path.rounded_result is not None
+        result = path.rounded_result
+        path_knot_points = path.get_rounded_vars()
+    else:
+        result = path.result
+        path_knot_points = path.get_vars()
+
+    constraint_violations = _get_constraint_violation(
+        path, result, rounded, compute_mean=False
+    )
 
     num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
     MIN_REF_THETA_VEL = np.pi / 15
@@ -933,10 +1115,12 @@ def analyze_mode_result(
     traj: PlanarPushingTrajectory,
     result: MathematicalProgramResult,
     rank_analysis: bool = True,
+    filename: Optional[str] = None,
 ) -> None:
     if rank_analysis:
         Xs = mode.get_Xs()
 
+        fig = plt.figure()
         if len(Xs) == 1:
             X_sol = result.GetSolution(Xs[0])
 
@@ -947,7 +1131,6 @@ def analyze_mode_result(
             plt.xlabel("Index of Eigenvalue")
             plt.ylabel("Norm of Eigenvalue")
             plt.title("Norms of the Eigenvalues of the Matrix")
-            plt.show()
         else:
             X_sols = [evaluate_np_expressions_array(X, result) for X in Xs]
 
@@ -966,27 +1149,13 @@ def analyze_mode_result(
             plt.xlabel("Index of Eigenvalue")
             plt.ylabel("Norm of Eigenvalue")
             plt.title("Norms of the Eigenvalues of the Matrix")
+
+        if filename is not None:
+            fig.savefig(filename + "_eigvals.png")  # type: ignore
+        else:
             plt.show()
 
-    keys = mode.constraints.keys()
-    constraint_violations = {key: [] for key in keys}
-    for key in keys:
-        for constraints in mode.constraints[key]:
-            if not isinstance(constraints, type(np.array([]))):  # only one constraint
-                constraint_violations[key].append(
-                    mode.eval_binding(constraints, result)
-                )
-            else:
-                constraint_violations[key].append(
-                    [
-                        mode.eval_binding(constraint, result)
-                        for constraint in constraints
-                    ]
-                )
-
-    # NOTE: This is super hacky
-    for key, item in constraint_violations.items():
-        constraint_violations[key] = np.array(item)
+    constraint_violations = get_constraint_violation_for_face_mode(mode, result)
 
     ref_vals = {
         "SO2": 1,
@@ -996,9 +1165,9 @@ def analyze_mode_result(
     }
     if traj.path_knot_points[0].theta_dots is not None:
         ref_vals["exponential_map"] = np.mean(traj.path_knot_points[0].theta_dots)
-    plot_constraint_violation(constraint_violations, ref_vals)
+    plot_constraint_violation(constraint_violations, ref_vals, filename=filename)
 
     # (num_knot_points, 2): first col cosines, second col sines
 
     rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])
-    plot_cos_sine_trajs(rs)
+    plot_cos_sine_trajs(rs, filename=filename)

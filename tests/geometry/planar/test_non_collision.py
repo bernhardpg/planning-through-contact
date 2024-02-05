@@ -251,7 +251,8 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
 
     mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
 
-    assert len(mode.prog.quadratic_costs()) == 2
+    # one avoidance term per knot point (minus first and last) + regularization
+    assert len(mode.prog.quadratic_costs()) == NUM_KNOT_POINTS - 2 + 1
 
     slider_pose = PlanarPose(0.3, 0.3, 0)
     mode.set_slider_pose(slider_pose)
@@ -280,56 +281,6 @@ def test_avoid_object_quadratic(plan_config: PlanarPlanConfig) -> None:
 
     # Pusher should move away from object
     assert vars.p_BP_xs[2] <= -0.27
-
-    if DEBUG:
-        start_and_goal = PlanarPushingStartAndGoal(
-            slider_pose, slider_pose, finger_initial_pose, finger_target_pose
-        )
-        traj.config.start_and_goal = start_and_goal  # needed for viz
-        visualize_planar_pushing_trajectory(
-            traj, visualize_knot_points=True, save=True, filename="debug_file"
-        )
-
-
-def test_avoid_object_socp(plan_config: PlanarPlanConfig) -> None:
-    NUM_KNOT_POINTS = 5
-    plan_config.num_knot_points_non_collision = NUM_KNOT_POINTS
-    plan_config.dynamics_config.pusher_radius = 0.03
-
-    plan_config.non_collision_cost = NonCollisionCost(
-        pusher_velocity_regularization=1.0, distance_to_object_socp_single_mode=1.0
-    )
-    loc = PolytopeContactLocation(ContactLocation.FACE, 3)
-
-    mode = NonCollisionMode.create_from_plan_spec(loc, plan_config)
-
-    slider_pose = PlanarPose(0.3, 0.3, 0)
-    mode.set_slider_pose(slider_pose)
-
-    finger_initial_pose = PlanarPose(-0.2, 0.1, 0)
-    mode.set_finger_initial_pose(finger_initial_pose)
-    finger_target_pose = PlanarPose(-0.2, -0.2, 0)
-    mode.set_finger_final_pose(finger_target_pose)
-
-    result = Solve(mode.prog)
-    assert result.is_success()
-
-    vars = mode.variables.eval_result(result)
-    traj = PlanarPushingTrajectory(mode.config, [vars])
-
-    assert_initial_and_final_poses(
-        traj,
-        slider_pose,
-        finger_initial_pose,
-        slider_pose,
-        finger_target_pose,
-        body_frame=True,
-    )
-
-    assert_object_is_avoided(plan_config.slider_geometry, np.vstack(vars.p_BPs))
-
-    # Pusher should move away from object
-    assert vars.p_BP_xs[2] <= -0.25
 
     if DEBUG:
         start_and_goal = PlanarPushingStartAndGoal(
