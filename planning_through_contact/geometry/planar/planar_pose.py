@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
 import numpy.typing as npt
@@ -116,6 +116,12 @@ class PlanarPose:
         new_pos = R.dot(self.pos())
         new_th = theta + self.theta
         return PlanarPose(new_pos[0, 0], new_pos[1, 0], new_th)
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return ", ".join(field_strings)
 
 
 class PlanarVelocity(PlanarPose):

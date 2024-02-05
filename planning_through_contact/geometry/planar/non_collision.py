@@ -256,18 +256,6 @@ class NonCollisionMode(AbstractContactMode):
             for expr in exprs:
                 self.prog.AddLinearConstraint(expr)
 
-        # TODO(bernhardpg): As of now we don't worry about the workspace constraints
-        use_workspace_constraints = False
-        if use_workspace_constraints:
-            self._add_workspace_constraints()
-
-    def _add_workspace_constraints(self) -> None:
-        for k in range(self.num_knot_points):
-            p_BF = self.variables.p_BPs[k]
-
-            lb, ub = self.config.workspace.pusher.bounds
-            self.prog.AddBoundingBoxConstraint(lb, ub, p_BF)
-
     def _create_collision_free_space_constraints(
         self, pusher_pos: NpVariableArray
     ) -> List[sym.Formula]:
@@ -288,6 +276,11 @@ class NonCollisionMode(AbstractContactMode):
             return
 
         self.cost_config = self.config.non_collision_cost
+
+        if self.cost_config.time is not None:
+            self.prog.AddLinearCost(
+                self.cost_config.time * self.config.time_non_collision
+            )
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
@@ -321,25 +314,25 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
-            dists_for_each_plane = [
-                [plane.dist_to(p_BF) for p_BF in self.variables.p_BPs]
-                for plane in planes
-            ]
 
             if self.cost_config.distance_to_object_quadratic is not None:
-                squared_dists = [
-                    self.cost_config.distance_to_object_quadratic
-                    * (
-                        d
-                        - self.cost_config.distance_to_object_quadratic_preferred_distance
-                    )
-                    ** 2
-                    for dist in dists_for_each_plane
-                    for d in dist
-                ]
-                self.quadratic_distance_cost = self.prog.AddQuadraticCost(
-                    np.sum(squared_dists), is_convex=True
-                )
+                c = self.cost_config.distance_to_object_quadratic
+                for k in range(1, self.num_knot_points - 1):
+                    # Divide this value by the number of planes so that the cost has the same magnitude for
+                    # regions, independently on number of faces
+                    p_BP = self.variables.p_BPs[k]
+                    for plane in planes:
+                        dist = plane.dist_to(p_BP)
+                        deviation_from_pref_dist = (
+                            dist
+                            - self.cost_config.distance_to_object_quadratic_preferred_distance
+                        )
+                        normalized_total_deviation = deviation_from_pref_dist / len(
+                            planes
+                        )
+                        self.quadratic_distance_cost = self.prog.AddQuadraticCost(
+                            c * normalized_total_deviation**2, is_convex=True
+                        )
 
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
@@ -347,46 +340,28 @@ class NonCollisionMode(AbstractContactMode):
                     self.contact_location.idx
                 )
                 for plane in planes:
-                    for p_BP in self.variables.p_BPs:
+                    for p_BP in self.variables.p_BPs[1:-1]:
                         # A = [a^T; 0]
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = plane.a.T * self.cost_config.distance_to_object_socp
+                        A[0, :] = (
+                            plane.a.T
+                            * self.cost_config.distance_to_object_socp
+                            # TODO(bernhardpg): Why does this cause a bug?
+                            # / len(planes)
+                        )
                         # b = [b; 1]
                         b = np.ones((NUM_VARS, 1))
                         b[0] = plane.b
                         b = b * self.cost_config.distance_to_object_socp
+                        # TODO(bernhardpg): Why does this cause a bug?
+                        # / len(planes)
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
-
-            if self.cost_config.distance_to_object_socp_single_mode is not None:
-                # TODO: Can probably get rid of this
-
-                # NOTE: Only a research feature for adding socp costs on a single mode (i.e. not in GCS)
-                for dists in dists_for_each_plane:
-                    dists_except_first_and_last = dists[1:-1]
-                    slacks = self.prog.NewContinuousVariables(
-                        len(dists_except_first_and_last), "s"
-                    )
-                    for d, s in zip(dists_except_first_and_last, slacks):
-                        # Let d := dist >= 0
-                        # we want infinite cost for being close to object:
-                        #   minimize 1 / d
-                        # reformulate as:
-                        #   minimize s s.t. s >= 1/d, d >= 0 (implies s >= 0)
-                        #   <=>
-                        #   minimize s s.t. s d >= 1, d >= 0
-                        # which is exactly a rotated Lorentz cone constraint:
-                        # (s,d,1) \in RotatedLorentzCone <=> s d >= 1^2, s >= 0, d >= 0
-
-                        self.prog.AddRotatedLorentzConeConstraint(np.array([s, d, 1]))
-                        self.prog.AddLinearCost(
-                            self.cost_config.distance_to_object_socp_single_mode * s
-                        )
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.
@@ -499,7 +474,7 @@ class NonCollisionMode(AbstractContactMode):
         # TODO: Currently, some tests will fail if this is not enabled (as the sets are unbounded)
         # TODO: This will be handled soon
         if make_bounded:
-            BOUND = 2  # TODO(bernhardpg): this should not be hardcoded
+            BOUND = 1  # TODO(bernhardpg): this should not be hardcoded
             ub = np.full((temp_prog.num_vars(),), BOUND)
             temp_prog.AddBoundingBoxConstraint(-ub, ub, temp_prog.decision_variables())
 
