@@ -133,8 +133,6 @@ def get_default_plan_config(
         contact_config = ContactConfig(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
         )
-        # time_in_contact = 6.0
-        # time_in_non_collision = 2.0
         time_contact = 2.0
         time_non_collision = 4.0
     else:
@@ -186,7 +184,6 @@ def get_default_solver_params(
         nonl_round_major_feas_tol=1e-5,
         nonl_round_minor_feas_tol=1e-5,
         nonl_round_opt_tol=1e-5,
-        # sol_retrieval="eigenvec",
     )
     return solver_params
 

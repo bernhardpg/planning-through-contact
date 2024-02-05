@@ -119,6 +119,7 @@ class PlanarSolverParams:
     max_mosek_solve_time: float = 300.0
     print_path: bool = False
     print_cost: bool = False
+    print_rounding_details: bool = False
     solver: Literal["mosek", "clarabel"] = "mosek"
     get_rounded_and_original_traj: bool = False
     nonl_round_major_feas_tol: float = (

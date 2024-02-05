@@ -533,7 +533,9 @@ class PlanarPushingPlanner:
             print("No gcs paths found")
             return None
         else:
-            print(f"num rounded paths: {len(paths)}")
+            if solver_params.print_rounding_details:
+                print(f"num rounded paths: {len(paths)}")
+
             # Do nonlinear rounding on each traj, pick the best one
             if solver_params.rounding_steps > 0:
                 for path in paths:
@@ -546,11 +548,11 @@ class PlanarPushingPlanner:
                     for p in paths
                 ]
 
-                print(
-                    f"num rounded feasible paths: {len([p for p in paths if p.rounded_result.is_success()])}"
-                )
-                # if np.isinf(np.min(rounded_costs)):
-                #     breakpoint()
+                if solver_params.print_rounding_details:
+                    print(
+                        f"num rounded feasible paths: {len([p for p in paths if p.rounded_result.is_success()])}"
+                    )
+
                 best_idx = np.argmin(rounded_costs)
                 self.path = paths[best_idx]
 
