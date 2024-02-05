@@ -245,6 +245,15 @@ class NonCollisionMode(AbstractContactMode):
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
+        # We keep these to evaluate cost term contributions later
+        self.costs = {
+            "pusher_arc_length": [],
+            "pusher_vel_reg": [],
+            "object_avoidance_socp": [],
+            "object_avoidance_quad": [],
+            "non_contact_time": [],
+        }
+
         self._define_constraints()
         self._define_cost()
 
@@ -278,9 +287,10 @@ class NonCollisionMode(AbstractContactMode):
         self.cost_config = self.config.non_collision_cost
 
         if self.cost_config.time is not None:
-            self.prog.AddLinearCost(
+            cost = self.prog.AddLinearCost(
                 self.cost_config.time * self.config.time_non_collision
             )
+            self.costs["non_contact_time"].append(cost)
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
@@ -298,6 +308,8 @@ class NonCollisionMode(AbstractContactMode):
                     is_convex=True,
                 )
 
+                self.costs["pusher_vel_reg"].append(self.squared_eucl_dist_cost)
+
         if self.cost_config.pusher_arc_length is not None:
             for k in range(self.num_knot_points - 1):
                 vars = np.concatenate(
@@ -311,6 +323,8 @@ class NonCollisionMode(AbstractContactMode):
                 A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
                 cost = self.prog.AddL2NormCost(A, b, vars)
                 self.l2_norm_costs.append(cost)
+
+                self.costs["pusher_arc_length"].append(cost)
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
@@ -333,6 +347,8 @@ class NonCollisionMode(AbstractContactMode):
                         self.quadratic_distance_cost = self.prog.AddQuadraticCost(
                             c * normalized_total_deviation**2, is_convex=True
                         )
+
+                self.costs["object_avoidance_quad"].append(self.quadratic_distance_cost)
 
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
@@ -362,6 +378,8 @@ class NonCollisionMode(AbstractContactMode):
                         cost = PerspectiveQuadraticCost(A, b)
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
+
+                        self.costs["object_avoidance_socp"].append(binding)
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.

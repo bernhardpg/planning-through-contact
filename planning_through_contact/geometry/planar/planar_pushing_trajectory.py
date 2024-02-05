@@ -409,6 +409,7 @@ class PlanarPushingTrajectory:
         self,
         config: PlanarPlanConfig,
         path_knot_points: List[FaceContactVariables | NonCollisionVariables],
+        cost: Optional[float] = None,
     ) -> None:
         self.config = config
         self.pusher_radius = config.pusher_radius
@@ -418,6 +419,7 @@ class PlanarPushingTrajectory:
         start_and_end_times = np.concatenate(([0], np.cumsum(time_in_modes)))
         self.start_times = start_and_end_times[:-1]
         self.end_times = start_and_end_times[1:]
+        self.cost = cost
 
         self.traj_segments = [
             NonCollisionTrajSegment.from_knot_points(p, start, end)

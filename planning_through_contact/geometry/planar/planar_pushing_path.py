@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import numpy.typing as npt
@@ -9,6 +9,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     SnoptSolver,
+    SolutionResult,
     SolverOptions,
 )
 
@@ -115,6 +116,67 @@ class PlanarPushingPath:
         self.rounded_result = None
         self.config = pairs_on_path[0].mode.config
 
+    @property
+    def relaxed_cost(self) -> float:
+        return self.result.get_optimal_cost()
+
+    @property
+    def rounded_cost(self) -> float:
+        assert self.rounded_result is not None
+        return self.rounded_result.get_optimal_cost()
+
+    @property
+    def solve_time(self) -> float:
+        # The field `optimizer_time` is Mosek specific
+        return self.result.get_solver_details().optimizer_time  # type: ignore
+
+    # @property
+    # def rounding_time(self) -> float:
+    #     assert self.rounded_result is not None
+    #     # The field `info` is Snopt specific
+    #     info = self.rounded_result.get_solver_details().info
+    #     # TODO(bernhardpg): How to get the SNOPT solver time?
+    #     return None
+
+    @classmethod
+    def from_path(
+        cls,
+        gcs: opt.GraphOfConvexSets,
+        result: MathematicalProgramResult,
+        edge_path: List[GcsEdge],
+        all_pairs: Dict[str, VertexModePair],
+        assert_nan_values: bool = True,
+    ) -> "PlanarPushingPath":
+        """
+        Creates a Planar Pushing path from a given set of edges.
+        """
+        vertex_path = [e.u() for e in edge_path]
+        vertex_path.append(edge_path[-1].v())
+
+        if assert_nan_values:
+            # We need a result to do this
+            assert result is not None
+
+            def _check_all_nan_or_zero(array: npt.NDArray[np.float64]) -> bool:
+                return np.isnan(array) | np.isclose(array, 0, atol=1e-5)
+
+            # Assert that all decision varibles NOT ON the optimal path are NaN or 0
+            vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
+            if len(vertices_not_on_path) > 0:
+                vertex_vars_not_on_path = np.concatenate(
+                    [result.GetSolution(v.x()) for v in vertices_not_on_path]
+                )
+                assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
+
+            # Assert that all decision varibles ON the optimal path are not NaN
+            vertex_vars_on_path = np.concatenate(
+                [result.GetSolution(v.x()) for v in vertex_path]
+            )
+            assert np.all(~np.isnan(vertex_vars_on_path))
+
+        pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
+        return cls(pairs_on_path, edge_path, result)
+
     @classmethod
     def from_result(
         cls,
@@ -125,6 +187,10 @@ class PlanarPushingPath:
         all_pairs: Dict[str, VertexModePair],
         assert_nan_values: bool = True,
     ) -> "PlanarPushingPath":
+        """
+        Create a PlanarPushingPath from a relaxed GCS result, which then picks
+        a deterministic graph path using gcs.GetSolutionPath(...).
+        """
         edge_path = gcs.GetSolutionPath(source_vertex, target_vertex, result)
         vertex_path = [e.u() for e in edge_path]
         vertex_path.append(edge_path[-1].v())
@@ -151,17 +217,98 @@ class PlanarPushingPath:
         pairs_on_path = [all_pairs[v.name()] for v in vertex_path]
         return cls(pairs_on_path, edge_path, result)
 
+    def get_cost_terms(self) -> Dict[str, Dict]:
+        contact_mode_costs = {
+            "keypoint_arc": [],
+            "keypoint_reg": [],
+            "angular_vel_reg": [],
+            "translational_vel_reg": [],
+            "force_reg": [],
+            "contact_time": [],
+            "mode_cost": [],
+        }
+
+        contact_mode_sums = {
+            "keypoint_arc": float,
+            "keypoint_reg": float,
+            "angular_vel_reg": float,
+            "translational_vel_reg": float,
+            "force_reg": float,
+            "contact_time": float,
+            "mode_cost": float,
+        }
+
+        non_collision_costs = {
+            "pusher_arc_length": [],
+            "pusher_vel_reg": [],
+            "object_avoidance_socp": [],
+            "object_avoidance_quad": [],
+            "non_contact_time": [],
+        }
+
+        non_collision_sums = {
+            "pusher_arc_length": float,
+            "pusher_vel_reg": float,
+            "object_avoidance_socp": float,
+            "object_avoidance_quad": float,
+            "non_contact_time": float,
+        }
+
+        def _get_cost_vals(mode, vertex, costs):
+            cost_var_idxs = [
+                mode.get_variable_indices_in_gcs_vertex(c.variables()) for c in costs
+            ]
+            cost_vars = [vertex.x()[idx] for idx in cost_var_idxs]
+            cost_var_vals = [self.result.GetSolution(vars) for vars in cost_vars]
+            cost_vals = [
+                cost.evaluator().Eval(vals) for cost, vals in zip(costs, cost_var_vals)
+            ]
+            return cost_vals
+
+        for key in contact_mode_costs.keys():
+            for vertex, mode in self.pairs:
+                if isinstance(mode, FaceContactMode):
+                    contact_mode_costs[key].append(
+                        np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
+                    )
+
+        for key in contact_mode_sums.keys():
+            contact_mode_sums[key] = np.sum(contact_mode_costs[key])
+
+        for key in non_collision_costs.keys():
+            for vertex, mode in self.pairs:
+                if isinstance(mode, NonCollisionMode):
+                    non_collision_costs[key].append(
+                        np.sum(_get_cost_vals(mode, vertex, mode.costs[key]))
+                    )
+
+        for key in non_collision_sums.keys():
+            non_collision_sums[key] = np.sum(non_collision_costs[key])
+
+        res = {
+            "contact_mode_costs": contact_mode_costs,
+            "contact_mode_sums": contact_mode_sums,
+            "non_collision_costs": non_collision_costs,
+            "non_collision_sums": non_collision_sums,
+        }
+
+        return res
+
     def to_traj(
         self,
-        do_rounding: bool = False,
-        solver_params: Optional[PlanarSolverParams] = None,
+        rounded: bool = False,
     ) -> PlanarPushingTrajectory:
-        if do_rounding:
-            assert solver_params is not None
-            self.do_rounding(solver_params)
-            return PlanarPushingTrajectory(self.config, self.get_rounded_vars())
+        if rounded:
+            assert self.rounded_result is not None
+            return PlanarPushingTrajectory(
+                self.config,
+                self.get_rounded_vars(),
+                self.rounded_result.get_optimal_cost(),
+            )
         else:
-            return PlanarPushingTrajectory(self.config, self.get_vars())
+            return PlanarPushingTrajectory(
+                self.config, self.get_vars(), self.result.get_optimal_cost()
+            )
 
     def get_vars(self) -> List[AbstractModeVariables]:
         vars_on_path = [
@@ -213,7 +360,7 @@ class PlanarPushingPath:
         add_edge_constraints_to_prog(self.edges, prog, self.pairs)
         return prog
 
-    def _get_initial_guess(
+    def _get_initial_guess_as_orig_variables(
         self, scale_rot_values: bool = True
     ) -> npt.NDArray[np.float64]:
         original_decision_var_idxs_in_vertices = [
@@ -274,7 +421,7 @@ class PlanarPushingPath:
 
         start = time.time()
 
-        initial_guess = self._get_initial_guess()
+        initial_guess = self._get_initial_guess_as_orig_variables()
 
         solver_options = SolverOptions()
 
@@ -321,13 +468,61 @@ class PlanarPushingPath:
             solver_params.nonl_round_major_iter_limit,
         )
 
+        start = time.time()
         result = snopt.Solve(prog, initial_guess, solver_options=solver_options)  # type: ignore
-
         end = time.time()
+        self.rounding_time = end - start
 
-        if solver_params.measure_solve_time:
-            elapsed_time = end - start
-            print(f"Total elapsed optimization time: {elapsed_time}")
+        def _are_within_ranges_with_tolerance(
+            values, lower_bounds, upper_bounds, tolerance
+        ) -> npt.NDArray[np.bool_]:
+            close_to_lower = np.isclose(values, lower_bounds, atol=tolerance)
+            close_to_upper = np.isclose(values, upper_bounds, atol=tolerance)
+            within_bounds = (values > lower_bounds) & (values < upper_bounds)
+            return close_to_lower | close_to_upper | within_bounds
+
+        # TODO(bernhardpg): Remove this, we don't use it.
+        if False:
+            if not result.is_success():
+                # Sometimes SNOPT reports that it cannot proceed due to numerical errors, but the solution is still
+                # feasible. In that case we keep it (empirically it is often close to optimal).
+                if result.get_solution_result() == SolutionResult.kSolverSpecificError:
+                    prog.SetInitialGuess(
+                        prog.decision_variables(),
+                        result.GetSolution(prog.decision_variables()),
+                    )
+
+                    TOL = solver_params.nonl_round_major_feas_tol
+
+                    def _is_binding_satisfied(binding) -> npt.NDArray[np.bool_]:
+                        val = prog.EvalBindingAtInitialGuess(binding)
+                        ub, lb = (
+                            binding.evaluator().upper_bound(),
+                            binding.evaluator().lower_bound(),
+                        )
+                        return _are_within_ranges_with_tolerance(val, lb, ub, TOL)
+
+                    constraints_satisfied = np.concatenate(
+                        [
+                            _is_binding_satisfied(binding)
+                            for binding in prog.GetAllConstraints()
+                        ]
+                    )
+
+                    # if result.get_optimal_cost() <= self.result.get_optimal_cost():
+                    #     # This should not happen
+                    #     calculated_cost = np.sum(
+                    #         [prog.EvalBindingAtInitialGuess(b) for b in prog.GetAllCosts()]
+                    #     )
+                    #     if not np.isclose(result.get_optimal_cost(), calculated_cost):
+                    #         breakpoint()
+
+                    cost_upper_bound = (
+                        result.get_optimal_cost() >= self.result.get_optimal_cost()
+                    )
+                    solution_feasible = np.all(constraints_satisfied)
+                    if solution_feasible and cost_upper_bound:
+                        result.set_solution_result(SolutionResult.kSolutionFound)
 
         if solver_params.assert_rounding_res:
             if not result.is_success():
@@ -335,10 +530,5 @@ class PlanarPushingPath:
                     f"Solution was not successfull. Solution result: {result.get_solution_result()} "
                 )
                 raise RuntimeError("Rounding was not succesfull.")
-        else:
-            if not result.is_success():
-                print(
-                    "Warning, rounding did not return is_success() == True, and might not have converged"
-                )
 
         return result

@@ -563,7 +563,15 @@ def make_traj_figure(
     plot_forces: bool = True,
     slider_color: Optional[Any] = None,
     split_on_mode_type: bool = False,
+    num_contact_frames: int = 5,
+    num_non_collision_frames: int = 5,
 ) -> None:
+    # Ensure a type 1 font is used
+    plt.rcParams["font.family"] = "Times"
+    plt.rcParams["ps.useafm"] = True
+    plt.rcParams["pdf.use14corefonts"] = True
+    plt.rcParams["text.usetex"] = False
+    # NOTE(bernhardpg): This function is a mess!
     # We need to add the first vertex again to close the polytope
     vertices = np.hstack(
         traj.config.slider_geometry.vertices + [traj.config.slider_geometry.vertices[0]]
@@ -620,7 +628,7 @@ def make_traj_figure(
 
             segment_groups.append(group)
 
-    fig_height = 5
+    fig_height = 4
     fig, axs = plt.subplots(
         1, len(segment_groups), figsize=(fig_height * len(segment_groups), fig_height)
     )
@@ -628,7 +636,7 @@ def make_traj_figure(
     if plot_lims is not None:
         x_min, x_max, y_min, y_max = plot_lims
     else:
-        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.1)
+        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.12)
 
     for segment_idx, segment_group in enumerate(segment_groups):
         if len(segment_groups) == 1:  # only one subplot
@@ -657,8 +665,8 @@ def make_traj_figure(
             alpha=fill_transparency,
         )
 
-        start_transparency = 0.5
-        end_transparency = 0.9
+        start_transparency = 0.3
+        end_transparency = 1.0
         get_transp_for_frame = (
             lambda idx, num_points: (end_transparency - start_transparency)
             * idx
@@ -679,95 +687,201 @@ def make_traj_figure(
             )
             ax.add_patch(ws_rect)
 
+        # count how many frames we have plotted in this group
+        frame_count = 0
         for element_idx, (traj_segment, knot_points) in enumerate(segment_group):
-            ts = np.linspace(
-                traj_segment.start_time,
-                traj_segment.end_time,
-                knot_points.num_knot_points,
+            # we don't plot the first mode (source)
+            num_segments_to_plot = len(
+                [
+                    1
+                    for _, knot_points in segment_group
+                    if knot_points.num_knot_points > 1
+                ]
             )
 
-            for idx in range(knot_points.num_knot_points):
-                R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
-                p_WB = traj_segment.get_p_WB(ts[idx])
+            if not plot_knot_points:
+                if knot_points.num_knot_points == 1 and element_idx == 0:
+                    # do not plot first mode (source vertex) as it
+                    # looks weird
+                    continue
 
-                p_WP = traj_segment.get_p_WP(ts[idx])
+                if isinstance(traj_segment, NonCollisionTrajSegment):
+                    num_frames_in_segment = num_non_collision_frames
 
-                # This is to get the knot point value which can have determinant < 1
-                if len(traj_segment.R_WB.Rs) > 1:
-                    R_WB = traj_segment.R_WB.Rs[idx]
-                else:
-                    R_WB = traj_segment.R_WB.Rs[0]
+                    if segment_idx < len(segment_groups) - 1:
+                        num_frames_in_group = (
+                            num_frames_in_segment * num_segments_to_plot
+                        )
+                    else:  # last group, we plot last mode
+                        num_frames_in_group = (
+                            num_frames_in_segment * (len(segment_group) - 1) + 1
+                        )
+                else:  # face contact
+                    num_frames_in_segment = num_contact_frames
+                    # Only one face contact
+                    num_frames_in_group = num_frames_in_segment
 
-                # We only plot the current frame if it will change next frame
-                # (this is to avoid plotting multiple frames on top of each other)
-                if idx + 1 < knot_points.num_knot_points:
-                    next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[:2, :2]  # 2x2 matrix
-                    next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
-                    next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
-                else:
-                    next_R_WB = R_WB
-                    next_p_WB = p_WB
-                    next_p_WP = p_WP
-
-                vertices_W = get_vertices_W(p_WB, R_WB)
-
-                transparency = get_transp_for_frame(frame_count, num_frames_in_group)
-                line_transparency = transparency
-                fill_transparency = transparency
-
-                # Plot polytope
                 if (
-                    np.any(next_R_WB != R_WB)
-                    or np.any(next_p_WB != p_WB)
-                    or element_idx == len(segment_group) - 1
+                    segment_idx == len(segment_groups) - 1
+                    and element_idx == len(segment_group) - 1
                 ):
+                    ts = [traj_segment.start_time]
+                else:
+                    ts = np.linspace(
+                        traj_segment.start_time,
+                        traj_segment.end_time,
+                        num_frames_in_segment,
+                    )
+                if element_idx < len(segment_group) - 1:
+                    ts = ts[
+                        :-1
+                    ]  # avoid plotting the last pusher of intermittent modes so we don't get double plots
+
+                for idx, t in enumerate(ts):
+                    p_WP = traj_segment.get_p_WP(t)
+                    transparency = get_transp_for_frame(
+                        frame_count, num_frames_in_group
+                    )
+                    if transparency > 1:
+                        breakpoint()
+                    ax.add_patch(make_circle(p_WP, transparency))
+
+                    # get the constant slider pose
+                    R_WB = traj_segment.get_R_WB(t)[:2, :2]  # 2x2 matrix
+                    p_WB = traj_segment.get_p_WB(t)
+
+                    # Plot polytope
+                    vertices_W = get_vertices_W(p_WB, R_WB)
                     ax.plot(
                         vertices_W[0, :],
                         vertices_W[1, :],
                         color=LINE_COLOR,
-                        alpha=line_transparency,
+                        alpha=transparency,
                         linewidth=1,
                     )
                     ax.fill(
                         vertices_W[0, :],
                         vertices_W[1, :],
-                        alpha=fill_transparency,
+                        alpha=transparency,
                         color=slider_color,
                     )
 
-                # Plot pusher
-                if np.any(next_p_WP != p_WP) or element_idx == len(segment_group) - 1:
-                    ax.add_patch(make_circle(p_WP, fill_transparency))
-
-                if plot_forces:
-                    # Plot forces
-                    FORCE_SCALE = 0.5
-                    # only N-1 inputs
-                    if (idx < knot_points.num_knot_points - 1) and (
-                        isinstance(knot_points, FaceContactVariables)
-                    ):
-                        f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
-                        p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
-                        ax.arrow(
-                            p_Wc[0],
-                            p_Wc[1],
-                            f_W[0],
-                            f_W[1],
-                            color=LINE_COLOR,
-                            fill=True,
-                            zorder=99999,
-                            alpha=line_transparency,
-                            joinstyle="round",
-                            linewidth=0.0,
-                            width=0.008,
-                        )
+                    if plot_forces:
+                        # Plot forces
+                        FORCE_SCALE = 8.0
+                        # only N-1 inputs
+                        if (idx < knot_points.num_knot_points - 1) and (
+                            isinstance(knot_points, FaceContactVariables)
+                        ):
+                            f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+                            p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
+                            ax.arrow(
+                                p_Wc[0],
+                                p_Wc[1],
+                                f_W[0],
+                                f_W[1],
+                                color=LINE_COLOR,
+                                fill=True,
+                                zorder=99999,
+                                alpha=transparency,
+                                joinstyle="round",
+                                linewidth=0.0,
+                                width=0.008,
+                            )
 
                     frame_count += 1
 
-        if not plot_knot_points:
-            raise NotImplementedError(
-                "Support for making figure of interpolated trajectory is not yet supported"
-            )
+            else:  # plot knot points values directly (which will shrink object if rotations have det R < 1 etc.)
+                ts = np.linspace(
+                    traj_segment.start_time,
+                    traj_segment.end_time,
+                    knot_points.num_knot_points,
+                )
+
+                for idx in range(knot_points.num_knot_points):
+                    R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
+                    p_WB = traj_segment.get_p_WB(ts[idx])
+
+                    p_WP = traj_segment.get_p_WP(ts[idx])
+
+                    # This is to get the knot point value which can have determinant < 1
+                    if len(traj_segment.R_WB.Rs) > 1:
+                        R_WB = traj_segment.R_WB.Rs[idx]
+                    else:
+                        R_WB = traj_segment.R_WB.Rs[0]
+
+                    # We only plot the current frame if it will change next frame
+                    # (this is to avoid plotting multiple frames on top of each other)
+                    if idx + 1 < knot_points.num_knot_points:
+                        next_R_WB = traj_segment.get_R_WB(ts[idx + 1])[
+                            :2, :2
+                        ]  # 2x2 matrix
+                        next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
+                        next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
+                    else:
+                        next_R_WB = R_WB
+                        next_p_WB = p_WB
+                        next_p_WP = p_WP
+
+                    vertices_W = get_vertices_W(p_WB, R_WB)
+
+                    transparency = get_transp_for_frame(
+                        frame_count, num_frames_in_group
+                    )
+                    line_transparency = transparency
+                    fill_transparency = transparency
+
+                    # Plot polytope
+                    if (
+                        np.any(next_R_WB != R_WB)
+                        or np.any(next_p_WB != p_WB)
+                        or element_idx == len(segment_group) - 1
+                    ):
+                        ax.plot(
+                            vertices_W[0, :],
+                            vertices_W[1, :],
+                            color=LINE_COLOR,
+                            alpha=line_transparency,
+                            linewidth=1,
+                        )
+                        ax.fill(
+                            vertices_W[0, :],
+                            vertices_W[1, :],
+                            alpha=fill_transparency,
+                            color=slider_color,
+                        )
+
+                    # Plot pusher
+                    if (
+                        np.any(next_p_WP != p_WP)
+                        or element_idx == len(segment_group) - 1
+                    ):
+                        ax.add_patch(make_circle(p_WP, fill_transparency))
+
+                    if plot_forces:
+                        # Plot forces
+                        FORCE_SCALE = 0.5
+                        # only N-1 inputs
+                        if (idx < knot_points.num_knot_points - 1) and (
+                            isinstance(knot_points, FaceContactVariables)
+                        ):
+                            f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+                            p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
+                            ax.arrow(
+                                p_Wc[0],
+                                p_Wc[1],
+                                f_W[0],
+                                f_W[1],
+                                color=LINE_COLOR,
+                                fill=True,
+                                zorder=99999,
+                                alpha=line_transparency,
+                                joinstyle="round",
+                                linewidth=0.0,
+                                width=0.008,
+                            )
+
+                        frame_count += 1
 
         # Plot start pos
         slider_initial_pose = traj.config.start_and_goal.slider_initial_pose  # type: ignore
@@ -828,11 +942,13 @@ def make_traj_figure(
                 for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
             ]
             # Creating the custom legend
-            plt.legend(handles=custom_patches)
+            plt.legend(
+                handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+            )
 
     fig.tight_layout()
     if filename:
-        fig.savefig(filename + f"_trajectory.pdf")  # type: ignore
+        fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
     else:
         plt.show()
 

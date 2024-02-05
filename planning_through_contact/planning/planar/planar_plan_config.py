@@ -68,7 +68,7 @@ class SliderPusherSystemConfig:
     )
     pusher_radius: float = 0.015
     friction_coeff_table_slider: float = 0.5
-    friction_coeff_slider_pusher: float = 0.5
+    friction_coeff_slider_pusher: float = 0.1
     grav_acc: float = 9.81
     integration_constant: float = 0.6
     force_scale: float = (
@@ -105,7 +105,7 @@ class SliderPusherSystemConfig:
 
 @dataclass
 class PlanarSolverParams:
-    gcs_max_rounded_paths: int = 20
+    rounding_steps: int = 20
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
@@ -116,8 +116,10 @@ class PlanarSolverParams:
     print_solver_output: bool = False
     save_solver_output: bool = False
     measure_solve_time: bool = False
+    max_mosek_solve_time: float = 300.0
     print_path: bool = False
     print_cost: bool = False
+    print_rounding_details: bool = False
     solver: Literal["mosek", "clarabel"] = "mosek"
     get_rounded_and_original_traj: bool = False
     nonl_round_major_feas_tol: float = (
@@ -127,8 +129,16 @@ class PlanarSolverParams:
         1e-4  # Feasibility treshold for nonlinear rounding
     )
     nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    # nonl_round_major_feas_tol: float = (
+    #     1e-6  # Feasibility treshold for nonlinear rounding
+    # )
+    # nonl_round_minor_feas_tol: float = (
+    #     1e-6  # Feasibility treshold for nonlinear rounding
+    # )
+    # nonl_round_opt_tol: float = 1e-6  # Optimality treshold for nonlinear rounding
     nonl_round_major_iter_limit: int = 10000  # Max number of major iterations of snopt
     assert_rounding_res: bool = False  # We don't run rounding to optimality
+    sol_retrieval: Literal["first_row", "eigenvec"] = "first_row"
 
 
 @dataclass

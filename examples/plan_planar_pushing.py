@@ -39,7 +39,7 @@ config = PlanarPlanConfig(
 planner = PlanarPushingPlanner(config)
 
 solver_params = PlanarSolverParams(
-    gcs_max_rounded_paths=10,
+    rounding_steps=10,
     print_flows=False,
     assert_determinants=True,
     print_solver_output=True,
