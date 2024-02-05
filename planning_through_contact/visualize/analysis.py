@@ -127,7 +127,9 @@ def plot_planar_pushing_logs(
     plot_planar_pushing_trajectory(actual, desired)
 
 
-def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "", save_dir: Optional[str] = None) -> None:
+def plot_control_sols_vs_time(
+    control_log: List[np.ndarray], suffix: str = "", save_dir: Optional[str] = None
+) -> None:
     # Convert the list to a numpy array for easier manipulation
     control_log_array = np.array(control_log)
 
@@ -178,7 +180,9 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "", s
     plt.savefig(file_path)
 
 
-def plot_cost(cost_log: List[float], suffix: str = "", save_dir: Optional[str] = None) -> None:
+def plot_cost(
+    cost_log: List[float], suffix: str = "", save_dir: Optional[str] = None
+) -> None:
     plt.figure()
     plt.plot(cost_log)
     plt.title("Cost vs. timestep")

@@ -1,4 +1,22 @@
-demo:
+speed-optimized:
+    directives:
+    - add_directives:
+        file: package://planning_through_contact/iiwa_controller_plant.yaml
+    - add_directives:
+        file: package://planning_through_contact/small_table.yaml
+    plant_config:
+        time_step: 2e-2 #0.001
+        contact_model: "point" #"hydroelastic"
+        discrete_contact_approximation: "sap"
+    lcm_buses:
+        default:
+            lcm_url: ""
+    model_drivers:
+        iiwa: !IiwaDriver
+            lcm_bus: "default"
+            hand_model_name: ""
+    simulation_duration: 6000
+accuracy-optimized:
     directives:
     - add_directives:
         file: package://planning_through_contact/iiwa_controller_plant.yaml

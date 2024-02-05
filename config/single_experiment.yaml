@@ -6,11 +6,14 @@ defaults:
   - hydra: base_hydra
 
 sim_config:
-  use_hardware: True
-  closed_loop: True
+  time_step: 2e-2
+  use_hardware: False
+  closed_loop: False
+  save_plots: False
+  visualize_desired: False
 
 trajectory_set_name: "hw_demos_20240129115732_tee"
-trajectory_index: 1
+trajectory_index: 2
 use_rounded: True
 # override_duration: 17
 
