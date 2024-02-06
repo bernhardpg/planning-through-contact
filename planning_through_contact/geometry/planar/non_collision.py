@@ -303,10 +303,18 @@ class NonCollisionMode(AbstractContactMode):
                 position_diffs = np.vstack(position_diffs)
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-                self.squared_eucl_dist_cost = self.prog.AddQuadraticCost(
+                cost = self.prog.AddQuadraticCost(
                     self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
                     is_convex=True,
                 )
+                Q = cost.evaluator().Q()
+                # Add a tiny constant to diagonal to make Q cholesky factorizable
+                # (Drake does a cholesky factorization under the hood)
+                new_Q = Q + np.eye(Q.shape[0]) * 1e-10
+                cost.evaluator().UpdateCoefficients(
+                    new_Q, cost.evaluator().b(), cost.evaluator().c()
+                )
+                self.squared_eucl_dist_cost = cost
 
                 self.costs["pusher_vel_reg"].append(self.squared_eucl_dist_cost)
 
