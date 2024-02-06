@@ -369,18 +369,19 @@ class NonCollisionMode(AbstractContactMode):
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = (
-                            plane.a.T
-                            * self.cost_config.distance_to_object_socp
-                            # TODO(bernhardpg): Why does this cause a bug?
-                            # / len(planes)
+                        # We want:
+                        #   min k * (1 / (a^T x + b))
+                        # which we formulate with
+                        #   min z_1^2 + ... + z_n^2 / z_0
+                        # where
+                        # z = Ax + b = [(1/k) * a^T x + b; 1]
+                        # A = [(1/k) * a^T; 0]
+                        A[0, :] = plane.a.T * (
+                            1 / self.cost_config.distance_to_object_socp
                         )
-                        # b = [b; 1]
+                        # b = [(1/k) * b; 1]
                         b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b
-                        b = b * self.cost_config.distance_to_object_socp
-                        # TODO(bernhardpg): Why does this cause a bug?
-                        # / len(planes)
+                        b[0] = plane.b * (1 / self.cost_config.distance_to_object_socp)
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)
