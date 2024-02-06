@@ -68,6 +68,7 @@ class SingleRunResult:
     rounded_mean_determinant: Optional[float]
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
+    solver_params: Optional[PlanarSolverParams] = None
     name: Optional[str] = None
     cost_term_vals: Optional[Dict[str, Dict]] = None
 
@@ -327,6 +328,7 @@ def do_one_run_get_path(
                 rounded_mean_determinant=None,
                 start_and_goal=start_and_goal,
                 config=plan_config,
+                solver_params=solver_params,
             ),
             path,
         )
@@ -357,6 +359,7 @@ def do_one_run_get_path(
             start_and_goal=start_and_goal,
             config=plan_config,
             cost_term_vals=path.get_cost_terms() if save_cost_vals else None,
+            solver_params=solver_params,
         ),
         path,
     )
