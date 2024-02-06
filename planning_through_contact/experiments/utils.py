@@ -74,28 +74,25 @@ def get_hardware_contact_cost() -> ContactCost:
     """
     contact_cost = ContactCost(
         cost_type=ContactCostType.STANDARD,
-        keypoint_arc_length=5.0,
+        keypoint_arc_length=10.0,
         linear_arc_length=None,
         angular_arc_length=None,
-        force_regularization=1.0,
-        keypoint_velocity_regularization=None,
-        ang_velocity_regularization=10.0,
-        lin_velocity_regularization=2.0,
+        force_regularization=100000.0,  # NOTE: This is multiplied by 1e-4 because we have forces in other units in the optimization problem
+        keypoint_velocity_regularization=100.0,
+        ang_velocity_regularization=None,
+        lin_velocity_regularization=None,
         trace=None,
         mode_transition_cost=None,
-        time=0.35,
+        time=1.0,
     )
     return contact_cost
 
 
 def get_hardware_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        # distance_to_object_quadratic=0.15,
-        # distance_to_object_quadratic_preferred_distance=0.075,
-        # distance_to_object_socp=None,
-        distance_to_object_socp=0.0001,  # this sometimes cause numerical problems
-        pusher_velocity_regularization=0.002,
-        pusher_arc_length=0.004,
+        distance_to_object_socp=0.25,
+        pusher_velocity_regularization=10.0,
+        pusher_arc_length=5.0,
         time=None,
     )
     return non_collision_cost
@@ -133,8 +130,11 @@ def get_default_plan_config(
         contact_config = ContactConfig(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
         )
-        time_contact = 2.0
-        time_non_collision = 4.0
+        time_contact = 5.0
+        time_non_collision = 2.0
+
+        num_knot_points_non_collision = 5
+        num_knot_points_contact = 3
     else:
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
@@ -150,10 +150,16 @@ def get_default_plan_config(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
         )
 
+        time_contact = 4.0
+        time_non_collision = 2.0
+
+        num_knot_points_non_collision = 3
+        num_knot_points_contact = 3
+
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,
-        num_knot_points_contact=3,
-        num_knot_points_non_collision=3,
+        num_knot_points_contact=num_knot_points_contact,
+        num_knot_points_non_collision=num_knot_points_non_collision,
         use_band_sparsity=True,
         contact_config=contact_config,
         non_collision_cost=non_collision_cost,
@@ -172,7 +178,7 @@ def get_default_solver_params(
 ) -> PlanarSolverParams:
     solver_params = PlanarSolverParams(
         measure_solve_time=debug,
-        rounding_steps=300,
+        rounding_steps=100,
         print_flows=False,
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,

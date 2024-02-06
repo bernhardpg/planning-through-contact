@@ -280,6 +280,7 @@ def create_plan(
     save_traj: bool = False,
     save_analysis: bool = False,
     debug: bool = False,
+    hardware: bool = False,
 ):
     # Set up folders
     folder_name = f"{output_dir}/{traj_name}"
@@ -355,6 +356,7 @@ def create_plan(
             filename=f"{analysis_folder}/relaxed_traj",
             slider_color=slider_color,
             split_on_mode_type=True,
+            show_workspace=hardware,
         )
         plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
         if traj_rounded is not None:
@@ -363,6 +365,7 @@ def create_plan(
                 filename=f"{analysis_folder}/rounded_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
+                show_workspace=hardware,
             )
             plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
 
@@ -433,15 +436,11 @@ if __name__ == "__main__":
     slider_type = args.body
 
     pusher_radius = 0.015
-    time_in_contact = 2.0
-    time_in_non_collision = 4.0
 
     config = get_default_plan_config(
         slider_type=slider_type,
         pusher_radius=pusher_radius,
         hardware=hardware_demos,
-        time_contact=time_in_contact,
-        time_non_collision=time_in_non_collision,
     )
     solver_params = get_default_solver_params(debug, clarabel=False)
 
@@ -463,10 +462,11 @@ if __name__ == "__main__":
             ),
         )
 
-        num_demos = 200
+        num_demos = 30
         plans = get_plans_to_point(
             num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
         )
+        print("Finished finding random plans within workspace")
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
@@ -480,6 +480,7 @@ if __name__ == "__main__":
                 interpolate_video=interpolate,
                 save_analysis=True,
                 do_rounding=rounding,
+                hardware=True,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -495,6 +496,7 @@ if __name__ == "__main__":
                     interpolate_video=interpolate,
                     save_analysis=True,
                     do_rounding=rounding,
+                    hardware=True,
                 )
     else:
         output_dir = "trajectories"
