@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from pydrake.all import DecomposeAffineExpressions
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
@@ -359,36 +360,17 @@ class NonCollisionMode(AbstractContactMode):
                 self.costs["object_avoidance_quad"].append(self.quadratic_distance_cost)
 
             if self.cost_config.distance_to_object_socp is not None:
-                # TODO(bernhardpg): Clean up this part
+                self.slack_vars = self.prog.NewContinuousVariables(
+                    self.num_knot_points - 2, "s"  # TODO(bernahrdpg): Fix
+                )
                 planes = self.slider_geometry.get_contact_planes(
                     self.contact_location.idx
                 )
-                for plane in planes:
-                    for p_BP in self.variables.p_BPs[1:-1]:
-                        # A = [a^T; 0]
-                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
-                        NUM_DIMS = 2
-                        A = np.zeros((NUM_VARS, NUM_DIMS))
-                        # We want:
-                        #   min k * (1 / (a^T x + b))
-                        # which we formulate with
-                        #   min z_1^2 + ... + z_n^2 / z_0
-                        # where
-                        # z = Ax + b = [(1/k) * a^T x + b; 1]
-                        # A = [(1/k) * a^T; 0]
-                        A[0, :] = plane.a.T * (
-                            1 / self.cost_config.distance_to_object_socp
-                        )
-                        # b = [(1/k) * b; 1]
-                        b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b * (1 / self.cost_config.distance_to_object_socp)
-
-                        # z = [a^T x + b; 1]
-                        cost = PerspectiveQuadraticCost(A, b)
-                        binding = self.prog.AddCost(cost, p_BP)
-                        self.distance_to_object_socp_costs.append(binding)
-
-                        self.costs["object_avoidance_socp"].append(binding)
+                for s in self.slack_vars:
+                    cost = self.prog.AddLinearCost(s)
+                    self.prog.AddLinearConstraint(s >= 0)
+                    self.distance_to_object_socp_costs.append(cost)
+                    self.costs["object_avoidance_socp"].append(cost)
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.
@@ -598,8 +580,39 @@ class NonCollisionMode(AbstractContactMode):
                 vertex.AddCost(binding)
 
             if self.cost_config.distance_to_object_socp:
-                for binding in self.distance_to_object_socp_costs:
-                    var_idxs, evaluator = self._get_cost_terms(binding)
+                # Encode
+                #   min k * (1/dist)
+                # as a RSOC
+
+                # Add the linear cost on the slack variable
+                #   min s
+                for c in self.distance_to_object_socp_costs:
+                    var_idxs, evaluator = self._get_cost_terms(c)
                     vars = vertex.x()[var_idxs]
-                    binding = Binding[PerspectiveQuadraticCost](evaluator, vars)
+                    binding = Binding[LinearCost](evaluator, vars)
                     vertex.AddCost(binding)
+
+                # Add the constraint
+                #   s >= k * (1/dist)
+                # which is equivalent to
+                #   s * dist >= k
+                # which is an RSOC
+                planes = self.slider_geometry.get_contact_planes(
+                    self.contact_location.idx
+                )
+                for plane in planes:
+                    # TODO(bernhardpg): This is a bug!! We should only not penalize the last variable of the non-contact modes that connect to contact
+                    for s, p_BP in zip(self.slack_vars, self.variables.p_BPs[1:-1]):
+                        dist = plane.dist_to(p_BP)
+                        k = self.cost_config.distance_to_object_socp
+                        vec = np.array([s, dist, k])
+                        vars = list(np.sum(vec).GetVariables())
+                        A, b = DecomposeAffineExpressions(vec, vars)
+                        evaluator = RotatedLorentzConeConstraint(A, b)
+                        vertex_vars = vertex.x()[
+                            self.get_variable_indices_in_gcs_vertex(vars)
+                        ]
+                        binding = Binding[RotatedLorentzConeConstraint](
+                            evaluator, vertex_vars
+                        )
+                        vertex.AddConstraint(binding)
