@@ -1,30 +1,37 @@
 import numpy as np
-
 from manipulation.station import (
-    MakeHardwareStation,
-    LoadScenario,
-    Scenario,
-    JointStiffnessDriver,
     IiwaDriver,
+    JointStiffnessDriver,
+    LoadScenario,
+    MakeHardwareStation,
+    Scenario,
 )
-
 from pydrake.all import (
-    DiagramBuilder,
-    Context,
-    StateInterpolatorWithDiscreteDerivative,
-    ConstantValueSource,
     AbstractValue,
-    Meshcat,
+    ConstantValueSource,
+    Context,
+    Demultiplexer,
+    DiagramBuilder,
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
-    PortSwitch,
-    Demultiplexer,
+    Meshcat,
     Multiplexer,
+    PortSwitch,
+    StateInterpolatorWithDiscreteDerivative,
 )
-from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 
+from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
+)
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
+    PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.sim_utils import (
+    GetSliderUrl,
+    LoadRobotOnly,
+    models_folder,
+    package_xml_file,
 )
 from planning_through_contact.simulation.systems.joint_velocity_clamp import (
     JointVelocityClamp,
@@ -32,16 +39,8 @@ from planning_through_contact.simulation.systems.joint_velocity_clamp import (
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
+
 from .robot_system_base import RobotSystemBase
-from planning_through_contact.simulation.sim_utils import (
-    LoadRobotOnly,
-    models_folder,
-    package_xml_file,
-    GetSliderUrl,
-)
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
-    PlanarPushingSimConfig,
-)
 
 
 class IiwaHardwareStation(RobotSystemBase):
@@ -53,10 +52,11 @@ class IiwaHardwareStation(RobotSystemBase):
         super().__init__()
         self._sim_config = sim_config
         self._meshcat = meshcat
-        if sim_config.use_hardware:
-            scenario_name = "speed-optimized"
-        else:
-            scenario_name = "accuracy-optimized"
+        scenario_name = "speed-optimized"
+        # if sim_config.use_hardware:
+        #     scenario_name = "speed-optimized"
+        # else:
+        #     scenario_name = "accuracy-optimized"
         scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
         scenario = LoadScenario(
             filename=scenario_file_name, scenario_name=scenario_name

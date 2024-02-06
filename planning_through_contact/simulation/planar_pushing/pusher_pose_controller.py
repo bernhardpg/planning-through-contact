@@ -1,18 +1,13 @@
-from enum import Enum
-from typing import List, Optional, Tuple
 import logging
+import time
+from enum import Enum
+from typing import List
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
-from pydrake.systems.framework import (
-    AbstractStateIndex,
-    Context,
-    LeafSystem,
-    AbstractStateIndex,
-    State,
-)
+from pydrake.systems.framework import AbstractStateIndex, Context, LeafSystem, State
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -70,6 +65,8 @@ class PusherPoseController(LeafSystem):
                 )
             )
         )
+
+        self.last_time = time.time()
 
         self._pusher_slider_contact = self.DeclareVectorInputPort(
             "pusher_slider_contact",
@@ -246,9 +243,12 @@ class PusherPoseController(LeafSystem):
 
         # Finite difference method based on pusher position
         pusher_pose_acc = pusher_pose_cmd_state.get_value()
+        start_time = time.time()
         x_dot_curr, u_input, pusher_vel = controller.compute_control(
             x_curr, x_traj[:N], u_traj[: N - 1]
         )
+        # end_time = time.time()
+        # print(f"rate: {1/(end_time - start_time)}")
 
         next_pusher_pose = PlanarPose(*(pusher_pose_acc.pos() + h * pusher_vel), 0)
         pusher_pose_cmd_state.set_value(next_pusher_pose)

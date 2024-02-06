@@ -1,4 +1,5 @@
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
@@ -102,6 +103,10 @@ class HybridMpc:
             for mode in HybridModes
         }
         self._last_sols = {mode: None for mode in HybridModes}
+
+        import time
+
+        self.last_time = time.time()
 
         Q = self.config.Q
         R = self.config.R
@@ -207,12 +212,17 @@ class HybridMpc:
         for constraint in all_constraints:
             prog.RemoveConstraint(constraint)
 
-        # # DONT REUSE MATHEMATICAL PROGRAM
+        # DONT REUSE MATHEMATICAL PROGRAM
         # prog = MathematicalProgram()
-
+        #
         # # Formulate the problem in the local coordinates around the nominal trajectory
         # x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
         # u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
+
+        # self._vars[mode] = {
+        #     "x_bar": x_bar,
+        #     "u_bar": u_bar,
+        # }
         # Q = self.config.Q
         # R = self.config.R
         # Q_N = self.config.Q_N
@@ -225,12 +235,13 @@ class HybridMpc:
         # )
         # terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
         # prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
-        # # DONT REUSE MATHEMATICAL PROGRAM
+        # DONT REUSE MATHEMATICAL PROGRAM
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
         prog.AddLinearConstraint(eq(x_bar[:, 0], x_bar_curr))
 
+        start_time = time.time()
         # Dynamic constraints
         lin_systems = [
             self._get_linear_system(state, control)
@@ -245,11 +256,13 @@ class HybridMpc:
             x_bar_dot = A.dot(x_bar[:, i]) + B.dot(u_bar[:, i])
             forward_euler = x_bar[:, i] + h * x_bar_dot
             prog.AddLinearConstraint(eq(x_bar[:, i + 1], forward_euler))
+        print(f"dynamics: {time.time() - start_time}")
 
         # Last error state should be exactly 0
         if self.config.enforce_hard_end_constraint:
             prog.AddLinearConstraint(eq(x_bar[:, N - 1], np.zeros(x_traj[-1].shape)))
 
+        start_time = time.time()
         # x_bar = x - x_traj
         x = x_bar + np.vstack(x_traj).T
 
@@ -298,10 +311,15 @@ class HybridMpc:
             prog.AddLinearConstraint(lam >= self.config.lam_min)
             prog.AddLinearConstraint(lam <= self.config.lam_max)
 
+        print(f"state/input constraints: {time.time() - start_time}")
+
+        start_time = time.time()
         if self._last_sols[mode] is not None:
             # Warm start
             prog.SetInitialGuess(x_bar, self._last_sols[mode]["x_bar"])
             prog.SetInitialGuess(u_bar, self._last_sols[mode]["u_bar"])
+
+        print(f"initial_guess: {time.time() - start_time}")
 
         return prog, x, u  # type: ignore
 
@@ -312,14 +330,29 @@ class HybridMpc:
         u_traj: List[npt.NDArray[np.float64]],
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         # Solve one prog per contact mode
+        # progs, states, controls = zip(
+        #     *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
+        # )
+
+        start_time = time.time()
         progs, states, controls = zip(
-            *[self._setup_QP(x_curr, x_traj, u_traj, mode) for mode in HybridModes]
+            *[
+                self._setup_QP(x_curr, x_traj, u_traj, mode)
+                for mode in [HybridModes.STICKING]
+            ]
         )
+        setup_time = time.time() - start_time
+        start_time = time.time()
         results = [Solve(prog) for prog in progs]  # type: ignore
+        solve_time = time.time() - start_time
+
+        print(f"setup_time: {setup_time}, solve_time: {solve_time}")
 
         # Log solve times for debugging
-        # for mode, result in zip(HybridModes, results):
-        #     self._solve_time_log[mode].append(result.get_solver_details().optimizer_time)
+        for mode, result in zip(HybridModes, results):
+            self._solve_time_log[mode].append(
+                result.get_solver_details().optimizer_time
+            )
 
         # Save solutions to warmstart the next iteration
         for mode, result in zip(HybridModes, results):
@@ -351,13 +384,13 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
 
-        # self.cost_log.append(lowest_cost)
-        # self.control_log.append(control_sol.T)
+        self.cost_log.append(lowest_cost)
+        self.control_log.append(control_sol.T)
 
-        # if lowest_cost == np.inf:
-        #     logger.debug(
-        #         f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
-        #     )
+        if lowest_cost == np.inf:
+            logger.debug(
+                f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
+            )
         u_next = control_sol[:, 0]
 
         # Finite difference method to get velocity of pusher
