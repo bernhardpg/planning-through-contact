@@ -243,6 +243,7 @@ class NonCollisionMode(AbstractContactMode):
 
         self.l2_norm_costs = []
         self.distance_to_object_socp_costs = []
+        self.distance_to_object_socp_constraints = []
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
@@ -366,11 +367,37 @@ class NonCollisionMode(AbstractContactMode):
                 planes = self.slider_geometry.get_contact_planes(
                     self.contact_location.idx
                 )
+                # Encode
+                #   min k * (1/dist)
+                # as a RSOC
                 for s in self.slack_vars:
+                    # Add the linear cost on the slack variable
+                    #   min s
                     cost = self.prog.AddLinearCost(s)
                     self.prog.AddLinearConstraint(s >= 0)
                     self.distance_to_object_socp_costs.append(cost)
                     self.costs["object_avoidance_socp"].append(cost)
+
+                    # Add the constraint
+                    #   s >= k * (1/dist)
+                    # which is equivalent to
+                    #   s * dist >= k
+                    # which is an RSOC
+                    planes = self.slider_geometry.get_contact_planes(
+                        self.contact_location.idx
+                    )
+                    for plane in planes:
+                        # TODO(bernhardpg): This is a bug!! We should only not penalize the last variable of the non-contact modes that connect to contact
+                        for s, p_BP in zip(self.slack_vars, self.variables.p_BPs[1:-1]):
+                            dist = plane.dist_to(p_BP)
+                            k = self.cost_config.distance_to_object_socp
+                            vec = np.array([s, dist, k])
+                            vars = np.array(list(np.sum(vec).GetVariables()))
+                            A, b = DecomposeAffineExpressions(vec, vars)
+                            evaluator = RotatedLorentzConeConstraint(A, b)
+                            self.distance_to_object_socp_constraints.append(
+                                self.prog.AddConstraint(evaluator, vars)
+                            )
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.
@@ -468,6 +495,10 @@ class NonCollisionMode(AbstractContactMode):
         x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
         # Some linear constraints will be added as bounding box constraints
         for c in self.prog.GetAllConstraints():
+            # Skip these constraints as they must be added as linear constraints
+            if isinstance(c.evaluator(), RotatedLorentzConeConstraint):
+                continue
+
             if not (
                 isinstance(c.evaluator(), LinearConstraint)
                 or isinstance(c.evaluator(), BoundingBoxConstraint)
@@ -591,6 +622,12 @@ class NonCollisionMode(AbstractContactMode):
                     vars = vertex.x()[var_idxs]
                     binding = Binding[LinearCost](evaluator, vars)
                     vertex.AddCost(binding)
+
+                for c in self.distance_to_object_socp_constraints:
+                    var_idxs, evaluator = self._get_cost_terms(c)
+                    vars = vertex.x()[var_idxs]
+                    binding = Binding[RotatedLorentzConeConstraint](evaluator, vars)
+                    vertex.AddConstraint(binding)
 
                 # Add the constraint
                 #   s >= k * (1/dist)
