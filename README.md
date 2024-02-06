@@ -21,6 +21,18 @@ poetry install -vvv
 
 (the `-vvv` flag adds verbose output).
 
+## Generating planar pushing plans
+
+Currently, the main entrypoint for generating planar pushing plans is the
+following script:
+
+```python
+python scripts/planar_pushing/create_plan.py
+```
+
+which takes a number of command line arguments. Add the flag `--help` for a
+description of these.
+
 ## Running pre-commit hooks
 
 The repo is setup to do automatic linting and code checking on every commit
@@ -45,7 +57,7 @@ where `single_experiment` should be replaced with your config name.
 ## Running hardware simulations
 
 Make sure to download `lcm` and build it to a desired directory:
-[lcm](https://github.com/lcm-proj/lcm). Then, add `lcm` to the pythonpath:
+[lcm](https://github.com/lcm-proj/lcm). Then, add `lcm` to the pythonpath, e.g. like this:
 
 ```python
 export PYTHONPATH="$PYTHONPATH:/Users/bernhardpg/software/lcm/build/python"
