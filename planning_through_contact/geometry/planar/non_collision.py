@@ -374,7 +374,6 @@ class NonCollisionMode(AbstractContactMode):
                     # Add the linear cost on the slack variable
                     #   min s
                     cost = self.prog.AddLinearCost(s)
-                    self.prog.AddLinearConstraint(s >= 0)
                     self.distance_to_object_socp_costs.append(cost)
                     self.costs["object_avoidance_socp"].append(cost)
 
@@ -623,33 +622,13 @@ class NonCollisionMode(AbstractContactMode):
                     binding = Binding[LinearCost](evaluator, vars)
                     vertex.AddCost(binding)
 
-                for c in self.distance_to_object_socp_constraints:
-                    var_idxs, evaluator = self._get_cost_terms(c)
-                    vars = vertex.x()[var_idxs]
-                    binding = Binding[RotatedLorentzConeConstraint](evaluator, vars)
-                    vertex.AddConstraint(binding)
-
                 # Add the constraint
                 #   s >= k * (1/dist)
                 # which is equivalent to
                 #   s * dist >= k
                 # which is an RSOC
-                planes = self.slider_geometry.get_contact_planes(
-                    self.contact_location.idx
-                )
-                for plane in planes:
-                    # TODO(bernhardpg): This is a bug!! We should only not penalize the last variable of the non-contact modes that connect to contact
-                    for s, p_BP in zip(self.slack_vars, self.variables.p_BPs[1:-1]):
-                        dist = plane.dist_to(p_BP)
-                        k = self.cost_config.distance_to_object_socp
-                        vec = np.array([s, dist, k])
-                        vars = list(np.sum(vec).GetVariables())
-                        A, b = DecomposeAffineExpressions(vec, vars)
-                        evaluator = RotatedLorentzConeConstraint(A, b)
-                        vertex_vars = vertex.x()[
-                            self.get_variable_indices_in_gcs_vertex(vars)
-                        ]
-                        binding = Binding[RotatedLorentzConeConstraint](
-                            evaluator, vertex_vars
-                        )
-                        vertex.AddConstraint(binding)
+                for c in self.distance_to_object_socp_constraints:
+                    var_idxs, evaluator = self._get_cost_terms(c)
+                    vars = vertex.x()[var_idxs]
+                    binding = Binding[RotatedLorentzConeConstraint](evaluator, vars)
+                    vertex.AddConstraint(binding)
