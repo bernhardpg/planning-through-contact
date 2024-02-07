@@ -447,11 +447,9 @@ class PlanarPushingPlanner:
         assert self.source is not None
         assert self.target is not None
 
-        # TODO(bernhardpg): Clean this up
         options = opt.GraphOfConvexSetsOptions()
         options.max_rounded_paths = solver_params.rounding_steps
-        options.max_rounding_trials = 10000
-        # options.max_rounding_trials = 100
+        options.max_rounding_trials = solver_params.max_rounding_trials
 
         options.convex_relaxation = True
         options.preprocessing = True
@@ -494,9 +492,9 @@ class PlanarPushingPlanner:
 
         return paths
 
-    def plan_path(
+    def _plan_paths(
         self, solver_params: PlanarSolverParams
-    ) -> Optional[PlanarPushingPath]:
+    ) -> Optional[List[PlanarPushingPath]]:
         """
         Plans a path.
         """
@@ -529,6 +527,7 @@ class PlanarPushingPlanner:
             gcs_result,
             solver_params,
         )
+
         if paths is None:
             print("No gcs paths found")
             return None
@@ -536,33 +535,60 @@ class PlanarPushingPlanner:
             if solver_params.print_rounding_details:
                 print(f"num rounded paths: {len(paths)}")
 
-            # Do nonlinear rounding on each traj, pick the best one
-            if solver_params.rounding_steps > 0:
-                for path in paths:
-                    path.do_rounding(solver_params)
+            return paths
 
-                rounded_costs = [
-                    p.rounded_result.get_optimal_cost()
-                    if p.rounded_result.is_success()
-                    else np.inf
-                    for p in paths
-                ]
+    def _get_rounded_paths(
+        self, solver_params: PlanarSolverParams, paths: List[PlanarPushingPath]
+    ) -> Optional[List[PlanarPushingPath]]:
+        if solver_params.rounding_steps > 0:
+            for path in paths:
+                path.do_rounding(solver_params)
 
-                if solver_params.print_rounding_details:
-                    print(
-                        f"num rounded feasible paths: {len([p for p in paths if p.rounded_result.is_success()])}"
-                    )
+            feasible_paths = [
+                p
+                for p in paths
+                if p.rounded_result is not None and p.rounded_result.is_success()
+            ]
 
-                best_idx = np.argmin(rounded_costs)
-                self.path = paths[best_idx]
+            if solver_params.print_rounding_details:
+                print(f"num rounded feasible paths: {len(feasible_paths)}")
 
+            if len(feasible_paths) == 0:
+                return None
             else:
-                raise NotImplementedError("Must enable rounding steps")
+                return feasible_paths
+        else:
+            raise NotImplementedError("Must enable rounding steps")
 
-            if solver_params.print_path:
-                print(f"path: {self.path.get_path_names()}")
+    def _pick_best_path(self, paths: List[PlanarPushingPath]) -> PlanarPushingPath:
+        rounded_costs = [
+            p.rounded_result.get_optimal_cost()
+            for p in paths
+            if p.rounded_result is not None  # type
+        ]
 
-            return self.path
+        best_idx = np.argmin(rounded_costs)
+        path = paths[best_idx]
+
+        return path
+
+    def plan_path(
+        self, solver_params: PlanarSolverParams
+    ) -> Optional[PlanarPushingPath]:
+        paths = self._plan_paths(solver_params)
+        if paths is None:
+            return None
+
+        feasible_paths = self._get_rounded_paths(solver_params, paths)
+        if feasible_paths is None:
+            return None
+
+        self.path = self._pick_best_path(feasible_paths)
+
+        if solver_params.print_path:
+            print(f"path: {self.path.get_path_names()}")
+
+        return self.path
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """

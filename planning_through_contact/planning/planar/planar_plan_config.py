@@ -106,6 +106,7 @@ class SliderPusherSystemConfig:
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20
+    max_rounding_trials: int = 10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
