@@ -304,11 +304,15 @@ def do_one_run_get_path(
     solver_params: PlanarSolverParams,
     start_and_goal: PlanarPushingStartAndGoal,
     save_cost_vals: bool = False,
+    graph_filename: Optional[str] = None,
 ) -> Tuple[SingleRunResult, Optional[PlanarPushingPath]]:
     plan_config.start_and_goal = start_and_goal
 
     planner = PlanarPushingPlanner(plan_config)
     planner.formulate_problem()
+
+    if graph_filename is not None:
+        planner.create_graph_diagram(graph_filename)
 
     path = planner.plan_path(solver_params)
 

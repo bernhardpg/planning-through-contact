@@ -302,15 +302,16 @@ def create_plan(
 
     if debug:
         solve_data, path = do_one_run_get_path(
-            config, solver_params, start_and_goal=plan_spec, save_cost_vals=True
+            config,
+            solver_params,
+            start_and_goal=plan_spec,
+            save_cost_vals=True,
+            graph_filename=f"{analysis_folder}/graph",
         )
     else:
         planner = PlanarPushingPlanner(config)
         planner.config.start_and_goal = plan_spec
         planner.formulate_problem()
-
-        if debug:
-            planner.create_graph_diagram(f"{analysis_folder}/graph")
 
         path = planner.plan_path(solver_params)
         solve_data = None
