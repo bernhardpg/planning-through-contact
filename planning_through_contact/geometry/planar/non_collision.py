@@ -629,9 +629,9 @@ class NonCollisionMode(AbstractContactMode):
             first_idx = 0
 
         if skip_last_knot_point:
-            last_idx = self.num_knot_points
-        else:
             last_idx = self.num_knot_points - 1
+        else:
+            last_idx = self.num_knot_points
 
         if self.cost_config.distance_to_object_socp:
             # Encode
