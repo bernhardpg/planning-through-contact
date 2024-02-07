@@ -337,7 +337,7 @@ def do_one_run_get_path(
             binary_flows_success = True
             binary_flows_cost = path.relaxed_cost
             binary_flows_time = path.solve_time
-        else:
+        else:  # we found at least one feasible path
             num_feasible_rounded_paths = len(feasible_paths)
             path = planner._pick_best_path(feasible_paths)
 

@@ -277,12 +277,7 @@ class NonCollisionMode(AbstractContactMode):
         stay_in_region = [
             plane.dist_to(pusher_pos) >= 0 for plane in self.collision_free_space_planes
         ]
-        if self.config.non_collision_cost.distance_to_object_socp is not None:
-            # With this cost, this is already encoded with the rotated second order cone constraint
-            exprs = stay_in_region
-        else:
-            exprs = stay_in_region + avoid_contact
-        return exprs
+        return stay_in_region + avoid_contact
 
     def _define_cost(self) -> None:
         if self.num_knot_points == 1 and not self.terminal_cost:
@@ -380,7 +375,9 @@ class NonCollisionMode(AbstractContactMode):
                 for s in self.slack_vars:
                     # Add the linear cost on the slack variable
                     #   min s
-                    cost = self.prog.AddLinearCost(s)
+                    evaluator = LinearCost(np.ones(1), b=0)
+                    cost = Binding[LinearCost](evaluator, [s])
+                    # These costs are added as edge costs, so we just store it for later
                     self.distance_to_object_socp_costs.append(cost)
                     self.costs["object_avoidance_socp"].append(cost)
 
@@ -397,13 +394,15 @@ class NonCollisionMode(AbstractContactMode):
                     for plane in planes:
                         dist = plane.dist_to(p_BP)
                         k = self.cost_config.distance_to_object_socp
-                        vec = np.array([s, dist, k])
+                        vec = np.array([s, dist, k])  # TODO: k should be sqrt(k)
                         vars = np.array(list(np.sum(vec).GetVariables()))
                         A, b = DecomposeAffineExpressions(vec, vars)
                         evaluator = RotatedLorentzConeConstraint(A, b)
-                        constraints_for_knot_point.append(
-                            self.prog.AddConstraint(evaluator, vars)
+                        # These costs are added as edge costs, so we just store it for later
+                        constraint = Binding[RotatedLorentzConeConstraint](
+                            evaluator, vars
                         )
+                        constraints_for_knot_point.append(constraint)
 
                     self.distance_to_object_socp_constraints.append(
                         constraints_for_knot_point

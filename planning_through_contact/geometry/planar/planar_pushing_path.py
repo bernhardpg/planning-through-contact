@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from pydrake.all import RotatedLorentzConeConstraint
 from pydrake.solvers import (
     CommonSolverOption,
     MathematicalProgram,
@@ -38,7 +39,8 @@ GcsEdge = opt.GraphOfConvexSets.Edge
 
 
 def assemble_progs_from_contact_modes(
-    modes: List[AbstractContactMode], remove_redundant_constraints: bool = True
+    modes: List[AbstractContactMode],
+    remove_redundant_constraints: bool = True,
 ) -> MathematicalProgram:
     prog = MathematicalProgram()
 
@@ -49,34 +51,10 @@ def assemble_progs_from_contact_modes(
                 for c in mode.redundant_constraints:
                     mode_prog.RemoveConstraint(c)
 
-        vars = mode_prog.decision_variables()
-        prog.AddDecisionVariables(vars)
-
+        # Now add all the costs and constraints into the big program
+        prog.AddDecisionVariables(mode_prog.decision_variables())
         for c in mode_prog.GetAllConstraints():
             prog.AddConstraint(c.evaluator(), c.variables())
-
-        # Remove the object avoidance cost for noncollisionmodes that are adjacent to
-        # contact modes (we don't want to penalize knot points where the pusher must
-        # make contact).
-        if isinstance(mode, NonCollisionMode):
-            if (
-                mode.distance_to_object_socp_costs is not None
-                and mode.distance_to_object_socp_constraints is not None
-            ):
-                if idx > 0 and idx < len(modes) - 1:  # skip first and last modes
-                    prev_mode = modes[idx - 1]
-                    if isinstance(prev_mode, FaceContactMode):
-                        # remove cost on first knot point
-                        prog.RemoveCost(mode.distance_to_object_socp_costs[0])
-                        for c in mode.distance_to_object_socp_constraints[0]:
-                            prog.RemoveConstraint(c)
-
-                    next_mode = modes[idx + 1]
-                    if isinstance(next_mode, FaceContactMode):
-                        # remove cost on last knot point
-                        prog.RemoveCost(mode.distance_to_object_socp_costs[-1])
-                        for c in mode.distance_to_object_socp_constraints[-1]:
-                            prog.RemoveConstraint(c)
 
         for c in mode_prog.GetAllCosts():
             prog.AddCost(c.evaluator(), c.variables())
@@ -120,6 +98,17 @@ def add_edge_constraints_to_prog(
                 c.variables(), pair_u, pair_v
             )
             prog.AddConstraint(c.evaluator(), vars)
+
+
+def add_edge_costs_to_prog(
+    edges: List[GcsEdge], prog: MathematicalProgram, pairs: List[VertexModePair]
+) -> None:
+    for edge, (pair_u, pair_v) in zip(edges, zip(pairs[:-1], pairs[1:])):
+        for c in edge.GetCosts():
+            vars = get_mode_variables_from_constraint_variables(
+                c.variables(), pair_u, pair_v
+            )
+            prog.AddCost(c.evaluator(), vars)
 
 
 class PlanarPushingPath:
@@ -381,6 +370,7 @@ class PlanarPushingPath:
     def _construct_nonlinear_program(self) -> MathematicalProgram:
         prog = assemble_progs_from_contact_modes([p.mode for p in self.pairs])
         add_edge_constraints_to_prog(self.edges, prog, self.pairs)
+        add_edge_costs_to_prog(self.edges, prog, self.pairs)
         return prog
 
     def _get_initial_guess_as_orig_variables(
