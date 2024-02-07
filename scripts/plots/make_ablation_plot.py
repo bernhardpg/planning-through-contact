@@ -11,8 +11,11 @@ from planning_through_contact.visualize.ablation_study import (
 )
 from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGERBLUE2
 
-main_folder = "trajectories/"
-study_tee = "run_20240201221116_tee_FINAL"
+# main_folder = "trajectories/"
+main_folder = "demos/"
+# study_tee = "run_20240201221116_tee_FINAL"
+study_tee = "hw_demos_20240206225105_tee_for_hardware"
+study_tee = "hw_demos_20240207141104_tee_fixed_bugs"
 # study_sugar_box = "run_20240202064957_sugar_box_FINAL"
 # study_sugar_box = "run_20240202080034_sugar_box"
 # study_tee = "run_20240202094838_tee"
@@ -20,9 +23,11 @@ study_tee = "run_20240201221116_tee_FINAL"
 # study_names = [study_sugar_box]
 study_names = [study_tee]
 
-num_trajs = 100
+num_trajs = 99999
 study_folders = [main_folder + folder for folder in study_names]
-studies = [AblationStudy.load_from_folder(folder, 100) for folder in study_folders]
+studies = [
+    AblationStudy.load_from_folder(folder, num_trajs) for folder in study_folders
+]
 
 
 for study in studies:
