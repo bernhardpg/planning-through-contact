@@ -616,6 +616,6 @@ class PlanarPushingPlanner:
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filename is not None:
-            data.write_png(filename + ".png")
+            data.write_pdf(filename + ".pdf")
 
         return data

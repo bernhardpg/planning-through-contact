@@ -310,6 +310,10 @@ def create_plan(
         planner = PlanarPushingPlanner(config)
         planner.config.start_and_goal = plan_spec
         planner.formulate_problem()
+
+        if debug:
+            planner.create_graph_diagram(f"{analysis_folder}/graph")
+
         path = planner.plan_path(solver_params)
         solve_data = None
 
@@ -499,7 +503,6 @@ if __name__ == "__main__":
             ),
         )
 
-        num_trajs = 30
         plans = get_plan_start_and_goals_to_point(
             seed,
             num_trajs,
