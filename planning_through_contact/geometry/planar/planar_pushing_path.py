@@ -58,21 +58,25 @@ def assemble_progs_from_contact_modes(
         # Remove the object avoidance cost for noncollisionmodes that are adjacent to
         # contact modes (we don't want to penalize knot points where the pusher must
         # make contact).
-        if idx > 0 and idx < len(modes) - 1:  # skip first and last modes
-            if isinstance(mode, NonCollisionMode):
-                prev_mode = modes[idx - 1]
-                if isinstance(prev_mode, FaceContactMode):
-                    # remove cost on first knot point
-                    prog.RemoveCost(mode.distance_to_object_socp_costs[0])
-                    for c in mode.distance_to_object_socp_constraints[0]:
-                        prog.RemoveConstraint(c)
+        if isinstance(mode, NonCollisionMode):
+            if (
+                mode.distance_to_object_socp_costs is not None
+                and mode.distance_to_object_socp_constraints is not None
+            ):
+                if idx > 0 and idx < len(modes) - 1:  # skip first and last modes
+                    prev_mode = modes[idx - 1]
+                    if isinstance(prev_mode, FaceContactMode):
+                        # remove cost on first knot point
+                        prog.RemoveCost(mode.distance_to_object_socp_costs[0])
+                        for c in mode.distance_to_object_socp_constraints[0]:
+                            prog.RemoveConstraint(c)
 
-                next_mode = modes[idx + 1]
-                if isinstance(next_mode, FaceContactMode):
-                    # remove cost on last knot point
-                    prog.RemoveCost(mode.distance_to_object_socp_costs[-1])
-                    for c in mode.distance_to_object_socp_constraints[-1]:
-                        prog.RemoveConstraint(c)
+                    next_mode = modes[idx + 1]
+                    if isinstance(next_mode, FaceContactMode):
+                        # remove cost on last knot point
+                        prog.RemoveCost(mode.distance_to_object_socp_costs[-1])
+                        for c in mode.distance_to_object_socp_constraints[-1]:
+                            prog.RemoveConstraint(c)
 
         for c in mode_prog.GetAllCosts():
             prog.AddCost(c.evaluator(), c.variables())
