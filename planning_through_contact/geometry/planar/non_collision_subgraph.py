@@ -38,7 +38,7 @@ def gcs_add_edge_with_continuity(
     incoming: VertexModePair,
     only_continuity_on_slider: bool = False,
     continuity_on_pusher_velocities: bool = False,
-) -> None:
+) -> GcsEdge:
     edge = gcs.AddEdge(outgoing.vertex, incoming.vertex)
     add_continuity_constraints_btwn_modes(
         outgoing.mode,
@@ -95,12 +95,14 @@ class NonCollisionSubGraph:
         for m, v in zip(non_collision_modes, non_collision_vertices):
             m.add_cost_to_vertex(v)
 
+        edges = []
+
         # Add bi-directional edges
         edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         for i, j in edge_idxs:
             if config.no_cycles:  # only connect lower idx faces to higher idx faces
                 if i <= j:
-                    gcs_add_edge_with_continuity(
+                    e = gcs_add_edge_with_continuity(
                         gcs,
                         VertexModePair(
                             non_collision_vertices[i], non_collision_modes[i]
@@ -110,8 +112,9 @@ class NonCollisionSubGraph:
                         ),
                         continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                     )
+                    edges.append(e)
                 else:
-                    gcs_add_edge_with_continuity(
+                    e = gcs_add_edge_with_continuity(
                         gcs,
                         VertexModePair(
                             non_collision_vertices[j], non_collision_modes[j]
@@ -121,19 +124,46 @@ class NonCollisionSubGraph:
                         ),
                         continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                     )
+                    edges.append(e)
             else:
-                gcs_add_edge_with_continuity(
+                pair_u_1 = VertexModePair(
+                    non_collision_vertices[i], non_collision_modes[i]
+                )
+                pair_v_1 = VertexModePair(
+                    non_collision_vertices[j], non_collision_modes[j]
+                )
+                e_1 = gcs_add_edge_with_continuity(
                     gcs,
-                    VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
-                    VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
+                    pair_u_1,
+                    pair_v_1,
                     continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                 )
-                gcs_add_edge_with_continuity(
+
+                pair_u_2 = VertexModePair(
+                    non_collision_vertices[j], non_collision_modes[j]
+                )
+                pair_v_2 = VertexModePair(
+                    non_collision_vertices[i], non_collision_modes[i]
+                )
+                e_2 = gcs_add_edge_with_continuity(
                     gcs,
                     VertexModePair(non_collision_vertices[j], non_collision_modes[j]),
                     VertexModePair(non_collision_vertices[i], non_collision_modes[i]),
                     continuity_on_pusher_velocities=config.continuity_on_pusher_velocity,
                 )
+                edges.append((pair_u_1, pair_v_1, e_1))
+                edges.append((pair_u_2, pair_v_2, e_2))
+
+        # Now we add all edge-specific costs (like the contact avoidance cost,
+        # where we don't want to penalize the first/last knot point if the edge
+        # is with a contact mode
+        for pair_u, _, edge in edges:
+            pair_u.mode.add_cost_to_edge(
+                edge,
+                pair_u.vertex,
+                skip_first_knot_point=False,
+                skip_last_knot_point=False,
+            )
 
         return cls(
             gcs,
@@ -172,14 +202,46 @@ class NonCollisionSubGraph:
             self.non_collision_vertices[subgraph_connection_idx],
             self.non_collision_modes[subgraph_connection_idx],
         )
+
+        # We only add edge costs on modes with more than one knot point, i.e.
+        # skip source and target modes
+        add_edge_cost = external_connection.mode.num_knot_points > 1
+
         if incoming:
-            gcs_add_edge_with_continuity(
+            edge_incoming = gcs_add_edge_with_continuity(
                 self.gcs, external_connection, subgraph_connection
             )
+            if add_edge_cost:
+                assert isinstance(
+                    subgraph_connection.mode, NonCollisionMode
+                )  # fix typing errors
+
+                # For an edge (contact, noncontact) we do not penalize the first knot point
+                # (which will be in contact)
+                subgraph_connection.mode.add_cost_to_edge(
+                    edge_incoming,
+                    subgraph_connection.vertex,
+                    skip_first_knot_point=True,
+                    skip_last_knot_point=False,
+                )
         if outgoing:
-            gcs_add_edge_with_continuity(
+            edge_outgoing = gcs_add_edge_with_continuity(
                 self.gcs, subgraph_connection, external_connection
             )
+
+            if add_edge_cost:
+                assert isinstance(
+                    subgraph_connection.mode, NonCollisionMode
+                )  # fix typing errors
+
+                # For an edge (noncontact, contact) we do not penalize the last knot point
+                # (which will be in contact)
+                subgraph_connection.mode.add_cost_to_edge(
+                    edge_outgoing,
+                    subgraph_connection.vertex,
+                    skip_first_knot_point=False,
+                    skip_last_knot_point=True,
+                )
 
     def _set_initial_or_final_poses(
         self,
@@ -197,6 +259,7 @@ class NonCollisionSubGraph:
             kwargs = {"outgoing": False, "incoming": True}
         else:
             kwargs = {"outgoing": True, "incoming": False}
+
         self.connect_with_continuity_constraints(
             mode.contact_location.idx, pair, **kwargs
         )

@@ -362,7 +362,7 @@ class NonCollisionMode(AbstractContactMode):
 
             if self.cost_config.distance_to_object_socp is not None:
                 self.slack_vars = self.prog.NewContinuousVariables(
-                    self.num_knot_points - 2, "s"  # TODO(bernahrdpg): Fix
+                    self.num_knot_points, "s"
                 )
                 planes = self.slider_geometry.get_contact_planes(
                     self.contact_location.idx
@@ -377,26 +377,30 @@ class NonCollisionMode(AbstractContactMode):
                     self.distance_to_object_socp_costs.append(cost)
                     self.costs["object_avoidance_socp"].append(cost)
 
-                    # Add the constraint
-                    #   s >= k * (1/dist)
-                    # which is equivalent to
-                    #   s * dist >= k
-                    # which is an RSOC
-                    planes = self.slider_geometry.get_contact_planes(
-                        self.contact_location.idx
-                    )
+                # Add the constraint
+                #   s >= k * (1/dist)
+                # which is equivalent to
+                #   s * dist >= k
+                # which is an RSOC
+                planes = self.slider_geometry.get_contact_planes(
+                    self.contact_location.idx
+                )
+                for s, p_BP in zip(self.slack_vars, self.variables.p_BPs):
+                    constraints_for_knot_point = []
                     for plane in planes:
-                        # TODO(bernhardpg): This is a bug!! We should only not penalize the last variable of the non-contact modes that connect to contact
-                        for s, p_BP in zip(self.slack_vars, self.variables.p_BPs[1:-1]):
-                            dist = plane.dist_to(p_BP)
-                            k = self.cost_config.distance_to_object_socp
-                            vec = np.array([s, dist, k])
-                            vars = np.array(list(np.sum(vec).GetVariables()))
-                            A, b = DecomposeAffineExpressions(vec, vars)
-                            evaluator = RotatedLorentzConeConstraint(A, b)
-                            self.distance_to_object_socp_constraints.append(
-                                self.prog.AddConstraint(evaluator, vars)
-                            )
+                        dist = plane.dist_to(p_BP)
+                        k = self.cost_config.distance_to_object_socp
+                        vec = np.array([s, dist, k])
+                        vars = np.array(list(np.sum(vec).GetVariables()))
+                        A, b = DecomposeAffineExpressions(vec, vars)
+                        evaluator = RotatedLorentzConeConstraint(A, b)
+                        constraints_for_knot_point.append(
+                            self.prog.AddConstraint(evaluator, vars)
+                        )
+
+                    self.distance_to_object_socp_constraints.append(
+                        constraints_for_knot_point
+                    )
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.
@@ -609,26 +613,49 @@ class NonCollisionMode(AbstractContactMode):
                 binding = Binding[QuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
 
-            if self.cost_config.distance_to_object_socp:
-                # Encode
-                #   min k * (1/dist)
-                # as a RSOC
+    def add_cost_to_edge(
+        self,
+        edge: GcsEdge,
+        vertex: GcsVertex,
+        skip_first_knot_point: bool = False,
+        skip_last_knot_point: bool = False,
+    ) -> None:
+        # We need the vertex to know which variables to use in cost,
+        # but we add the cost on the vertex.
 
-                # Add the linear cost on the slack variable
-                #   min s
-                for c in self.distance_to_object_socp_costs:
-                    var_idxs, evaluator = self._get_cost_terms(c)
-                    vars = vertex.x()[var_idxs]
-                    binding = Binding[LinearCost](evaluator, vars)
-                    vertex.AddCost(binding)
+        if skip_first_knot_point:
+            first_idx = 1
+        else:
+            first_idx = 0
 
-                # Add the constraint
-                #   s >= k * (1/dist)
-                # which is equivalent to
-                #   s * dist >= k
-                # which is an RSOC
-                for c in self.distance_to_object_socp_constraints:
+        if skip_last_knot_point:
+            last_idx = self.num_knot_points
+        else:
+            last_idx = self.num_knot_points - 1
+
+        if self.cost_config.distance_to_object_socp:
+            # Encode
+            #   min k * (1/dist)
+            # as a RSOC
+
+            # Add the linear cost on the slack variable
+            #   min s
+            for c in self.distance_to_object_socp_costs[first_idx:last_idx]:
+                var_idxs, evaluator = self._get_cost_terms(c)
+                vars = vertex.x()[var_idxs]
+                binding = Binding[LinearCost](evaluator, vars)
+                edge.AddCost(binding)
+
+            # Add the constraint
+            #   s >= k * (1/dist)
+            # which is equivalent to
+            #   s * dist >= k
+            # which is an RSOC
+            for constraints in self.distance_to_object_socp_constraints[
+                first_idx:last_idx
+            ]:
+                for c in constraints:
                     var_idxs, evaluator = self._get_cost_terms(c)
                     vars = vertex.x()[var_idxs]
                     binding = Binding[RotatedLorentzConeConstraint](evaluator, vars)
-                    vertex.AddConstraint(binding)
+                    edge.AddConstraint(binding)
