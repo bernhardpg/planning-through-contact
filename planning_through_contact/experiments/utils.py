@@ -83,7 +83,7 @@ def get_hardware_contact_cost() -> ContactCost:
         lin_velocity_regularization=None,
         trace=None,
         mode_transition_cost=None,
-        time=1.5,
+        time=1.75,
     )
     return contact_cost
 
@@ -126,6 +126,10 @@ def get_default_plan_config(
 
         contact_cost = get_hardware_contact_cost()
         non_collision_cost = get_hardware_non_collision_cost()
+
+        # contact_cost = get_default_contact_cost()
+        # non_collision_cost = get_default_non_collision_cost()
+
         lam_buffer = 0.25
         contact_config = ContactConfig(
             cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
