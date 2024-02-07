@@ -7,16 +7,16 @@ defaults:
 
 sim_config:
   time_step: 5e-3
-  use_hardware: True
-  closed_loop: True
+  use_hardware: False
+  closed_loop: False
   save_plots: True
-  use_realtime: True
+  use_realtime: False
   visualize_desired: True
 
 mpc_config:
-  rate_Hz: 200
+  rate_Hz: 50
 
-trajectory_set_name: "hw_demos_20240129170214_tee" # "hw_demos_20240129170214_tee"
+trajectory_set_name: "hw_demos_20240207141104_tee_fixed_bugs"
 trajectory_index: 1
 use_rounded: True
 # override_duration: 5
@@ -27,6 +27,5 @@ hydra:
   mode: MULTIRUN
   sweeper:
     params:
-      trajectory_index: 0, 1, 2, 9, 14, 15, 17, 24, 25
+      trajectory_index: 0,1,5,8,11,13,16,17,20,21
       # sim_config.closed_loop: False, True
-# 0, 1, 2, 9, 14, 15, 17, 24, 25
