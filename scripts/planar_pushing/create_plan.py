@@ -326,7 +326,11 @@ def create_plan(
     if path is not None:
         traj_relaxed = path.to_traj()
 
-        if do_rounding:
+        if (
+            do_rounding
+            and path.rounded_result is not None
+            and path.rounded_result.is_success()
+        ):
             traj_rounded = path.to_traj(rounded=True)
         else:
             traj_rounded = None

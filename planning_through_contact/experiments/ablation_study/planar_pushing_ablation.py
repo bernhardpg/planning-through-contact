@@ -349,7 +349,7 @@ def do_one_run_get_path(
             feasible_success = False
             feasible_cost = None
             feasible_time = None
-        else:
+        else:  # we found at least one feasible path
             num_feasible_rounded_paths = len(feasible_paths)
             path = planner._pick_best_path(feasible_paths)
 
