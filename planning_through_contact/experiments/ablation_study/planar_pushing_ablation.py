@@ -329,6 +329,9 @@ def do_one_run_get_path(
         feasible_success = False
         feasible_cost = None
         feasible_time = None
+        binary_flows_cost = None
+        binary_flows_success = False
+        binary_flows_time = None
     else:
         num_binary_rounded_paths = len(paths)
 
