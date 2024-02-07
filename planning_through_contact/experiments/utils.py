@@ -78,21 +78,21 @@ def get_hardware_contact_cost() -> ContactCost:
         linear_arc_length=None,
         angular_arc_length=None,
         force_regularization=100000.0,  # NOTE: This is multiplied by 1e-4 because we have forces in other units in the optimization problem
-        keypoint_velocity_regularization=100.0,
+        keypoint_velocity_regularization=50.0,
         ang_velocity_regularization=None,
         lin_velocity_regularization=None,
         trace=None,
         mode_transition_cost=None,
-        time=1.0,
+        time=1.5,
     )
     return contact_cost
 
 
 def get_hardware_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_socp=0.25,
-        pusher_velocity_regularization=10.0,
-        pusher_arc_length=5.0,
+        distance_to_object_socp=0.01,
+        pusher_velocity_regularization=1.0,
+        pusher_arc_length=1.0,
         time=None,
     )
     return non_collision_cost
@@ -134,7 +134,7 @@ def get_default_plan_config(
         time_non_collision = 2.0
 
         num_knot_points_non_collision = 5
-        num_knot_points_contact = 3
+        num_knot_points_contact = 5
     else:
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,

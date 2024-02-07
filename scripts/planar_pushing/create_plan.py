@@ -308,6 +308,10 @@ def create_plan(
         planner = PlanarPushingPlanner(config)
         planner.config.start_and_goal = plan_spec
         planner.formulate_problem()
+
+        if debug:
+            planner.create_graph_diagram(f"{analysis_folder}/graph")
+
         path = planner.plan_path(solver_params)
         solve_data = None
 
@@ -462,7 +466,7 @@ if __name__ == "__main__":
             ),
         )
 
-        num_demos = 30
+        num_demos = 100
         plans = get_plans_to_point(
             num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
         )
