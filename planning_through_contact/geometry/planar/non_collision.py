@@ -242,8 +242,8 @@ class NonCollisionMode(AbstractContactMode):
         )
 
         self.l2_norm_costs = []
-        self.distance_to_object_socp_costs = []
-        self.distance_to_object_socp_constraints = []
+        self.distance_to_object_socp_costs = None
+        self.distance_to_object_socp_constraints = None
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
@@ -277,7 +277,11 @@ class NonCollisionMode(AbstractContactMode):
         stay_in_region = [
             plane.dist_to(pusher_pos) >= 0 for plane in self.collision_free_space_planes
         ]
-        exprs = avoid_contact + stay_in_region
+        if self.config.non_collision_cost.distance_to_object_socp is not None:
+            # With this cost, this is already encoded with the rotated second order cone constraint
+            exprs = stay_in_region
+        else:
+            exprs = stay_in_region + avoid_contact
         return exprs
 
     def _define_cost(self) -> None:
@@ -361,6 +365,9 @@ class NonCollisionMode(AbstractContactMode):
                 self.costs["object_avoidance_quad"].append(self.quadratic_distance_cost)
 
             if self.cost_config.distance_to_object_socp is not None:
+                self.distance_to_object_socp_costs = []
+                self.distance_to_object_socp_constraints = []
+
                 self.slack_vars = self.prog.NewContinuousVariables(
                     self.num_knot_points, "s"
                 )
