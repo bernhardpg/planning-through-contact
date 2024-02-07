@@ -203,45 +203,48 @@ class NonCollisionSubGraph:
             self.non_collision_modes[subgraph_connection_idx],
         )
 
-        # We only add edge costs on modes with more than one knot point, i.e.
-        # skip source and target modes
-        add_edge_cost = external_connection.mode.num_knot_points > 1
-
         if incoming:
             edge_incoming = gcs_add_edge_with_continuity(
                 self.gcs, external_connection, subgraph_connection
             )
-            if add_edge_cost:
-                assert isinstance(
-                    subgraph_connection.mode, NonCollisionMode
-                )  # fix typing errors
 
-                # For an edge (contact, noncontact) we do not penalize the first knot point
-                # (which will be in contact)
-                subgraph_connection.mode.add_cost_to_edge(
-                    edge_incoming,
-                    subgraph_connection.vertex,
-                    skip_first_knot_point=True,
-                    skip_last_knot_point=False,
-                )
+            assert isinstance(
+                subgraph_connection.mode, NonCollisionMode
+            )  # fix typing errors
+
+            # For an edge (contact, noncontact) we do not penalize the first knot point
+            # (which will be in contact)
+            if isinstance(external_connection.mode, FaceContactMode):
+                kwargs = {"skip_first_knot_point": True, "skip_last_knot_point": False}
+            else:
+                kwargs = {"skip_first_knot_point": False, "skip_last_knot_point": False}
+
+            subgraph_connection.mode.add_cost_to_edge(
+                edge_incoming,
+                subgraph_connection.vertex,
+                **kwargs,
+            )
         if outgoing:
             edge_outgoing = gcs_add_edge_with_continuity(
                 self.gcs, subgraph_connection, external_connection
             )
 
-            if add_edge_cost:
-                assert isinstance(
-                    subgraph_connection.mode, NonCollisionMode
-                )  # fix typing errors
+            assert isinstance(
+                subgraph_connection.mode, NonCollisionMode
+            )  # fix typing errors
 
-                # For an edge (noncontact, contact) we do not penalize the last knot point
-                # (which will be in contact)
-                subgraph_connection.mode.add_cost_to_edge(
-                    edge_outgoing,
-                    subgraph_connection.vertex,
-                    skip_first_knot_point=False,
-                    skip_last_knot_point=True,
-                )
+            # For an edge (noncontact, contact) we do not penalize the last knot point
+            # (which will be in contact)
+            if isinstance(external_connection.mode, FaceContactMode):
+                kwargs = {"skip_first_knot_point": False, "skip_last_knot_point": True}
+            else:
+                kwargs = {"skip_first_knot_point": False, "skip_last_knot_point": False}
+
+            subgraph_connection.mode.add_cost_to_edge(
+                edge_outgoing,
+                subgraph_connection.vertex,
+                **kwargs,
+            )
 
     def _set_initial_or_final_poses(
         self,
