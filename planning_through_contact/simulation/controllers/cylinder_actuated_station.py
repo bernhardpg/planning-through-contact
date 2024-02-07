@@ -88,6 +88,16 @@ class CylinderActuatedStation(RobotSystemBase):
             ),
         )
 
+        if sim_config.camera_config is not None:
+            from pydrake.systems.sensors import (
+                ApplyCameraConfig
+            )
+
+            ApplyCameraConfig(
+                config=sim_config.camera_config,
+                builder=builder
+            )
+
         ## Connect systems
 
         self._robot_model_instance = self.station_plant.GetModelInstanceByName(

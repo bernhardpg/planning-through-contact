@@ -1,5 +1,16 @@
 import numpy as np
 from pydrake.all import ContactModel, StartMeshcat
+from pydrake.systems.sensors import (
+    CameraConfig
+)
+from pydrake.math import (
+    RigidTransform, 
+    RotationMatrix
+)
+from pydrake.common.schema import (
+    Transform
+)
+
 import logging
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -59,6 +70,20 @@ def run_sim(
     )
     # disturbance = PlanarPose(x=0.01, y=0, theta=-15* np.pi/180)
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
+
+    # camera set up
+    R_WB = RotationMatrix.MakeXRotation(np.pi)
+    camera_config = CameraConfig(
+        name="overhead_camera",
+        X_PB=Transform(
+            RigidTransform(
+                RotationMatrix.MakeXRotation(np.pi),
+                np.array([0.5, 0.0, 1.0])
+            )
+        ),
+        show_rgb=True,
+    )
+
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -76,6 +101,7 @@ def run_sim(
         save_plots=False,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
+        camera_config=camera_config
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -160,7 +186,7 @@ if __name__ == "__main__":
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
     run_sim(
-        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_0/trajectory/traj_rounded.pkl",
+        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_2/trajectory/traj_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

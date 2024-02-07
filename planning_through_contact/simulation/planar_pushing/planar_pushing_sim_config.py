@@ -6,6 +6,9 @@ import numpy.typing as npt
 from pydrake.multibody.plant import (
     ContactModel,
 )
+from pydrake.systems.sensors import (
+    CameraConfig
+)
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -46,7 +49,7 @@ class PlanarPushingSimConfig:
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
-    camera = False
+    camera_config: CameraConfig = None
 
     @classmethod
     def from_traj(cls, trajectory: PlanarPushingTrajectory, **kwargs):
