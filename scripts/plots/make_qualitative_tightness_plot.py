@@ -14,7 +14,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.visualize.analysis import analyze_plans
 from planning_through_contact.visualize.planar_pushing import compare_trajs_vertically
-from scripts.planar_pushing.create_plan import get_plans_to_point
+from scripts.planar_pushing.create_plan import get_plan_start_and_goals_to_point
 
 make_data = True
 if make_data:

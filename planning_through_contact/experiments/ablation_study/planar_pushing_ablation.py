@@ -68,6 +68,9 @@ class SingleRunResult:
     rounded_mean_determinant: Optional[float]
     start_and_goal: PlanarPushingStartAndGoal
     config: PlanarPlanConfig
+    num_binary_rounded_paths: Optional[int] = None
+    num_feasible_rounded_paths: Optional[int] = None
+    solver_params: Optional[PlanarSolverParams] = None
     name: Optional[str] = None
     cost_term_vals: Optional[Dict[str, Dict]] = None
 
@@ -303,60 +306,91 @@ def do_one_run_get_path(
     solver_params: PlanarSolverParams,
     start_and_goal: PlanarPushingStartAndGoal,
     save_cost_vals: bool = False,
+    graph_filename: Optional[str] = None,
 ) -> Tuple[SingleRunResult, Optional[PlanarPushingPath]]:
     plan_config.start_and_goal = start_and_goal
 
     planner = PlanarPushingPlanner(plan_config)
     planner.formulate_problem()
 
-    path = planner.plan_path(solver_params)
+    if graph_filename is not None:
+        planner.create_graph_diagram(graph_filename)
 
-    if path is None:
-        return (
-            SingleRunResult(
-                relaxed_gcs_cost=planner.relaxed_gcs_result.get_optimal_cost(),
-                relaxed_gcs_success=planner.relaxed_gcs_result.is_success(),
-                relaxed_gcs_time=planner.relaxed_gcs_result.get_solver_details().optimizer_time,  # type: ignore
-                binary_flows_cost=None,
-                binary_flows_success=None,
-                binary_flows_time=None,
-                feasible_cost=None,
-                feasible_success=None,
-                feasible_time=None,
-                relaxed_mean_determinant=None,
-                rounded_mean_determinant=None,
-                start_and_goal=start_and_goal,
-                config=plan_config,
-            ),
-            path,
-        )
+    paths = planner._plan_paths(solver_params)
+    if paths is None:
+        num_binary_rounded_paths = 0
+        num_feasible_rounded_paths = None
+        path = None
+
+        binary_flows_cost = None
+        binary_flows_success = False
+        binary_flows_time = None
+
+        feasible_success = False
+        feasible_cost = None
+        feasible_time = None
+    else:
+        num_binary_rounded_paths = len(paths)
+
+        feasible_paths = planner._get_rounded_paths(solver_params, paths)
+        if feasible_paths is None:
+            num_feasible_rounded_paths = 0
+
+            # Still record binary path
+            binary_flows_best_idx = np.argmin([p.relaxed_cost for p in paths])
+            path = paths[binary_flows_best_idx]
+            binary_flows_success = True
+            binary_flows_cost = path.relaxed_cost
+            binary_flows_time = path.solve_time
+
+            feasible_success = False
+            feasible_cost = None
+            feasible_time = None
+        else:
+            num_feasible_rounded_paths = len(feasible_paths)
+            path = planner._pick_best_path(feasible_paths)
+
+            binary_flows_success = True
+            binary_flows_cost = path.relaxed_cost
+            binary_flows_time = path.solve_time
+
+            feasible_success = True
+            feasible_cost = path.rounded_cost
+            feasible_time = path.rounding_time
 
     assert planner.source is not None  # avoid typing errors
     assert planner.target is not None  # avoid typing errors
 
-    relaxed_mean_determinant: float = np.mean(path.get_determinants())
-    rounded_mean_determinant: float = np.mean(path.get_determinants(rounded=True))
+    relaxed_mean_determinant: float | None = (
+        np.mean(path.get_determinants()) if path is not None else None
+    )
+    rounded_mean_determinant: float | None = (
+        np.mean(path.get_determinants(rounded=True)) if path is not None else None
+    )
 
     assert planner.relaxed_gcs_result is not None
-
-    assert path.rounded_result is not None
 
     return (
         SingleRunResult(
             relaxed_gcs_cost=planner.relaxed_gcs_result.get_optimal_cost(),
             relaxed_gcs_success=planner.relaxed_gcs_result.is_success(),
             relaxed_gcs_time=planner.relaxed_gcs_result.get_solver_details().optimizer_time,  # type: ignore
-            binary_flows_cost=path.relaxed_cost,
-            binary_flows_success=path.result.is_success(),
-            binary_flows_time=path.solve_time,
-            feasible_cost=path.rounded_cost,
-            feasible_success=path.rounded_result.is_success(),
-            feasible_time=path.rounding_time,
+            binary_flows_cost=binary_flows_cost,
+            binary_flows_success=binary_flows_success,
+            binary_flows_time=binary_flows_time,
+            feasible_cost=feasible_cost,
+            feasible_success=feasible_success,
+            feasible_time=feasible_time,
             relaxed_mean_determinant=relaxed_mean_determinant,
             rounded_mean_determinant=rounded_mean_determinant,
             start_and_goal=start_and_goal,
             config=plan_config,
-            cost_term_vals=path.get_cost_terms() if save_cost_vals else None,
+            cost_term_vals=path.get_cost_terms()
+            if path is not None and save_cost_vals
+            else None,
+            solver_params=solver_params,
+            num_binary_rounded_paths=num_binary_rounded_paths,
+            num_feasible_rounded_paths=num_feasible_rounded_paths,
         ),
         path,
     )
