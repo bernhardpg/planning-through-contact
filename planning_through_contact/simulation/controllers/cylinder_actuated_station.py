@@ -97,26 +97,6 @@ class CylinderActuatedStation(RobotSystemBase):
                 config=sim_config.camera_config,
                 builder=builder
             )
-        
-        if sim_config.collect_data:
-            assert sim_config.camera_config is not None
-            from pydrake.systems.sensors import (
-                ImageWriter,
-                PixelType
-            )
-            
-            image_writer_system = ImageWriter()
-            image_writer_system.DeclareImageInputPort(
-                pixel_type=PixelType.kRgba8U,
-                port_name="overhead_camera_image",
-                file_name_format= 'images/{time_msec}.png',
-                publish_period=0.1,
-                start_time=0.0
-            )
-            image_writer = builder.AddNamedSystem(
-                "ImageWriter",
-                image_writer_system
-            )
 
         ## Connect systems
 
@@ -138,12 +118,6 @@ class CylinderActuatedStation(RobotSystemBase):
             robot_controller.get_input_port_desired_state(),
         )
 
-        if sim_config.collect_data:
-            builder.Connect(
-                builder.GetSubsystemByName("rgbd_sensor_overhead_camera").color_image_output_port(),
-                image_writer.get_input_port()
-            )
-
         ## Export inputs and outputs
 
         builder.ExportInput(
@@ -162,6 +136,14 @@ class CylinderActuatedStation(RobotSystemBase):
             self.station_plant.get_state_output_port(self.slider),
             "object_state_measured",
         )
+
+        if self._sim_config.collect_data:
+            builder.ExportOutput(
+                builder.GetSubsystemByName(
+                    "rgbd_sensor_overhead_camera"
+                ).color_image_output_port(),
+                "rgbd_sensor_overhead_camera",
+            )
 
         builder.BuildInto(self)
 

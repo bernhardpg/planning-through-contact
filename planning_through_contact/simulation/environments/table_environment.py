@@ -219,6 +219,39 @@ class TableEnvironment:
                 self._desired_position_source.GetOutputPort("mpc_control_desired"),
                 builder,
             )
+        
+        if sim_config.collect_data:
+            assert sim_config.camera_config is not None
+            from pydrake.systems.sensors import (
+                ImageWriter,
+                PixelType
+            )
+
+            if not os.path.exists(sim_config.data_dir):
+                os.mkdir(sim_config.data_dir)
+            traj_idx = 0
+            for path in os.listdir(sim_config.data_dir):
+                if os.path.isdir(os.path.join(sim_config.data_dir, path)):
+                    traj_idx += 1
+            image_dir = f'{sim_config.data_dir}/{traj_idx}/images'
+            os.makedirs(image_dir)
+                                    
+            image_writer_system = ImageWriter()
+            image_writer_system.DeclareImageInputPort(
+                pixel_type=PixelType.kRgba8U,
+                port_name="overhead_camera_image",
+                file_name_format= image_dir + '/{time_msec}.png',
+                publish_period=0.1,
+                start_time=0.0
+            )
+            image_writer = builder.AddNamedSystem(
+                "ImageWriter",
+                image_writer_system
+            )
+            builder.Connect(
+                self._robot_system.GetOutputPort("rgbd_sensor_overhead_camera"),
+                image_writer.get_input_port()
+            )
 
         diagram = builder.Build()
         self._diagram = diagram
@@ -352,11 +385,15 @@ class TableEnvironment:
                 save_dir=save_dir,
             )
     
-    def save_data(self, save_dir: str='.'):
+    def save_data(self):
+        import pathlib
+
         if self._sim_config.save_plots:
             # data has already been saved in save_plots()
             return
         if self._sim_config.collect_data:
+            assert self._sim_config.data_dir is not None
+
             # Save the logs
             pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
             slider_pose_log = self._slider_pose_logger.FindLog(self.context)
@@ -384,7 +421,11 @@ class TableEnvironment:
                 pusher_desired=pusher_desired,
                 slider_desired=slider_desired,
             )
-            
+
+            # assumes that a directory for this trajectory has already been
+            # created (when saving the images)
+            traj_idx = str(0)
+            save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(traj_idx)
             log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
             with open(log_path, "wb") as f:
                 pickle.dump(combined, f)

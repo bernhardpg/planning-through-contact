@@ -51,6 +51,7 @@ class PlanarPushingSimConfig:
     pusher_z_offset: float = 0.05
     camera_config: CameraConfig = None
     collect_data: bool = False
+    data_dir: str = None
 
     @classmethod
     def from_traj(cls, trajectory: PlanarPushingTrajectory, **kwargs):

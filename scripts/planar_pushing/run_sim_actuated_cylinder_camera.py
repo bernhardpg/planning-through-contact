@@ -1,4 +1,6 @@
 import numpy as np
+import argparse
+
 from pydrake.all import ContactModel, StartMeshcat
 from pydrake.systems.sensors import (
     CameraConfig
@@ -42,6 +44,7 @@ from planning_through_contact.visualize.analysis import (
 
 def run_sim(
     plan: str,
+    data_collection_dir: str = None,
     save_recording: bool = False,
     debug: bool = False,
     station_meshcat=None,
@@ -103,7 +106,8 @@ def run_sim(
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
         camera_config=camera_config,
-        collect_data=True
+        collect_data=True,
+        data_dir = data_collection_dir
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -182,12 +186,17 @@ def run_multiple(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, default=None)
+    args = parser.parse_args()
+
     print(f"station meshcat")
     station_meshcat = StartMeshcat()
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
     run_sim(
         plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
+        data_collection_dir=args.data_dir,
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,
