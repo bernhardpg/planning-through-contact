@@ -72,7 +72,6 @@ def run_sim(
     disturbance = PlanarPose(x=0.0, y=0, theta=0)
 
     # camera set up
-    R_WB = RotationMatrix.MakeXRotation(np.pi)
     camera_config = CameraConfig(
         name="overhead_camera",
         X_PB=Transform(
@@ -81,6 +80,8 @@ def run_sim(
                 np.array([0.5, 0.0, 1.0])
             )
         ),
+        width=96,
+        height=96,
         show_rgb=True,
     )
 
@@ -98,10 +99,11 @@ def run_sim(
         closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
-        save_plots=False,
+        save_plots=True,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
-        camera_config=camera_config
+        camera_config=camera_config,
+        collect_data=True
     )
     # Commented out code for generating values for hybrid MPC tests
     # for t in [4, 8]:
@@ -137,7 +139,6 @@ def run_sim(
         else None
     )
     environment.export_diagram("environment_diagram.pdf")
-    # environment.simulate(traj.end_time + 0.5, recording_file=recording_name, save_dir="~/workspace/planning-through-contact")
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
 

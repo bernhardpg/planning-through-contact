@@ -41,6 +41,8 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
 from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
     plot_and_save_planar_pushing_logs_from_sim,
+    collect_planar_pushing_data,
+    PlanarPushingLog,
 )
 
 logger = logging.getLogger(__name__)
@@ -216,6 +218,29 @@ class TableEnvironment:
                 self._desired_position_source.GetOutputPort("mpc_control_desired"),
                 builder,
             )
+        
+        # Collect data for diffusion policy
+        if sim_config.collect_data:
+            assert not isinstance(
+                self._desired_position_source, TeleopPositionSource
+            ), "Cannot save plots during teleop"
+            # Actual slider state logger
+            slider_pose_to_vector = builder.AddSystem(
+                RigidTransformToPlanarPoseVectorSystem()
+            )
+            builder.Connect(
+                self._state_estimator.GetOutputPort("slider_pose_estimated"),
+                slider_pose_to_vector.get_input_port(),
+            )
+            self._slider_pose_logger = LogVectorOutput(
+                slider_pose_to_vector.get_output_port(), builder
+            )
+
+            # Desired Pusher Command Logger
+            self._pusher_pose_desired_logger = LogVectorOutput(
+                self._desired_position_source.GetOutputPort("planar_position_command"),
+                builder,
+            )
 
         diagram = builder.Build()
         self._diagram = diagram
@@ -287,6 +312,21 @@ class TableEnvironment:
             self._simulator.AdvanceTo(timeout)
 
         self.save_logs(recording_file, save_dir)
+        
+        if self._sim_config.collect_data:
+            slider_pose_log = self._slider_pose_logger.FindLog(self.context)
+            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
+                self.context
+            )
+            control_log = self._control_logger.FindLog(self.context)
+            slider_actual = PlanarPushingLog.from_log(slider_pose_log, control_log)
+            pusher_desired = PlanarPushingLog.from_pose_vector_log(
+                pusher_pose_desired_log
+            )
+            collect_planar_pushing_data(
+                pusher_desired=pusher_desired,
+                slider_actual=slider_actual,
+            )
 
     def save_logs(self, recording_file: Optional[str], save_dir: str):
         if recording_file:
