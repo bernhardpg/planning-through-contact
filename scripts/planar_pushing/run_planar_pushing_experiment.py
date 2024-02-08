@@ -56,6 +56,7 @@ logging.getLogger(
     "planning_through_contact.simulation.environments.table_environment"
 ).setLevel(logging.DEBUG)
 
+
 @hydra.main(version_base=None, config_path="../../config", config_name="basic")
 def main(cfg: OmegaConf) -> None:
     now = datetime.now()
@@ -84,7 +85,8 @@ def main(cfg: OmegaConf) -> None:
     except FileNotFoundError:
         logger.error(f"Trajectory file {traj_file} not found")
         return
-    
+
+    # Non-collision time override
     # NEW_TIME = 4
     # new_config = traj.config
     # new_config.time_non_collision = NEW_TIME
