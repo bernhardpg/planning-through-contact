@@ -82,7 +82,7 @@ def run_sim(
         ),
         width=96,
         height=96,
-        show_rgb=True,
+        show_rgb=False,
     )
 
     sim_config = PlanarPushingSimConfig(

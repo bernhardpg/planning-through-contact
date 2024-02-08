@@ -44,7 +44,6 @@ from planning_through_contact.visualize.analysis import (
     plot_and_save_planar_pushing_logs_from_sim,
     PlanarPushingLog,
     CombinedPlanarPushingLogs
-
 )
 
 logger = logging.getLogger(__name__)
