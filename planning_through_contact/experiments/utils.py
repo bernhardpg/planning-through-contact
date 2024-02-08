@@ -183,6 +183,7 @@ def get_default_solver_params(
         solver="mosek" if not clarabel else "clarabel",
         print_solver_output=debug,
         save_solver_output=False,
+        print_rounding_details=debug,
         print_path=False,
         print_cost=debug,
         assert_result=False,
