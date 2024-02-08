@@ -336,6 +336,15 @@ class FaceContactMode(AbstractContactMode):
             self.dynamics_config.force_scale,
             define_theta_dots=self.config.use_approx_exponential_map,
         )
+        self.costs = {
+            "keypoint_arc": [],
+            "keypoint_reg": [],
+            "angular_vel_reg": [],
+            "translational_vel_reg": [],
+            "force_reg": [],
+            "contact_time": [],
+            "mode_cost": [],
+        }
         self.constraints = {
             "SO2": [],
             "rotational_dynamics": [],
@@ -524,12 +533,14 @@ class FaceContactMode(AbstractContactMode):
         cost_config = self.config.contact_config.cost
 
         if cost_config.mode_transition_cost is not None:
-            self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
+            cost = self.prog_wrapper.add_independent_cost(cost_config.mode_transition_cost)  # type: ignore
+            self.costs["mode_cost"].append(cost)
 
         if cost_config.time is not None:
-            self.prog_wrapper.add_independent_cost(
+            cost = self.prog_wrapper.add_independent_cost(
                 cost_config.time * self.config.time_in_contact
             )
+            self.costs["contact_time"].append(cost)
 
         if cost_config.cost_type == ContactCostType.STANDARD:
             # Arc length on keypoint trajectories
@@ -560,6 +571,7 @@ class FaceContactMode(AbstractContactMode):
                         cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
 
                         self.l2_norm_costs.append(cost)
+                        self.costs["keypoint_arc"].append(cost)
 
             # Linear arc length
             if cost_config.linear_arc_length is not None:
@@ -604,22 +616,24 @@ class FaceContactMode(AbstractContactMode):
             # Contact force regularization
             if cost_config.force_regularization is not None:
                 for k, c_n in enumerate(self.variables.normal_forces):
-                    self.prog_wrapper.add_quadratic_cost(
+                    cost = self.prog_wrapper.add_quadratic_cost(
                         k,
                         k,
                         cost_config.force_regularization
                         * c_n**2
                         * self.dynamics_config.force_scale**2,
                     )
+                    self.costs["force_reg"].append(cost)
 
                 for k, c_f in enumerate(self.variables.friction_forces):
-                    self.prog_wrapper.add_quadratic_cost(
+                    cost = self.prog_wrapper.add_quadratic_cost(
                         k,
                         k,
                         cost_config.force_regularization
                         * c_f**2
                         * self.dynamics_config.force_scale**2,
                     )
+                    self.costs["force_reg"].append(cost)
 
             # Keypoint velocity regularization
             if cost_config.keypoint_velocity_regularization is not None:
@@ -630,13 +644,14 @@ class FaceContactMode(AbstractContactMode):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                         disp = vertex_k_next - vertex_k
                         sq_disp = (disp.T @ disp).item()
-                        self.prog_wrapper.add_quadratic_cost(
+                        cost = self.prog_wrapper.add_quadratic_cost(
                             k,
                             k + 1,
                             cost_config.keypoint_velocity_regularization
                             * (1 / num_keypoints)
                             * sq_disp,
                         )
+                        self.costs["keypoint_reg"].append(cost)
 
             # Linear velocity regularization
             if cost_config.lin_velocity_regularization is not None:
@@ -644,23 +659,25 @@ class FaceContactMode(AbstractContactMode):
                     v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs
                 ]
                 for idx, term in enumerate(sq_linear_vels):
-                    self.prog_wrapper.add_quadratic_cost(
+                    cost = self.prog_wrapper.add_quadratic_cost(
                         idx,
                         idx + 1,
                         cost_config.lin_velocity_regularization * term,
                     )
+                    self.costs["translational_vel_reg"].append(cost)
 
             # Angular velocity regularization
             if cost_config.ang_velocity_regularization is not None:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
                     zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
                 ):
-                    self.prog_wrapper.add_quadratic_cost(
+                    cost = self.prog_wrapper.add_quadratic_cost(
                         k,
                         k + 1,
                         cost_config.ang_velocity_regularization
                         * (delta_sin_th**2 + delta_cos_th**2),
                     )
+                    self.costs["angular_vel_reg"].append(cost)
 
         elif cost_config.cost_type == ContactCostType.SQ_VELOCITIES:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]

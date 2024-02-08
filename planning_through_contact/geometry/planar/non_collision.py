@@ -245,6 +245,15 @@ class NonCollisionMode(AbstractContactMode):
         self.squared_eucl_dist_cost = None
         self.quadratic_distance_cost = None
 
+        # We keep these to evaluate cost term contributions later
+        self.costs = {
+            "pusher_arc_length": [],
+            "pusher_vel_reg": [],
+            "object_avoidance_socp": [],
+            "object_avoidance_quad": [],
+            "non_contact_time": [],
+        }
+
         self._define_constraints()
         self._define_cost()
 
@@ -278,9 +287,10 @@ class NonCollisionMode(AbstractContactMode):
         self.cost_config = self.config.non_collision_cost
 
         if self.cost_config.time is not None:
-            self.prog.AddLinearCost(
+            cost = self.prog.AddLinearCost(
                 self.cost_config.time * self.config.time_non_collision
             )
+            self.costs["non_contact_time"].append(cost)
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
@@ -293,10 +303,20 @@ class NonCollisionMode(AbstractContactMode):
                 position_diffs = np.vstack(position_diffs)
                 # position_diffs is now one long vector with diffs in each entry
                 squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
-                self.squared_eucl_dist_cost = self.prog.AddQuadraticCost(
+                cost = self.prog.AddQuadraticCost(
                     self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
                     is_convex=True,
                 )
+                Q = cost.evaluator().Q()
+                # Add a tiny constant to diagonal to make Q cholesky factorizable
+                # (Drake does a cholesky factorization under the hood)
+                new_Q = Q + np.eye(Q.shape[0]) * 1e-10
+                cost.evaluator().UpdateCoefficients(
+                    new_Q, cost.evaluator().b(), cost.evaluator().c()
+                )
+                self.squared_eucl_dist_cost = cost
+
+                self.costs["pusher_vel_reg"].append(self.squared_eucl_dist_cost)
 
         if self.cost_config.pusher_arc_length is not None:
             for k in range(self.num_knot_points - 1):
@@ -311,6 +331,8 @@ class NonCollisionMode(AbstractContactMode):
                 A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
                 cost = self.prog.AddL2NormCost(A, b, vars)
                 self.l2_norm_costs.append(cost)
+
+                self.costs["pusher_arc_length"].append(cost)
 
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
@@ -334,6 +356,8 @@ class NonCollisionMode(AbstractContactMode):
                             c * normalized_total_deviation**2, is_convex=True
                         )
 
+                self.costs["object_avoidance_quad"].append(self.quadratic_distance_cost)
+
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
                 planes = self.slider_geometry.get_contact_planes(
@@ -345,23 +369,26 @@ class NonCollisionMode(AbstractContactMode):
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
-                        A[0, :] = (
-                            plane.a.T
-                            * self.cost_config.distance_to_object_socp
-                            # TODO(bernhardpg): Why does this cause a bug?
-                            # / len(planes)
+                        # We want:
+                        #   min k * (1 / (a^T x + b))
+                        # which we formulate with
+                        #   min z_1^2 + ... + z_n^2 / z_0
+                        # where
+                        # z = Ax + b = [(1/k) * a^T x + b; 1]
+                        # A = [(1/k) * a^T; 0]
+                        A[0, :] = plane.a.T * (
+                            1 / self.cost_config.distance_to_object_socp
                         )
-                        # b = [b; 1]
+                        # b = [(1/k) * b; 1]
                         b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b
-                        b = b * self.cost_config.distance_to_object_socp
-                        # TODO(bernhardpg): Why does this cause a bug?
-                        # / len(planes)
+                        b[0] = plane.b * (1 / self.cost_config.distance_to_object_socp)
 
                         # z = [a^T x + b; 1]
                         cost = PerspectiveQuadraticCost(A, b)
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
+
+                        self.costs["object_avoidance_socp"].append(binding)
 
         # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
         if self.terminal_cost:  # Penalize difference from target position on slider.

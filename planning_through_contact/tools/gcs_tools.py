@@ -1,5 +1,6 @@
 from typing import List, Tuple
 
+import numpy as np
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 

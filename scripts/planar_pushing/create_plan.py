@@ -234,7 +234,8 @@ def _get_slider_pose_within_workspace(
     return slider_pose
 
 
-def get_plans_to_point(
+def get_plan_start_and_goals_to_point(
+    seed: int,
     num_plans: int,
     workspace: PlanarPushingWorkspace,
     config: PlanarPlanConfig,
@@ -242,14 +243,14 @@ def get_plans_to_point(
     limit_rotations: bool = True,  # Use this to start with
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
-    np.random.seed(1)
+    np.random.seed(seed)
 
     slider = config.slider_geometry
 
     # Hardcoded pusher start pose to be at top edge
     # of workspace
     ws = workspace.slider.new_workspace_with_buffer(new_buffer=0)
-    pusher_pose = PlanarPose(ws.center[0], ws.y_max, 0)
+    pusher_pose = PlanarPose(ws.x_min, 0, 0)
 
     plans = []
     for _ in range(num_plans):
@@ -272,7 +273,7 @@ def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
     output_dir: str = "",
     traj_name: str = "Untitled_traj",
-    visualize: bool = False,
+    save_video: bool = False,
     pusher_radius: float = 0.035,
     do_rounding: bool = True,
     interpolate_video: bool = False,
@@ -280,6 +281,8 @@ def create_plan(
     save_traj: bool = False,
     save_analysis: bool = False,
     debug: bool = False,
+    hardware: bool = False,
+    save_relaxed: bool = False,
 ):
     # Set up folders
     folder_name = f"{output_dir}/{traj_name}"
@@ -301,7 +304,7 @@ def create_plan(
 
     if debug:
         solve_data, path = do_one_run_get_path(
-            config, solver_params, start_and_goal=plan_spec
+            config, solver_params, start_and_goal=plan_spec, save_cost_vals=True
         )
     else:
         planner = PlanarPushingPlanner(config)
@@ -319,12 +322,13 @@ def create_plan(
         traj_relaxed = path.to_traj()
 
         if do_rounding:
-            traj_rounded = path.to_traj(do_rounding=True, solver_params=solver_params)
+            traj_rounded = path.to_traj(rounded=True)
         else:
             traj_rounded = None
 
         if save_traj:
-            traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
+            if save_relaxed:
+                traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
 
             if traj_rounded is not None:
                 traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")  # type: ignore
@@ -339,51 +343,34 @@ def create_plan(
                     rounded=True,
                 )
 
-        # if slider_type == "box":
-        #     slider_color = COLORS["deepskyblue4"].diffuse()
-        # elif slider_type == "sugar_box":
-        #     slider_color = COLORS["goldenrod2"].diffuse()
-        # elif slider_type == "tee":
-        #     slider_color = COLORS["aquamarine4"].diffuse()
-        # else:
-        #     raise NotImplementedError(f"Slider type {slider_type} not supported.")
-
         slider_color = COLORS["aquamarine4"].diffuse()
 
-        make_traj_figure(
-            traj_relaxed,
-            filename=f"{analysis_folder}/relaxed_traj",
-            slider_color=slider_color,
-            split_on_mode_type=True,
-        )
-        plot_forces(traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces")
+        if save_relaxed:
+            make_traj_figure(
+                traj_relaxed,
+                filename=f"{analysis_folder}/relaxed_traj",
+                slider_color=slider_color,
+                split_on_mode_type=True,
+                show_workspace=hardware,
+            )
+
+            if save_analysis:
+                plot_forces(
+                    traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces"
+                )
+
         if traj_rounded is not None:
             make_traj_figure(
                 traj_rounded,
                 filename=f"{analysis_folder}/rounded_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
-            )
-            plot_forces(traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces")
-
-        if visualize:
-            ani = visualize_planar_pushing_trajectory(
-                traj_relaxed,  # type: ignore
-                save=True,
-                # show=True,
-                filename=f"{analysis_folder}/relaxed_traj",
-                visualize_knot_points=not interpolate_video,
-                lims=animation_lims,
+                show_workspace=hardware,
             )
 
-            if traj_rounded is not None:
-                ani = visualize_planar_pushing_trajectory(
-                    traj_rounded,  # type: ignore
-                    save=True,
-                    # show=True,
-                    filename=f"{analysis_folder}/rounded_traj",
-                    visualize_knot_points=not interpolate_video,
-                    lims=animation_lims,
+            if save_analysis:
+                plot_forces(
+                    traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces"
                 )
 
                 compare_trajs(
@@ -394,7 +381,27 @@ def create_plan(
                     filename=f"{analysis_folder}/comparison",
                 )
 
-            return ani
+        if save_video:
+            if save_relaxed:
+                ani = visualize_planar_pushing_trajectory(
+                    traj_relaxed,  # type: ignore
+                    save=True,
+                    # show=True,
+                    filename=f"{analysis_folder}/relaxed_traj",
+                    visualize_knot_points=not interpolate_video,
+                    lims=animation_lims,
+                )
+
+            if traj_rounded is not None:
+                ani = visualize_planar_pushing_trajectory(
+                    traj_rounded,  # type: ignore
+                    save=True,
+                    # show=True,
+                    filename=f"{analysis_folder}/rounded_traj",
+                    visualize_knot_points=not interpolate_video,
+                    lims=animation_lims,
+                )
+                return ani
 
 
 def _get_time_as_str() -> str:
@@ -407,121 +414,80 @@ def _get_time_as_str() -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--seed",
+        help="Random seed for generating trajectories",
+        type=int,
+        default=1,
+    )
+    parser.add_argument(
         "--traj",
-        help="Which trajectory to plan",
+        help="(Optional) specify a specific trajectory number to generate, with the given random seed.",
         type=int,
         default=None,
     )
     parser.add_argument(
         "--body",
-        help="Which body to plan for",
+        help="Which slider body to use.",
         type=str,
         default="box",
     )
-    parser.add_argument("--round", help="Do nonlinear rounding", action="store_true")
-    parser.add_argument("--demos", help="Generate demos", action="store_true")
-    parser.add_argument("--hardware_demos", help="Generate demos", action="store_true")
-    parser.add_argument("--debug", help="Debug mode", action="store_true")
     parser.add_argument(
-        "--interpolate", help="Interpolate trajectory in video", action="store_true"
+        "--num",
+        help="Number of trajectories to generate",
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
+        "--save_relaxed",
+        help="Also save the relaxed trajectory, which may not be feasible.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--hardware_demos",
+        help="Generate demos for hardware experiments.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--debug",
+        help="Debug mode. Will output a number of additional data.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--interpolate",
+        help="Interpolate trajectory in video (does not impact the plans themselves).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--output_dir", help="Output directory.", type=str, default="trajectories"
     )
     args = parser.parse_args()
+    seed = args.seed
     traj_number = args.traj
-    make_demos = args.demos
     hardware_demos = args.hardware_demos
     debug = args.debug
-    rounding = args.round
+    rounding = True
     interpolate = args.interpolate
     slider_type = args.body
+    num_trajs = args.num
+    output_dir = args.output_dir
+    save_relaxed = args.save_relaxed
 
     pusher_radius = 0.015
 
-    time_in_contact = 6.0
-    time_in_non_collision = 2.0
-
-    use_old_params = False
-    if use_old_params:
-        if slider_type == "box":
-            slider = get_box()
-        elif slider_type == "tee":
-            slider = get_tee()
-        elif slider_type == "sugar_box":
-            slider = get_sugar_box()
-        else:
-            raise NotImplementedError("")
-
-        dynamics_config = SliderPusherSystemConfig(
-            pusher_radius=pusher_radius,
-            slider=slider,
-            friction_coeff_slider_pusher=0.25,
-            friction_coeff_table_slider=0.5,
-            integration_constant=0.02,
-        )
-
-        # Configure contact cost
-        contact_cost = ContactCost(
-            cost_type=ContactCostType.OPTIMAL_CONTROL,
-            force_regularization=5.0,
-            ang_displacements=1.0,
-            lin_displacements=1.0,
-            mode_transition_cost=None,
-        )
-
-        contact_config = ContactConfig(
-            cost=contact_cost,
-            lam_min=0.47,
-            lam_max=0.53,
-            delta_vel_max=0.05 * 2,
-            delta_theta_max=0.4 * 2,
-        )
-
-        # Configure non-collision cost
-        non_collision_cost = NonCollisionCost(
-            distance_to_object_quadratic=None,
-            distance_to_object_socp=1.0,
-            pusher_velocity_regularization=1.0,
-            pusher_arc_length=None,
-        )
-
-        config = PlanarPlanConfig(
-            dynamics_config=dynamics_config,
-            time_in_contact=time_in_contact,
-            time_non_collision=time_in_non_collision,
-            num_knot_points_contact=4,
-            num_knot_points_non_collision=4,
-            allow_teleportation=False,
-            use_band_sparsity=True,
-            use_entry_and_exit_subgraphs=True,
-            contact_config=contact_config,
-            continuity_on_pusher_velocity=True,
-            non_collision_cost=non_collision_cost,
-        )
-
-        solver_params = PlanarSolverParams(
-            measure_solve_time=True,
-            gcs_max_rounded_paths=20,
-            print_flows=False,
-            print_solver_output=debug,
-            save_solver_output=False,
-            print_path=debug,
-            print_cost=debug,
-            assert_result=True,
-        )
-
-    else:
-        config = get_default_plan_config(
-            slider_type=slider_type,
-            pusher_radius=pusher_radius,
-            integration_constant=0.3,
-            friction_coeff=0.05,
-            lam_buffer=0.25,
-        )
-        solver_params = get_default_solver_params(debug, clarabel=False)
+    config = get_default_plan_config(
+        slider_type=slider_type,
+        pusher_radius=pusher_radius,
+        hardware=hardware_demos,
+    )
+    solver_params = get_default_solver_params(debug, clarabel=False)
 
     if hardware_demos:
-        output_dir = "demos"
+        output_dir = "hardware_demos"
         os.makedirs(output_dir, exist_ok=True)
         folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
+        if traj_number is not None:
+            folder_name += f"_traj_{traj_number}"
+
         os.makedirs(folder_name, exist_ok=True)
 
         workspace = PlanarPushingWorkspace(
@@ -533,23 +499,31 @@ if __name__ == "__main__":
             ),
         )
 
-        num_demos = 200
-        plans = get_plans_to_point(
-            num_demos, workspace, config, (0.575, -0.04285714), limit_rotations=False
+        num_trajs = 30
+        plans = get_plan_start_and_goals_to_point(
+            seed,
+            num_trajs,
+            workspace,
+            config,
+            (0.575, -0.04285714),
+            limit_rotations=False,
         )
+        print("Finished finding random plans within workspace")
         if traj_number is not None:
             create_plan(
                 plans[traj_number],
                 debug=debug,
                 output_dir=folder_name,
                 traj_name=f"hw_demo_{traj_number}",
-                visualize=True,
+                save_video=True,
                 pusher_radius=pusher_radius,
                 save_traj=True,
                 animation_lims=None,
                 interpolate_video=interpolate,
-                save_analysis=True,
+                save_analysis=debug,
                 do_rounding=rounding,
+                hardware=True,
+                save_relaxed=save_relaxed,
             )
         else:
             for idx, plan in enumerate(plans):
@@ -558,25 +532,68 @@ if __name__ == "__main__":
                     output_dir=folder_name,
                     debug=debug,
                     traj_name=f"hw_demo_{idx}",
-                    visualize=True,
+                    save_video=True,
                     pusher_radius=pusher_radius,
                     save_traj=True,
                     animation_lims=None,
                     interpolate_video=interpolate,
-                    save_analysis=True,
+                    save_analysis=debug,
                     do_rounding=rounding,
+                    hardware=True,
+                    save_relaxed=save_relaxed,
                 )
     else:
-        plan_spec = get_predefined_plan(traj_number)
+        os.makedirs(output_dir, exist_ok=True)
+        folder_name = f"{output_dir}/run_{_get_time_as_str()}_{slider_type}"
+        if traj_number is not None:
+            folder_name += f"_traj_{traj_number}"
+        os.makedirs(folder_name, exist_ok=True)
 
-        create_plan(
-            plan_spec,
-            debug=debug,
-            pusher_radius=pusher_radius,
-            slider_type=args.body,
-            traj_name=str(traj_number),
-            visualize=True,
-            save_traj=True,
-            save_analysis=True,
-            do_rounding=rounding,
+        workspace = PlanarPushingWorkspace(
+            slider=BoxWorkspace(
+                width=0.6,
+                height=0.6,
+                center=np.array([0.0, 0.0]),
+                buffer=0,
+            ),
         )
+
+        plans = get_plan_start_and_goals_to_point(
+            seed,
+            num_trajs,
+            workspace,
+            config,
+            (0.0, 0.0),
+            limit_rotations=False,
+        )
+        if traj_number is not None:
+            create_plan(
+                plans[traj_number],
+                debug=debug,
+                output_dir=folder_name,
+                traj_name=f"run_{traj_number}",
+                save_video=True,
+                pusher_radius=pusher_radius,
+                save_traj=True,
+                animation_lims=None,
+                interpolate_video=interpolate,
+                save_analysis=debug,
+                do_rounding=rounding,
+                save_relaxed=save_relaxed,
+            )
+        else:
+            for idx, plan in enumerate(plans):
+                create_plan(
+                    plan,
+                    output_dir=folder_name,
+                    debug=debug,
+                    traj_name=f"run_{idx}",
+                    save_video=True,
+                    pusher_radius=pusher_radius,
+                    save_traj=True,
+                    animation_lims=None,
+                    interpolate_video=interpolate,
+                    save_analysis=debug,
+                    do_rounding=rounding,
+                    save_relaxed=save_relaxed,
+                )

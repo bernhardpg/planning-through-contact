@@ -1,6 +1,7 @@
 from itertools import combinations
 from typing import Dict, List, Literal, Optional, Tuple
 
+import numpy as np
 import pydot
 import pydrake.geometry.optimization as opt
 from pydrake.geometry.optimization import Point
@@ -61,6 +62,7 @@ class PlanarPushingPlanner:
 
         self.source = None
         self.target = None
+        self.relaxed_gcs_result = None
 
         if (
             self.config.non_collision_cost.avoid_object
@@ -352,39 +354,59 @@ class PlanarPushingPlanner:
 
         return pair
 
-    def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
-        options = opt.GraphOfConvexSetsOptions()
+    def _get_mosek_params(
+        self,
+        solver_params: PlanarSolverParams,
+        tolerance: float = 1e-5,
+        presolve: bool = True,
+    ) -> SolverOptions:
+        solver_options = SolverOptions()
         if solver_params.print_solver_output:
-            options.solver_options = SolverOptions()
-            # options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
-            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            # solver_options.SetOption(CommonSolverOption.kPrintFileName, "optimization_log.txt")  # type: ignore
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
         if solver_params.save_solver_output:
-            options.solver_options = SolverOptions()
-            options.solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
+            solver_options.SetOption(CommonSolverOption.kPrintFileName, "solver_log.txt")  # type: ignore
+
+        mosek = MosekSolver()
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+        )
+
+        solver_options.SetOption(
+            mosek.solver_id(),
+            "MSK_DPAR_OPTIMIZER_MAX_TIME",
+            solver_params.max_mosek_solve_time,
+        )
+
+        if not presolve:
+            solver_options.SetOption(mosek.solver_id(), "MSK_IPAR_PRESOLVE_USE", 0)
+
+        return solver_options
+
+    def _solve(self, solver_params: PlanarSolverParams) -> MathematicalProgramResult:
+        """
+        Returns the relaxed GCS result, potentially with non-binary flow values.
+        """
+        options = opt.GraphOfConvexSetsOptions()
 
         options.convex_relaxation = solver_params.gcs_convex_relaxation
         if solver_params.gcs_convex_relaxation:
-            options.preprocessing = True  # TODO(bernhardpg): should this be changed?
-            options.max_rounded_paths = solver_params.gcs_max_rounded_paths
+            options.preprocessing = True
+            # We want to solve only the convex relaxation first
+            options.max_rounded_paths = 0
 
         if solver_params.solver == "mosek":
             mosek = MosekSolver()
             options.solver = mosek
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", 1e-5
-            )
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", 1e-5
-            )
-            options.solver_options.SetOption(
-                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-5
-            )
-
-            options.solver_options.SetOption(
-                mosek.solver_id(),
-                "MSK_DPAR_OPTIMIZER_MAX_TIME",
-                300.0,
+            options.solver_options = self._get_mosek_params(
+                solver_params, 1e-4, presolve=False
             )
         else:  # clarabel
             clarabel = ClarabelSolver()
@@ -413,62 +435,156 @@ class PlanarPushingPlanner:
 
         return result
 
-    def get_vertex_solution_path(
+    def get_solution_paths(
         self,
         result: MathematicalProgramResult,
-    ) -> List[GcsVertex]:
+        solver_params: PlanarSolverParams,
+    ) -> Optional[List[PlanarPushingPath]]:
         """
-        Returns the vertices on the solution path in the correct order,
-        given a MathematicalProgramResult.
+        Returns N solution paths, sorted in increasing order based on optimal cost,
+        where N = solver_params.rounding_steps.
         """
-        path = self.get_solution_path(result)
-        return path.get_vertices()
-
-    def get_solution_path(self, result: MathematicalProgramResult) -> PlanarPushingPath:
         assert self.source is not None
         assert self.target is not None
 
-        path = PlanarPushingPath.from_result(
-            self.gcs,
-            result,
-            self.source.vertex,
-            self.target.vertex,
-            self._get_all_vertex_mode_pairs(),
+        options = opt.GraphOfConvexSetsOptions()
+        options.max_rounded_paths = solver_params.rounding_steps
+        options.max_rounding_trials = solver_params.max_rounding_trials
+
+        options.convex_relaxation = True
+        options.preprocessing = True
+
+        options.solver_options = self._get_mosek_params(solver_params, 1e-5)
+
+        paths, results = self.gcs.GetRandomizedSolutionPath(
+            self.source.vertex, self.target.vertex, result, options
         )
-        return path
 
-    def plan_path(self, solver_params: PlanarSolverParams) -> PlanarPushingPath:
+        flows = [result.GetSolution(e.phi()) for e in self.gcs.Edges()]
+
+        # Sort the paths and results by optimal cost
+        paths_and_results = zip(paths, results)
+        only_successful_res = [
+            pair for pair in paths_and_results if pair[1].is_success()
+        ]
+
+        if len(only_successful_res) == 0:
+            return None
+
+        # if len(only_successful_res) == 0:
+        #     raise RuntimeError("No trajectories rounded succesfully")
+
+        sorted_res = sorted(
+            only_successful_res, key=lambda pair: pair[1].get_optimal_cost()
+        )
+        paths, results = zip(*sorted_res)
+
+        paths = [
+            PlanarPushingPath.from_path(
+                self.gcs,
+                result,
+                path,
+                self._get_all_vertex_mode_pairs(),
+                assert_nan_values=solver_params.assert_nan_values,
+            )
+            for path, result in zip(paths, results)
+        ]
+
+        return paths
+
+    def _plan_paths(
+        self, solver_params: PlanarSolverParams
+    ) -> Optional[List[PlanarPushingPath]]:
+        """
+        Plans a path.
+        """
         assert self.source is not None
         assert self.target is not None
 
-        import time
-
-        start = time.time()
-        result = self._solve(solver_params)
-        end = time.time()
+        gcs_result = self._solve(solver_params)
+        self.relaxed_gcs_result = gcs_result
 
         if solver_params.assert_result:
-            assert result.is_success()
+            assert gcs_result.is_success()
         else:
-            if not result.is_success():
+            if not gcs_result.is_success():
                 print("WARNING: Solver did not find a solution!")
 
+        if not gcs_result.is_success():
+            return None
+
         if solver_params.measure_solve_time:
-            elapsed_time = end - start
-            print(f"Total elapsed optimization time: {elapsed_time}")
+            print(
+                f"Total elapsed optimization time: {gcs_result.get_solver_details().optimizer_time}"
+            )
 
         if solver_params.print_cost:
-            cost = result.get_optimal_cost()
+            cost = gcs_result.get_optimal_cost()
             print(f"Cost: {cost}")
 
-        self.path = PlanarPushingPath.from_result(
-            self.gcs,
-            result,
-            self.source.vertex,
-            self.target.vertex,
-            self._get_all_vertex_mode_pairs(),
-            assert_nan_values=solver_params.assert_nan_values,
+        # Get N paths from GCS rounding, pick the best one
+        paths = self.get_solution_paths(
+            gcs_result,
+            solver_params,
         )
+
+        if paths is None:
+            print("No gcs paths found")
+            return None
+        else:
+            if solver_params.print_rounding_details:
+                print(f"num rounded paths: {len(paths)}")
+
+            return paths
+
+    def _get_rounded_paths(
+        self, solver_params: PlanarSolverParams, paths: List[PlanarPushingPath]
+    ) -> Optional[List[PlanarPushingPath]]:
+        if solver_params.rounding_steps > 0:
+            for path in paths:
+                path.do_rounding(solver_params)
+
+            feasible_paths = [
+                p
+                for p in paths
+                if p.rounded_result is not None and p.rounded_result.is_success()
+            ]
+
+            if solver_params.print_rounding_details:
+                print(f"num rounded feasible paths: {len(feasible_paths)}")
+
+            if len(feasible_paths) == 0:
+                return None
+            else:
+                return feasible_paths
+        else:
+            raise NotImplementedError("Must enable rounding steps")
+
+    def _pick_best_path(self, paths: List[PlanarPushingPath]) -> PlanarPushingPath:
+        rounded_costs = [
+            p.rounded_result.get_optimal_cost()
+            for p in paths
+            if p.rounded_result is not None  # type
+        ]
+
+        best_idx = np.argmin(rounded_costs)
+        path = paths[best_idx]
+
+        return path
+
+    def plan_path(
+        self, solver_params: PlanarSolverParams
+    ) -> Optional[PlanarPushingPath]:
+        paths = self._plan_paths(solver_params)
+        if paths is None:
+            return None
+
+        feasible_paths = self._get_rounded_paths(solver_params, paths)
+        if feasible_paths is None:
+            return None
+
+        self.path = self._pick_best_path(feasible_paths)
+
         if solver_params.print_path:
             print(f"path: {self.path.get_path_names()}")
 
