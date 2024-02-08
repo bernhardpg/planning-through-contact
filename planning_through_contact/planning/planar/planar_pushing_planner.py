@@ -561,12 +561,7 @@ class PlanarPushingPlanner:
             raise NotImplementedError("Must enable rounding steps")
 
     def _pick_best_path(self, paths: List[PlanarPushingPath]) -> PlanarPushingPath:
-        rounded_costs = [
-            p.rounded_result.get_optimal_cost()
-            for p in paths
-            if p.rounded_result is not None  # type
-        ]
-
+        rounded_costs = [p.rounded_cost for p in paths]
         best_idx = np.argmin(rounded_costs)
         path = paths[best_idx]
 
