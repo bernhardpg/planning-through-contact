@@ -11,6 +11,7 @@ from omegaconf import OmegaConf, open_dict
 from pydrake.all import (
     StartMeshcat,
 )
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -83,6 +84,18 @@ def main(cfg: OmegaConf) -> None:
     except FileNotFoundError:
         logger.error(f"Trajectory file {traj_file} not found")
         return
+    
+    # NEW_TIME = 4
+    # new_config = traj.config
+    # new_config.time_non_collision = NEW_TIME
+    # new_knot_points = traj.path_knot_points
+    # for knot_points in new_knot_points:
+    #     if isinstance(knot_points, NonCollisionVariables):
+    #         knot_points.time_in_mode = NEW_TIME
+
+    # new_traj = PlanarPushingTrajectory(new_config, new_knot_points)
+    # traj = new_traj
+
     mpc_config: HybridMpcConfig = instantiate(cfg.mpc_config)
     optitrack_config: OptitrackConfig = instantiate(cfg.optitrack_config)
 

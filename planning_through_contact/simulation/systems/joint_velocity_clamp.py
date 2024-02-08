@@ -42,16 +42,16 @@ class JointVelocityClamp(LeafSystem):
                 )
                 velocity = (joint_positions_commanded[i] - last_command[i]) / time_step
                 speed = abs(velocity)
-                accel_sign = 1.0 if velocity > last_velocity[i] else -1.0
-                acceleration_mag = abs(velocity - last_velocity[i]) / time_step
-                if acceleration_mag > self._joint_acceleration_limits[i]:
-                    speed = (
-                        last_velocity[i]
-                        + self._joint_acceleration_limits[i] * time_step * accel_sign
-                    )
-                    # logger.warn(
-                    #     f"({context.get_time()}) clamped acceleration {acceleration_mag} to {self._joint_acceleration_limits[i]}"
-                    # )
+                # accel_sign = 1.0 if velocity > last_velocity[i] else -1.0
+                # acceleration_mag = abs(velocity - last_velocity[i]) / time_step
+                # if acceleration_mag > self._joint_acceleration_limits[i]:
+                #     speed = (
+                #         last_velocity[i]
+                #         + self._joint_acceleration_limits[i] * time_step * accel_sign
+                #     )
+                #     # logger.warn(
+                #     #     f"({context.get_time()}) clamped acceleration {acceleration_mag} to {self._joint_acceleration_limits[i]}"
+                #     # )
                 if speed > self._joint_velocity_limits[i]:
                     # Above speed limit
                     joint_positions_clamped[i] = (
