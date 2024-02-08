@@ -96,10 +96,10 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=1,
-        closed_loop=False,
+        closed_loop=True,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
-        save_plots=True,
+        save_plots=False,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
         camera_config=camera_config,
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     print(f"state estimator meshcat")
     state_estimator_meshcat = StartMeshcat()
     run_sim(
-        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_2/trajectory/traj_rounded.pkl",
+        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

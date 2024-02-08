@@ -263,30 +263,6 @@ def plot_and_save_planar_pushing_logs_from_sim(
         save_dir=save_dir,
     )
 
-def collect_planar_pushing_data(
-    pusher_desired: PlanarPushingLog,
-    slider_actual: PlanarPushingLog,
-    save_dir: Optional[str] = '.'
-) -> None:
-    data = {}
-    data["pusher_desired"] = {
-        "t": pusher_desired.t,
-        "x": pusher_desired.x,
-        "y": pusher_desired.y,
-        "theta": pusher_desired.theta,
-    }
-    data["slider_final"] = {
-        "t": slider_actual.t[-1],
-        "x": slider_actual.x[-1],
-        "y": slider_actual.y[-1],
-        "theta": slider_actual.theta[-1],
-    }
-    
-    import os
-    pkl_path = os.path.join(save_dir, "planar_pushing_data.pkl")
-    with open(pkl_path, "wb") as f:
-        pickle.dump(data, f)
-
 def plot_planar_pushing_trajectory(
     actual: PlanarPushingLog,
     desired: PlanarPushingLog,
