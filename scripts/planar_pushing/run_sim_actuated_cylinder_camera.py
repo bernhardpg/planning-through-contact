@@ -28,8 +28,8 @@ from planning_through_contact.simulation.controllers.mpc_position_source import 
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
-from planning_through_contact.simulation.environments.table_environment import (
-    TableEnvironment,
+from planning_through_contact.simulation.environments.data_collection_table_environment import (
+    DataCollectionTableEnvironment,
 )
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
@@ -99,7 +99,7 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=1,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=False,
@@ -109,19 +109,8 @@ def run_sim(
         collect_data=True,
         data_dir = data_collection_dir
     )
-    # Commented out code for generating values for hybrid MPC tests
-    # for t in [4, 8]:
-    #     print(traj.get_slider_planar_pose(t))
-    #     print(traj.get_mode(t))
-    # for seg in traj.traj_segments:
-    #     print(f"Segment with mode {seg.mode}, {type(seg)}, from {seg.start_time} to {seg.end_time}")
-
-    ## Choose position source
-    # Option 1: Use teleop
-    # teleop = dict(input_limit= 1.0, step_size=0.01, start_translation=[0.0,0.0])
-    # position_source = TeleopPositionSource(sim_config=sim_config, teleop_config=teleop, meshcat=station_meshcat)
-
-    # Option 2: Use open/closed loop controller based on planned trajectory
+    # Using MPCPositionSource in open loop to output the pusher and slider
+    # states directly to the state estimator for data collection
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
 
     ## Set up position controller
@@ -129,7 +118,7 @@ def run_sim(
         sim_config=sim_config, meshcat=station_meshcat
     )
 
-    environment = TableEnvironment(
+    environment = DataCollectionTableEnvironment(
         desired_position_source=position_source,
         robot_system=position_controller,
         sim_config=sim_config,
