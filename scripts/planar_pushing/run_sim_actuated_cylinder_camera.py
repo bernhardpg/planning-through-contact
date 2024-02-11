@@ -1,5 +1,7 @@
 import numpy as np
 import argparse
+import os
+from tqdm import tqdm
 
 from pydrake.all import ContactModel, StartMeshcat
 from pydrake.systems.sensors import (
@@ -131,7 +133,7 @@ def run_sim(
         if save_recording
         else None
     )
-    environment.export_diagram("environment_diagram.pdf")
+    # environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
 
@@ -151,20 +153,20 @@ def run_sim(
 
 
 def run_multiple(
-    start: int, end: int, station_meshcat=None, state_estimator_meshcat=None
+    plans: list,
+    save_dir: str,
+    station_meshcat=None, 
+    state_estimator_meshcat=None
 ):
-    plans = [
-        f"trajectories/box_pushing_demos/hw_demo_C_{i}_rounded.pkl"
-        for i in range(start, end + 1)
-    ] + [
-        f"trajectories/box_pushing_demos/hw_demo_C_{i}.pkl"
-        for i in range(start, end + 1)
-    ]
     print(f"Running {len(plans)} plans\n{plans}")
-    for plan in plans:
+    for plan in tqdm(plans):
+        if not os.path.exists(plan):
+            print(f"Plan {plan} does not exist. Skipping.")
+            continue
         run_sim(
             plan,
-            save_recording=True,
+            data_collection_dir=save_dir,
+            save_recording=False,
             debug=False,
             station_meshcat=station_meshcat,
             state_estimator_meshcat=state_estimator_meshcat,
@@ -176,19 +178,43 @@ def run_multiple(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default=None)
+    parser.add_argument("--save_dir", type=str, default=None)
+    parser.add_argument("--trajectory_dir", type=str, default=None)
     args = parser.parse_args()
 
-    print(f"station meshcat")
-    station_meshcat = StartMeshcat()
-    print(f"state estimator meshcat")
-    state_estimator_meshcat = StartMeshcat()
-    run_sim(
-        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
-        # plan="trajectories/run_20240208221258_box/run_0/trajectory/traj_rounded.pkl",
-        data_collection_dir=args.data_dir,
-        save_recording=False,
-        debug=False,
-        station_meshcat=station_meshcat,
-        state_estimator_meshcat=state_estimator_meshcat,
-    )
+    if args.trajectory_dir is None:
+        print(f"station meshcat")
+        station_meshcat = StartMeshcat()
+        print(f"state estimator meshcat")
+        state_estimator_meshcat = StartMeshcat()
+        run_sim(
+            # plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
+            plan="data_collection_trajectories/traj_2/trajectory/traj_rounded.pkl",
+            data_collection_dir=args.save_dir,
+            save_recording=False,
+            debug=False,
+            station_meshcat=station_meshcat,
+            state_estimator_meshcat=state_estimator_meshcat,
+        )
+    else:
+        traj_dir = args.trajectory_dir
+        list_dir = os.listdir(traj_dir)
+        plans = []
+        for name in list_dir:
+            if os.path.isdir(os.path.join(traj_dir, name)):
+                plan = os.path.join(traj_dir, name, "trajectory", "traj_rounded.pkl")
+                plans.append(plan)
+        # note that plans is not stored in numerical order
+        # i.e. index i is not necessarily the i-th plan
+                
+        print(f"station meshcat")
+        station_meshcat = StartMeshcat()
+        print(f"state estimator meshcat")
+        state_estimator_meshcat = StartMeshcat()
+
+        run_multiple(
+            plans=plans,
+            save_dir=args.save_dir,
+            station_meshcat=station_meshcat,
+            state_estimator_meshcat=state_estimator_meshcat,
+        )

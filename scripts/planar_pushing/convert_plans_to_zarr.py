@@ -22,7 +22,7 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str)
-    parser.add_argument("--debug", type=bool, default=False)
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
     data_dir = pathlib.Path(args.data_dir)
     debug = args.debug
@@ -44,8 +44,6 @@ def main():
         # load pickle file and timing variables
         combined_logs = pickle.load(open(log_path, 'rb'))
         pusher_desired = combined_logs.pusher_desired
-        pusher_actual = combined_logs.pusher_actual
-        slider_actual = combined_logs.slider_actual
         slider_desired = combined_logs.slider_desired
 
         freq = 10.0
@@ -53,44 +51,27 @@ def main():
         t = combined_logs.pusher_desired.t
         total_time = math.floor(t[-1] * freq) / freq
         
-        # check if plan and rollout are reasonable
-        trans_tol = 0.01 # 1cm
-        rot_tol = 5.0 * np.pi / 180.0 # 5 degrees
-        if abs(slider_actual.x[-1] - slider_desired.x[-1]) > trans_tol:
-            return
-        if abs(slider_actual.y[-1] - slider_desired.y[-1]) > trans_tol:
-            return
-        if abs(slider_actual.theta[-1] - slider_desired.theta[-1]) > rot_tol:
-            return
-
         # get start time
         start_idx = get_start_idx(pusher_desired)   
         start_time = math.ceil(t[start_idx]*freq) / freq
 
         # get state, action, images
         state = []
-        action = []
         current_time = start_time
         idx = start_idx
         images = []
         while current_time < total_time:
             # state and action
             idx = get_closest_index(t, current_time, idx)
-            current_state = np.array([pusher_actual.x[idx], 
-                                    pusher_actual.y[idx], 
-                                    pusher_actual.theta[idx]
-            ])
-            current_action = np.array([pusher_desired.x[idx], 
+            current_state = np.array([pusher_desired.x[idx], 
                                     pusher_desired.y[idx], 
                                     pusher_desired.theta[idx]
             ])
             state.append(current_state)
-            action.append(current_action)
-
+        
             # image
-            # this line can be simplified but it is clearer this way
-            # image name is time in ms (hence * 10000) rounded to
-            # the nearest 100 (hence the * 100 and / 100)
+            # This line can be simplified but it is clearer this way.
+            # Image names are "{time in ms}" rounded to the nearest 100th
             image_name = round((current_time * 1000) / 100) * 100
             image_path = image_dir.joinpath(f"{int(image_name)}.png")
             img = Image.open(image_path).convert('RGB')
@@ -98,21 +79,25 @@ def main():
             images.append(img)
             if debug:
                 from matplotlib import pyplot as plt
-                plt.imshow(img)
+                print(f"\nCurrent time: {current_time}")
+                print(f"Current index: {idx}")
+                print(f"Image path: {image_path}")
+                print(f"Current state: {current_state}")
+                plt.imshow(img[6:-6, 6:-6, :])
                 plt.show()
 
             # update current time
             current_time = round((current_time + dt) * freq) / freq
 
         state = np.array(state)
-        action = np.array(action)
+        action = np.concatenate([state[1:], state[-1:]], axis=0)
         images = np.array(images)
 
-        # get target with actual slider
+        # get target with desired slider position
         last_idx = get_closest_index(t, total_time)
-        target = np.array([slider_actual.x[last_idx], 
-                        slider_actual.y[last_idx], 
-                        slider_actual.theta[last_idx]
+        target = np.array([slider_desired.x[last_idx], 
+                        slider_desired.y[last_idx], 
+                        slider_desired.theta[last_idx]
         ])
         target = np.array([target for _ in range(len(state))])
 

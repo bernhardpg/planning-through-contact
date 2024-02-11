@@ -11,6 +11,7 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Simulator,
+    StateInterpolatorWithDiscreteDerivative
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -38,6 +39,9 @@ from planning_through_contact.simulation.state_estimators.state_estimator import
 )
 from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import (
     RigidTransformToPlanarPoseVectorSystem,
+)
+from planning_through_contact.simulation.systems.planar_pose_to_generalized_coords import (
+    PlanarPoseToGeneralizedCoords,
 )
 from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
@@ -103,6 +107,29 @@ class DataCollectionTableEnvironment:
                     X_optitrackBody_plantBody=optitrack_config.X_optitrackBody_plantBody,
                 ),
             )
+        
+        # Add system to convert desired position to desired position and velocity.
+        self._desired_state_source = builder.AddNamedSystem(
+            "DesiredStateInterpolator",
+            StateInterpolatorWithDiscreteDerivative(
+                self._robot_system._num_positions,
+                self._sim_config.time_step,
+                suppress_initial_transient=True,
+            ),
+        )
+
+        # Add system to convert slider_pose to generalized coords
+        if self._sim_config.slider.name == "box":
+            z_value = self._sim_config.slider.geometry.height / 2.0
+        else: # T
+            z_value = self._sim_config.slider.geometry.box_1.height / 2.0
+        self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
+            "PlanarPoseToGeneralizedCoords",
+            PlanarPoseToGeneralizedCoords(
+                z_value=z_value,
+                z_axis_is_positive=True,
+            ),
+        )
 
         ## Connect systems
 
@@ -129,11 +156,17 @@ class DataCollectionTableEnvironment:
 
         # Inputs to state estimator
         # Connections to update the robot state within state estimator
-        # TODO:
+        
         builder.Connect(
-            self._robot_system.GetOutputPort("robot_state_measured"),
+            self._desired_position_source.GetOutputPort("planar_position_command"),
+            self._desired_state_source.get_input_port(),
+        )
+
+        builder.Connect(
+            self._desired_state_source.get_output_port(),
             self._state_estimator.GetInputPort("robot_state"),
         )
+
         if sim_config.use_hardware:
             # TODO connect Optitrack system
             # For now set the object_position to be constant
@@ -148,24 +181,18 @@ class DataCollectionTableEnvironment:
             # )
             pass
         else:
-            # Connections to update the object position within state estimator
             self._plant = self._robot_system.station_plant
             self._slider = self._robot_system.slider
-            slider_demux = builder.AddSystem(
-                Demultiplexer(
-                    [
-                        self._plant.num_positions(self._slider),
-                        self._plant.num_velocities(self._slider),
-                    ]
-                )
+            
+            # Connections to update the object position within state estimator
+            builder.Connect(
+                self._desired_position_source.GetOutputPort(
+                    "desired_slider_planar_pose_vector"
+                ),
+                self._slider_pose_to_generalized_coords.get_input_port()
             )
             builder.Connect(
-                self._robot_system.GetOutputPort("object_state_measured"),
-                slider_demux.get_input_port(),
-            )
-            # TODO:
-            builder.Connect(
-                slider_demux.get_output_port(0),
+                self._slider_pose_to_generalized_coords.get_output_port(),
                 self._state_estimator.GetInputPort("object_position"),
             )
 
@@ -251,8 +278,8 @@ class DataCollectionTableEnvironment:
                 image_writer_system
             )
             builder.Connect(
-                self._robot_system.GetOutputPort(
-                    "rgbd_sensor_overhead_camera"
+                self._state_estimator.GetOutputPort(
+                    "rgbd_sensor_state_estimator_overhead_camera"
                 ),
                 image_writer.get_input_port()
             )
@@ -392,9 +419,6 @@ class DataCollectionTableEnvironment:
     def save_data(self):
         import pathlib
 
-        if self._sim_config.save_plots:
-            # data has already been saved in save_plots()
-            return
         if self._sim_config.collect_data:
             assert self._sim_config.data_dir is not None
 
@@ -428,8 +452,12 @@ class DataCollectionTableEnvironment:
 
             # assumes that a directory for this trajectory has already been
             # created (when saving the images)
-            traj_idx = str(0)
-            save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(traj_idx)
+            traj_idx = -1
+            for path in os.listdir(self._sim_config.data_dir):
+                if os.path.isdir(os.path.join(self._sim_config.data_dir, path)):
+                    traj_idx += 1
+            assert traj_idx >= 0
+            save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(str(traj_idx))
             log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
             with open(log_path, "wb") as f:
                 pickle.dump(combined, f)

@@ -65,6 +65,27 @@ class StateEstimator(Diagram):
         self.slider = AddSliderAndConfigureContact(
             sim_config=sim_config, plant=self._plant, scene_graph=self._scene_graph
         )
+
+        # Add camera
+        if sim_config.camera_config is not None:
+            from pydrake.systems.sensors import (
+                ApplyCameraConfig
+            )
+
+            ApplyCameraConfig(
+                config=sim_config.camera_config,
+                builder=builder,
+                plant=self._plant,
+                scene_graph=self._scene_graph,
+            )
+
+            builder.ExportOutput(
+                builder.GetSubsystemByName(
+                    "rgbd_sensor_overhead_camera"
+                ).color_image_output_port(),
+                "rgbd_sensor_state_estimator_overhead_camera",
+            )
+
         # Add system for updating the plant
         self._plant_updater: PlantUpdater = builder.AddNamedSystem(
             "plant_updater",

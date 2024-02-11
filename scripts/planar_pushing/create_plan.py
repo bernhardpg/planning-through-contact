@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -240,6 +241,7 @@ def get_plan_start_and_goals_to_point(
     workspace: PlanarPushingWorkspace,
     config: PlanarPlanConfig,
     point: Tuple[float, float] = (0, 0),  # Default is origin
+    init_pusher_pose: Optional[PlanarPose] = None,
     limit_rotations: bool = True,  # Use this to start with
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
@@ -250,7 +252,10 @@ def get_plan_start_and_goals_to_point(
     # Hardcoded pusher start pose to be at top edge
     # of workspace
     ws = workspace.slider.new_workspace_with_buffer(new_buffer=0)
-    pusher_pose = PlanarPose(ws.x_min, 0, 0)
+    if init_pusher_pose is not None:
+        pusher_pose = init_pusher_pose
+    else:
+        pusher_pose = PlanarPose(ws.x_min, 0, 0)
 
     plans = []
     for _ in range(num_plans):
@@ -460,6 +465,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_dir", help="Output directory.", type=str, default="trajectories"
     )
+    parser.add_argument(
+        "--data_collection",
+        help="Run in data collectino mode. Overrides many other options.",
+        action="store_true",
+    )
+
     args = parser.parse_args()
     seed = args.seed
     traj_number = args.traj
@@ -471,6 +482,7 @@ if __name__ == "__main__":
     num_trajs = args.num
     output_dir = args.output_dir
     save_relaxed = args.save_relaxed
+    data_collection = args.data_collection
 
     pusher_radius = 0.015
 
@@ -481,7 +493,62 @@ if __name__ == "__main__":
     )
     solver_params = get_default_solver_params(debug, clarabel=False)
 
-    if hardware_demos:
+    if data_collection:
+        from tqdm import tqdm
+        import logging
+
+        output_dir = "data_collection_trajectories"
+        if os.path.exists(output_dir):
+            user_input = input(f"{output_dir} already exists. Overwrite? (y/n): ")
+            if user_input.lower() != "y":
+                print("Exiting")
+                exit()
+        
+        shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        folder_name = f"{output_dir}"
+        os.makedirs(folder_name, exist_ok=True)
+
+        workspace = PlanarPushingWorkspace(
+            slider=BoxWorkspace(
+                width=0.35,
+                height=0.5,
+                center=np.array([0.5, 0.0]),
+                buffer=0,
+            ),
+        )
+
+        plans = get_plan_start_and_goals_to_point(
+            seed,
+            num_trajs,
+            workspace,
+            config,
+            (0.5, 0.0),
+            init_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
+            limit_rotations=False,
+        )
+        print("Finished finding random plans within workspace")
+
+        logging.getLogger('drake').setLevel(logging.WARNING)
+        pbar = tqdm(total=len(plans))
+        for idx, plan in enumerate(plans):
+            create_plan(
+                plan,
+                output_dir=folder_name,
+                debug=False,
+                traj_name=f"traj_{idx}",
+                save_video=False,
+                pusher_radius=pusher_radius,
+                save_traj=True,
+                animation_lims=None,
+                interpolate_video=interpolate,
+                save_analysis=False,
+                do_rounding=rounding,
+                hardware=False,
+                save_relaxed=False,
+            )
+            pbar.update(1)
+    elif hardware_demos:
         output_dir = "hardware_demos"
         os.makedirs(output_dir, exist_ok=True)
         folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"
