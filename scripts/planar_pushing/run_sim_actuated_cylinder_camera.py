@@ -196,9 +196,10 @@ if __name__ == "__main__":
     state_estimator_meshcat = StartMeshcat()
     run_sim(
         plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
+        # plan="trajectories/run_20240208221258_box/run_0/trajectory/traj_rounded.pkl",
         data_collection_dir=args.data_dir,
-        save_recording=True,
-        debug=True,
+        save_recording=False,
+        debug=False,
         station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
     )
