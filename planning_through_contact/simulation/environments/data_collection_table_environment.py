@@ -81,8 +81,6 @@ class DataCollectionTableEnvironment:
                 robot_model_name=robot_system.robot_model_name,
             ),
         )
-        print(robot_system.robot_model_name)
-        breakpoint()
 
         builder.AddNamedSystem(
             "DesiredPlanarPositionSource",
@@ -121,10 +119,8 @@ class DataCollectionTableEnvironment:
         )
 
         # Add system to convert slider_pose to generalized coords
-        if self._sim_config.slider.name == "box":
-            z_value = self._sim_config.slider.geometry.height / 2.0
-        else: # T
-            z_value = self._sim_config.slider.geometry.box_1.height / 2.0
+        # TODO: better way to get z_value
+        z_value = 0.025
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
             "PlanarPoseToGeneralizedCoords",
             PlanarPoseToGeneralizedCoords(
