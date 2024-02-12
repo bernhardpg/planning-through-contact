@@ -137,7 +137,7 @@ class CylinderActuatedStation(RobotSystemBase):
             "object_state_measured",
         )
 
-        if self._sim_config.collect_data:
+        if self._sim_config.camera_config:
             builder.ExportOutput(
                 builder.GetSubsystemByName(
                     "rgbd_sensor_overhead_camera"

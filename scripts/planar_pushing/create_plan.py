@@ -496,6 +496,7 @@ if __name__ == "__main__":
     if data_collection:
         from tqdm import tqdm
         import logging
+        import matplotlib.pyplot as plt
 
         output_dir = "data_collection_trajectories"
         if os.path.exists(output_dir):
@@ -503,8 +504,7 @@ if __name__ == "__main__":
             if user_input.lower() != "y":
                 print("Exiting")
                 exit()
-        
-        shutil.rmtree(output_dir)
+            shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         folder_name = f"{output_dir}"
         os.makedirs(folder_name, exist_ok=True)
@@ -547,6 +547,7 @@ if __name__ == "__main__":
                 hardware=False,
                 save_relaxed=False,
             )
+            plt.close()
             pbar.update(1)
     elif hardware_demos:
         output_dir = "hardware_demos"

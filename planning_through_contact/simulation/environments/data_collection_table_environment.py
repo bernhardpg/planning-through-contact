@@ -81,6 +81,8 @@ class DataCollectionTableEnvironment:
                 robot_model_name=robot_system.robot_model_name,
             ),
         )
+        print(robot_system.robot_model_name)
+        breakpoint()
 
         builder.AddNamedSystem(
             "DesiredPlanarPositionSource",
