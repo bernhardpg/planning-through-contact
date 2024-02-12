@@ -498,7 +498,14 @@ if __name__ == "__main__":
         import logging
         import matplotlib.pyplot as plt
 
-        output_dir = "data_collection_trajectories"
+        # update config
+        config.contact_config.lam_min = 0.15
+        config.contact_config.lam_max = 0.85
+        config.non_collision_cost.distance_to_object_socp = 2.0
+        # config.dynamics_config.friction_coeff_table_slider = 1
+        # config.dynamics_config.friction_coeff_slider_pusher = 0.01
+
+        output_dir = f"data_collection_trajectories_{slider_type}"
         if os.path.exists(output_dir):
             user_input = input(f"{output_dir} already exists. Overwrite? (y/n): ")
             if user_input.lower() != "y":

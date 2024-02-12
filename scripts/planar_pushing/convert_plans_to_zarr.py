@@ -89,8 +89,8 @@ def main():
             # update current time
             current_time = round((current_time + dt) * freq) / freq
 
-        state = np.array(state)
-        action = np.concatenate([state[1:], state[-1:]], axis=0)
+        state = np.array(state) # T x 3
+        action = np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2
         images = np.array(images)
 
         # get target with desired slider position
@@ -117,7 +117,7 @@ def main():
 
     # Chunk sizes optimized for read (not for supercloud storage, sorry admins)
     state_chunk_size = (1024, 3)
-    action_chunk_size = (2048, 3)
+    action_chunk_size = (2048, 2)
     target_chunk_size = (1024, 3)
     image_chunk_size = (128, *images[0].shape)
 
