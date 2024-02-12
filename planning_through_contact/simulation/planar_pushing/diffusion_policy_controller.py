@@ -54,12 +54,16 @@ class DiffusionPolicyController(LeafSystem):
         initial_pusher_pose: PlanarPose=PlanarPose(
             x=0.5, y=0.25, theta=0.0
         ),
+        target_slider_pose: PlanarPose=PlanarPose(
+            x=0.5, y=0.0, theta=0.0
+        ),
         freq: float = 10.0,
         delay=1.0
     ):
         super().__init__()
         self._checkpoint = pathlib.Path(checkpoint)
         self._initial_pusher_pose = initial_pusher_pose
+        self._target_slider_pose = target_slider_pose
         self._freq = freq
         self._dt = 1.0 / freq
         self._delay = delay
@@ -145,17 +149,17 @@ class DiffusionPolicyController(LeafSystem):
 
         # Read input ports
         pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
-        pusher_planar_pose = PlanarPose.from_pose(pusher_pose)
-        image = self.camera_port.Eval(context).data[:,:,:-1]
+        image = self.camera_port.Eval(context)
 
         # Update observation history
-        self._pusher_pose_deque.append(pusher_planar_pose)
-        self._image_deque.append(image)
+        pusher_planer_pose = PlanarPose.from_pose(pusher_pose)
+        self._pusher_pose_deque.append(pusher_planer_pose.vector())
+        self._image_deque.append(image.data[:,:,:-1])
 
         # Actions available: use next action
         if len(self._actions) == 0:
             # TODO: actual diffusion policy code here
-            new_desired_pose = pusher_planar_pose
+            new_desired_pose = pusher_planer_pose
             for i in range(self._action_steps):
                 self._actions.append(np.array(
                     [new_desired_pose.x, new_desired_pose.y]

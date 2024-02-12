@@ -44,8 +44,9 @@ from planning_through_contact.visualize.analysis import (
 
 
 def run_sim(
-    plan: str,
+    plan: str, # TODO: remove the need for this argument
     initial_pusher_planar_pose: PlanarPose = None,
+    target_slider_planar_pose: PlanarPose = None,
     data_collection_dir: str = None,
     save_recording: bool = False,
     debug: bool = False,
@@ -140,9 +141,11 @@ def run_multiple(
 if __name__ == "__main__":
     print(f"station meshcat")
     station_meshcat = StartMeshcat()
+    # plan path is used to extract sim_config
+    # the trajectory in plan path is not used
+    plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
-        # plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
-        plan="data_collection_trajectories/traj_2/trajectory/traj_rounded.pkl",
+        plan=plan,
         data_collection_dir=None,
         save_recording=False,
         debug=False,

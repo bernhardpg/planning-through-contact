@@ -39,6 +39,7 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
             DiffusionPolicyController(
                 checkpoint,
                 self._sim_config.pusher_start_pose,
+                self._sim_config.slider_goal_pose,
                 freq=10.0, # default
                 delay=1.0, # default
             ),
