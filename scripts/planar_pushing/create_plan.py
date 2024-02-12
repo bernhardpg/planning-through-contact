@@ -216,7 +216,8 @@ def _get_slider_pose_within_workspace(
         y_initial = np.random.uniform(workspace.slider.y_min, workspace.slider.y_max)
         EPS = 0.01
         if limit_rotations:
-            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+            # th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+            th_initial = np.random.uniform(-np.pi / 4 + EPS, np.pi / 4 - EPS)
         else:
             th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 
@@ -501,7 +502,7 @@ if __name__ == "__main__":
         # update config
         config.contact_config.lam_min = 0.15
         config.contact_config.lam_max = 0.85
-        config.non_collision_cost.distance_to_object_socp = 2.0
+        config.non_collision_cost.distance_to_object_socp = 2.5
         # config.dynamics_config.friction_coeff_table_slider = 1
         # config.dynamics_config.friction_coeff_slider_pusher = 0.01
 
@@ -532,7 +533,7 @@ if __name__ == "__main__":
             config,
             (0.5, 0.0),
             init_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
-            limit_rotations=False,
+            limit_rotations=True if slider_type == "box" else False,
         )
         print("Finished finding random plans within workspace")
 

@@ -90,7 +90,7 @@ def main():
             current_time = round((current_time + dt) * freq) / freq
 
         state = np.array(state) # T x 3
-        action = np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2
+        action = np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2 (discard theta)
         images = np.array(images)
 
         # get target with desired slider position
