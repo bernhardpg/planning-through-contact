@@ -114,7 +114,7 @@ def run_sim(
         if save_recording
         else None
     )
-    environment.export_diagram("environment_diagram.pdf")
+    environment.export_diagram("diffusion_environment_diagram.pdf")
     end_time = 100.0
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)

@@ -6,7 +6,7 @@ from pydrake.all import (
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-
+import time
 
 
 class RobotStateToRigidTransform(LeafSystem):
