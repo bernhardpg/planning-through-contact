@@ -244,6 +244,7 @@ def get_plan_start_and_goals_to_point(
     point: Tuple[float, float] = (0, 0),  # Default is origin
     init_pusher_pose: Optional[PlanarPose] = None,
     limit_rotations: bool = True,  # Use this to start with
+    noise_final_pose: bool = False,
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(seed)
@@ -264,7 +265,16 @@ def get_plan_start_and_goals_to_point(
             workspace, slider, pusher_pose, config, limit_rotations
         )
 
-        slider_target_pose = PlanarPose(point[0], point[1], 0)
+        if noise_final_pose:
+            tran_tol = 0.01 # 0.01cm
+            rot_tol = 1 * np.pi / 180 # 1 degrees
+            slider_target_pose = PlanarPose(
+                point[0] + np.random.uniform(-tran_tol, tran_tol),
+                point[1] + np.random.uniform(-tran_tol, tran_tol),
+                0 + np.random.uniform(-rot_tol, rot_tol),
+            )
+        else:
+            slider_target_pose = PlanarPose(point[0], point[1], 0)
 
         plans.append(
             PlanarPushingStartAndGoal(
@@ -502,9 +512,8 @@ if __name__ == "__main__":
         # update config
         config.contact_config.lam_min = 0.15
         config.contact_config.lam_max = 0.85
-        config.non_collision_cost.distance_to_object_socp = 2.5
-        # config.dynamics_config.friction_coeff_table_slider = 1
-        # config.dynamics_config.friction_coeff_slider_pusher = 0.01
+        config.non_collision_cost.distance_to_object_socp = \
+            2.0 if slider_type == "box" else 0.25
 
         output_dir = f"data_collection_trajectories_{slider_type}"
         if os.path.exists(output_dir):
@@ -534,6 +543,7 @@ if __name__ == "__main__":
             (0.5, 0.0),
             init_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
             limit_rotations=True if slider_type == "box" else False,
+            noise_final_pose=True,
         )
         print("Finished finding random plans within workspace")
 

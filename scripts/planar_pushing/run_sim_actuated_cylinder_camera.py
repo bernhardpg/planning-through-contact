@@ -189,7 +189,7 @@ if __name__ == "__main__":
         state_estimator_meshcat = StartMeshcat()
         run_sim(
             # plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
-            plan="data_collection_trajectories_box/traj_0/trajectory/traj_rounded.pkl",
+            plan="data_collection_trajectories_tee/traj_0/trajectory/traj_rounded.pkl",
             data_collection_dir=args.save_dir,
             save_recording=False,
             debug=False,

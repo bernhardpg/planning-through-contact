@@ -193,6 +193,7 @@ class DiffusionPolicyController(LeafSystem):
         # delta = np.linalg.norm(self._current_action - self._actions[0])
         # print(f"Time: {time:.3f}, delta: {delta}")
         self._current_action = self._actions.popleft()
+        print(f"Time: {time:.3f}, action: {self._current_action}")
         self._next_update_time += self._dt
     
     def _deque_to_dict(self, 

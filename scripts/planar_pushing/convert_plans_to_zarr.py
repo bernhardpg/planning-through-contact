@@ -44,7 +44,7 @@ def main():
         # load pickle file and timing variables
         combined_logs = pickle.load(open(log_path, 'rb'))
         pusher_desired = combined_logs.pusher_desired
-        slider_desired = combined_logs.slider_desired
+        # slider_desired = combined_logs.slider_desired
 
         freq = 10.0
         dt = 1 / freq
@@ -90,15 +90,12 @@ def main():
             current_time = round((current_time + dt) * freq) / freq
 
         state = np.array(state) # T x 3
-        action = np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2 (discard theta)
+        action = np.array(state)[:,:2] # T x 2
+        # np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2 (discard theta)
         images = np.array(images)
 
-        # get target with desired slider position
-        last_idx = get_closest_index(t, total_time)
-        target = np.array([slider_desired.x[last_idx], 
-                        slider_desired.y[last_idx], 
-                        slider_desired.theta[last_idx]
-        ])
+        # get target
+        target = np.array([0.5, 0.0, 0.0]) # TODO: this is hardcoded
         target = np.array([target for _ in range(len(state))])
 
         # update concatenated arrays
