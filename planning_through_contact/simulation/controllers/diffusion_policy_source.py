@@ -23,7 +23,8 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
     def __init__(
         self,
         sim_config: PlanarPushingSimConfig,
-        checkpoint: str
+        checkpoint: str,
+        diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
     ):
         super().__init__()
 
@@ -37,9 +38,10 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         self._diffusion_policy_controller = builder.AddNamedSystem(
             "DiffusionPolicyController",
             DiffusionPolicyController(
-                checkpoint,
-                self._sim_config.pusher_start_pose,
-                self._sim_config.slider_goal_pose,
+                checkpoint=checkpoint,
+                diffusion_policy_path=diffusion_policy_path,
+                initial_pusher_pose=self._sim_config.pusher_start_pose,
+                target_slider_pose=self._sim_config.slider_goal_pose,
                 freq=10.0, # default
                 delay=1.0, # default
             ),

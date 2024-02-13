@@ -45,6 +45,8 @@ from planning_through_contact.visualize.analysis import (
 
 def run_sim(
     plan: str, # TODO: remove the need for this argument
+    checkpoint: str = None,
+    diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
     initial_pusher_planar_pose: PlanarPose = None,
     target_slider_planar_pose: PlanarPose = None,
     data_collection_dir: str = None,
@@ -94,7 +96,7 @@ def run_sim(
         collect_data=False
     )
     # Diffusion Policy source
-    position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint='')
+    position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
 
     ## Set up position controller
     position_controller = CylinderActuatedStation(
@@ -113,6 +115,7 @@ def run_sim(
         else None
     )
     environment.export_diagram("environment_diagram.pdf")
+    end_time = 100.0
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
 
@@ -146,6 +149,7 @@ if __name__ == "__main__":
     plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
         plan=plan,
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee/checkpoints/latest.ckpt',
         data_collection_dir=None,
         save_recording=False,
         debug=False,

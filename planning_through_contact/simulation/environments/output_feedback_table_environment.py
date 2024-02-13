@@ -175,6 +175,50 @@ class OutputFeedbackTableEnvironment:
 
         self.save_logs(recording_file, save_dir)
 
+    
+    # def _visualize_desired_slider_pose(
+    #     self, desired_planar_pose: PlanarPose, time_in_recording: float = 0.0
+    # ) -> None:
+    #     shapes = self.get_slider_shapes()
+    #     poses = self.get_slider_shape_poses()
+
+    #     heights = [shape.height() for shape in shapes]
+    #     min_height = min(heights)
+    #     desired_pose = desired_planar_pose.to_pose(
+    #         min_height / 2, z_axis_is_positive=True
+    #     )
+    #     if len(self._goal_geometries) == 0:
+    #         source_id = self._scene_graph.RegisterSource()
+    #         BOX_COLOR = COLORS["emeraldgreen"]
+    #         DESIRED_POSE_ALPHA = 0.4
+    #         for idx, (shape, pose) in enumerate(zip(shapes, poses)):
+    #             geom_instance = GeometryInstance(
+    #                 desired_pose.multiply(pose),
+    #                 shape,
+    #                 f"shape_{idx}",
+    #             )
+    #             curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
+    #                 source_id,
+    #                 geom_instance,
+    #             )
+    #             self._scene_graph.AssignRole(
+    #                 source_id,
+    #                 curr_shape_geometry_id,
+    #                 MakePhongIllustrationProperties(
+    #                     BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)
+    #                 ),
+    #             )
+    #             geom_name = f"goal_shape_{idx}"
+    #             self._goal_geometries.append(geom_name)
+    #             self.meshcat.SetObject(
+    #                 geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA))
+    #             )
+    #     else:
+    #         for pose, geom_name in zip(poses, self._goal_geometries):
+    #             self.meshcat.SetTransform(
+    #                 geom_name, desired_pose.multiply(pose), time_in_recording
+    #             )
+
     # TODO: write function to visualize target pose
     # def _visualize_desired_slider_pose(self, t):
     #     # Visualizing the desired slider pose
