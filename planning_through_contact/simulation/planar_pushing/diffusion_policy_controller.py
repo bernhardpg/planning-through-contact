@@ -174,6 +174,7 @@ class DiffusionPolicyController(LeafSystem):
         
         # Actions available: use next action
         if len(self._actions) == 0:
+            print("Computing new actions")
             with torch.no_grad():
                 actions = self._policy.predict_action(obs_dict)['action_pred'][0]
             for action in actions:
@@ -189,8 +190,9 @@ class DiffusionPolicyController(LeafSystem):
 
         # get next action and increment next update time
         assert len(self._actions) > 0
+        # delta = np.linalg.norm(self._current_action - self._actions[0])
+        # print(f"Time: {time:.3f}, delta: {delta}")
         self._current_action = self._actions.popleft()
-        output.set_value(self._current_action)
         self._next_update_time += self._dt
     
     def _deque_to_dict(self, 
