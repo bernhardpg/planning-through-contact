@@ -157,3 +157,8 @@ class CylinderActuatedStation(RobotSystemBase):
     def robot_model_name(self) -> str:
         """The name of the robot model."""
         return "pusher"
+    
+    @property
+    def slider_model_name(self) -> str:
+        """The name of the robot model."""
+        return "t_pusher"

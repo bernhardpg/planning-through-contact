@@ -99,7 +99,6 @@ class DiffusionPolicyController(LeafSystem):
             self._initial_pusher_pose.x,
             self._initial_pusher_pose.y,
         ])
-        self._next_update_time = self._delay # tracks when to update actions
 
         # Input port for pusher pose
         self.pusher_pose_measured = self.DeclareAbstractInputPort(
@@ -152,19 +151,15 @@ class DiffusionPolicyController(LeafSystem):
     
     def DoCalcOutput(self, context: Context, output):
         time = context.get_time()
-        pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
-        image = self.camera_port.Eval(context)
-
+        
         # Continually update ports until delay is over
         if time < self._delay:
-            self._update_history(pusher_pose, image)
-
-        if time < self._next_update_time:
+            self._update_history(context)
             output.set_value(self._current_action)
             return
-
+        
         # Update observation history
-        self._update_history(pusher_pose, image)
+        self._update_history(context)
 
         obs_dict = self._deque_to_dict(
             self._pusher_pose_deque,
@@ -182,21 +177,24 @@ class DiffusionPolicyController(LeafSystem):
             print(f"Computed new actions in {pytime.time() - start_time:.3f}s")
 
             # DEBUG: dummy actions (move pusher in positive x direction)
-            # new_desired_pose = PlanarPose.from_pose(pusher_pose)
+            # new_desired_pose = self._pusher_pose_deque[-1].copy()
             # for i in range(self._action_steps):
             #     self._actions.append(np.array(
-            #         [new_desired_pose.x, new_desired_pose.y]
+            #         [new_desired_pose[0], new_desired_pose[1]]
             #     ))
-            #     new_desired_pose.x += 0.01 # move freq*0.01m/s
+            #     new_desired_pose[0] += 0.01 # move freq*0.01m/s
 
         # get next action and increment next update time
         assert len(self._actions) > 0
-        delta = np.linalg.norm(self._current_action - self._actions[0])
-        # print(f"Time: {time:.3f}, action delta: {delta}")
+        prev_action = self._current_action
         self._current_action = self._actions.popleft()
+        output.set_value(self._current_action)
+
+        # debug print statements
+        # delta = np.linalg.norm(self._current_action - prev_action)
+        # print(f"Time: {time:.3f}, action delta: {delta}")
         # print(f"Time: {time:.3f}, action: {self._current_action}")
-        self._next_update_time += self._dt
-    
+        
     def _deque_to_dict(self, 
                       obs_deque: deque, 
                       img_deque: deque, 
@@ -219,8 +217,10 @@ class DiffusionPolicyController(LeafSystem):
                 'target': target_tensor.to(self._device), # 1, D_t
         }
 
-    def _update_history(self, pusher_pose: RigidTransform, image):
+    def _update_history(self, context):
         """ Update state and image observation history """
+        pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
+        image = self.camera_port.Eval(context)
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
         self._image_deque.append(image.data[:,:,:-1])        

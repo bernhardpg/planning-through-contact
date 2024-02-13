@@ -74,6 +74,7 @@ def run_sim(
         width=96,
         height=96,
         show_rgb=False,
+        fps=10.0
     )
 
     sim_config = PlanarPushingSimConfig(
@@ -93,7 +94,8 @@ def run_sim(
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
         camera_config=camera_config,
-        collect_data=False
+        collect_data=True,
+        data_dir='diffusion_policy_logs'
     )
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
@@ -116,8 +118,9 @@ def run_sim(
     )
     environment.export_diagram("diffusion_environment_diagram.pdf")
     end_time = 100.0
-    environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
+    environment.simulate(end_time, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
+    environment.save_data()
 
 
 def run_multiple(
@@ -149,7 +152,8 @@ if __name__ == "__main__":
     plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
         plan=plan,
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee/checkpoints/latest.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1/checkpoints/epoch=0168-val_loss=0.011135.ckpt',
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/latest.ckpt',
         data_collection_dir=None,
         save_recording=False,
         debug=False,

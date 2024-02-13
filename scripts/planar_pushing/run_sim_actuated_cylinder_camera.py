@@ -133,7 +133,7 @@ def run_sim(
         if save_recording
         else None
     )
-    # environment.export_diagram("environment_diagram.pdf")
+    environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
 
@@ -188,8 +188,8 @@ if __name__ == "__main__":
         print(f"state estimator meshcat")
         state_estimator_meshcat = StartMeshcat()
         run_sim(
-            # plan="trajectories/hw_demos_20240129115732_tee/hw_demo_1/trajectory/traj_rounded.pkl",
-            plan="data_collection_trajectories_tee/traj_0/trajectory/traj_rounded.pkl",
+            # plan="data_collection_trajectories_tee/run_0/traj_0/trajectory/traj_rounded.pkl",
+            plan='diffusion_policy_logs/0/combined_planar_pushing_logs.pkl',
             data_collection_dir=args.save_dir,
             save_recording=False,
             debug=False,

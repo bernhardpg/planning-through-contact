@@ -3,6 +3,11 @@ demos/
 trajectories/
 outputs/
 multirun/
+data*
+temp
+*pdf
+*png
+diffusion_policy_logs/
 
 # Vim
 *.swp
