@@ -36,6 +36,10 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 
+from planning_through_contact.planning.planar.planar_plan_config import (
+    MultiRunConfig
+)
+
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
     plot_cost,
@@ -77,6 +81,14 @@ def run_sim(
         fps=10.0
     )
 
+    num_runs = 10
+    max_attempt_duration = 50.0
+    multi_run_config = MultiRunConfig(
+        initial_slider_poses=[traj.initial_slider_planar_pose for _ in range(num_runs)],
+        target_slider_poses=[traj.target_slider_planar_pose for _ in range(num_runs)],
+        max_attempt_duration=max_attempt_duration
+    )
+
     sim_config = PlanarPushingSimConfig(
         slider=slider,
         contact_model=ContactModel.kHydroelastic,
@@ -86,7 +98,7 @@ def run_sim(
         visualize_desired=True,
         draw_frames=True,
         time_step=1e-3,
-        use_realtime=True,
+        use_realtime=False,
         delay_before_execution=1,
         closed_loop=False,
         dynamics_config=traj.config.dynamics_config,
@@ -95,7 +107,8 @@ def run_sim(
         pusher_z_offset=0.03,
         camera_config=camera_config,
         collect_data=False,
-        data_dir='diffusion_policy_logs'
+        data_dir='diffusion_policy_logs',
+        multi_run_config=multi_run_config
     )
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
@@ -117,11 +130,10 @@ def run_sim(
         else None
     )
     environment.export_diagram("diffusion_environment_diagram.pdf")
-    # end_time = 100.0
-    end_time = 30.0
+    end_time = max(100.0, num_runs * max_attempt_duration)
     environment.simulate(end_time, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
-    environment.save_data()
+    environment.save_data("diffusion_policy_logs")
 
 
 def run_multiple(
@@ -153,10 +165,9 @@ if __name__ == "__main__":
     plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
         plan=plan,
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1/checkpoints/epoch=0168-val_loss=0.011135.ckpt',
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1/checkpoints/latest.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt',
         # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt',
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch_168.ckpt',
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt',
         data_collection_dir=None,
         save_recording=True,
         debug=False,

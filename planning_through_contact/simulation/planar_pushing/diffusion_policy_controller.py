@@ -190,7 +190,7 @@ class DiffusionPolicyController(LeafSystem):
             actions = action_prediction[self._start:self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())
-            print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
+            # print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
 
             # DEBUG: dummy actions (move pusher in positive x direction)
             # new_desired_pose = self._pusher_pose_deque[-1].copy()

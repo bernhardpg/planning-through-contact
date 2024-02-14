@@ -16,7 +16,8 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    SliderPusherSystemConfig,
+    SliderPusherSystemConfig, 
+    MultiRunConfig
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
@@ -52,6 +53,8 @@ class PlanarPushingSimConfig:
     camera_config: CameraConfig = None
     collect_data: bool = False
     data_dir: str = None
+
+    multi_run_config: MultiRunConfig = None
 
     @classmethod
     def from_traj(cls, trajectory: PlanarPushingTrajectory, **kwargs):
