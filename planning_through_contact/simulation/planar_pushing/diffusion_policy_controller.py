@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 import logging
 
 import numpy as np
-import numpy.typing as npt
+import matplotlib.pyplot as plt
 from collections import deque
 import pathlib
 from pydrake.common.value import AbstractValue, Value
@@ -62,7 +62,7 @@ class DiffusionPolicyController(LeafSystem):
             x=0.5, y=0.0, theta=0.0
         ),
         freq: float = 10.0,
-        delay=1.0
+        delay=1.0,
     ):
         super().__init__()
         self._checkpoint = pathlib.Path(checkpoint)
@@ -84,14 +84,24 @@ class DiffusionPolicyController(LeafSystem):
         self._image_height = self._cfg.shape_meta.obs.image.shape[1]
         self._image_width = self._cfg.shape_meta.obs.image.shape[2]
         self._B = 1 # batch size is 1
+
+        # indexing parameters for action predictions
+        self._start = self._obs_horizon
+        # Hack to ensure backward compatibility with version 1 checkpoints
+        # Version 1 checkpoints used a shifted action horizon 
+        # (which is technically correct... oops)
+        if 'push_tee_v1' in checkpoint:
+            print("Using version 1 slicing for action predictions")
+            self._start = self._obs_horizon - 1
+        self._end = self._start + self._action_steps
         
         # observation histories
         self._pusher_pose_deque = deque(
             [self._initial_pusher_pose.vector()
-            for _ in range(self._obs_horizon)], 
-            maxlen=2
+            for _ in range(self._obs_horizon+1)], 
+            maxlen=self._obs_horizon+1
         )
-        self._image_deque = deque([], maxlen=2)
+        self._image_deque = deque([], maxlen=self._obs_horizon+1)
 
         # variables for DoCalcOutput
         self._actions = deque([], maxlen=self._action_steps)
@@ -169,12 +179,18 @@ class DiffusionPolicyController(LeafSystem):
         
         # Actions available: use next action
         if len(self._actions) == 0:
+            # print(f"Time: {time:.3f}, state_deque: {self._pusher_pose_deque}")
+            # for img in self._image_deque:
+            #     plt.imshow(img)
+            #     plt.show()
             start_time = pytime.time()
             with torch.no_grad():
-                actions = self._policy.predict_action(obs_dict)['action_pred'][0]
+                action_prediction = self._policy.predict_action(obs_dict)['action_pred'][0]
+          
+            actions = action_prediction[self._start:self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())
-            print(f"Computed new actions in {pytime.time() - start_time:.3f}s")
+            print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
 
             # DEBUG: dummy actions (move pusher in positive x direction)
             # new_desired_pose = self._pusher_pose_deque[-1].copy()
@@ -191,7 +207,7 @@ class DiffusionPolicyController(LeafSystem):
         output.set_value(self._current_action)
 
         # debug print statements
-        # delta = np.linalg.norm(self._current_action - prev_action)
+        delta = np.linalg.norm(self._current_action - prev_action)
         # print(f"Time: {time:.3f}, action delta: {delta}")
         # print(f"Time: {time:.3f}, action: {self._current_action}")
         
@@ -200,15 +216,27 @@ class DiffusionPolicyController(LeafSystem):
                       img_deque: deque, 
                       target: np.ndarray
                     ):
+        state_tensor = list()
+        for i in range(self._obs_horizon):
+            state_tensor.append(torch.from_numpy(obs_deque[i+1]))
+        state_tensor = torch.cat(state_tensor, dim=0).reshape(self._B, self._obs_horizon, self._state_dim)
         
-        state_tensor = torch.cat(
-            [torch.from_numpy(state) for state in obs_deque], 
-            dim=0
-        ).reshape(self._B, self._obs_horizon, self._state_dim)
-        img_tensor = torch.cat(
-            [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], 
-            dim=0
-        ).reshape(self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height)
+        img_tensor = list()
+        for i in range(self._obs_horizon):
+            img = img_deque[i+1]
+            img_tensor.append(torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0))
+        img_tensor = torch.cat(img_tensor, dim=0).reshape(
+            self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height
+        )
+        
+        # state_tensor = torch.cat(
+        #     [torch.from_numpy(obs) for obs in obs_deque], 
+        #     dim=0
+        # ).reshape(self._B, self._obs_horizon, self._state_dim)
+        # img_tensor = torch.cat(
+        #     [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], 
+        #     dim=0
+        # ).reshape(self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height)
         target_tensor = torch.from_numpy(target).reshape(1, self._target_dim) # 1, D_t
         return {'obs': {
                     'image': img_tensor.to(self._device), # 1, T_obs, C, H, W
@@ -223,4 +251,4 @@ class DiffusionPolicyController(LeafSystem):
         image = self.camera_port.Eval(context)
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
-        self._image_deque.append(image.data[:,:,:-1])        
+        self._image_deque.append(image.data[:,:,:-1])  

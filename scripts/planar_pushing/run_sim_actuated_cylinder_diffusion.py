@@ -94,7 +94,7 @@ def run_sim(
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
         camera_config=camera_config,
-        collect_data=True,
+        collect_data=False,
         data_dir='diffusion_policy_logs'
     )
     # Diffusion Policy source
@@ -112,12 +112,13 @@ def run_sim(
         station_meshcat=station_meshcat,
     )
     recording_name = (
-        plan.split(".")[0] + f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html"
+        "diffusion_policy_roll_out.html"
         if save_recording
         else None
     )
     environment.export_diagram("diffusion_environment_diagram.pdf")
-    end_time = 100.0
+    # end_time = 100.0
+    end_time = 30.0
     environment.simulate(end_time, recording_file=recording_name)
     # environment.simulate(10, save_recording_as=recording_name)
     environment.save_data()
@@ -153,9 +154,11 @@ if __name__ == "__main__":
     run_sim(
         plan=plan,
         # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1/checkpoints/epoch=0168-val_loss=0.011135.ckpt',
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/latest.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1/checkpoints/latest.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt',
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch_168.ckpt',
         data_collection_dir=None,
-        save_recording=False,
+        save_recording=True,
         debug=False,
         station_meshcat=station_meshcat,
     )
