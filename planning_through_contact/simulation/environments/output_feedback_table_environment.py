@@ -1,6 +1,8 @@
 import logging
 import os
 from typing import Optional, List
+import pathlib
+import pickle
 
 import numpy as np
 from pydrake.all import (
@@ -224,7 +226,6 @@ class OutputFeedbackTableEnvironment:
         self,
         timeout=1e8,
         recording_file: Optional[str] = None,
-        save_dir: str = "",
         for_reset: bool = False,
     ) -> None:
         """
@@ -246,12 +247,18 @@ class OutputFeedbackTableEnvironment:
         else:
             self._simulator.AdvanceTo(timeout)
 
-        # self.save_logs(recording_file, save_dir)
+        traj_idx = 0
+        if os.path.exists(self._sim_config.data_dir):
+            for path in os.listdir(self._sim_config.data_dir):
+                if os.path.isdir(os.path.join(self._sim_config.data_dir, path)):
+                    traj_idx += 1
+        os.makedirs(os.path.join(self._sim_config.data_dir, str(traj_idx)))
+        save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(str(traj_idx))
+        
+        self.save_logs(recording_file, save_dir)
+        self.save_data(save_dir)
     
-    def save_data(self):
-        import pathlib
-        import pickle
-
+    def save_data(self, save_dir):
         if self._sim_config.collect_data:
             assert self._sim_config.data_dir is not None
 
@@ -288,17 +295,21 @@ class OutputFeedbackTableEnvironment:
 
             # assumes that a directory for this trajectory has already been
             # created (when saving the images)
-            traj_idx = 0
-            if os.path.exists(self._sim_config.data_dir):
-                for path in os.listdir(self._sim_config.data_dir):
-                    if os.path.isdir(os.path.join(self._sim_config.data_dir, path)):
-                        traj_idx += 1
-            os.makedirs(os.path.join(self._sim_config.data_dir, str(traj_idx)))
-            save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(str(traj_idx))
             log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
             print(f"Saving combined logs to {log_path}")
             with open(log_path, "wb") as f:
                 pickle.dump(combined, f)
+    
+    def save_logs(self, recording_file: Optional[str], save_dir: str):
+        if recording_file:
+            self._meshcat.StopRecording()
+            self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
+            self._meshcat.PublishRecording()
+            res = self._meshcat.StaticHtml()
+            if save_dir:
+                recording_file = os.path.join(save_dir, recording_file)
+            with open(recording_file, "w") as f:
+                f.write(res)
 
     # # TODO: fix this
     # def _visualize_desired_slider_pose(
