@@ -147,13 +147,14 @@ def run_sim(
     environment.export_diagram("diffusion_environment_diagram.pdf")
     end_time = max(100.0, num_runs * max_attempt_duration)
     successful_idx, save_dir = environment.simulate(end_time, recording_file=recording_name)
-    with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
-        f.write(f"{checkpoint}\n")
-        f.write(f"Seed: {seed}\n")
-        f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
-        f.write(f"Success_idx: {successful_idx}\n")
-        f.write(f"Save dir: {save_dir}\n")
-        f.write("\n")
+    if num_runs > 1:
+        with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
+            f.write(f"{checkpoint}\n")
+            f.write(f"Seed: {seed}\n")
+            f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
+            f.write(f"Success_idx: {successful_idx}\n")
+            f.write(f"Save dir: {save_dir}\n")
+            f.write("\n")
 
 def run_multiple(
     plans: list,
@@ -319,16 +320,16 @@ def get_multi_run_config(num_runs, max_attempt_duration, seed, target_slider_pos
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint")
-    parser.add_argument("--num_runs", type=int, default=10, help="Number of runs to simulate")
-    parser.add_argument("--max_attempt_duration", type=float, default=50.0, help="Max duration for each run")
-    parser.add_argument("--seed", type=int, default=888, help="Seed for random number generator")
+    parser.add_argument("--num_runs", type=int, default=1, help="Number of runs to simulate")
+    parser.add_argument("--max_attempt_duration", type=float, default=60.0, help="Max duration for each run")
+    parser.add_argument("--seed", type=int, default=9001, help="Seed for random number generator")
     args = parser.parse_args()
 
     if args.checkpoint is None:
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt',
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt',
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better_70ish.ckpt',
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt'
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt'
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/checkpoints_to_test/epoch=0250-val_loss=0.033619.ckpt'
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt'
     else:
         checkpoint = args.checkpoint
     

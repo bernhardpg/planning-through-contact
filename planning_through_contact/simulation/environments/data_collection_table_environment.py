@@ -350,7 +350,6 @@ class DataCollectionTableEnvironment:
 
         else:
             self._simulator.AdvanceTo(timeout)
-
         self.save_logs(recording_file, save_dir)
         self.save_data()
         
@@ -467,8 +466,7 @@ class DataCollectionTableEnvironment:
             "desired_slider_planar_pose_vector"
         ).Eval(context)
         self._state_estimator._visualize_desired_slider_pose(
-            # PlanarPose(*slider_desired_pose_vec),
-            PlanarPose(x=0.5, y=0.0, theta=0.0),
+            PlanarPose(*slider_desired_pose_vec),
             time_in_recording=t,
         )
         pusher_desired_pose_vec = self._desired_position_source.GetOutputPort(

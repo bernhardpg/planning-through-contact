@@ -188,8 +188,8 @@ if __name__ == "__main__":
         print(f"state estimator meshcat")
         state_estimator_meshcat = StartMeshcat()
         run_sim(
-            # plan="data_collection_trajectories_tee/run_0/traj_0/trajectory/traj_rounded.pkl",
-            plan='diffusion_policy_logs/0/combined_planar_pushing_logs.pkl',
+            plan="data_collection_trajectories_tee/run_0/traj_0/trajectory/traj_rounded.pkl",
+            # plan='diffusion_policy_logs/0/combined_planar_pushing_logs.pkl',
             data_collection_dir=args.save_dir,
             save_recording=False,
             debug=False,

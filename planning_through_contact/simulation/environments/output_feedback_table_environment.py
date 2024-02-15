@@ -272,9 +272,12 @@ class OutputFeedbackTableEnvironment:
                     if self._multi_run_idx == self._total_runs:
                         break
                     self._reset_environment(t, reset_dict)
-                # self._visualize_desired_slider_pose(
-                #     self._sim_config.slider_goal_pose
-                # )
+                # visualization of target pose
+                self._visualize_desired_slider_pose(
+                    t,
+                    PlanarPose(0.5, 0.0, 0.0),
+                    scale_factor=1.0
+                )
                 # Print the time every 5 seconds
                 if t % 5 == 0:
                     logger.info(f"t={t}")
@@ -413,70 +416,12 @@ class OutputFeedbackTableEnvironment:
                 f.write(res)
 
     # # TODO: fix this
-    # def _visualize_desired_slider_pose(
-    #     self, desired_planar_pose: PlanarPose,
-    # ) -> None:
-    #     shapes = self.get_slider_shapes()
-    #     poses = self.get_slider_shape_poses()
-
-    #     heights = [shape.height() for shape in shapes]
-    #     min_height = min(heights)
-    #     desired_pose = desired_planar_pose.to_pose(
-    #         min_height / 2, z_axis_is_positive=True
-    #     )
-
-    #     source_id = self._scene_graph.RegisterSource()
-    #     BOX_COLOR = COLORS["emeraldgreen"]
-    #     DESIRED_POSE_ALPHA = 0.4
-    #     for idx, (shape, pose) in enumerate(zip(shapes, poses)):
-    #         geom_instance = GeometryInstance(
-    #             # desired_pose.multiply(pose),
-    #             desired_pose,
-    #             shape,
-    #             f"shape_{idx}",
-    #         )
-    #         curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
-    #             source_id,
-    #             geom_instance,
-    #         )
-    #         # self._scene_graph.AssignRole(
-    #         #     source_id,
-    #         #     curr_shape_geometry_id,
-    #         #     MakePhongIllustrationProperties(
-    #         #         BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)
-    #         #     ),
-    #         # )
-    #         geom_name = f"goal_shape_{idx}"
-    #         self._meshcat.SetObject(
-    #             geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA))
-    #         )
-    #         break
-
-    # def get_slider_shapes(self) -> List[DrakeBox]:
-    #     slider_body = self.get_slider_body()
-    #     collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
-    #         slider_body
-    #     )
-
-    #     inspector = self._scene_graph.model_inspector()
-    #     shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
-
-    #     # for now we only support Box shapes
-    #     assert all([isinstance(shape, DrakeBox) for shape in shapes])
-
-    #     return shapes
-    
-    # def get_slider_body(self) -> DrakeRigidBody:
-    #     slider_body = self._plant.GetUniqueFreeBaseBodyOrThrow(self._slider)
-    #     return slider_body
-
-    # def get_slider_shape_poses(self) -> List[DrakeBox]:
-    #     slider_body = self.get_slider_body()
-    #     collision_geometries_ids = self._plant.GetCollisionGeometriesForBody(
-    #         slider_body
-    #     )
-
-    #     inspector = self._scene_graph.model_inspector()
-    #     poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]
-
-    #     return poses
+    def _visualize_desired_slider_pose(self, t, 
+                                       desired_slider_pose = PlanarPose(0.5, 0.0, 0.0),
+                                       scale_factor: float = 1.0):
+        # Visualizing the desired slider pose
+        self._robot_system._visualize_desired_slider_pose(
+            desired_slider_pose,
+            time_in_recording=t,
+            scale_factor=scale_factor
+        )

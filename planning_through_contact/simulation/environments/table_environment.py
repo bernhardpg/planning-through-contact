@@ -285,7 +285,6 @@ class TableEnvironment:
 
         else:
             self._simulator.AdvanceTo(timeout)
-
         self.save_logs(recording_file, save_dir)
 
     def save_logs(self, recording_file: Optional[str], save_dir: str):

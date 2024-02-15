@@ -162,7 +162,7 @@ if __name__ == "__main__":
     # run_multiple(0, 9, station_meshcat=station_meshcat, state_estimator_meshcat=state_estimator_meshcat)
     run_sim(
         # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/box_pushing_demos/hw_demo_C_2_rounded.pkl",
+        plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_0/trajectory/traj_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,
