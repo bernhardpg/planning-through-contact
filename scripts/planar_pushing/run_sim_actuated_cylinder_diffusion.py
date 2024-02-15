@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import os
 from tqdm import tqdm
+from typing import List, Tuple, Optional
 
 from pydrake.all import ContactModel, StartMeshcat
 from pydrake.systems.sensors import (
@@ -40,16 +41,35 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     MultiRunConfig
 )
 
-from planning_through_contact.visualize.analysis import (
-    plot_control_sols_vs_time,
-    plot_cost,
-    plot_velocities,
+from planning_through_contact.planning.planar.planar_plan_config import (
+    BoxWorkspace,
+    PlanarPlanConfig,
+    PlanarPushingStartAndGoal,
+    PlanarPushingWorkspace,
+    MultiRunConfig
+)
+
+from planning_through_contact.geometry.planar.non_collision import (
+    check_finger_pose_in_contact_location,
+)
+
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+    ContactLocation,
+    PolytopeContactLocation,
+)
+
+from planning_through_contact.experiments.utils import (
+    get_default_plan_config,
 )
 
 
 def run_sim(
     plan: str, # TODO: remove the need for this argument
-    checkpoint: str = None,
+    checkpoint: str,
+    num_runs: int,
+    max_attempt_duration: float,
+    seed: int,
     diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
     initial_pusher_planar_pose: PlanarPose = None,
     target_slider_planar_pose: PlanarPose = None,
@@ -80,14 +100,9 @@ def run_sim(
         show_rgb=False,
         fps=10.0
     )
-
-    num_runs = 10
-    max_attempt_duration = 50.0
-    multi_run_config = MultiRunConfig(
-        initial_slider_poses=[traj.initial_slider_planar_pose for _ in range(num_runs)],
-        target_slider_poses=[traj.target_slider_planar_pose for _ in range(num_runs)],
-        max_attempt_duration=max_attempt_duration
-    )
+    
+    # Set up multi run config
+    multi_run_config = get_multi_run_config(num_runs, max_attempt_duration, seed=seed)
 
     sim_config = PlanarPushingSimConfig(
         slider=slider,
@@ -131,10 +146,14 @@ def run_sim(
     )
     environment.export_diagram("diffusion_environment_diagram.pdf")
     end_time = max(100.0, num_runs * max_attempt_duration)
-    environment.simulate(end_time, recording_file=recording_name)
-    # environment.simulate(10, save_recording_as=recording_name)
-    environment.save_data("diffusion_policy_logs")
-
+    successful_idx, save_dir = environment.simulate(end_time, recording_file=recording_name)
+    with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
+        f.write(f"{checkpoint}\n")
+        f.write(f"Seed: {seed}\n")
+        f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
+        f.write(f"Success_idx: {successful_idx}\n")
+        f.write(f"Save dir: {save_dir}\n")
+        f.write("\n")
 
 def run_multiple(
     plans: list,
@@ -156,8 +175,163 @@ def run_multiple(
         station_meshcat.Delete()
         station_meshcat.DeleteAddedControls()
 
+# similar to the functions in scripts/planar_pushing/create_plan.py
+        
+# TODO: refactor
+def _check_collision(
+    pusher_pose_world: PlanarPose,
+    slider_pose_world: PlanarPose,
+    config: PlanarPlanConfig,
+) -> bool:
+    p_WP = pusher_pose_world.pos()
+    R_WB = slider_pose_world.two_d_rot_matrix()
+    p_WB = slider_pose_world.pos()
+
+    # We need to compute the pusher pos in the frame of the slider
+    p_BP = R_WB.T @ (p_WP - p_WB)
+    pusher_pose_body = PlanarPose(p_BP[0, 0], p_BP[1, 0], 0)
+
+    # we always add all non-collision modes, even when we don't add all contact modes
+    # (think of maneuvering around the object etc)
+    locations = [
+        PolytopeContactLocation(ContactLocation.FACE, idx)
+        for idx in range(config.slider_geometry.num_collision_free_regions)
+    ]
+    matching_locs = [
+        loc
+        for loc in locations
+        if check_finger_pose_in_contact_location(pusher_pose_body, loc, config)
+    ]
+    if len(matching_locs) == 0:
+        return True
+    else:
+        return False
+
+def _slider_within_workspace(
+    workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
+) -> bool:
+    """
+    Checks whether the entire slider is within the workspace
+    """
+    R_WB = pose.two_d_rot_matrix()
+    p_WB = pose.pos()
+
+    p_Wv_s = [
+        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB).flatten()
+        for vertex_idx in range(len(slider.vertices))
+    ]
+
+    lb, ub = workspace.slider.bounds
+    vertices_within_workspace: bool = np.all([v <= ub for v in p_Wv_s]) and np.all(
+        [v >= lb for v in p_Wv_s]
+    )
+    return vertices_within_workspace
+
+def _get_slider_pose_within_workspace(
+    workspace: PlanarPushingWorkspace,
+    slider: CollisionGeometry,
+    pusher_pose: PlanarPose,
+    config: PlanarPlanConfig,
+    limit_rotations: bool = False,
+    enforce_entire_slider_within_workspace: bool = True,
+) -> PlanarPose:
+    valid_pose = False
+
+    slider_pose = None
+    while not valid_pose:
+        x_initial = np.random.uniform(workspace.slider.x_min, workspace.slider.x_max)
+        y_initial = np.random.uniform(workspace.slider.y_min, workspace.slider.y_max)
+        EPS = 0.01
+        if limit_rotations:
+            # th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+            th_initial = np.random.uniform(-np.pi / 4 + EPS, np.pi / 4 - EPS)
+        else:
+            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
+
+        slider_pose = PlanarPose(x_initial, y_initial, th_initial)
+
+        collides_with_pusher = _check_collision(pusher_pose, slider_pose, config)
+        within_workspace = _slider_within_workspace(workspace, slider_pose, slider)
+
+        if enforce_entire_slider_within_workspace:
+            valid_pose = within_workspace and not collides_with_pusher
+        else:
+            valid_pose = not collides_with_pusher
+
+    assert slider_pose is not None  # fix LSP errors
+
+    return slider_pose
+
+def get_slider_start_poses(
+    seed: int,
+    num_plans: int,
+    workspace: PlanarPushingWorkspace,
+    config: PlanarPlanConfig,
+    limit_rotations: bool = True,  # Use this to start with
+) -> List[PlanarPushingStartAndGoal]:
+    # We want the plans to always be the same
+    np.random.seed(seed)
+    slider = config.slider_geometry
+    pusher_pose = PlanarPose(0.5, 0.25, 0)
+    slider_initial_poses = []
+    for _ in range(num_plans):
+        slider_initial_pose = _get_slider_pose_within_workspace(
+            workspace, slider, pusher_pose, config, limit_rotations
+        )
+        slider_initial_poses.append(slider_initial_pose)
+
+    return slider_initial_poses
+
+def get_multi_run_config(num_runs, max_attempt_duration, seed, target_slider_pose=PlanarPose(0.5, 0.0, 0.0)):
+    # Set up multi run config
+    config = get_default_plan_config(
+        slider_type='tee',
+        pusher_radius=0.015,
+        hardware=False,
+    )
+    # update config
+    config.contact_config.lam_min = 0.15
+    config.contact_config.lam_max = 0.85
+    config.non_collision_cost.distance_to_object_socp = 0.25   
+
+    workspace = PlanarPushingWorkspace(
+        slider=BoxWorkspace(
+            width=0.35,
+            height=0.5,
+            center=np.array([0.5, 0.0]),
+            buffer=0,
+        ),
+    )
+    initial_slider_poses = get_slider_start_poses(
+        seed=seed,
+        num_plans=num_runs,
+        workspace=workspace,
+        config=config,
+        limit_rotations=False,
+    )
+
+    return MultiRunConfig(
+        initial_slider_poses=initial_slider_poses,
+        target_slider_poses=[target_slider_pose for _ in range(num_runs)],
+        max_attempt_duration=max_attempt_duration
+    )
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint")
+    parser.add_argument("--num_runs", type=int, default=10, help="Number of runs to simulate")
+    parser.add_argument("--max_attempt_duration", type=float, default=50.0, help="Max duration for each run")
+    parser.add_argument("--seed", type=int, default=888, help="Seed for random number generator")
+    args = parser.parse_args()
+
+    if args.checkpoint is None:
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt',
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better_70ish.ckpt',
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt',
+    else:
+        checkpoint = args.checkpoint
+    
     print(f"station meshcat")
     station_meshcat = StartMeshcat()
     # plan path is used to extract sim_config
@@ -165,9 +339,10 @@ if __name__ == "__main__":
     plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
         plan=plan,
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt',
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt',
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt',
+        checkpoint=checkpoint,
+        num_runs=args.num_runs,
+        max_attempt_duration=args.max_attempt_duration,
+        seed=args.seed,
         data_collection_dir=None,
         save_recording=True,
         debug=False,

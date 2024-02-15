@@ -240,25 +240,38 @@ class OutputFeedbackTableEnvironment:
         # add a small height to avoid the box penetrating the table
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self._plant.SetPositions(self.mbp_context, self._slider, q)
+    
+    def set_pusher_planar_pose(self, pose: PlanarPose):
+        q_v = np.array([pose.x, pose.y, 0.0, 0.0])
+        self._plant.SetPositionsAndVelocities(self.mbp_context, 
+                                 self._robot_model_instance, 
+                                 q_v
+        )
 
     def simulate(
         self,
         timeout=1e8,
         recording_file: Optional[str] = None,
         for_reset: bool = False,
-    ) -> None:
+    ):
         """
         :return: Returns a tuple of (success, simulation_time_s).
         """
         if recording_file:
             self._meshcat.StartRecording()
         time_step = self._sim_config.time_step * 10
+        successful_idx = []
         if not isinstance(self._desired_position_source, TeleopPositionSource):
             for t in np.append(np.arange(0, timeout, time_step), timeout):
-                # reset position if necessary
-                if self._should_reset_environment(t):
-                    self._reset_environment(t)
                 self._simulator.AdvanceTo(t)
+                # reset position if necessary
+                reset_dict = self._should_reset_environment(t)
+                if reset_dict['pusher'] or reset_dict['slider']:
+                    if reset_dict['pusher'] == False and reset_dict['slider'] == True:
+                        successful_idx.append(self._multi_run_idx-1)
+                    if self._multi_run_idx == self._total_runs:
+                        break
+                    self._reset_environment(t, reset_dict)
                 # self._visualize_desired_slider_pose(
                 #     self._sim_config.slider_goal_pose
                 # )
@@ -279,6 +292,7 @@ class OutputFeedbackTableEnvironment:
         
         self.save_logs(recording_file, save_dir)
         self.save_data(save_dir)
+        return successful_idx, save_dir
     
     def _should_reset_environment(self, 
                                   time: float,
@@ -287,9 +301,10 @@ class OutputFeedbackTableEnvironment:
                                   trans_tol: float=0.02, # +/- 2cm
                                   rot_tol: float=2.0*np.pi/180, # +/- 2 degrees
                                   slider_vel_tol: float=0.008 # 8mm/s
-        ) -> bool:
+        ) -> dict[str, bool]:
+        false_dict = {'pusher': False, 'slider': False}
         if self._multi_run_config is None:
-            return False
+            return false_dict
         
         # Extract pusher and slider poses
         pusher_position = self._plant.GetPositions(self.mbp_context, self._robot_model_instance)
@@ -312,30 +327,37 @@ class OutputFeedbackTableEnvironment:
         if reached_pusher_target_pose and reached_slider_target_pose:
             print("Success! Reseting slider pose.")
             print("Initial pusher pose: ", 
-                  self._multi_run_config.initial_slider_poses[self._multi_run_idx])
+                  self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
             print("Final slider pose: ", slider_pose)
-        
-        if self._multi_run_idx >= self._total_runs:
-            return False
-        
-        if reached_pusher_target_pose and reached_slider_target_pose:
-            return True
+            return {'pusher': False, 'slider': True}
         
         if (time - self._last_reset_time) > self._multi_run_config.max_attempt_duration:
             print("Reseting slider pose due to timeout.")
             print("Final pusher pose:", pusher_pose)
             print("Final pusher speed:", pusher_speed)
             print("Final slider pose:", slider_pose)
-            return True
+            return {'pusher': True, 'slider': True}
         else:
-            return False
+            return false_dict
 
 
 
-    def _reset_environment(self, time) -> None:
-        self.set_slider_planar_pose(self._multi_run_config.initial_slider_poses[self._multi_run_idx])
+    def _reset_environment(self, time, reset_dict) -> None:
+        # reset pusher
+        # if reset_dict['pusher']:
+        #     self.set_pusher_planar_pose(PlanarPose(0.5, 0.25, 0.0))
+        #     reset_position = np.array([0.5, 0.25])
+        # else:
+        #     reset_position = self._plant.GetPositions(self.mbp_context, self._robot_model_instance)
+        
+        # reset slider
+        if reset_dict['slider']:
+            self.set_slider_planar_pose(self._multi_run_config.initial_slider_poses[self._multi_run_idx])
+            self._multi_run_idx += 1
+
+        # reset diffusion policy
+        # self._desired_position_source._diffusion_policy_controller.reset(reset_position)
         self._last_reset_time = time
-        self._multi_run_idx += 1
 
     def save_data(self, save_dir):
         if self._sim_config.collect_data:

@@ -150,7 +150,7 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
 
 def _slider_within_workspace(
     workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
-) -> bool:
+) -> bool
     """
     Checks whether the entire slider is within the workspace
     """

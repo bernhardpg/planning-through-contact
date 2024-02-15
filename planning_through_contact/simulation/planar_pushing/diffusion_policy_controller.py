@@ -98,10 +98,10 @@ class DiffusionPolicyController(LeafSystem):
         # observation histories
         self._pusher_pose_deque = deque(
             [self._initial_pusher_pose.vector()
-            for _ in range(self._obs_horizon+1)], 
-            maxlen=self._obs_horizon+1
+            for _ in range(self._obs_horizon)], 
+            maxlen=self._obs_horizon
         )
-        self._image_deque = deque([], maxlen=self._obs_horizon+1)
+        self._image_deque = deque([], maxlen=self._obs_horizon)
 
         # variables for DoCalcOutput
         self._actions = deque([], maxlen=self._action_steps)
@@ -168,6 +168,12 @@ class DiffusionPolicyController(LeafSystem):
             output.set_value(self._current_action)
             return
         
+        if len(self._pusher_pose_deque) < self._obs_horizon or len(self._image_deque) < self._obs_horizon:
+            self._update_history(context)
+            output.set_value(self._current_action)
+            return
+
+
         # Update observation history
         self._update_history(context)
 
@@ -190,7 +196,7 @@ class DiffusionPolicyController(LeafSystem):
             actions = action_prediction[self._start:self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())
-            # print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
+            print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
 
             # DEBUG: dummy actions (move pusher in positive x direction)
             # new_desired_pose = self._pusher_pose_deque[-1].copy()
@@ -211,32 +217,25 @@ class DiffusionPolicyController(LeafSystem):
         # print(f"Time: {time:.3f}, action delta: {delta}")
         # print(f"Time: {time:.3f}, action: {self._current_action}")
         
+    def reset(self, reset_position: np.ndarray):
+        self._current_action = reset_position
+        self._actions.clear()
+        self._pusher_pose_deque.clear()
+        self._image_deque.clear()
+    
     def _deque_to_dict(self, 
                       obs_deque: deque, 
                       img_deque: deque, 
                       target: np.ndarray
-                    ):
-        state_tensor = list()
-        for i in range(self._obs_horizon):
-            state_tensor.append(torch.from_numpy(obs_deque[i+1]))
-        state_tensor = torch.cat(state_tensor, dim=0).reshape(self._B, self._obs_horizon, self._state_dim)
-        
-        img_tensor = list()
-        for i in range(self._obs_horizon):
-            img = img_deque[i+1]
-            img_tensor.append(torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0))
-        img_tensor = torch.cat(img_tensor, dim=0).reshape(
-            self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height
-        )
-        
-        # state_tensor = torch.cat(
-        #     [torch.from_numpy(obs) for obs in obs_deque], 
-        #     dim=0
-        # ).reshape(self._B, self._obs_horizon, self._state_dim)
-        # img_tensor = torch.cat(
-        #     [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], 
-        #     dim=0
-        # ).reshape(self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height)
+                    ):      
+        state_tensor = torch.cat(
+            [torch.from_numpy(obs) for obs in obs_deque], 
+            dim=0
+        ).reshape(self._B, self._obs_horizon, self._state_dim)
+        img_tensor = torch.cat(
+            [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], 
+            dim=0
+        ).reshape(self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height)
         target_tensor = torch.from_numpy(target).reshape(1, self._target_dim) # 1, D_t
         return {'obs': {
                     'image': img_tensor.to(self._device), # 1, T_obs, C, H, W
@@ -251,4 +250,4 @@ class DiffusionPolicyController(LeafSystem):
         image = self.camera_port.Eval(context)
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
-        self._image_deque.append(image.data[:,:,:-1])  
+        self._image_deque.append(image.data[:,:,:-1])
