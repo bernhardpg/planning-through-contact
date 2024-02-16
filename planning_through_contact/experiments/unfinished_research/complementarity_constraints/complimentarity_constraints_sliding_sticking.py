@@ -9,6 +9,7 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MosekSolver,
+    SnoptSolver,
     Solve,
     SolverOptions,
 )
@@ -111,9 +112,31 @@ result = Solve(relaxed_prog)
 
 assert result.is_success()
 
-X_sol = result.GetSolution(X)
-# print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-4)}")
-plot_eigvals(X_sol)
+analyze_relaxed = False
+if analyze_relaxed:
+    X_sol = result.GetSolution(X)
+    # print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-4)}")
+    plot_eigvals(X_sol)
+
+    fig, axs = plt.subplots(5, 1)
+
+    axs[0].plot(result.GetSolution(box_pos))
+    axs[0].set_title("Box position")
+
+    axs[1].plot(result.GetSolution(phi))
+    axs[1].set_title("SDF")
+    axs[1].set_ylim([0, max(result.GetSolution(phi))])
+
+    axs[2].plot(result.GetSolution(finger_lambda_n))
+    axs[2].set_title("Finger normal force")
+
+    plt.show()
+
+x_sol = result.GetSolution(prog.decision_variables())
+prog.SetInitialGuess(prog.decision_variables(), x_sol)
+
+snopt = SnoptSolver()
+feasible_result = snopt.Solve(prog)  # type: ignore
 
 fig, axs = plt.subplots(5, 1)
 
