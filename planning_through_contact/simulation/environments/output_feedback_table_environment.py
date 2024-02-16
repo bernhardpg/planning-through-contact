@@ -328,14 +328,14 @@ class OutputFeedbackTableEnvironment:
             target_slider_pose.theta-rot_tol <= slider_pose.theta <= target_slider_pose.theta+rot_tol
 
         if reached_pusher_target_pose and reached_slider_target_pose:
-            print("Success! Reseting slider pose.")
+            print(f"\n[Run {self._multi_run_idx}] Success! Reseting slider pose.")
             print("Initial pusher pose: ", 
                   self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
             print("Final slider pose: ", slider_pose)
             return {'pusher': False, 'slider': True}
         
         if (time - self._last_reset_time) > self._multi_run_config.max_attempt_duration:
-            print("Reseting slider pose due to timeout.")
+            print(f"\n[Run {self._multi_run_idx}] Reseting slider pose due to timeout.")
             print("Final pusher pose:", pusher_pose)
             print("Final pusher speed:", pusher_speed)
             print("Final slider pose:", slider_pose)
@@ -359,7 +359,8 @@ class OutputFeedbackTableEnvironment:
             self._multi_run_idx += 1
 
         # reset diffusion policy
-        # self._desired_position_source._diffusion_policy_controller.reset(reset_position)
+        # pusher_position = self._plant.GetPositions(self.mbp_context, self._robot_model_instance)
+        # self._desired_position_source._diffusion_policy_controller.reset(pusher_position)
         self._last_reset_time = time
 
     def save_data(self, save_dir):

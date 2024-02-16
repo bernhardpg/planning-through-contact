@@ -70,6 +70,7 @@ def run_sim(
     num_runs: int,
     max_attempt_duration: float,
     seed: int,
+    traj_idx: int,
     diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
     initial_pusher_planar_pose: PlanarPose = None,
     target_slider_planar_pose: PlanarPose = None,
@@ -83,7 +84,6 @@ def run_sim(
         "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
     ).setLevel(logging.DEBUG)
     traj = PlanarPushingTrajectory.load(plan)
-    print(traj.config.dynamics_config)
     slider = traj.config.dynamics_config.slider
 
     # camera set up
@@ -102,7 +102,7 @@ def run_sim(
     )
     
     # Set up multi run config
-    multi_run_config = get_multi_run_config(num_runs, max_attempt_duration, seed=seed)
+    multi_run_config = get_multi_run_config(num_runs, max_attempt_duration, seed=seed, traj_idx=traj_idx)
 
     sim_config = PlanarPushingSimConfig(
         slider=slider,
@@ -125,6 +125,7 @@ def run_sim(
         data_dir='diffusion_policy_logs',
         multi_run_config=multi_run_config
     )
+    print(traj.initial_slider_planar_pose)
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
 
@@ -147,14 +148,16 @@ def run_sim(
     environment.export_diagram("diffusion_environment_diagram.pdf")
     end_time = max(100.0, num_runs * max_attempt_duration)
     successful_idx, save_dir = environment.simulate(end_time, recording_file=recording_name)
-    if num_runs > 1:
-        with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
-            f.write(f"{checkpoint}\n")
-            f.write(f"Seed: {seed}\n")
-            f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
-            f.write(f"Success_idx: {successful_idx}\n")
-            f.write(f"Save dir: {save_dir}\n")
-            f.write("\n")
+    # if num_runs > 1:
+    with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
+        f.write(f"{checkpoint}\n")
+        f.write(f"Seed: {seed}\n")
+        if num_runs == 1 and traj_idx is not None:
+            f.write(f"Trajectory idx: {traj_idx}\n")
+        f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
+        f.write(f"Success_idx: {successful_idx}\n")
+        f.write(f"Save dir: {save_dir}\n")
+        f.write("\n")
 
 def run_multiple(
     plans: list,
@@ -283,7 +286,11 @@ def get_slider_start_poses(
 
     return slider_initial_poses
 
-def get_multi_run_config(num_runs, max_attempt_duration, seed, target_slider_pose=PlanarPose(0.5, 0.0, 0.0)):
+def get_multi_run_config(num_runs, 
+                         max_attempt_duration, 
+                         seed, 
+                         traj_idx = None,
+                         target_slider_pose=PlanarPose(0.5, 0.0, 0.0)):
     # Set up multi run config
     config = get_default_plan_config(
         slider_type='tee',
@@ -305,15 +312,29 @@ def get_multi_run_config(num_runs, max_attempt_duration, seed, target_slider_pos
     )
     initial_slider_poses = get_slider_start_poses(
         seed=seed,
-        num_plans=num_runs,
+        num_plans=max(num_runs, 100),
         workspace=workspace,
         config=config,
         limit_rotations=False,
     )
 
+    if num_runs == 1:
+        if traj_idx is not None:
+            initial_slider_poses = [initial_slider_poses[traj_idx]]
+        else:
+            initial_slider_poses = [initial_slider_poses[0]]
+    else:
+        initial_slider_poses = initial_slider_poses[:num_runs]
+
+    # For demo, hard coding the initial slider poses
+    # successful_idx = successful_idx = [0, 3, 9, 30, 0, 53, 65, 53, 54, 51] # term 3
+    # successful_idx = successful_idx[:num_runs]
+    # initial_slider_poses = [initial_slider_poses[i] for i in successful_idx]
+    # initial_slider_poses[4] = PlanarPose(0.513585856901175, -0.0404027427983526, 1.160064053488128) # term 2
+
     return MultiRunConfig(
         initial_slider_poses=initial_slider_poses,
-        target_slider_poses=[target_slider_pose for _ in range(num_runs)],
+        target_slider_poses=[target_slider_pose for _ in range(len(initial_slider_poses))],
         max_attempt_duration=max_attempt_duration
     )
 
@@ -321,8 +342,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint")
     parser.add_argument("--num_runs", type=int, default=1, help="Number of runs to simulate")
-    parser.add_argument("--max_attempt_duration", type=float, default=60.0, help="Max duration for each run")
-    parser.add_argument("--seed", type=int, default=9001, help="Seed for random number generator")
+    parser.add_argument("--max_attempt_duration", type=float, default=90.0, help="Max duration for each run")
+    parser.add_argument("--seed", type=int, default=163, help="Seed for random number generator")
+    parser.add_argument("--traj_idx", type=int, default=None, help="Index of trajectory to use")
     args = parser.parse_args()
 
     if args.checkpoint is None:
@@ -344,6 +366,7 @@ if __name__ == "__main__":
         num_runs=args.num_runs,
         max_attempt_duration=args.max_attempt_duration,
         seed=args.seed,
+        traj_idx=args.traj_idx,
         data_collection_dir=None,
         save_recording=True,
         debug=False,
