@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List
 
 import matplotlib.pyplot as plt
@@ -16,7 +17,11 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
+from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
+
+OUTPUT_DIR = Path("output/complimentarity_constraints/")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 dt = 0.1
 N = 10
@@ -125,129 +130,151 @@ prog.AddQuadraticCost(v_rel.T @ v_rel)  # type: ignore
 # prog.AddLinearCost(np.sum(finger_lambda_n))  # type: ignore
 # prog.AddLinearCost(np.sum(lambda_f_comps))  # type: ignore
 
-
 relaxed_prog = MakeSemidefiniteRelaxation(prog)
 X = get_X_from_relaxation(relaxed_prog)
-# This seems to actually help with rounding
+x = prog.decision_variables()
+
+# Use my SDP relaxation code:
+# relaxed_prog = create_sdp_relaxation(prog)[0]
+# X = get_X_from_relaxation(relaxed_prog)
+# x = X[1:, 0]
+
+# This seems to actually make nonlinear rounding easier.
+# Would be achieve the same effect if we processed all the numbers
+# and made the small numbers equal to 0?
 trace_cost = relaxed_prog.AddLinearCost(1e-6 * np.trace(X))
 
 
 # Set solver options to be equal
-TOL = 1e-8
+# TOL = 1e-5
 mosek = MosekSolver()
 mosek_options = SolverOptions()
-mosek_options.SetOption(CommonSolverOption.kPrintFileName, "mosek_log.txt")  # type: ignore
-mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", TOL)
-mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", TOL)
-mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", TOL)
+mosek_options.SetOption(CommonSolverOption.kPrintFileName, str(OUTPUT_DIR / "mosek_log.txt"))  # type: ignore
+# mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", TOL)
+# mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", TOL)
+# mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", TOL)
 
 snopt = SnoptSolver()
 snopt_options = SolverOptions()
-snopt_options.SetOption(snopt.solver_id(), "Print file", "snopt_log.txt")
-snopt_options.SetOption(snopt.solver_id(), "Major Feasibility Tolerance", TOL)
-snopt_options.SetOption(snopt.solver_id(), "Major Optimality Tolerance", TOL)
-snopt_options.SetOption(snopt.solver_id(), "Minor Feasibility Tolerance", TOL)
-snopt_options.SetOption(snopt.solver_id(), "Minor Optimality Tolerance", TOL)
+snopt_options.SetOption(
+    snopt.solver_id(), "Print file", str(OUTPUT_DIR / "snopt_log.txt")
+)
+# snopt_options.SetOption(snopt.solver_id(), "Major Feasibility Tolerance", TOL)
+# snopt_options.SetOption(snopt.solver_id(), "Major Optimality Tolerance", TOL)
+# snopt_options.SetOption(snopt.solver_id(), "Minor Feasibility Tolerance", TOL)
+# snopt_options.SetOption(snopt.solver_id(), "Minor Optimality Tolerance", TOL)
+
+# NOTE: We sometimes get a negative optimality gap of ~0.01%, which seems to be because
+# of numerical tolerances. To investigate this properly, I would have to look at the solver
+# parameters in more detail.
 
 
-result = mosek.Solve(relaxed_prog)  # type: ignore
+result = mosek.Solve(relaxed_prog, solver_options=mosek_options)  # type: ignore
 
 assert result.is_success()
 
-trace_cost_sol = (
-    result.GetSolution(trace_cost.evaluator().Eval(trace_cost.variables()))
-    .item()
-    .Evaluate()
+relaxed_cost = np.sum(
+    relaxed_prog.EvalBindings(
+        relaxed_prog.GetAllCosts()[:-1],  # skip trace_cost
+        result.GetSolution(relaxed_prog.decision_variables()),
+    )
 )
-# Remove the trace from the relaxed cost so it doesn't impact the optimality gap
-relaxed_cost = result.get_optimal_cost() - trace_cost_sol
-# relaxed_cost = result.get_optimal_cost()
-
-x_sol = result.GetSolution(prog.decision_variables())
-prog.SetInitialGuess(prog.decision_variables(), x_sol)
-
-feasible_result = snopt.Solve(prog)  # type: ignore
-
-do_rounding = True
-
-if do_rounding:
-    assert feasible_result.is_success()
-    feasible_cost = feasible_result.get_optimal_cost()
-
-    optimality_gap = ((feasible_cost - relaxed_cost) / relaxed_cost) * 100
-
-    print(f"Global optimality gap: {optimality_gap} %")
 
 X_sol = result.GetSolution(X)
 # print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-2)}")
 plot_eigvals(X_sol)
 
-fig, axs = plt.subplots(6, 2)
-fig.set_size_inches(16, 10)
-
-v_rel_sol = result.GetSolution(v_rel)
-phi_sol = result.GetSolution(phi)
-finger_lambda_n_sol = result.GetSolution(finger_lambda_n)
-gamma_sol = result.GetSolution(gamma)
-lambda_f_comps_sol = result.GetSolution(lambda_f_comps)
-
-axs[0, 0].plot(v_rel_sol)  # type: ignore
-axs[0, 0].set_title("v_rel")
-axs[0, 0].set_xlim(0, N + 1)
-
-axs[1, 0].plot(phi_sol)
-axs[1, 0].set_title("phi")
-axs[1, 0].set_ylim([0, max(phi_sol)])
-axs[1, 0].set_xlim(0, N + 1)
-
-axs[2, 0].plot(finger_lambda_n_sol)
-axs[2, 0].set_title("finger_lambda_n")
-axs[2, 0].set_xlim(0, N + 1)
-
-axs[3, 0].plot(lambda_f_comps_sol[:, 0])
-axs[3, 0].set_title("lambda_f 1")
-axs[3, 0].set_xlim(0, N + 1)
-
-axs[4, 0].plot(lambda_f_comps_sol[:, 1])
-axs[4, 0].set_title("lambda_f 2")
-axs[4, 0].set_xlim(0, N + 1)
-
-axs[5, 0].plot(gamma_sol)
-axs[5, 0].set_title("gamma")
-axs[5, 0].set_xlim(0, N + 1)
-
+do_rounding = True
+use_first_row_as_initial_guess = True
 if do_rounding:
-    v_rel_sol = feasible_result.GetSolution(v_rel)
-    phi_sol = feasible_result.GetSolution(phi)
-    finger_lambda_n_sol = feasible_result.GetSolution(finger_lambda_n)
-    gamma_sol = feasible_result.GetSolution(gamma)
-    lambda_f_comps_sol = feasible_result.GetSolution(lambda_f_comps)
+    if use_first_row_as_initial_guess:
+        x_sol = result.GetSolution(x)
+    else:  # use biggest eigenvector (does not work)
+        eigvals, eigvecs = np.linalg.eig(X_sol)
+        # get the idxs that sort the eigvals in descending order
+        sorted_idxs, _ = zip(*reversed(sorted(enumerate(eigvals), key=lambda x: x[1])))
+        biggest_eigvec_normalized = eigvecs[:, sorted_idxs[0]]  # eigvecs are columns
+        biggest_eigval = eigvals[sorted_idxs[0]]
+        biggest_eigvec = biggest_eigvec_normalized
+        x_sol = biggest_eigvec[:-1]
 
-    axs[0, 1].plot(v_rel_sol)  # type: ignore
-    axs[0, 1].set_title("v_rel")
-    axs[0, 1].set_xlim(0, N + 1)
+    feasible_result = snopt.Solve(prog, initial_guess=x_sol, solver_options=snopt_options)  # type: ignore
 
-    axs[1, 1].plot(phi_sol)
-    axs[1, 1].set_title("phi")
-    axs[1, 1].set_ylim([0, max(phi_sol)])
-    axs[1, 1].set_xlim(0, N + 1)
+    assert feasible_result.is_success()
+    feasible_cost = feasible_result.get_optimal_cost()
 
-    axs[2, 1].plot(finger_lambda_n_sol)
-    axs[2, 1].set_title("finger_lambda_n")
-    axs[2, 1].set_xlim(0, N + 1)
+    optimality_gap = ((feasible_cost - relaxed_cost) / relaxed_cost) * 100
+    print(f"Global optimality gap: {optimality_gap} %")
 
-    axs[3, 1].plot(lambda_f_comps_sol[:, 0])
-    axs[3, 1].set_title("lambda_f 1")
-    axs[3, 1].set_xlim(0, N + 1)
 
-    axs[4, 1].plot(lambda_f_comps_sol[:, 1])
-    axs[4, 1].set_title("lambda_f 2")
-    axs[4, 1].set_xlim(0, N + 1)
+plot = True
+if plot:
+    fig, axs = plt.subplots(6, 2)
+    fig.set_size_inches(16, 10)  # type: ignore
 
-    axs[5, 1].plot(gamma_sol)
-    axs[5, 1].set_title("gamma")
-    axs[5, 1].set_xlim(0, N + 1)
-    fig.suptitle("Relaxation | Feasible")
+    v_rel_sol = result.GetSolution(v_rel)
+    phi_sol = result.GetSolution(phi)
+    finger_lambda_n_sol = result.GetSolution(finger_lambda_n)
+    gamma_sol = result.GetSolution(gamma)
+    lambda_f_comps_sol = result.GetSolution(lambda_f_comps)
 
-plt.tight_layout()
-plt.show()
+    axs[0, 0].plot(v_rel_sol)  # type: ignore
+    axs[0, 0].set_title("v_rel")
+    axs[0, 0].set_xlim(0, N + 1)
+
+    axs[1, 0].plot(phi_sol)
+    axs[1, 0].set_title("phi")
+    axs[1, 0].set_ylim([0, max(phi_sol)])
+    axs[1, 0].set_xlim(0, N + 1)
+
+    axs[2, 0].plot(finger_lambda_n_sol)
+    axs[2, 0].set_title("finger_lambda_n")
+    axs[2, 0].set_xlim(0, N + 1)
+
+    axs[3, 0].plot(lambda_f_comps_sol[:, 0])
+    axs[3, 0].set_title("lambda_f 1")
+    axs[3, 0].set_xlim(0, N + 1)
+
+    axs[4, 0].plot(lambda_f_comps_sol[:, 1])
+    axs[4, 0].set_title("lambda_f 2")
+    axs[4, 0].set_xlim(0, N + 1)
+
+    axs[5, 0].plot(gamma_sol)
+    axs[5, 0].set_title("gamma")
+    axs[5, 0].set_xlim(0, N + 1)
+
+    if do_rounding:
+        v_rel_sol = feasible_result.GetSolution(v_rel)
+        phi_sol = feasible_result.GetSolution(phi)
+        finger_lambda_n_sol = feasible_result.GetSolution(finger_lambda_n)
+        gamma_sol = feasible_result.GetSolution(gamma)
+        lambda_f_comps_sol = feasible_result.GetSolution(lambda_f_comps)
+
+        axs[0, 1].plot(v_rel_sol)  # type: ignore
+        axs[0, 1].set_title("v_rel")
+        axs[0, 1].set_xlim(0, N + 1)
+
+        axs[1, 1].plot(phi_sol)
+        axs[1, 1].set_title("phi")
+        axs[1, 1].set_ylim([0, max(phi_sol)])
+        axs[1, 1].set_xlim(0, N + 1)
+
+        axs[2, 1].plot(finger_lambda_n_sol)
+        axs[2, 1].set_title("finger_lambda_n")
+        axs[2, 1].set_xlim(0, N + 1)
+
+        axs[3, 1].plot(lambda_f_comps_sol[:, 0])
+        axs[3, 1].set_title("lambda_f 1")
+        axs[3, 1].set_xlim(0, N + 1)
+
+        axs[4, 1].plot(lambda_f_comps_sol[:, 1])
+        axs[4, 1].set_title("lambda_f 2")
+        axs[4, 1].set_xlim(0, N + 1)
+
+        axs[5, 1].plot(gamma_sol)
+        axs[5, 1].set_title("gamma")
+        axs[5, 1].set_xlim(0, N + 1)
+        fig.suptitle("Relaxation | Feasible")
+
+    plt.tight_layout()
+    plt.show()
