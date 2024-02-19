@@ -123,7 +123,7 @@ class Config:
 # end_pos = pos_0 + np.sum(v_rel)
 
 # Friction cone: First component is along negative x axis, second along positive x axis
-cfg = Config()
+cfg = Config(N=5)
 prog = MathematicalProgram()
 
 gravity_force = cfg.box_mass * 9.81
@@ -158,7 +158,7 @@ p_v3_W = [p + R @ p_v3_B for p, R in zip(p_WB, R_WB)]
 bt3_phi = [p[1] for p in p_v3_W]
 
 bt3_v_rel = np.array(
-    [(p_next - p_curr)[1] for p_next, p_curr in zip(p_v3_W[1:], p_v3_W[:-1])]
+    [(p_next - p_curr)[0] for p_next, p_curr in zip(p_v3_W[1:], p_v3_W[:-1])]
 )
 bt3_v_rel_comps = np.vstack([-bt3_v_rel, bt3_v_rel]).T  # (N, 2)
 
@@ -174,7 +174,7 @@ p_v2_W = [p + R @ p_v2_B for p, R in zip(p_WB, R_WB)]
 bt2_phi = [p[1] for p in p_v2_W]
 
 bt2_v_rel = np.array(
-    [(p_next - p_curr)[1] for p_next, p_curr in zip(p_v2_W[1:], p_v2_W[:-1])]
+    [(p_next - p_curr)[0] for p_next, p_curr in zip(p_v2_W[1:], p_v2_W[:-1])]
 )
 bt2_v_rel_comps = np.vstack([-bt2_v_rel, bt2_v_rel]).T  # (N, 2)
 
@@ -221,13 +221,28 @@ for i in range(cfg.N - 1):
     for c in sum_forces:
         prog.AddQuadraticConstraint(c, 0, 0)
 
-# Initial conditions
-prog.AddLinearConstraint(phi[0] == 1)
-prog.AddLinearConstraint(phi[N] == 1)
-prog.AddLinearConstraint(end_pos == 1)
+    prog.AddQuadraticConstraint(cos_th[i] ** 2 + sin_th[i] ** 2, 1, 1)
+
+# Initial conditions on box
+th_I = 0
+th_F = 0
+prog.AddLinearConstraint(cos_th[0] == np.cos(th_I))
+prog.AddLinearConstraint(sin_th[0] == np.sin(th_I))
+prog.AddLinearConstraint(cos_th[cfg.N - 1] == np.cos(th_F))
+prog.AddLinearConstraint(sin_th[cfg.N - 1] == np.sin(th_F))
+prog.AddLinearConstraint(p_WB[0, 0] == 0)
+prog.AddLinearConstraint(p_WB[0, 1] == box.height)
+prog.AddLinearConstraint(p_WB[cfg.N - 1, 0] == 1)
+prog.AddLinearConstraint(p_WB[cfg.N - 1, 1] == box.height)
+
+# Initial conditions on finger
+prog.AddLinearConstraint(p_BF_x[0] == -box.width - 0.2)
+prog.AddLinearConstraint(p_BF_x[cfg.N - 1] == -box.width - 0.2)
 
 
-prog.AddQuadraticCost(v_rel.T @ v_rel)  # type: ignore
+prog.AddQuadraticCost(bt3_v_rel.T @ bt3_v_rel)
+prog.AddQuadraticCost(bt2_v_rel.T @ bt2_v_rel)
+
 # prog.AddQuadraticCost(finger_lambda_n.T @ finger_lambda_n)  # type: ignore
 # prog.AddQuadraticCost(lambda_f_comps.flatten() @ lambda_f_comps.flatten())  # type: ignore
 # prog.AddQuadraticCost(gamma.T @ gamma)  # type: ignore
@@ -257,7 +272,8 @@ trace_cost = relaxed_prog.AddLinearCost(1e-6 * np.trace(X))
 # TOL = 1e-5
 mosek = MosekSolver()
 mosek_options = SolverOptions()
-mosek_options.SetOption(CommonSolverOption.kPrintFileName, str(OUTPUT_DIR / "mosek_log.txt"))  # type: ignore
+# mosek_options.SetOption(CommonSolverOption.kPrintFileName, str(OUTPUT_DIR / "mosek_log.txt"))  # type: ignore
+mosek_options.SetOption(CommonSolverOption.kPrintToConsole, True)
 # mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", TOL)
 # mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", TOL)
 # mosek_options.SetOption(mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", TOL)
@@ -289,10 +305,10 @@ relaxed_cost = np.sum(
 )
 
 X_sol = result.GetSolution(X)
-# print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-2)}")
+print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-3)}")
 plot_eigvals(X_sol)
 
-do_rounding = True
+do_rounding = False
 use_first_row_as_initial_guess = True
 if do_rounding:
     if use_first_row_as_initial_guess:
@@ -315,74 +331,102 @@ if do_rounding:
     print(f"Global optimality gap: {optimality_gap} %")
 
 
-plot = True
-if plot:
-    fig, axs = plt.subplots(6, 2)
-    fig.set_size_inches(16, 10)  # type: ignore
+# First, retrieve the solutions for all your decision variables
+p_WB_sol = result.GetSolution(p_WB)
+p_BF_x_sol = result.GetSolution(p_BF_x)
+cos_th_sol = result.GetSolution(cos_th)
+sin_th_sol = result.GetSolution(sin_th)
+bf_lambda_n_sol = result.GetSolution(bf_lambda_n)
+bf_lambda_f_sol = evaluate_np_expressions_array(bf_lambda_f, result)
+bt3_gamma_sol = result.GetSolution(bt3_gamma)
+bt3_lambda_n_sol = result.GetSolution(bt3_lambda_n)
+bt3_lambda_f_sol = evaluate_np_expressions_array(bt3_lambda_f, result)
+bt3_v_rel_sol = evaluate_np_expressions_array(bt3_v_rel, result)
+bt2_gamma_sol = result.GetSolution(bt2_gamma)
+bt2_lambda_n_sol = result.GetSolution(bt2_lambda_n)
+bt2_lambda_f_sol = evaluate_np_expressions_array(bt2_lambda_f, result)
+bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
 
-    v_rel_sol = result.GetSolution(v_rel)
-    phi_sol = result.GetSolution(phi)
-    finger_lambda_n_sol = result.GetSolution(finger_lambda_n)
-    gamma_sol = result.GetSolution(gamma)
-    lambda_f_comps_sol = result.GetSolution(lambda_f_comps)
+# Now, plot them
+fig, axs = plt.subplots(
+    7, 2, figsize=(10, 10)
+)  # Adjust the number of subplots based on the number of variables
 
-    axs[0, 0].plot(v_rel_sol)  # type: ignore
-    axs[0, 0].set_title("v_rel")
-    axs[0, 0].set_xlim(0, N + 1)
+axs = axs.flatten()
+# Plot p_WB
+for i in range(p_WB_sol.shape[1]):
+    axs[0].plot(p_WB_sol[:, i], label=f"p_WB_dim_{i}")
+axs[0].set_title("p_WB")
+axs[0].set_xlim(0, cfg.N - 1)
+axs[0].legend()
 
-    axs[1, 0].plot(phi_sol)
-    axs[1, 0].set_title("phi")
-    axs[1, 0].set_ylim([0, max(phi_sol)])
-    axs[1, 0].set_xlim(0, N + 1)
+# Plot p_BF_x
+axs[1].plot(p_BF_x_sol)
+axs[1].set_title("p_BF_x")
+axs[1].set_xlim(0, cfg.N - 1)
 
-    axs[2, 0].plot(finger_lambda_n_sol)
-    axs[2, 0].set_title("finger_lambda_n")
-    axs[2, 0].set_xlim(0, N + 1)
+# Plot cos_th
+axs[2].plot(cos_th_sol)
+axs[2].set_title("cos_th")
+axs[2].set_xlim(0, cfg.N - 1)
+axs[2].set_ylim(-1, 1)
 
-    axs[3, 0].plot(lambda_f_comps_sol[:, 0])
-    axs[3, 0].set_title("lambda_f 1")
-    axs[3, 0].set_xlim(0, N + 1)
 
-    axs[4, 0].plot(lambda_f_comps_sol[:, 1])
-    axs[4, 0].set_title("lambda_f 2")
-    axs[4, 0].set_xlim(0, N + 1)
+# Plot sin_th
+axs[3].plot(sin_th_sol)
+axs[3].set_title("sin_th")
+axs[3].set_xlim(0, cfg.N - 1)
+axs[3].set_ylim(-1, 1)
 
-    axs[5, 0].plot(gamma_sol)
-    axs[5, 0].set_title("gamma")
-    axs[5, 0].set_xlim(0, N + 1)
+# Plot bf_lambda_n
+axs[4].plot(bf_lambda_n_sol)
+axs[4].set_title("bf_lambda_n")
+axs[4].set_xlim(0, cfg.N - 1)
 
-    if do_rounding:
-        v_rel_sol = feasible_result.GetSolution(v_rel)
-        phi_sol = feasible_result.GetSolution(phi)
-        finger_lambda_n_sol = feasible_result.GetSolution(finger_lambda_n)
-        gamma_sol = feasible_result.GetSolution(gamma)
-        lambda_f_comps_sol = feasible_result.GetSolution(lambda_f_comps)
+# Plot bf_lambda_f
+axs[5].plot(bf_lambda_f_sol)
+axs[5].set_title("bf_lambda_f")
+axs[5].set_xlim(0, cfg.N - 1)
 
-        axs[0, 1].plot(v_rel_sol)  # type: ignore
-        axs[0, 1].set_title("v_rel")
-        axs[0, 1].set_xlim(0, N + 1)
+# Plot bt3_gamma
+axs[6].plot(bt3_gamma_sol)
+axs[6].set_title("bt3_gamma")
+axs[6].set_xlim(0, cfg.N - 1)
 
-        axs[1, 1].plot(phi_sol)
-        axs[1, 1].set_title("phi")
-        axs[1, 1].set_ylim([0, max(phi_sol)])
-        axs[1, 1].set_xlim(0, N + 1)
+# Plot bt3_lambda_n
+axs[7].plot(bt3_lambda_n_sol)
+axs[7].set_title("bt3_lambda_n")
+axs[7].set_xlim(0, cfg.N - 1)
 
-        axs[2, 1].plot(finger_lambda_n_sol)
-        axs[2, 1].set_title("finger_lambda_n")
-        axs[2, 1].set_xlim(0, N + 1)
+# Plot bt3_lambda_f
+axs[8].plot(bt3_lambda_f_sol)
+axs[8].set_title("bt3_lambda_f")
+axs[8].set_xlim(0, cfg.N - 1)
 
-        axs[3, 1].plot(lambda_f_comps_sol[:, 0])
-        axs[3, 1].set_title("lambda_f 1")
-        axs[3, 1].set_xlim(0, N + 1)
+# Plot bt3_lambda_f
+axs[9].plot(bt3_v_rel_sol)
+axs[9].set_title("bt3_v_rel")
+axs[9].set_xlim(0, cfg.N - 1)
 
-        axs[4, 1].plot(lambda_f_comps_sol[:, 1])
-        axs[4, 1].set_title("lambda_f 2")
-        axs[4, 1].set_xlim(0, N + 1)
+# Plot bt2_gamma
+axs[10].plot(bt2_gamma_sol)
+axs[10].set_title("bt2_gamma")
+axs[10].set_xlim(0, cfg.N - 1)
 
-        axs[5, 1].plot(gamma_sol)
-        axs[5, 1].set_title("gamma")
-        axs[5, 1].set_xlim(0, N + 1)
-        fig.suptitle("Relaxation | Feasible")
+# Plot bt2_lambda_n
+axs[11].plot(bt2_lambda_n_sol)
+axs[11].set_title("bt2_lambda_n")
+axs[11].set_xlim(0, cfg.N - 1)
 
-    plt.tight_layout()
-    plt.show()
+# Plot bt2_lambda_f
+axs[12].plot(bt2_lambda_f_sol)
+axs[12].set_title("bt2_lambda_f")
+axs[12].set_xlim(0, cfg.N - 1)
+
+# Plot bt3_lambda_f
+axs[13].plot(bt2_v_rel_sol)
+axs[13].set_title("bt2_v_rel")
+axs[13].set_xlim(0, cfg.N - 1)
+
+plt.tight_layout()
+plt.show()
