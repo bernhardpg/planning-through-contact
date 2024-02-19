@@ -132,7 +132,7 @@ class Config:
 cfg = Config(N=5)
 prog = MathematicalProgram()
 
-gravity_force = cfg.box_mass * 9.81
+gravity_force = np.array([0, -cfg.box_mass * 9.81])
 
 box = Box2d(width=0.2, height=0.1)
 
@@ -223,7 +223,7 @@ for i in range(cfg.N - 1):
     add_complimentarity_constraint(prog, lhs_2, rhs_2)
 
     # Add force balance constraint
-    sum_forces = f_F_W[i] + f_v3_W[i] + f_v2_W[i]
+    sum_forces = f_F_W[i] + f_v3_W[i] + f_v2_W[i] + gravity_force
     for c in sum_forces:
         prog.AddQuadraticConstraint(c, 0, 0)
 
@@ -354,7 +354,7 @@ bt2_lambda_f_sol = evaluate_np_expressions_array(bt2_lambda_f, result)
 bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
 
 
-show_plot = False
+show_plot = True
 if show_plot:
     plot_eigvals(X_sol)
     # Now, plot them
@@ -401,6 +401,7 @@ if show_plot:
     axs[6].plot(bt3_gamma_sol)
     axs[6].set_title("bt3_gamma")
     axs[6].set_xlim(0, cfg.N - 1)
+    axs[6].set_ylim(0, max(max(bt3_gamma_sol) * 1.3, 0.1))
 
     # Plot bt3_lambda_n
     axs[7].plot(bt3_lambda_n_sol)
@@ -416,11 +417,13 @@ if show_plot:
     axs[9].plot(bt3_v_rel_sol)
     axs[9].set_title("bt3_v_rel")
     axs[9].set_xlim(0, cfg.N - 1)
+    axs[9].set_ylim(0, max(max(bt3_v_rel_sol) * 1.3, 0.1))
 
     # Plot bt2_gamma
     axs[10].plot(bt2_gamma_sol)
     axs[10].set_title("bt2_gamma")
     axs[10].set_xlim(0, cfg.N - 1)
+    axs[10].set_ylim(0, max(max(bt2_gamma_sol) * 1.3, 0.1))
 
     # Plot bt2_lambda_n
     axs[11].plot(bt2_lambda_n_sol)
@@ -436,6 +439,7 @@ if show_plot:
     axs[13].plot(bt2_v_rel_sol)
     axs[13].set_title("bt2_v_rel")
     axs[13].set_xlim(0, cfg.N - 1)
+    axs[13].set_ylim(0, max(max(bt3_v_rel_sol) * 1.3, 0.1))
 
     plt.tight_layout()
     plt.show()
