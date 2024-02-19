@@ -131,7 +131,9 @@ for i in range(N):
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
     # Add force balance constraint
-    prog.AddLinearConstraint(cp1_lambda_f[i] + finger_lambda_n[i] == 0)
+    prog.AddLinearConstraint(
+        cp1_lambda_f[i] + cp2_lambda_f[i] + finger_lambda_n[i] == 0
+    )
 
 
 # Initial conditions
@@ -231,7 +233,7 @@ if do_rounding:
 
 plot = True
 if plot:
-    fig, axs = plt.subplots(9, 2)
+    fig, axs = plt.subplots(11, 2)
     fig.set_size_inches(16, 10)  # type: ignore
 
     def fill_plot_col(result, col_idx):
@@ -240,9 +242,11 @@ if plot:
         gamma_sol = result.GetSolution(gamma)
 
         cp1_lambda_f_comps_sol = result.GetSolution(cp1_lambda_f_comps)
+        cp1_lambda_f_sol = evaluate_np_expressions_array(cp1_lambda_f, result)
         cp1_v_rel_sol = result.GetSolution(cp1_v_rel)
 
         cp2_lambda_f_comps_sol = result.GetSolution(cp2_lambda_f_comps)
+        cp2_lambda_f_sol = evaluate_np_expressions_array(cp2_lambda_f, result)
         cp2_v_rel_sol = result.GetSolution(cp2_v_rel)
 
         axs[0, col_idx].plot(phi_sol)
@@ -270,17 +274,25 @@ if plot:
         axs[5, col_idx].set_title("cp1_lambda_f 2")
         axs[5, col_idx].set_xlim(0, N + 1)
 
-        axs[6, col_idx].plot(cp2_v_rel_sol)  # type: ignore
-        axs[6, col_idx].set_title("cp2_v_rel")
+        axs[6, col_idx].plot(cp1_lambda_f_sol)
+        axs[6, col_idx].set_title("cp1_lambda_f")
         axs[6, col_idx].set_xlim(0, N + 1)
 
-        axs[7, col_idx].plot(cp2_lambda_f_comps_sol[:, 0])
-        axs[7, col_idx].set_title("cp2_lambda_f 1")
+        axs[7, col_idx].plot(cp2_v_rel_sol)  # type: ignore
+        axs[7, col_idx].set_title("cp2_v_rel")
         axs[7, col_idx].set_xlim(0, N + 1)
 
-        axs[8, col_idx].plot(cp2_lambda_f_comps_sol[:, 1])
-        axs[8, col_idx].set_title("cp2_lambda_f 2")
+        axs[8, col_idx].plot(cp2_lambda_f_comps_sol[:, 0])
+        axs[8, col_idx].set_title("cp2_lambda_f 1")
         axs[8, col_idx].set_xlim(0, N + 1)
+
+        axs[9, col_idx].plot(cp2_lambda_f_comps_sol[:, 1])
+        axs[9, col_idx].set_title("cp2_lambda_f 2")
+        axs[9, col_idx].set_xlim(0, N + 1)
+
+        axs[10, col_idx].plot(cp2_lambda_f_sol)
+        axs[10, col_idx].set_title("cp2_lambda_f")
+        axs[10, col_idx].set_xlim(0, N + 1)
 
     fill_plot_col(result, 0)
 
