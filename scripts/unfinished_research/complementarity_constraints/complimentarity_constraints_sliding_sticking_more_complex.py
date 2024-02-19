@@ -80,7 +80,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ## Plan parameters
 h = 0.1
 N = 4
-mu = 0.5
+mu = 1.0
 mass = 1.0
 
 box = Box2d(width=0.2, height=0.1)
@@ -257,6 +257,9 @@ for i in range(N):
     prog.AddLinearConstraint(sin_th[i] <= 1)
     prog.AddLinearConstraint(sin_th[i] >= -1)
 
+    prog.AddLinearConstraint(p_BF[i, 1] <= box.height / 2)
+    prog.AddLinearConstraint(p_BF[i, 1] >= -box.height / 2)
+
     # Backward euler: x_next = x_curr + h * f(x_curr, u_curr)
     if i == 0:
         prog.AddLinearConstraint(eq(p_WB[i], p_WB_0 + h * delta_p_WB[i]))
@@ -271,9 +274,10 @@ for i in range(N):
 
 
 # Final conditions
-th_F = 0
+# th_F = -np.pi / 2
+th_F = -np.pi / 2
 end_x_pos = 0.5
-prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
+# prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
 prog.AddLinearConstraint(p_WB[N - 1][0] == end_x_pos)
 
 prog.AddLinearConstraint(cos_th[N - 1] == np.cos(th_F))
