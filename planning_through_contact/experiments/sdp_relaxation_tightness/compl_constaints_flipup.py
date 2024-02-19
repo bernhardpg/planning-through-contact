@@ -155,7 +155,7 @@ f_F_W = [R @ f for R, f in zip(R_WB, f_F_B)]
 
 # Box/table corner 3
 name = "bt3"
-bt3_gamma = prog.NewContinuousVariables(cfg.N - 1, f"{name}_gamma")
+bt2_bt3_gamma = prog.NewContinuousVariables(cfg.N - 1, f"{name}_gamma")
 bt3_lambda_n = prog.NewContinuousVariables(cfg.N - 1, f"{name}_lambda_n")
 bt3_lambda_f_comps = prog.NewContinuousVariables(cfg.N - 1, 2, f"{name}_lambda_f")
 bt3_lambda_f = bt3_lambda_f_comps[:, 0] - bt3_lambda_f_comps[:, 1]
@@ -164,15 +164,13 @@ p_v3_B = box.vertices[3].flatten()
 p_v3_W = [p + R @ p_v3_B for p, R in zip(p_WB, R_WB)]
 bt3_phi = [p[1] for p in p_v3_W]  # y component
 
-bt3_v_rel_expr = np.array(
+bt3_v_rel = np.array(
     [(p_next - p_curr)[0] for p_next, p_curr in zip(p_v3_W[1:], p_v3_W[:-1])]
 )
-bt3_v_rel = prog.NewContinuousVariables(cfg.N - 1, f"{name}_v_rel")
 bt3_v_rel_comps = np.vstack([bt3_v_rel, -bt3_v_rel]).T  # (N, 2)
 
 # Box/table corner 2
 name = "bt2"
-bt2_gamma = prog.NewContinuousVariables(cfg.N - 1, f"{name}_gamma")
 bt2_lambda_n = prog.NewContinuousVariables(cfg.N - 1, f"{name}_lambda_n")
 bt2_lambda_f_comps = prog.NewContinuousVariables(cfg.N - 1, 2, f"{name}_lambda_f")
 bt2_lambda_f = bt2_lambda_f_comps[:, 0] - bt2_lambda_f_comps[:, 1]
@@ -181,11 +179,9 @@ p_v2_B = box.vertices[2].flatten()
 p_v2_W = [p + R @ p_v2_B for p, R in zip(p_WB, R_WB)]
 bt2_phi = [p[1] for p in p_v2_W]  # y component
 
-bt2_v_rel_expr = np.array(
+bt2_v_rel = np.array(
     [(p_next - p_curr)[0] for p_next, p_curr in zip(p_v2_W[1:], p_v2_W[:-1])]
 )
-
-bt2_v_rel = prog.NewContinuousVariables(cfg.N - 1, f"{name}_v_rel")
 bt2_v_rel_comps = np.vstack([bt2_v_rel, -bt2_v_rel]).T  # (N, 2)
 
 e = np.ones((2,))
@@ -206,12 +202,12 @@ for i in range(cfg.N - 1):
 
     # Box/table corner 3
     # Add sliding/sticking complimentarity constraints
-    lhs_1 = bt3_gamma[i] * e + bt3_v_rel_comps[i]
+    lhs_1 = bt2_bt3_gamma[i] * e + bt3_v_rel_comps[i]
     rhs_1 = bt3_lambda_f_comps[i]
     add_complimentarity_constraint(prog, lhs_1, rhs_1)
 
     lhs_2 = cfg.mu * bt3_lambda_n[i] - np.sum(bt3_lambda_f_comps[i])
-    rhs_2 = bt3_gamma[i]
+    rhs_2 = bt2_bt3_gamma[i]
     add_complimentarity_constraint(prog, lhs_2, rhs_2)
 
     # Add contact/non-contact complimentarity constraints
@@ -221,12 +217,12 @@ for i in range(cfg.N - 1):
 
     # Box/table corner 2
     # Add sliding/sticking complimentarity constraints
-    lhs_1 = bt2_gamma[i] * e + bt2_v_rel_comps[i]
+    lhs_1 = bt2_bt3_gamma[i] * e + bt2_v_rel_comps[i]
     rhs_1 = bt2_lambda_f_comps[i]
     add_complimentarity_constraint(prog, lhs_1, rhs_1)
 
     lhs_2 = cfg.mu * bt2_lambda_n[i] - np.sum(bt2_lambda_f_comps[i])
-    rhs_2 = bt2_gamma[i]
+    rhs_2 = bt2_bt3_gamma[i]
     add_complimentarity_constraint(prog, lhs_2, rhs_2)
 
     # Add force balance constraint
@@ -235,9 +231,6 @@ for i in range(cfg.N - 1):
         prog.AddQuadraticConstraint(c, 0, 0)
 
     prog.AddQuadraticConstraint(cos_th[i] ** 2 + sin_th[i] ** 2, 1, 1)
-
-    prog.AddLinearConstraint(bt2_v_rel_expr[i] == bt2_v_rel[i])
-    prog.AddLinearConstraint(bt3_v_rel_expr[i] == bt3_v_rel[i])
 
 # Initial conditions on box
 th_I = 0
@@ -350,9 +343,6 @@ else:
     feasible_result = None
 
 
-breakpoint()
-
-
 def plot_vals(result: MathematicalProgramResult, title: str):
     # First, retrieve the solutions for all your decision variables
     p_WB_sol = result.GetSolution(p_WB)
@@ -362,20 +352,18 @@ def plot_vals(result: MathematicalProgramResult, title: str):
     bf_lambda_n_sol = result.GetSolution(bf_lambda_n)
     bf_lambda_f_sol = evaluate_np_expressions_array(bf_lambda_f, result)
     bf_lambda_f_comps_sol = result.GetSolution(bf_lambda_f_comps)
-    bt3_gamma_sol = result.GetSolution(bt3_gamma)
+    bt2_bt3_gamma_sol = result.GetSolution(bt2_bt3_gamma)
     bt3_lambda_n_sol = result.GetSolution(bt3_lambda_n)
     bt3_lambda_f_sol = evaluate_np_expressions_array(bt3_lambda_f, result)
     bt3_lambda_f_comps_sol = result.GetSolution(bt3_lambda_f_comps)
-    # bt3_v_rel_sol = evaluate_np_expressions_array(bt3_v_rel, result)
-    bt3_v_rel_sol = result.GetSolution(bt3_v_rel)
+    bt3_v_rel_sol = evaluate_np_expressions_array(bt3_v_rel, result)
+    # bt3_v_rel_sol = result.GetSolution(bt3_v_rel)
     bt3_v_rel_comps_sol = evaluate_np_expressions_array(bt3_v_rel_comps, result)
-    bt2_gamma_sol = result.GetSolution(bt2_gamma)
     bt2_lambda_n_sol = result.GetSolution(bt2_lambda_n)
     bt2_lambda_f_sol = evaluate_np_expressions_array(bt2_lambda_f, result)
-    # bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
-    bt2_v_rel_sol = result.GetSolution(bt2_v_rel)
+    bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
+    # bt2_v_rel_sol = result.GetSolution(bt2_v_rel)
     bt2_v_rel_comps_sol = evaluate_np_expressions_array(bt2_v_rel_comps, result)
-    bt2_gamma_sol = result.GetSolution(bt2_gamma)
     bt2_lambda_f_comps_sol = result.GetSolution(bt2_lambda_f_comps)
 
     # Now, plot them
@@ -428,11 +416,11 @@ def plot_vals(result: MathematicalProgramResult, title: str):
 
     col = 2
 
-    # Plot bt3_gamma
-    axs[0, col].plot(bt3_gamma_sol)
-    axs[0, col].set_title("bt3_gamma")
+    # Plot bt2_bt3_gamma
+    axs[0, col].plot(bt2_bt3_gamma_sol)
+    axs[0, col].set_title("bt2_bt3_gamma")
     axs[0, col].set_xlim(0, cfg.N - 1)
-    axs[0, col].set_ylim(0, max(max(bt3_gamma_sol) * 1.3, 0.1))
+    axs[0, col].set_ylim(0, max(max(bt2_bt3_gamma_sol) * 1.3, 0.1))
 
     # Plot bt3_lambda_n
     axs[1, col].plot(bt3_lambda_n_sol)
@@ -468,11 +456,11 @@ def plot_vals(result: MathematicalProgramResult, title: str):
 
     col = 3
 
-    # Plot bt2_gamma
-    axs[0, col].plot(bt2_gamma_sol)
-    axs[0, col].set_title("bt2_gamma")
+    # Plot bt2_bt3_gamma
+    axs[0, col].plot(bt2_bt3_gamma_sol)
+    axs[0, col].set_title("bt2_bt3_gamma")
     axs[0, col].set_xlim(0, cfg.N - 1)
-    axs[0, col].set_ylim(0, max(max(bt2_gamma_sol) * 1.3, 0.1))
+    axs[0, col].set_ylim(0, max(max(bt2_bt3_gamma_sol) * 1.3, 0.1))
 
     # Plot bt2_lambda_n
     axs[1, col].plot(bt2_lambda_n_sol)
@@ -521,20 +509,19 @@ def animate_vals(result):
     bf_lambda_n_sol = result.GetSolution(bf_lambda_n)
     bf_lambda_f_sol = evaluate_np_expressions_array(bf_lambda_f, result)
     bf_lambda_f_comps_sol = result.GetSolution(bf_lambda_f_comps)
-    bt3_gamma_sol = result.GetSolution(bt3_gamma)
+    bt2_bt3_gamma_sol = result.GetSolution(bt2_bt3_gamma)
     bt3_lambda_n_sol = result.GetSolution(bt3_lambda_n)
     bt3_lambda_f_sol = evaluate_np_expressions_array(bt3_lambda_f, result)
     bt3_lambda_f_comps_sol = result.GetSolution(bt3_lambda_f_comps)
-    # bt3_v_rel_sol = evaluate_np_expressions_array(bt3_v_rel, result)
-    bt3_v_rel_sol = result.GetSolution(bt3_v_rel)
+    bt3_v_rel_sol = evaluate_np_expressions_array(bt3_v_rel, result)
+    # bt3_v_rel_sol = result.GetSolution(bt3_v_rel)
     bt3_v_rel_comps_sol = evaluate_np_expressions_array(bt3_v_rel_comps, result)
-    bt2_gamma_sol = result.GetSolution(bt2_gamma)
+    bt2_bt3_gamma_sol = result.GetSolution(bt2_bt3_gamma)
     bt2_lambda_n_sol = result.GetSolution(bt2_lambda_n)
     bt2_lambda_f_sol = evaluate_np_expressions_array(bt2_lambda_f, result)
-    # bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
-    bt2_v_rel_sol = result.GetSolution(bt2_v_rel)
+    bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
+    # bt2_v_rel_sol = result.GetSolution(bt2_v_rel)
     bt2_v_rel_comps_sol = evaluate_np_expressions_array(bt2_v_rel_comps, result)
-    bt2_gamma_sol = result.GetSolution(bt2_gamma)
     bt2_lambda_f_comps_sol = result.GetSolution(bt2_lambda_f_comps)
 
     R_WB_sol = [evaluate_np_expressions_array(R, result) for R in R_WB]
@@ -579,7 +566,7 @@ def animate_vals(result):
     viz.visualize(viz_com_points, [], viz_polygons, 1.0, None)
 
 
-show_plot = False
+show_plot = True
 if show_plot:
     # plot_eigvals(X_sol)
     plot_vals(result, "Relaxed")
