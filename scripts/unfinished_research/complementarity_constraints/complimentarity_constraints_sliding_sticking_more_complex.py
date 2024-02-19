@@ -25,13 +25,14 @@ OUTPUT_DIR = Path("output/complimentarity_constraints/")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 dt = 0.1
-N = 6
+N = 5
 mu = 0.5
 mass = 1.0
 
 prog = MathematicalProgram()
 
 
+p_BF_x = prog.NewContinuousVariables(N + 1, "p_BF_x")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
 cos_th = prog.NewContinuousVariables(N + 1, "cos_th")
 sin_th = prog.NewContinuousVariables(N + 1, "sin_th")
@@ -65,9 +66,6 @@ cp2_lambda_n = mass * 9.81
 cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
 cp2_v_rel_comps = np.vstack([-cp2_v_rel, cp2_v_rel]).T  # (N, 2)
 cp2_lambda_f = cp2_lambda_f_comps[:, 1] - cp2_lambda_f_comps[:, 0]
-
-pos_0 = 0
-end_pos = pos_0 + np.sum(cp1_v_rel)
 
 # Finger variables
 phi = prog.NewContinuousVariables(N + 1, "phi")
@@ -149,6 +147,9 @@ for i in range(N):
     prog.AddLinearConstraint(v_cp1_W[i][0] == cp1_v_rel[i])
     prog.AddLinearConstraint(v_cp2_W[i][0] == cp2_v_rel[i])
 
+    # Enforce sdf corresponds to negative x-component of finger position
+    prog.AddLinearConstraint(phi[i] == -p_BF_x[i])
+
     # Add contact/non-contact complimentarity constraints
     lhs = phi[i]
     rhs = finger_lambda_n[i]
@@ -159,13 +160,15 @@ for i in range(N):
         cp1_lambda_f[i] + cp2_lambda_f[i] + finger_lambda_n[i] == 0
     )
 
+    # SO(2)
     prog.AddQuadraticConstraint(cos_th[i] ** 2 + sin_th[i] ** 2, 1, 1)
 
 
 # Initial conditions
-prog.AddLinearConstraint(phi[0] == 1)
-prog.AddLinearConstraint(phi[N] == 1)
-prog.AddLinearConstraint(end_pos == 1)
+prog.AddLinearConstraint(p_BF_x[0] == -1 - box.width / 2)
+prog.AddLinearConstraint(p_BF_x[N] == -1 - box.width / 2)
+prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
+prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([1, box.height / 2])))
 
 
 prog.AddQuadraticCost(cp1_v_rel.T @ cp1_v_rel)  # type: ignore
