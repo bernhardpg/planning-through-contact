@@ -45,13 +45,14 @@ prog = MathematicalProgram()
 # NOTE: The knot point values represent the values at the END of a time step
 
 # Finger variables
+finger_gamma = prog.NewContinuousVariables(N, "finger_gamma")
 finger_phi = prog.NewContinuousVariables(N, "finger_phi")
 finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
 finger_lambda_f_comps = prog.NewContinuousVariables(N, 2, "finger_lambda_f")
 finger_lambda_f = finger_lambda_f_comps[:, 1] - finger_lambda_f_comps[:, 0]
 finger_v_rel = prog.NewContinuousVariables(N, "finger_v_rel")
 finger_v_rel_comps = np.vstack([-finger_v_rel, finger_v_rel]).T  # (N, 2)
-p_BF_x = prog.NewContinuousVariables(N, "p_BF_x")
+p_BF = prog.NewContinuousVariables(N, 2, "p_BF")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
 cos_th = prog.NewContinuousVariables(N + 1, "cos_th")
 sin_th = prog.NewContinuousVariables(N + 1, "sin_th")
@@ -147,6 +148,16 @@ sliding_comp_constraints = []
 contact_comp_constraints = []
 
 for i in range(N):
+    # Finger
+    # Add sliding/sticking complimentarity constraints
+    lhs = finger_gamma[i] * e + finger_v_rel_comps[i]
+    rhs = finger_lambda_f_comps[i]
+    sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+
+    lhs = mu * finger_lambda_n[i] - np.sum(finger_lambda_f_comps[i])
+    rhs = finger_gamma[i]
+    sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+
     # Contact point 1
     # Add sliding/sticking complimentarity constraints
     lhs = gamma[i] * e + cp1_v_rel_comps[i]
@@ -188,7 +199,7 @@ for i in range(N):
     prog.AddLinearConstraint(v_cp2_W[i][0] == cp2_v_rel[i])
 
     # Enforce sdf corresponds to negative x-component of finger position
-    prog.AddLinearConstraint(finger_phi[i] == -p_BF_x[i] - box.width / 2)
+    prog.AddLinearConstraint(finger_phi[i] == -p_BF[i, 0] - box.width / 2)
     prog.AddLinearConstraint(cp1_phi[i] == p_cp1_W[i][1])
     prog.AddLinearConstraint(cp2_phi[i] == p_cp2_W[i][1])
 
@@ -210,8 +221,8 @@ for i in range(N):
 
 
 # Initial conditions
-prog.AddLinearConstraint(p_BF_x[0] == -0.1 - box.width / 2)
-prog.AddLinearConstraint(p_BF_x[N - 1] == -0.1 - box.width / 2)
+prog.AddLinearConstraint(eq(p_BF[0], np.array([-0.1 - box.width / 2, 0])))
+prog.AddLinearConstraint(eq(p_BF[N - 1], np.array([-0.1 - box.width / 2, 0])))
 prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
 end_x_pos = 0.5
 prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([end_x_pos, box.height / 2])))
@@ -330,7 +341,7 @@ if do_rounding:
 
 def animate_vals(result):
     p_WB_sol = result.GetSolution(p_WB)[:-1, :]
-    p_BF_x_sol = result.GetSolution(p_BF_x)
+    p_BF_sol = result.GetSolution(p_BF)
     f_F_W_sol = evaluate_np_expressions_array(f_F_W, result)
     f_cp1_W_sol = evaluate_np_expressions_array(f_cp1_W, result)
     f_cp2_W_sol = evaluate_np_expressions_array(f_cp2_W, result)
@@ -346,7 +357,6 @@ def animate_vals(result):
     TABLE_COLOR = COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
 
-    p_BF_sol = np.vstack([np.array([x, 0]) for x in p_BF_x_sol])
     p_WF_sol = np.vstack([p + R @ f for p, R, f in zip(p_WB_sol, R_WB_sol, p_BF_sol)])
 
     viz_com_points = [
