@@ -18,6 +18,10 @@ from pydrake.all import (
     Rgba,
 )
 
+from pydrake.math import (
+    RotationMatrix
+)
+
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
@@ -68,13 +72,18 @@ class CylinderActuatedStation(RobotSystemBase):
             sim_config, self.station_plant, self._scene_graph
         )
 
-        self._meshcat.SetTransform(
-            path="/Cameras/default",
-            matrix=RigidTransform(
-                RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-                np.array([1, 0, 0]),
-            ).GetAsMatrix4(),
-        )
+        # self._meshcat.SetTransform(
+        #     path="/Cameras/default",
+        #     matrix=RigidTransform(
+        #         RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
+        #         np.array([1, 0, 0]),
+        #     ).GetAsMatrix4(),
+        # )
+        # Set the initial camera pose
+        zoom = 1.8
+        camera_in_world = [0.5, -1/zoom, 1.5/zoom]
+        target_in_world = [0.5, 0, 0]
+        self._meshcat.SetCameraPose(camera_in_world, target_in_world)
         AddDefaultVisualization(builder, self._meshcat)
 
         ## Add Leaf systems

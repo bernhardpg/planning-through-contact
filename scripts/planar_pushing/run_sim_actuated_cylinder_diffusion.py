@@ -125,7 +125,6 @@ def run_sim(
         data_dir='diffusion_policy_logs',
         multi_run_config=multi_run_config
     )
-    print(traj.initial_slider_planar_pose)
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
 
@@ -326,11 +325,10 @@ def get_multi_run_config(num_runs,
     else:
         initial_slider_poses = initial_slider_poses[:num_runs]
 
-    # For demo, hard coding the initial slider poses
-    # successful_idx = successful_idx = [0, 3, 9, 30, 0, 53, 65, 53, 54, 51] # term 3
-    # successful_idx = successful_idx[:num_runs]
+    # For push_tee_v2 demo, hard coding the initial slider poses
+    # successful_idx = [0, 3, 9, 30, 0, 53, 65, 53, 54, 51]
     # initial_slider_poses = [initial_slider_poses[i] for i in successful_idx]
-    # initial_slider_poses[4] = PlanarPose(0.513585856901175, -0.0404027427983526, 1.160064053488128) # term 2
+    # initial_slider_poses[4] = PlanarPose(0.513585856901175, -0.0404027427983526, 1.160064053488128)
 
     return MultiRunConfig(
         initial_slider_poses=initial_slider_poses,
