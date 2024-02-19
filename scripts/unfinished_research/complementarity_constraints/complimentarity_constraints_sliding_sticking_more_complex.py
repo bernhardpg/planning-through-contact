@@ -24,6 +24,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
     Visualizer2d,
@@ -39,22 +40,27 @@ mass = 1.0
 
 prog = MathematicalProgram()
 
-
+# Finger variables
+phi = prog.NewContinuousVariables(N + 1, "phi")
+finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
 p_BF_x = prog.NewContinuousVariables(N + 1, "p_BF_x")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
 cos_th = prog.NewContinuousVariables(N + 1, "cos_th")
 sin_th = prog.NewContinuousVariables(N + 1, "sin_th")
 R_WB = [np.array([[c, -s], [s, c]]) for c, s in zip(cos_th, sin_th)]
 
+f_F_B = [np.array([n, 0]) for n in finger_lambda_n]
+f_F_W = np.vstack([R @ f for R, f in zip(R_WB, f_F_B)])
+
 box = Box2d(width=0.2, height=0.1)
 p_cp1_B = box.vertices[3].flatten()
-p_cp1_W = [p + R @ p_cp1_B for p, R in zip(p_WB, R_WB)]
+p_cp1_W = np.vstack([p + R @ p_cp1_B for p, R in zip(p_WB, R_WB)])
 v_cp1_W = [
     (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
 ]
 
 p_cp2_B = box.vertices[2].flatten()
-p_cp2_W = [p + R @ p_cp2_B for p, R in zip(p_WB, R_WB)]
+p_cp2_W = np.vstack([p + R @ p_cp2_B for p, R in zip(p_WB, R_WB)])
 v_cp2_W = [
     (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
 ]
@@ -68,6 +74,8 @@ cp1_v_rel = prog.NewContinuousVariables(N, "cp1_v_rel")
 cp1_v_rel_comps = np.vstack([-cp1_v_rel, cp1_v_rel]).T  # (N, 2)
 cp1_lambda_f = cp1_lambda_f_comps[:, 1] - cp1_lambda_f_comps[:, 0]
 
+f_cp1_B = [np.array([f, cp1_lambda_n]) for f in cp1_lambda_f]
+f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
 
 cp2_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp2_lambda_f")
 cp2_lambda_n = mass * 9.81
@@ -75,9 +83,8 @@ cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
 cp2_v_rel_comps = np.vstack([-cp2_v_rel, cp2_v_rel]).T  # (N, 2)
 cp2_lambda_f = cp2_lambda_f_comps[:, 1] - cp2_lambda_f_comps[:, 0]
 
-# Finger variables
-phi = prog.NewContinuousVariables(N + 1, "phi")
-finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
+f_cp2_B = [np.array([f, cp2_lambda_n]) for f in cp2_lambda_f]
+f_cp2_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp2_B)])
 
 e = np.ones((2,))
 
@@ -162,7 +169,7 @@ for i in range(N):
     prog.AddLinearConstraint(p_WB[i][1] == box.height / 2)
 
     # Add contact/non-contact complimentarity constraints
-    lhs = phi[i]
+    lhs = phi[i + 1]
     rhs = finger_lambda_n[i]
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -291,6 +298,22 @@ if do_rounding:
 def animate_vals(result):
     p_WB_sol = result.GetSolution(p_WB)
     p_BF_x_sol = result.GetSolution(p_BF_x)
+    f_F_W_sol = evaluate_np_expressions_array(f_F_W, result)
+    f_F_W_sol = np.vstack(
+        [[0, 0], f_F_W_sol]
+    )  # we don't plot any force for the first step
+    f_cp1_W_sol = evaluate_np_expressions_array(f_cp1_W, result)
+    f_cp1_W_sol = np.vstack(
+        [[0, 0], f_cp1_W_sol]
+    )  # we don't plot any force for the first step
+    f_cp2_W_sol = evaluate_np_expressions_array(f_cp2_W, result)
+    f_cp2_W_sol = np.vstack(
+        [[0, 0], f_cp2_W_sol]
+    )  # we don't plot any force for the first step
+    p_cp1_W_sol = evaluate_np_expressions_array(p_cp1_W, result)
+    p_cp2_W_sol = evaluate_np_expressions_array(p_cp2_W, result)
+
+    f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
 
     R_WB_sol = [evaluate_np_expressions_array(R, result) for R in R_WB]
     rotation_traj = np.vstack([R.flatten() for R in R_WB_sol])
@@ -306,7 +329,9 @@ def animate_vals(result):
 
     viz_com_points = [
         VisualizationPoint2d(p_WB_sol, GRAVITY_COLOR),
-        VisualizationPoint2d(p_WF_sol, GRAVITY_COLOR),
+        VisualizationPoint2d(p_WF_sol, FINGER_COLOR),
+        VisualizationPoint2d(p_cp1_W_sol, CONTACT_COLOR),
+        VisualizationPoint2d(p_cp2_W_sol, CONTACT_COLOR),
     ]  # type: ignore
 
     table = Box2d(width=2.0, height=0.2)
@@ -315,6 +340,12 @@ def animate_vals(result):
     )
     table_rot = np.repeat(np.eye(2).flatten().reshape((1, -1)), N + 1, axis=0)
 
+    viz_contact_forces = [
+        VisualizationForce2d(p_WF_sol, CONTACT_COLOR, f_F_W_sol),
+        VisualizationForce2d(p_cp1_W_sol, CONTACT_COLOR, f_cp1_W_sol),
+        VisualizationForce2d(p_cp2_W_sol, CONTACT_COLOR, f_cp2_W_sol),
+        VisualizationForce2d(p_WB_sol, GRAVITY_COLOR, f_grav_W),
+    ]
     viz_polygons = [
         VisualizationPolygon2d.from_trajs(
             p_WB_sol,
@@ -331,14 +362,14 @@ def animate_vals(result):
     ]
 
     viz = Visualizer2d()
-    viz.visualize(viz_com_points, [], viz_polygons, 1.0, None)
+    viz.visualize(viz_com_points, viz_contact_forces, viz_polygons, 1.0, None)
 
 
 show_plot = False
 if show_plot:
     plot_eigvals(X_sol)
 
-    fig, axs = plt.subplots(13, 2)
+    fig, axs = plt.subplots(11, 2)
     fig.set_size_inches(16, 10)  # type: ignore
 
     def fill_plot_col(result, col_idx):
@@ -401,17 +432,17 @@ if show_plot:
         axs[10, col_idx].set_title("cp2_lambda_f")
         axs[10, col_idx].set_xlim(0, N + 1)
 
-        # Plot cos_th
-        axs[11, col_idx].plot(cos_th_sol)
-        axs[11, col_idx].set_title("cos_th")
-        axs[11, col_idx].set_xlim(0, N + 1)
-        axs[11, col_idx].set_ylim(-1.2, 1.2)
-
-        # Plot sin_th
-        axs[12, col_idx].plot(sin_th_sol)
-        axs[12, col_idx].set_title("sin_th")
-        axs[12, col_idx].set_xlim(0, N + 1)
-        axs[12, col_idx].set_ylim(-1.2, 1.2)
+        # # Plot cos_th
+        # axs[11, col_idx].plot(cos_th_sol)
+        # axs[11, col_idx].set_title("cos_th")
+        # axs[11, col_idx].set_xlim(0, N + 1)
+        # axs[11, col_idx].set_ylim(-1.2, 1.2)
+        #
+        # # Plot sin_th
+        # axs[12, col_idx].plot(sin_th_sol)
+        # axs[12, col_idx].set_title("sin_th")
+        # axs[12, col_idx].set_xlim(0, N + 1)
+        # axs[12, col_idx].set_ylim(-1.2, 1.2)
 
     fill_plot_col(result, 0)
 
