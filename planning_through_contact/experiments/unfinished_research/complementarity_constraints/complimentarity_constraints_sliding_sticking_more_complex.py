@@ -77,12 +77,35 @@ def add_complimentarity_constraint(prog, lhs, rhs) -> List:
 OUTPUT_DIR = Path("output/complimentarity_constraints/")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-dt = 0.1
+## Plan parameters
+h = 0.1
 N = 4
 mu = 0.5
 mass = 1.0
 
+box = Box2d(width=0.2, height=0.1)
+
 f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
+
+## Initial conditions
+p_WB_0 = np.array([0, box.height / 2])
+p_BF_0 = np.array([-0.1 - box.width / 2, 0])
+th_I = 0
+cos_th_0 = np.cos(th_I)
+sin_th_0 = np.sin(th_I)
+R_WB_0 = np.array([[cos_th_0, -sin_th_0], [sin_th_0, cos_th_0]])
+
+p_cp1_B = box.vertices[3].flatten()
+p_cp2_B = box.vertices[2].flatten()
+p_cp1_W_0 = p_WB_0 + R_WB_0 @ p_cp1_B
+p_cp2_W_0 = p_WB_0 + R_WB_0 @ p_cp2_B
+
+# Finger sdf corresponds to negative x-component of finger position
+finger_phi_0 = -p_BF_0[0] - box.width / 2
+# CP SDFs corresponds to y coordinate in world frame
+cp1_phi_0 = p_cp1_W_0[1]
+cp2_phi_0 = p_cp2_W_0[1]
+
 
 prog = MathematicalProgram()
 
@@ -93,21 +116,24 @@ finger_gamma = prog.NewContinuousVariables(N, "finger_gamma")
 finger_phi = prog.NewContinuousVariables(N, "finger_phi")
 finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
 finger_lambda_f_comps = prog.NewContinuousVariables(N, 2, "finger_lambda_f")
-finger_v_rel = prog.NewContinuousVariables(N, "finger_v_rel")
+
 p_BF = prog.NewContinuousVariables(N, 2, "p_BF")
+delta_p_BF = prog.NewContinuousVariables(N, 2, "delta_p_BF")
 p_WB = prog.NewContinuousVariables(N, 2, "p_WB")
+delta_p_WB = prog.NewContinuousVariables(N, 2, "delta_p_WB")
 cos_th = prog.NewContinuousVariables(N, "cos_th")
 sin_th = prog.NewContinuousVariables(N, "sin_th")
+delta_cos_th = prog.NewContinuousVariables(N, "delta_cos_th")
+delta_sin_th = prog.NewContinuousVariables(N, "delta_sin_th")
 R_WB = [np.array([[c, -s], [s, c]]) for c, s in zip(cos_th, sin_th)]
+delta_R_WB = [np.array([[c, -s], [s, c]]) for c, s in zip(delta_cos_th, delta_sin_th)]
 
+finger_v_rel = p_BF[:, 1]  # TODO: Replace this with general jacobian
 finger_v_rel_comps = np.vstack([-finger_v_rel, finger_v_rel]).T  # (N, 2)
 finger_lambda_f = finger_lambda_f_comps[:, 1] - finger_lambda_f_comps[:, 0]
 f_F_B = [np.array([n, -f]) for n, f in zip(finger_lambda_n, finger_lambda_f)]
 f_F_W = np.vstack([R @ f for R, f in zip(R_WB, f_F_B)])
 f_grav_B = [R.T @ f for R, f in zip(R_WB, f_grav_W)]
-
-
-box = Box2d(width=0.2, height=0.1)
 
 
 # Shared box/table variables
@@ -117,13 +143,14 @@ gamma = prog.NewContinuousVariables(N, "gamma")
 cp1_phi = prog.NewContinuousVariables(N, "cp1_phi")
 cp1_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp1_lambda_f")
 cp1_lambda_n = prog.NewContinuousVariables(N, "cp1_lambda_n")
-cp1_v_rel = prog.NewContinuousVariables(N, "cp1_v_rel")
-
-cp1_v_rel_comps = np.vstack([-cp1_v_rel, cp1_v_rel]).T  # (N, 2)
+delta_p_cp1_W = np.vstack(
+    [delta_p + delta_R @ p_cp1_B for delta_p, delta_R in zip(delta_p_WB, delta_R_WB)]
+)
+cp1_delta_tang_pos = delta_p_cp1_W[:, 0]
+cp1_delta_tang_pos_comps = np.vstack(
+    [-cp1_delta_tang_pos, cp1_delta_tang_pos]
+).T  # (N, 2)
 cp1_lambda_f = cp1_lambda_f_comps[:, 1] - cp1_lambda_f_comps[:, 0]
-
-p_cp1_B = box.vertices[3].flatten()
-p_cp1_W = np.vstack([p + R @ p_cp1_B for p, R in zip(p_WB, R_WB)])
 
 f_cp1_B = [np.array([f, n]) for f, n in zip(cp1_lambda_f, cp1_lambda_n)]
 f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
@@ -132,34 +159,20 @@ f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
 cp2_phi = prog.NewContinuousVariables(N, "cp2_phi")
 cp2_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp2_lambda_f")
 cp2_lambda_n = prog.NewContinuousVariables(N, "cp2_lambda_n")
-cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
+delta_p_cp2_W = np.vstack(
+    [delta_p + delta_R @ p_cp2_B for delta_p, delta_R in zip(delta_p_WB, delta_R_WB)]
+)
+cp2_delta_tang_pos = delta_p_cp2_W[:, 0]
+cp2_delta_tang_pos_comps = np.vstack(
+    [-cp2_delta_tang_pos, cp2_delta_tang_pos]
+).T  # (N, 2)
 
-cp2_v_rel_comps = np.vstack([-cp2_v_rel, cp2_v_rel]).T  # (N, 2)
 cp2_lambda_f = cp2_lambda_f_comps[:, 1] - cp2_lambda_f_comps[:, 0]
-
-p_cp2_B = box.vertices[2].flatten()
-p_cp2_W = np.vstack([p + R @ p_cp2_B for p, R in zip(p_WB, R_WB)])
 
 f_cp2_B = [np.array([f, n]) for f, n in zip(cp2_lambda_f, cp2_lambda_n)]
 f_cp2_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp2_B)])
 
 e = np.ones((2,))
-
-p_WB_0 = np.array([0, box.height / 2])
-p_BF_0 = np.array([-0.1 - box.width / 2, 0])
-th_I = 0
-cos_th_0 = np.cos(th_I)
-sin_th_0 = np.sin(th_I)
-R_WB_0 = np.array([[cos_th_0, -sin_th_0], [sin_th_0, cos_th_0]])
-
-p_cp1_W_0 = p_WB_0 + R_WB_0 @ p_cp1_B
-p_cp2_W_0 = p_WB_0 + R_WB_0 @ p_cp2_B
-
-# Finger sdf corresponds to negative x-component of finger position
-finger_phi_0 = -p_BF_0[0] - box.width / 2
-# CP SDFs corresponds to y coordinate in world frame
-cp1_phi_0 = p_cp1_W_0[1]
-cp2_phi_0 = p_cp2_W_0[1]
 
 sliding_comp_constraints = []
 contact_comp_constraints = []
@@ -182,7 +195,7 @@ for i in range(N):
 
     # Contact point 1
     # Add sliding/sticking complimentarity constraints
-    lhs = gamma[i] * e + cp1_v_rel_comps[i]
+    lhs = gamma[i] * e + cp1_delta_tang_pos_comps[i]
     rhs = cp1_lambda_f_comps[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -197,7 +210,7 @@ for i in range(N):
 
     # Contact point 2
     # Add sliding/sticking complimentarity constraints
-    lhs = gamma[i] * e + cp2_v_rel_comps[i]
+    lhs = gamma[i] * e + cp2_delta_tang_pos_comps[i]
     rhs = cp2_lambda_f_comps[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -211,16 +224,20 @@ for i in range(N):
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
     # Enforce v_rels equal
-    prog.AddLinearConstraint(cp1_v_rel[i] == cp2_v_rel[i])
+    prog.AddLinearConstraint(cp1_delta_tang_pos[i] == cp2_delta_tang_pos[i])
 
     # Enforce contact point velocities correspond to positions in world frame (x velocities = v_rel)
     # TODO: This is not correct when we also have rotations
     if i == 0:
-        prog.AddLinearConstraint(p_cp1_W[i][0] == p_cp1_W_0[0] + cp1_v_rel[i])
-        prog.AddLinearConstraint(p_cp2_W[i][0] == p_cp2_W_0[0] + cp2_v_rel[i])
+        prog.AddLinearConstraint(p_cp1_W[i][0] == p_cp1_W_0[0] + cp1_delta_tang_pos[i])
+        prog.AddLinearConstraint(p_cp2_W[i][0] == p_cp2_W_0[0] + cp2_delta_tang_pos[i])
     else:
-        prog.AddLinearConstraint(p_cp1_W[i][0] == p_cp1_W[i - 1][0] + cp1_v_rel[i])
-        prog.AddLinearConstraint(p_cp2_W[i][0] == p_cp2_W[i - 1][0] + cp2_v_rel[i])
+        prog.AddLinearConstraint(
+            p_cp1_W[i][0] == p_cp1_W[i - 1][0] + cp1_delta_tang_pos[i]
+        )
+        prog.AddLinearConstraint(
+            p_cp2_W[i][0] == p_cp2_W[i - 1][0] + cp2_delta_tang_pos[i]
+        )
 
         # Finger sdf corresponds to negative x-component of finger position
     prog.AddLinearConstraint(finger_phi[i] == -p_BF[i, 0] - box.width / 2)
@@ -282,8 +299,8 @@ cp2_phi_diff = cp2_phi[1:] - cp2_phi[:-1]
 # TODO: Can in principle replace these with penalizing velocity on contact points
 # (or keypoints on object)
 prog.AddQuadraticCost(finger_v_rel.T @ finger_v_rel)  # type: ignore
-prog.AddQuadraticCost(cp1_v_rel.T @ cp1_v_rel)  # type: ignore
-prog.AddQuadraticCost(cp2_v_rel.T @ cp2_v_rel)  # type: ignore
+prog.AddQuadraticCost(cp1_delta_tang_pos.T @ cp1_delta_tang_pos)  # type: ignore
+prog.AddQuadraticCost(cp2_delta_tang_pos.T @ cp2_delta_tang_pos)  # type: ignore
 prog.AddQuadraticCost(finger_phi_diff.T @ finger_phi_diff)  # type: ignore
 prog.AddQuadraticCost(cp1_phi_diff.T @ cp1_phi_diff)  # type: ignore
 prog.AddQuadraticCost(cp2_phi_diff.T @ cp2_phi_diff)  # type: ignore
@@ -444,11 +461,11 @@ def plot_vals(result: MathematicalProgramResult, title: str):
     cp1_lambda_n_sol = result.GetSolution(cp1_lambda_n)
     cp1_lambda_f_sol = evaluate_np_expressions_array(cp1_lambda_f, result)
     cp1_lambda_f_comps_sol = result.GetSolution(cp1_lambda_f_comps)
-    cp1_v_rel_sol = result.GetSolution(cp1_v_rel)
+    cp1_v_rel_sol = result.GetSolution(cp1_delta_tang_pos)
     cp1_phi_sol = result.GetSolution(cp1_phi)
     cp2_lambda_n_sol = result.GetSolution(cp2_lambda_n)
     cp2_lambda_f_sol = evaluate_np_expressions_array(cp2_lambda_f, result)
-    cp2_v_rel_sol = result.GetSolution(cp2_v_rel)
+    cp2_v_rel_sol = result.GetSolution(cp2_delta_tang_pos)
     cp2_lambda_f_comps_sol = result.GetSolution(cp2_lambda_f_comps)
     cp2_phi_sol = result.GetSolution(cp2_phi)
 
