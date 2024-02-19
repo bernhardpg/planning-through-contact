@@ -40,10 +40,12 @@ mass = 1.0
 
 prog = MathematicalProgram()
 
+# NOTE: The knot point values represent the values at the END of a time step
+
 # Finger variables
-phi = prog.NewContinuousVariables(N + 1, "phi")
+phi = prog.NewContinuousVariables(N, "phi")
 finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
-p_BF_x = prog.NewContinuousVariables(N + 1, "p_BF_x")
+p_BF_x = prog.NewContinuousVariables(N, "p_BF_x")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
 cos_th = prog.NewContinuousVariables(N + 1, "cos_th")
 sin_th = prog.NewContinuousVariables(N + 1, "sin_th")
@@ -53,17 +55,7 @@ f_F_B = [np.array([n, 0]) for n in finger_lambda_n]
 f_F_W = np.vstack([R @ f for R, f in zip(R_WB, f_F_B)])
 
 box = Box2d(width=0.2, height=0.1)
-p_cp1_B = box.vertices[3].flatten()
-p_cp1_W = np.vstack([p + R @ p_cp1_B for p, R in zip(p_WB, R_WB)])
-v_cp1_W = [
-    (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
-]
 
-p_cp2_B = box.vertices[2].flatten()
-p_cp2_W = np.vstack([p + R @ p_cp2_B for p, R in zip(p_WB, R_WB)])
-v_cp2_W = [
-    (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
-]
 
 # Box / table variables
 gamma = prog.NewContinuousVariables(N, "gamma")
@@ -74,6 +66,12 @@ cp1_v_rel = prog.NewContinuousVariables(N, "cp1_v_rel")
 cp1_v_rel_comps = np.vstack([-cp1_v_rel, cp1_v_rel]).T  # (N, 2)
 cp1_lambda_f = cp1_lambda_f_comps[:, 1] - cp1_lambda_f_comps[:, 0]
 
+p_cp1_B = box.vertices[3].flatten()
+p_cp1_W = np.vstack([p + R @ p_cp1_B for p, R in zip(p_WB, R_WB)])
+v_cp1_W = [
+    (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
+]
+
 f_cp1_B = [np.array([f, cp1_lambda_n]) for f in cp1_lambda_f]
 f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
 
@@ -82,6 +80,12 @@ cp2_lambda_n = mass * 9.81
 cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
 cp2_v_rel_comps = np.vstack([-cp2_v_rel, cp2_v_rel]).T  # (N, 2)
 cp2_lambda_f = cp2_lambda_f_comps[:, 1] - cp2_lambda_f_comps[:, 0]
+
+p_cp2_B = box.vertices[2].flatten()
+p_cp2_W = np.vstack([p + R @ p_cp2_B for p, R in zip(p_WB, R_WB)])
+v_cp2_W = [
+    (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
+]
 
 f_cp2_B = [np.array([f, cp2_lambda_n]) for f in cp2_lambda_f]
 f_cp2_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp2_B)])
@@ -169,7 +173,7 @@ for i in range(N):
     prog.AddLinearConstraint(p_WB[i][1] == box.height / 2)
 
     # Add contact/non-contact complimentarity constraints
-    lhs = phi[i + 1]
+    lhs = phi[i]
     rhs = finger_lambda_n[i]
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -189,7 +193,7 @@ for i in range(N):
 
 # Initial conditions
 prog.AddLinearConstraint(p_BF_x[0] == -0.1 - box.width / 2)
-prog.AddLinearConstraint(p_BF_x[N] == -0.1 - box.width / 2)
+prog.AddLinearConstraint(p_BF_x[N - 1] == -0.1 - box.width / 2)
 prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
 prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([1, box.height / 2])))
 
@@ -296,22 +300,13 @@ if do_rounding:
 
 
 def animate_vals(result):
-    p_WB_sol = result.GetSolution(p_WB)
+    p_WB_sol = result.GetSolution(p_WB)[:-1, :]
     p_BF_x_sol = result.GetSolution(p_BF_x)
     f_F_W_sol = evaluate_np_expressions_array(f_F_W, result)
-    f_F_W_sol = np.vstack(
-        [[0, 0], f_F_W_sol]
-    )  # we don't plot any force for the first step
     f_cp1_W_sol = evaluate_np_expressions_array(f_cp1_W, result)
-    f_cp1_W_sol = np.vstack(
-        [[0, 0], f_cp1_W_sol]
-    )  # we don't plot any force for the first step
     f_cp2_W_sol = evaluate_np_expressions_array(f_cp2_W, result)
-    f_cp2_W_sol = np.vstack(
-        [[0, 0], f_cp2_W_sol]
-    )  # we don't plot any force for the first step
-    p_cp1_W_sol = evaluate_np_expressions_array(p_cp1_W, result)
-    p_cp2_W_sol = evaluate_np_expressions_array(p_cp2_W, result)
+    p_cp1_W_sol = evaluate_np_expressions_array(p_cp1_W, result)[:-1, :]
+    p_cp2_W_sol = evaluate_np_expressions_array(p_cp2_W, result)[:-1, :]
 
     f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
 
@@ -335,10 +330,8 @@ def animate_vals(result):
     ]  # type: ignore
 
     table = Box2d(width=2.0, height=0.2)
-    table_com = np.repeat(
-        np.array([0, -table.height / 2]).reshape((1, -1)), N + 1, axis=0
-    )
-    table_rot = np.repeat(np.eye(2).flatten().reshape((1, -1)), N + 1, axis=0)
+    table_com = np.repeat(np.array([0, -table.height / 2]).reshape((1, -1)), N, axis=0)
+    table_rot = np.repeat(np.eye(2).flatten().reshape((1, -1)), N, axis=0)
 
     viz_contact_forces = [
         VisualizationForce2d(p_WF_sol, CONTACT_COLOR, f_F_W_sol),
@@ -390,58 +383,58 @@ if show_plot:
         axs[0, col_idx].plot(phi_sol)
         axs[0, col_idx].set_title("phi")
         axs[0, col_idx].set_ylim([0, max(phi_sol)])
-        axs[0, col_idx].set_xlim(0, N + 1)
+        axs[0, col_idx].set_xlim(0, N)
 
         axs[1, col_idx].plot(finger_lambda_n_sol)
         axs[1, col_idx].set_title("finger_lambda_n")
-        axs[1, col_idx].set_xlim(0, N + 1)
+        axs[1, col_idx].set_xlim(0, N)
 
         axs[2, col_idx].plot(gamma_sol)
         axs[2, col_idx].set_title("gamma")
-        axs[2, col_idx].set_xlim(0, N + 1)
+        axs[2, col_idx].set_xlim(0, N)
 
         axs[3, col_idx].plot(cp1_v_rel_sol)  # type: ignore
         axs[3, col_idx].set_title("cp1_v_rel")
-        axs[3, col_idx].set_xlim(0, N + 1)
+        axs[3, col_idx].set_xlim(0, N)
 
         axs[4, col_idx].plot(cp1_lambda_f_comps_sol[:, 0])
         axs[4, col_idx].set_title("cp1_lambda_f 1")
-        axs[4, col_idx].set_xlim(0, N + 1)
+        axs[4, col_idx].set_xlim(0, N)
 
         axs[5, col_idx].plot(cp1_lambda_f_comps_sol[:, 1])
         axs[5, col_idx].set_title("cp1_lambda_f 2")
-        axs[5, col_idx].set_xlim(0, N + 1)
+        axs[5, col_idx].set_xlim(0, N)
 
         axs[6, col_idx].plot(cp1_lambda_f_sol)
         axs[6, col_idx].set_title("cp1_lambda_f")
-        axs[6, col_idx].set_xlim(0, N + 1)
+        axs[6, col_idx].set_xlim(0, N)
 
         axs[7, col_idx].plot(cp2_v_rel_sol)  # type: ignore
         axs[7, col_idx].set_title("cp2_v_rel")
-        axs[7, col_idx].set_xlim(0, N + 1)
+        axs[7, col_idx].set_xlim(0, N)
 
         axs[8, col_idx].plot(cp2_lambda_f_comps_sol[:, 0])
         axs[8, col_idx].set_title("cp2_lambda_f 1")
-        axs[8, col_idx].set_xlim(0, N + 1)
+        axs[8, col_idx].set_xlim(0, N)
 
         axs[9, col_idx].plot(cp2_lambda_f_comps_sol[:, 1])
         axs[9, col_idx].set_title("cp2_lambda_f 2")
-        axs[9, col_idx].set_xlim(0, N + 1)
+        axs[9, col_idx].set_xlim(0, N)
 
         axs[10, col_idx].plot(cp2_lambda_f_sol)
         axs[10, col_idx].set_title("cp2_lambda_f")
-        axs[10, col_idx].set_xlim(0, N + 1)
+        axs[10, col_idx].set_xlim(0, N)
 
         # # Plot cos_th
         # axs[11, col_idx].plot(cos_th_sol)
         # axs[11, col_idx].set_title("cos_th")
-        # axs[11, col_idx].set_xlim(0, N + 1)
+        # axs[11, col_idx].set_xlim(0, N)
         # axs[11, col_idx].set_ylim(-1.2, 1.2)
         #
         # # Plot sin_th
         # axs[12, col_idx].plot(sin_th_sol)
         # axs[12, col_idx].set_title("sin_th")
-        # axs[12, col_idx].set_xlim(0, N + 1)
+        # axs[12, col_idx].set_xlim(0, N)
         # axs[12, col_idx].set_ylim(-1.2, 1.2)
 
     fill_plot_col(result, 0)
