@@ -22,6 +22,12 @@ from pydrake.symbolic import Variable
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
+from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationPoint2d,
+    VisualizationPolygon2d,
+    Visualizer2d,
+)
 
 OUTPUT_DIR = Path("output/complimentarity_constraints/")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -134,11 +140,11 @@ p_WB = prog.NewContinuousVariables(cfg.N, 2, "p_WB")
 p_BF_x = prog.NewContinuousVariables(cfg.N, "p_BF_x")
 cos_th = prog.NewContinuousVariables(cfg.N, "cos_th")
 sin_th = prog.NewContinuousVariables(cfg.N, "sin_th")
-R_WB = [np.array([[c, -s], [s, c]]) for s, c in zip(cos_th, sin_th)]
+R_WB = [np.array([[c, -s], [s, c]]) for c, s in zip(cos_th, sin_th)]
 
 # Box/finger
 name = "bf"
-bf_phi = -p_BF_x - box.width
+bf_phi = -p_BF_x - box.width / 2
 bf_lambda_n = prog.NewContinuousVariables(cfg.N - 1, f"{name}_lambda_n")
 bf_lambda_f_comps = prog.NewContinuousVariables(cfg.N - 1, 2, f"{name}_lambda_f")
 bf_lambda_f = bf_lambda_f_comps[:, 1] - bf_lambda_f_comps[:, 0]
@@ -231,13 +237,13 @@ prog.AddLinearConstraint(sin_th[0] == np.sin(th_I))
 prog.AddLinearConstraint(cos_th[cfg.N - 1] == np.cos(th_F))
 prog.AddLinearConstraint(sin_th[cfg.N - 1] == np.sin(th_F))
 prog.AddLinearConstraint(p_WB[0, 0] == 0)
-prog.AddLinearConstraint(p_WB[0, 1] == box.height)
+prog.AddLinearConstraint(p_WB[0, 1] == box.height / 2)
 prog.AddLinearConstraint(p_WB[cfg.N - 1, 0] == 1)
-prog.AddLinearConstraint(p_WB[cfg.N - 1, 1] == box.height)
+prog.AddLinearConstraint(p_WB[cfg.N - 1, 1] == box.height / 2)
 
 # Initial conditions on finger
-prog.AddLinearConstraint(p_BF_x[0] == -box.width - 0.2)
-prog.AddLinearConstraint(p_BF_x[cfg.N - 1] == -box.width - 0.2)
+prog.AddLinearConstraint(p_BF_x[0] == -box.width / 2 - 0.2)
+prog.AddLinearConstraint(p_BF_x[cfg.N - 1] == -box.width / 2 - 0.2)
 
 
 prog.AddQuadraticCost(bt3_v_rel.T @ bt3_v_rel)
@@ -295,6 +301,7 @@ snopt_options.SetOption(
 
 result = mosek.Solve(relaxed_prog, solver_options=mosek_options)  # type: ignore
 
+
 assert result.is_success()
 
 relaxed_cost = np.sum(
@@ -306,7 +313,6 @@ relaxed_cost = np.sum(
 
 X_sol = result.GetSolution(X)
 print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-3)}")
-plot_eigvals(X_sol)
 
 do_rounding = False
 use_first_row_as_initial_guess = True
@@ -347,86 +353,130 @@ bt2_lambda_n_sol = result.GetSolution(bt2_lambda_n)
 bt2_lambda_f_sol = evaluate_np_expressions_array(bt2_lambda_f, result)
 bt2_v_rel_sol = evaluate_np_expressions_array(bt2_v_rel, result)
 
-# Now, plot them
-fig, axs = plt.subplots(
-    7, 2, figsize=(10, 10)
-)  # Adjust the number of subplots based on the number of variables
 
-axs = axs.flatten()
-# Plot p_WB
-for i in range(p_WB_sol.shape[1]):
-    axs[0].plot(p_WB_sol[:, i], label=f"p_WB_dim_{i}")
-axs[0].set_title("p_WB")
-axs[0].set_xlim(0, cfg.N - 1)
-axs[0].legend()
+show_plot = False
+if show_plot:
+    plot_eigvals(X_sol)
+    # Now, plot them
+    fig, axs = plt.subplots(
+        7, 2, figsize=(10, 10)
+    )  # Adjust the number of subplots based on the number of variables
 
-# Plot p_BF_x
-axs[1].plot(p_BF_x_sol)
-axs[1].set_title("p_BF_x")
-axs[1].set_xlim(0, cfg.N - 1)
+    axs = axs.flatten()
+    # Plot p_WB
+    for i in range(p_WB_sol.shape[1]):
+        axs[0].plot(p_WB_sol[:, i], label=f"p_WB_dim_{i}")
+    axs[0].set_title("p_WB")
+    axs[0].set_xlim(0, cfg.N - 1)
+    axs[0].legend()
 
-# Plot cos_th
-axs[2].plot(cos_th_sol)
-axs[2].set_title("cos_th")
-axs[2].set_xlim(0, cfg.N - 1)
-axs[2].set_ylim(-1, 1)
+    # Plot p_BF_x
+    axs[1].plot(p_BF_x_sol)
+    axs[1].set_title("p_BF_x")
+    axs[1].set_xlim(0, cfg.N - 1)
 
+    # Plot cos_th
+    axs[2].plot(cos_th_sol)
+    axs[2].set_title("cos_th")
+    axs[2].set_xlim(0, cfg.N - 1)
+    axs[2].set_ylim(-1, 1)
 
-# Plot sin_th
-axs[3].plot(sin_th_sol)
-axs[3].set_title("sin_th")
-axs[3].set_xlim(0, cfg.N - 1)
-axs[3].set_ylim(-1, 1)
+    # Plot sin_th
+    axs[3].plot(sin_th_sol)
+    axs[3].set_title("sin_th")
+    axs[3].set_xlim(0, cfg.N - 1)
+    axs[3].set_ylim(-1, 1)
 
-# Plot bf_lambda_n
-axs[4].plot(bf_lambda_n_sol)
-axs[4].set_title("bf_lambda_n")
-axs[4].set_xlim(0, cfg.N - 1)
+    # Plot bf_lambda_n
+    axs[4].plot(bf_lambda_n_sol)
+    axs[4].set_title("bf_lambda_n")
+    axs[4].set_xlim(0, cfg.N - 1)
 
-# Plot bf_lambda_f
-axs[5].plot(bf_lambda_f_sol)
-axs[5].set_title("bf_lambda_f")
-axs[5].set_xlim(0, cfg.N - 1)
+    # Plot bf_lambda_f
+    axs[5].plot(bf_lambda_f_sol)
+    axs[5].set_title("bf_lambda_f")
+    axs[5].set_xlim(0, cfg.N - 1)
 
-# Plot bt3_gamma
-axs[6].plot(bt3_gamma_sol)
-axs[6].set_title("bt3_gamma")
-axs[6].set_xlim(0, cfg.N - 1)
+    # Plot bt3_gamma
+    axs[6].plot(bt3_gamma_sol)
+    axs[6].set_title("bt3_gamma")
+    axs[6].set_xlim(0, cfg.N - 1)
 
-# Plot bt3_lambda_n
-axs[7].plot(bt3_lambda_n_sol)
-axs[7].set_title("bt3_lambda_n")
-axs[7].set_xlim(0, cfg.N - 1)
+    # Plot bt3_lambda_n
+    axs[7].plot(bt3_lambda_n_sol)
+    axs[7].set_title("bt3_lambda_n")
+    axs[7].set_xlim(0, cfg.N - 1)
 
-# Plot bt3_lambda_f
-axs[8].plot(bt3_lambda_f_sol)
-axs[8].set_title("bt3_lambda_f")
-axs[8].set_xlim(0, cfg.N - 1)
+    # Plot bt3_lambda_f
+    axs[8].plot(bt3_lambda_f_sol)
+    axs[8].set_title("bt3_lambda_f")
+    axs[8].set_xlim(0, cfg.N - 1)
 
-# Plot bt3_lambda_f
-axs[9].plot(bt3_v_rel_sol)
-axs[9].set_title("bt3_v_rel")
-axs[9].set_xlim(0, cfg.N - 1)
+    # Plot bt3_lambda_f
+    axs[9].plot(bt3_v_rel_sol)
+    axs[9].set_title("bt3_v_rel")
+    axs[9].set_xlim(0, cfg.N - 1)
 
-# Plot bt2_gamma
-axs[10].plot(bt2_gamma_sol)
-axs[10].set_title("bt2_gamma")
-axs[10].set_xlim(0, cfg.N - 1)
+    # Plot bt2_gamma
+    axs[10].plot(bt2_gamma_sol)
+    axs[10].set_title("bt2_gamma")
+    axs[10].set_xlim(0, cfg.N - 1)
 
-# Plot bt2_lambda_n
-axs[11].plot(bt2_lambda_n_sol)
-axs[11].set_title("bt2_lambda_n")
-axs[11].set_xlim(0, cfg.N - 1)
+    # Plot bt2_lambda_n
+    axs[11].plot(bt2_lambda_n_sol)
+    axs[11].set_title("bt2_lambda_n")
+    axs[11].set_xlim(0, cfg.N - 1)
 
-# Plot bt2_lambda_f
-axs[12].plot(bt2_lambda_f_sol)
-axs[12].set_title("bt2_lambda_f")
-axs[12].set_xlim(0, cfg.N - 1)
+    # Plot bt2_lambda_f
+    axs[12].plot(bt2_lambda_f_sol)
+    axs[12].set_title("bt2_lambda_f")
+    axs[12].set_xlim(0, cfg.N - 1)
 
-# Plot bt3_lambda_f
-axs[13].plot(bt2_v_rel_sol)
-axs[13].set_title("bt2_v_rel")
-axs[13].set_xlim(0, cfg.N - 1)
+    # Plot bt3_lambda_f
+    axs[13].plot(bt2_v_rel_sol)
+    axs[13].set_title("bt2_v_rel")
+    axs[13].set_xlim(0, cfg.N - 1)
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
+else:  # animate
+    R_WB_sol = [evaluate_np_expressions_array(R, result) for R in R_WB]
+    rotation_traj = np.vstack([R.flatten() for R in R_WB_sol])
+
+    CONTACT_COLOR = COLORS["dodgerblue4"]
+    GRAVITY_COLOR = COLORS["blueviolet"]
+    BOX_COLOR = COLORS["aquamarine4"]
+    TABLE_COLOR = COLORS["bisque3"]
+    FINGER_COLOR = COLORS["firebrick3"]
+
+    p_BF_sol = np.vstack([np.array([x, 0]) for x in p_BF_x_sol])
+    p_WF_sol = np.vstack([p + R @ f for p, R, f in zip(p_WB_sol, R_WB_sol, p_BF_sol)])
+
+    viz_com_points = [
+        VisualizationPoint2d(p_WB_sol, GRAVITY_COLOR),
+        VisualizationPoint2d(p_WF_sol, GRAVITY_COLOR),
+    ]  # type: ignore
+
+    table = Box2d(width=2.0, height=0.2)
+    table_com = np.repeat(
+        np.array([0, -table.height / 2]).reshape((1, -1)), cfg.N, axis=0
+    )
+    table_rot = np.repeat(np.eye(2).flatten().reshape((1, -1)), cfg.N, axis=0)
+
+    viz_polygons = [
+        VisualizationPolygon2d.from_trajs(
+            p_WB_sol,
+            rotation_traj,
+            box,
+            BOX_COLOR,
+        ),
+        VisualizationPolygon2d.from_trajs(
+            table_com,
+            table_rot,
+            table,
+            TABLE_COLOR,
+        ),
+    ]
+
+    viz = Visualizer2d()
+    viz.visualize(viz_com_points, [], viz_polygons, 1.0, None)
