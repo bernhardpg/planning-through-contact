@@ -11,15 +11,23 @@ from pydrake.solvers import (
     L1NormCost,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
+    MathematicalProgramResult,
     MosekSolver,
     SnoptSolver,
     Solve,
     SolverOptions,
 )
+from pydrake.symbolic import Variable
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
+from planning_through_contact.visualize.colors import COLORS
+from planning_through_contact.visualize.visualizer_2d import (
+    VisualizationPoint2d,
+    VisualizationPolygon2d,
+    Visualizer2d,
+)
 
 OUTPUT_DIR = Path("output/complimentarity_constraints/")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -255,7 +263,6 @@ relaxed_cost = np.sum(
 
 X_sol = result.GetSolution(X)
 # print(f"Rank(X): {np.linalg.matrix_rank(X_sol, tol=1e-2)}")
-plot_eigvals(X_sol)
 
 do_rounding = False
 use_first_row_as_initial_guess = True
@@ -280,8 +287,56 @@ if do_rounding:
     print(f"Global optimality gap: {optimality_gap} %")
 
 
-plot = True
-if plot:
+def animate_vals(result):
+    p_WB_sol = result.GetSolution(p_WB)
+    p_BF_x_sol = result.GetSolution(p_BF_x)
+
+    R_WB_sol = [evaluate_np_expressions_array(R, result) for R in R_WB]
+    rotation_traj = np.vstack([R.flatten() for R in R_WB_sol])
+
+    CONTACT_COLOR = COLORS["dodgerblue4"]
+    GRAVITY_COLOR = COLORS["blueviolet"]
+    BOX_COLOR = COLORS["aquamarine4"]
+    TABLE_COLOR = COLORS["bisque3"]
+    FINGER_COLOR = COLORS["firebrick3"]
+
+    p_BF_sol = np.vstack([np.array([x, 0]) for x in p_BF_x_sol])
+    p_WF_sol = np.vstack([p + R @ f for p, R, f in zip(p_WB_sol, R_WB_sol, p_BF_sol)])
+
+    viz_com_points = [
+        VisualizationPoint2d(p_WB_sol, GRAVITY_COLOR),
+        VisualizationPoint2d(p_WF_sol, GRAVITY_COLOR),
+    ]  # type: ignore
+
+    table = Box2d(width=2.0, height=0.2)
+    table_com = np.repeat(
+        np.array([0, -table.height / 2]).reshape((1, -1)), N + 1, axis=0
+    )
+    table_rot = np.repeat(np.eye(2).flatten().reshape((1, -1)), N + 1, axis=0)
+
+    viz_polygons = [
+        VisualizationPolygon2d.from_trajs(
+            p_WB_sol,
+            rotation_traj,
+            box,
+            BOX_COLOR,
+        ),
+        VisualizationPolygon2d.from_trajs(
+            table_com,
+            table_rot,
+            table,
+            TABLE_COLOR,
+        ),
+    ]
+
+    viz = Visualizer2d()
+    viz.visualize(viz_com_points, [], viz_polygons, 1.0, None)
+
+
+show_plot = False
+if show_plot:
+    plot_eigvals(X_sol)
+
     fig, axs = plt.subplots(13, 2)
     fig.set_size_inches(16, 10)  # type: ignore
 
@@ -368,3 +423,6 @@ if plot:
 
     plt.tight_layout()
     plt.show()
+
+else:  # animate
+    animate_vals(result)
