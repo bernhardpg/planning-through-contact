@@ -148,7 +148,7 @@ for i in range(N):
     prog.AddLinearConstraint(v_cp2_W[i][0] == cp2_v_rel[i])
 
     # Enforce sdf corresponds to negative x-component of finger position
-    prog.AddLinearConstraint(phi[i] == -p_BF_x[i])
+    # prog.AddLinearConstraint(phi[i] == -p_BF_x[i])
 
     # Add contact/non-contact complimentarity constraints
     lhs = phi[i]
@@ -163,13 +163,33 @@ for i in range(N):
     # SO(2)
     prog.AddQuadraticConstraint(cos_th[i] ** 2 + sin_th[i] ** 2, 1, 1)
 
+    prog.AddLinearConstraint(cos_th[i] <= 1)
+    prog.AddLinearConstraint(cos_th[i] >= -1)
+    prog.AddLinearConstraint(sin_th[i] <= 1)
+    prog.AddLinearConstraint(sin_th[i] >= -1)
+
 
 # Initial conditions
-prog.AddLinearConstraint(p_BF_x[0] == -1 - box.width / 2)
-prog.AddLinearConstraint(p_BF_x[N] == -1 - box.width / 2)
+prog.AddLinearConstraint(phi[0] == 1)
+prog.AddLinearConstraint(phi[N] == 1)
+# prog.AddLinearConstraint(p_BF_x[0] == -1 - box.width / 2)
+# prog.AddLinearConstraint(p_BF_x[N] == -1 - box.width / 2)
 prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
 prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([1, box.height / 2])))
 
+th_I = 0
+th_F = 0
+prog.AddLinearConstraint(cos_th[0] == np.cos(th_I))
+prog.AddLinearConstraint(sin_th[0] == np.sin(th_I))
+prog.AddLinearConstraint(cos_th[N] == np.cos(th_F))
+prog.AddLinearConstraint(sin_th[N] == np.sin(th_F))
+
+
+cos_th_diffs = cos_th[1:] - cos_th[:-1]
+sin_th_diffs = sin_th[1:] - sin_th[:-1]
+
+prog.AddQuadraticCost(cos_th_diffs.T @ cos_th_diffs)
+prog.AddQuadraticCost(sin_th_diffs.T @ sin_th_diffs)
 
 prog.AddQuadraticCost(cp1_v_rel.T @ cp1_v_rel)  # type: ignore
 prog.AddQuadraticCost(cp2_v_rel.T @ cp2_v_rel)  # type: ignore
@@ -262,13 +282,15 @@ if do_rounding:
 
 plot = True
 if plot:
-    fig, axs = plt.subplots(11, 2)
+    fig, axs = plt.subplots(13, 2)
     fig.set_size_inches(16, 10)  # type: ignore
 
     def fill_plot_col(result, col_idx):
         phi_sol = result.GetSolution(phi)
         finger_lambda_n_sol = result.GetSolution(finger_lambda_n)
         gamma_sol = result.GetSolution(gamma)
+        cos_th_sol = result.GetSolution(cos_th)
+        sin_th_sol = result.GetSolution(sin_th)
 
         cp1_lambda_f_comps_sol = result.GetSolution(cp1_lambda_f_comps)
         cp1_lambda_f_sol = evaluate_np_expressions_array(cp1_lambda_f, result)
@@ -322,6 +344,18 @@ if plot:
         axs[10, col_idx].plot(cp2_lambda_f_sol)
         axs[10, col_idx].set_title("cp2_lambda_f")
         axs[10, col_idx].set_xlim(0, N + 1)
+
+        # Plot cos_th
+        axs[11, col_idx].plot(cos_th_sol)
+        axs[11, col_idx].set_title("cos_th")
+        axs[11, col_idx].set_xlim(0, N + 1)
+        axs[11, col_idx].set_ylim(-1.2, 1.2)
+
+        # Plot sin_th
+        axs[12, col_idx].plot(sin_th_sol)
+        axs[12, col_idx].set_title("sin_th")
+        axs[12, col_idx].set_xlim(0, N + 1)
+        axs[12, col_idx].set_ylim(-1.2, 1.2)
 
     fill_plot_col(result, 0)
 
