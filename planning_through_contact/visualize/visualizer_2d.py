@@ -31,7 +31,7 @@ class VisualizationPoint2d:
         return cls(position_curve, COLORS[color])
 
     def __post_init__(self):
-        self.radius = 1.0
+        self.radius = 0.01
 
     def change_radius(self, new_radius: float) -> None:
         self.radius = new_radius
