@@ -10,8 +10,8 @@ def unit_vector(i: int, n: int):
 
 def cross_2d(v1, v2):
     res = v1[0] * v2[1] - v1[1] * v2[0]
-    if type(res) == type(np.array([])):
-        return res[0]
+    if isinstance(res, type(np.array([]))):
+        return res.item()
     else:
         return res
 
