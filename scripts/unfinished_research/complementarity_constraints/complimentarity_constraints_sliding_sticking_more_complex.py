@@ -156,7 +156,10 @@ for i in range(N):
     prog.AddLinearConstraint(v_cp2_W[i][0] == cp2_v_rel[i])
 
     # Enforce sdf corresponds to negative x-component of finger position
-    prog.AddLinearConstraint(phi[i] == -p_BF_x[i])
+    prog.AddLinearConstraint(phi[i] == -p_BF_x[i] - box.width / 2)
+
+    # TODO: Temporary, remove this
+    prog.AddLinearConstraint(p_WB[i][1] == box.height / 2)
 
     # Add contact/non-contact complimentarity constraints
     lhs = phi[i]
@@ -178,10 +181,8 @@ for i in range(N):
 
 
 # Initial conditions
-# prog.AddLinearConstraint(phi[0] == 1)
-# prog.AddLinearConstraint(phi[N] == 1)
-prog.AddLinearConstraint(p_BF_x[0] == -1 - box.width / 2)
-prog.AddLinearConstraint(p_BF_x[N] == -1 - box.width / 2)
+prog.AddLinearConstraint(p_BF_x[0] == -0.1 - box.width / 2)
+prog.AddLinearConstraint(p_BF_x[N] == -0.1 - box.width / 2)
 prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
 prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([1, box.height / 2])))
 
