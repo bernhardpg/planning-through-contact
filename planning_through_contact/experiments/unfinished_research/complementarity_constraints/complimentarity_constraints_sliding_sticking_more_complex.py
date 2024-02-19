@@ -38,6 +38,8 @@ N = 5
 mu = 0.5
 mass = 1.0
 
+f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
+
 prog = MathematicalProgram()
 
 # NOTE: The knot point values represent the values at the END of a time step
@@ -61,7 +63,7 @@ box = Box2d(width=0.2, height=0.1)
 gamma = prog.NewContinuousVariables(N, "gamma")
 # First component is along negative x axis, second along positive x axis
 cp1_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp1_lambda_f")
-cp1_lambda_n = mass * 9.81
+cp1_lambda_n = prog.NewContinuousVariables(N, "cp1_lambda_n")
 cp1_v_rel = prog.NewContinuousVariables(N, "cp1_v_rel")
 cp1_v_rel_comps = np.vstack([-cp1_v_rel, cp1_v_rel]).T  # (N, 2)
 cp1_lambda_f = cp1_lambda_f_comps[:, 1] - cp1_lambda_f_comps[:, 0]
@@ -72,11 +74,11 @@ v_cp1_W = [
     (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
 ]
 
-f_cp1_B = [np.array([f, cp1_lambda_n]) for f in cp1_lambda_f]
+f_cp1_B = [np.array([f, n]) for f, n in zip(cp1_lambda_f, cp1_lambda_n)]
 f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
 
 cp2_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp2_lambda_f")
-cp2_lambda_n = mass * 9.81
+cp2_lambda_n = prog.NewContinuousVariables(N, "cp2_lambda_n")
 cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
 cp2_v_rel_comps = np.vstack([-cp2_v_rel, cp2_v_rel]).T  # (N, 2)
 cp2_lambda_f = cp2_lambda_f_comps[:, 1] - cp2_lambda_f_comps[:, 0]
@@ -87,7 +89,7 @@ v_cp2_W = [
     (1 / dt) * (p_next - p_curr) for p_next, p_curr in zip(p_cp1_W[1:], p_cp1_W[:-1])
 ]
 
-f_cp2_B = [np.array([f, cp2_lambda_n]) for f in cp2_lambda_f]
+f_cp2_B = [np.array([f, n]) for f, n in zip(cp2_lambda_f, cp2_lambda_n)]
 f_cp2_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp2_B)])
 
 e = np.ones((2,))
@@ -145,7 +147,7 @@ for i in range(N):
     rhs = cp1_lambda_f_comps[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
-    lhs = mu * cp1_lambda_n - np.sum(cp1_lambda_f_comps[i])
+    lhs = mu * cp1_lambda_n[i] - np.sum(cp1_lambda_f_comps[i])
     rhs = gamma[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -155,7 +157,7 @@ for i in range(N):
     rhs = cp2_lambda_f_comps[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
-    lhs = mu * cp2_lambda_n - np.sum(cp2_lambda_f_comps[i])
+    lhs = mu * cp2_lambda_n[i] - np.sum(cp2_lambda_f_comps[i])
     rhs = gamma[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
@@ -178,9 +180,12 @@ for i in range(N):
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
     # Add force balance constraint
+    # x direction
     prog.AddLinearConstraint(
         cp1_lambda_f[i] + cp2_lambda_f[i] + finger_lambda_n[i] == 0
     )
+    # y direction
+    prog.AddLinearConstraint(cp1_lambda_n[i] + cp2_lambda_n[i] + f_grav_W[i][1] == 0)
 
     # SO(2)
     prog.AddQuadraticConstraint(cos_th[i] ** 2 + sin_th[i] ** 2, 1, 1)
@@ -307,8 +312,6 @@ def animate_vals(result):
     f_cp2_W_sol = evaluate_np_expressions_array(f_cp2_W, result)
     p_cp1_W_sol = evaluate_np_expressions_array(p_cp1_W, result)[:-1, :]
     p_cp2_W_sol = evaluate_np_expressions_array(p_cp2_W, result)[:-1, :]
-
-    f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
 
     R_WB_sol = [evaluate_np_expressions_array(R, result) for R in R_WB]
     rotation_traj = np.vstack([R.flatten() for R in R_WB_sol])
