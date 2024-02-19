@@ -34,7 +34,7 @@ OUTPUT_DIR = Path("output/complimentarity_constraints/")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 dt = 0.1
-N = 5
+N = 4
 mu = 0.5
 mass = 1.0
 
@@ -45,7 +45,7 @@ prog = MathematicalProgram()
 # NOTE: The knot point values represent the values at the END of a time step
 
 # Finger variables
-phi = prog.NewContinuousVariables(N, "phi")
+finger_phi = prog.NewContinuousVariables(N, "finger_phi")
 finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
 p_BF_x = prog.NewContinuousVariables(N, "p_BF_x")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
@@ -62,6 +62,7 @@ box = Box2d(width=0.2, height=0.1)
 # Box / table variables
 gamma = prog.NewContinuousVariables(N, "gamma")
 # First component is along negative x axis, second along positive x axis
+cp1_phi = prog.NewContinuousVariables(N, "cp1_phi")
 cp1_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp1_lambda_f")
 cp1_lambda_n = prog.NewContinuousVariables(N, "cp1_lambda_n")
 cp1_v_rel = prog.NewContinuousVariables(N, "cp1_v_rel")
@@ -77,6 +78,7 @@ v_cp1_W = [
 f_cp1_B = [np.array([f, n]) for f, n in zip(cp1_lambda_f, cp1_lambda_n)]
 f_cp1_W = np.vstack([R @ f for R, f in zip(R_WB, f_cp1_B)])
 
+cp2_phi = prog.NewContinuousVariables(N, "cp2_phi")
 cp2_lambda_f_comps = prog.NewContinuousVariables(N, 2, "cp2_lambda_f")
 cp2_lambda_n = prog.NewContinuousVariables(N, "cp2_lambda_n")
 cp2_v_rel = prog.NewContinuousVariables(N, "cp2_v_rel")
@@ -161,6 +163,19 @@ for i in range(N):
     rhs = gamma[i]
     sliding_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
+    # Add contact/non-contact complimentarity constraints
+    lhs = finger_phi[i]
+    rhs = finger_lambda_n[i]
+    contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+
+    lhs = cp1_phi[i]
+    rhs = cp1_lambda_n[i]
+    contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+
+    lhs = cp2_phi[i]
+    rhs = cp2_lambda_n[i]
+    contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+
     # Enforce v_rels equal
     prog.AddLinearConstraint(cp1_v_rel[i] == cp2_v_rel[i])
 
@@ -169,15 +184,9 @@ for i in range(N):
     prog.AddLinearConstraint(v_cp2_W[i][0] == cp2_v_rel[i])
 
     # Enforce sdf corresponds to negative x-component of finger position
-    prog.AddLinearConstraint(phi[i] == -p_BF_x[i] - box.width / 2)
-
-    # TODO: Temporary, remove this
-    prog.AddLinearConstraint(p_WB[i][1] == box.height / 2)
-
-    # Add contact/non-contact complimentarity constraints
-    lhs = phi[i]
-    rhs = finger_lambda_n[i]
-    contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
+    prog.AddLinearConstraint(finger_phi[i] == -p_BF_x[i] - box.width / 2)
+    prog.AddLinearConstraint(cp1_phi[i] == p_cp1_W[i][1])
+    prog.AddLinearConstraint(cp2_phi[i] == p_cp2_W[i][1])
 
     # Add force balance constraint
     # x direction
@@ -200,7 +209,8 @@ for i in range(N):
 prog.AddLinearConstraint(p_BF_x[0] == -0.1 - box.width / 2)
 prog.AddLinearConstraint(p_BF_x[N - 1] == -0.1 - box.width / 2)
 prog.AddLinearConstraint(eq(p_WB[0].flatten(), np.array([0, box.height / 2])))
-prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([1, box.height / 2])))
+end_x_pos = 0.5
+prog.AddLinearConstraint(eq(p_WB[N].flatten(), np.array([end_x_pos, box.height / 2])))
 
 th_I = 0
 th_F = 0
@@ -216,8 +226,15 @@ sin_th_diffs = sin_th[1:] - sin_th[:-1]
 prog.AddQuadraticCost(cos_th_diffs.T @ cos_th_diffs)
 prog.AddQuadraticCost(sin_th_diffs.T @ sin_th_diffs)
 
+cp1_phi_diff = cp1_phi[1:] - cp1_phi[:-1]
+cp2_phi_diff = cp2_phi[1:] - cp2_phi[:-1]
+
+# TODO: Can in principle replace these with penalizing velocity on contact points
+# (or keypoints on object)
 prog.AddQuadraticCost(cp1_v_rel.T @ cp1_v_rel)  # type: ignore
 prog.AddQuadraticCost(cp2_v_rel.T @ cp2_v_rel)  # type: ignore
+prog.AddQuadraticCost(cp1_phi_diff.T @ cp1_phi_diff)  # type: ignore
+prog.AddQuadraticCost(cp2_phi_diff.T @ cp2_phi_diff)  # type: ignore
 # prog.AddQuadraticCost(finger_lambda_n.T @ finger_lambda_n)  # type: ignore
 # prog.AddQuadraticCost(lambda_f_comps.flatten() @ lambda_f_comps.flatten())  # type: ignore
 # prog.AddQuadraticCost(gamma.T @ gamma)  # type: ignore
@@ -369,7 +386,7 @@ if show_plot:
     fig.set_size_inches(16, 10)  # type: ignore
 
     def fill_plot_col(result, col_idx):
-        phi_sol = result.GetSolution(phi)
+        phi_sol = result.GetSolution(finger_phi)
         finger_lambda_n_sol = result.GetSolution(finger_lambda_n)
         gamma_sol = result.GetSolution(gamma)
         cos_th_sol = result.GetSolution(cos_th)
