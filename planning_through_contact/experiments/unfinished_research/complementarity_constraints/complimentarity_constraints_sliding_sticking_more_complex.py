@@ -47,13 +47,17 @@ prog = MathematicalProgram()
 # Finger variables
 finger_phi = prog.NewContinuousVariables(N, "finger_phi")
 finger_lambda_n = prog.NewContinuousVariables(N, "finger_lambda_n")
+finger_lambda_f_comps = prog.NewContinuousVariables(N, 2, "finger_lambda_f")
+finger_lambda_f = finger_lambda_f_comps[:, 1] - finger_lambda_f_comps[:, 0]
+finger_v_rel = prog.NewContinuousVariables(N, "finger_v_rel")
+finger_v_rel_comps = np.vstack([-finger_v_rel, finger_v_rel]).T  # (N, 2)
 p_BF_x = prog.NewContinuousVariables(N, "p_BF_x")
 p_WB = prog.NewContinuousVariables(N + 1, 2, "p_WB")
 cos_th = prog.NewContinuousVariables(N + 1, "cos_th")
 sin_th = prog.NewContinuousVariables(N + 1, "sin_th")
 R_WB = [np.array([[c, -s], [s, c]]) for c, s in zip(cos_th, sin_th)]
 
-f_F_B = [np.array([n, 0]) for n in finger_lambda_n]
+f_F_B = [np.array([n, -f]) for n, f in zip(finger_lambda_n, finger_lambda_f)]
 f_F_W = np.vstack([R @ f for R, f in zip(R_WB, f_F_B)])
 
 box = Box2d(width=0.2, height=0.1)
@@ -226,13 +230,16 @@ sin_th_diffs = sin_th[1:] - sin_th[:-1]
 prog.AddQuadraticCost(cos_th_diffs.T @ cos_th_diffs)
 prog.AddQuadraticCost(sin_th_diffs.T @ sin_th_diffs)
 
+finger_phi_diff = finger_phi[1:] - finger_phi[:-1]
 cp1_phi_diff = cp1_phi[1:] - cp1_phi[:-1]
 cp2_phi_diff = cp2_phi[1:] - cp2_phi[:-1]
 
 # TODO: Can in principle replace these with penalizing velocity on contact points
 # (or keypoints on object)
+prog.AddQuadraticCost(finger_v_rel.T @ finger_v_rel)  # type: ignore
 prog.AddQuadraticCost(cp1_v_rel.T @ cp1_v_rel)  # type: ignore
 prog.AddQuadraticCost(cp2_v_rel.T @ cp2_v_rel)  # type: ignore
+prog.AddQuadraticCost(finger_phi_diff.T @ finger_phi_diff)  # type: ignore
 prog.AddQuadraticCost(cp1_phi_diff.T @ cp1_phi_diff)  # type: ignore
 prog.AddQuadraticCost(cp2_phi_diff.T @ cp2_phi_diff)  # type: ignore
 # prog.AddQuadraticCost(finger_lambda_n.T @ finger_lambda_n)  # type: ignore
