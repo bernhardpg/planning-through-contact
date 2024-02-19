@@ -85,7 +85,7 @@ mass = 1.0
 
 box = Box2d(width=0.2, height=0.1)
 
-f_grav_W = np.repeat(np.array([0, -mass * 9.81]).reshape((1, -1)), N, axis=0)
+f_grav_W = np.array([0, -mass * 9.81])
 
 ## Initial conditions
 p_WB_0 = np.array([0, box.height / 2])
@@ -140,7 +140,7 @@ finger_delta_tang_pos_comps = np.vstack(
 finger_lambda_f = finger_lambda_f_comps[:, 1] - finger_lambda_f_comps[:, 0]
 f_F_B = [np.array([n, -f]) for n, f in zip(finger_lambda_n, finger_lambda_f)]
 f_F_W = np.vstack([R @ f for R, f in zip(R_WB, f_F_B)])
-f_grav_B = [R.T @ f for R, f in zip(R_WB, f_grav_W)]
+f_grav_B = [R.T @ f_grav_W for R in R_WB]
 
 
 # Shared box/table variables
@@ -376,7 +376,7 @@ def animate_vals(result):
     f_F_W_sol = np.vstack([f_F_W_0, f_F_W_sol])
     f_cp1_W_sol = np.vstack([f_cp1_W_0, f_cp1_W_sol])
     f_cp2_W_sol = np.vstack([f_cp2_W_0, f_cp2_W_sol])
-    f_grav_W_sol = np.vstack([f_grav_W[0, :], f_grav_W])  # pad this for plotting
+    f_grav_W_sol = np.repeat(f_grav_W.reshape((1, -1)), N + 1, axis=0)
 
     R_WB_sol = [R_WB_0] + [evaluate_np_expressions_array(R, result) for R in R_WB]
     p_WF_sol = np.vstack([p + R @ f for p, R, f in zip(p_WB_sol, R_WB_sol, p_BF_sol)])
