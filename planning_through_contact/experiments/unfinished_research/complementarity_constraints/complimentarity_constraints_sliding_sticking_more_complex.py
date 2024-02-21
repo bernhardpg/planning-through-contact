@@ -83,7 +83,7 @@ N = 4
 mu = 1.0
 mass = 1.0
 
-box = Box2d(width=0.2, height=0.1)
+box = Box2d(width=0.2, height=0.2)
 
 f_grav_W = np.array([0, -mass * 9.81])
 
@@ -270,8 +270,8 @@ for i in range(N):
 
 
 # Final conditions
-# th_F = -np.pi / 2
-th_F = -0.02
+th_F = -0.6
+# th_F = -0.02
 end_x_pos = 0.5
 # prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
 prog.AddLinearConstraint(p_WB[N - 1][0] == end_x_pos)
