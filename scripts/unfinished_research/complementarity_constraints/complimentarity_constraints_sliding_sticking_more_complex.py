@@ -233,13 +233,9 @@ for i in range(N):
     rhs = cp2_lambda_n[i]
     contact_comp_constraints.append(add_complimentarity_constraint(prog, lhs, rhs))
 
-    # Add force balance constraint
-    # x direction
-    prog.AddLinearConstraint(
-        cp1_lambda_f[i] + cp2_lambda_f[i] + finger_lambda_n[i] + f_grav_B[i][0] == 0
-    )
-    # y direction
-    prog.AddLinearConstraint(cp1_lambda_n[i] + cp2_lambda_n[i] + f_grav_B[i][1] == 0)
+    # Force balance in body frame
+    c = eq(f_F_B[i] + f_cp1_B[i] + f_cp2_B[i] + f_grav_B[i], 0)
+    prog.AddLinearConstraint(c)
 
     # Torque balance
     sum_torques = (
@@ -275,7 +271,7 @@ for i in range(N):
 
 # Final conditions
 # th_F = -np.pi / 2
-th_F = -np.pi / 2
+th_F = -0.02
 end_x_pos = 0.5
 # prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
 prog.AddLinearConstraint(p_WB[N - 1][0] == end_x_pos)
