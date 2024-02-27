@@ -381,7 +381,11 @@ class OutputFeedbackTableEnvironment:
             for t in np.append(np.arange(0, timeout, time_step), timeout):
                 self._simulator.AdvanceTo(t)
                 # reset position if necessary
-                reset_dict = self._should_reset_environment(t)
+                # reset_dict = self._should_reset_environment(t)
+                reset_dict = self._should_reset_environment(t,
+                                                            trans_tol=0.0075,
+                                                            rot_tol = 1.0*np.pi/180
+                ) 
                 if reset_dict['pusher'] or reset_dict['slider']:
                     if reset_dict['pusher'] == False and reset_dict['slider'] == True:
                         successful_idx.append(self._multi_run_idx-1)
@@ -394,8 +398,11 @@ class OutputFeedbackTableEnvironment:
                     PlanarPose(0.5, 0.0, 0.0),
                     scale_factor=1.0
                 )
-                # Print the time every 5 seconds
+                # print errors
+
+                # Print every 5 seconds
                 if t % 5 == 0:
+                    # self._print_distance_to_target_pose()
                     logger.info(f"t={t}")
 
         else:
@@ -413,6 +420,22 @@ class OutputFeedbackTableEnvironment:
         self.save_data(save_dir)
         return successful_idx, save_dir
     
+    def _print_distance_to_target_pose(self, 
+                                       target_slider_pose: PlanarPose=PlanarPose(0.5, 0.0, 0.0)
+    ):
+        # Extract slider poses
+        slider_position = self._plant.GetPositions(self.mbp_context, self._slider_model_instance)
+        slider_pose = PlanarPose.from_generalized_coords(slider_position)
+        
+        # print distance to target pose
+        x_error = target_slider_pose.x - slider_pose.x
+        y_error = target_slider_pose.y - slider_pose.y
+        theta_error = target_slider_pose.theta - slider_pose.theta
+        print(f'\nx error: {100*x_error:.2f}cm')
+        print(f'y error: {100*y_error:.2f}cm')
+        print(f'orientation error: {theta_error*180.0/np.pi:.2f} degrees ({theta_error:.2f}rads)')
+
+
     def _should_reset_environment(self, 
                                   time: float,
                                   target_pusher_pose: PlanarPose=PlanarPose(0.5, 0.25, 0.0),

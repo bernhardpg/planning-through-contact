@@ -49,8 +49,8 @@ class CylinderActuatedStation(RobotSystemBase):
         super().__init__()
         self._sim_config = sim_config
         self._meshcat = meshcat
-        # self._pid_gains = dict(kp=3200, ki=100, kd=100)
-        self._pid_gains = dict(kp=1600, ki=100, kd=50)
+        self._pid_gains = dict(kp=3200, ki=100, kd=50)
+        # self._pid_gains = dict(kp=1600, ki=100, kd=50)
         self._num_positions = 2  # Number of dimensions for robot position
         self._goal_geometries = []
 
