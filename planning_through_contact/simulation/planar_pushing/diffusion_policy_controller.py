@@ -86,14 +86,14 @@ class DiffusionPolicyController(LeafSystem):
         self._B = 1 # batch size is 1
 
         # indexing parameters for action predictions
-        self._start = self._obs_horizon
-        # Hack to ensure backward compatibility with version 1 checkpoints
-        # Version 1 checkpoints used a shifted action horizon 
-        # (which is technically correct... oops)
-        if 'push_tee_v1' in checkpoint:
-            print("Using version 1 slicing for action predictions")
-            self._start = self._obs_horizon - 1
+        self._start = self._obs_horizon - 1
         self._end = self._start + self._action_steps
+        # Hack to ensure backward compatibility with version 2 checkpoints
+        # Version 2 checkpoints did not used shifted actions
+        if 'push_tee_v2' in checkpoint:
+            print("Using version 2 slicing for action predictions")
+            self._start = self._obs_horizon
+            self._end = self._start + self._action_steps
         
         # observation histories
         self._pusher_pose_deque = deque(

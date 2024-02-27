@@ -357,7 +357,7 @@ if __name__ == "__main__":
     station_meshcat = StartMeshcat()
     # plan path is used to extract sim_config
     # the trajectory in plan path is not used
-    plan = "data_collection_trajectories/run_0/traj_0/trajectory/traj_rounded.pkl"
+    plan = "data_collection_trajectories_tee_v3/run_0/traj_0/trajectory/traj_rounded.pkl"
     run_sim(
         plan=plan,
         checkpoint=checkpoint,

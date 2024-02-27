@@ -7,19 +7,30 @@ import pickle
 import numpy as np
 from pydrake.all import (
     ConstantVectorSource,
-    Demultiplexer,
     DiagramBuilder,
     LogVectorOutput,
     Meshcat,
     Simulator,
     Box as DrakeBox,
     RigidBody as DrakeRigidBody,
-    GeometryInstance,
-    MakePhongIllustrationProperties,
-    Rgba,
-    MultibodyPlant,
-    SceneGraph,
 )
+
+from planning_through_contact.planning.planar.planar_plan_config import (
+    BoxWorkspace,
+    PlanarPlanConfig,
+    PlanarPushingWorkspace,
+)
+
+from planning_through_contact.geometry.planar.non_collision import (
+    check_finger_pose_in_contact_location,
+)
+
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+    ContactLocation,
+    PolytopeContactLocation,
+)
+
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
@@ -56,8 +67,96 @@ from planning_through_contact.visualize.analysis import (
 )
 from planning_through_contact.visualize.colors import COLORS
 
+from planning_through_contact.experiments.utils import (
+    get_default_plan_config,
+)
+
 logger = logging.getLogger(__name__)
 
+# TODO: refactor
+def _check_collision(
+    pusher_pose_world: PlanarPose,
+    slider_pose_world: PlanarPose,
+    config: PlanarPlanConfig,
+) -> bool:
+    p_WP = pusher_pose_world.pos()
+    R_WB = slider_pose_world.two_d_rot_matrix()
+    p_WB = slider_pose_world.pos()
+
+    # We need to compute the pusher pos in the frame of the slider
+    p_BP = R_WB.T @ (p_WP - p_WB)
+    pusher_pose_body = PlanarPose(p_BP[0, 0], p_BP[1, 0], 0)
+
+    # we always add all non-collision modes, even when we don't add all contact modes
+    # (think of maneuvering around the object etc)
+    locations = [
+        PolytopeContactLocation(ContactLocation.FACE, idx)
+        for idx in range(config.slider_geometry.num_collision_free_regions)
+    ]
+    matching_locs = [
+        loc
+        for loc in locations
+        if check_finger_pose_in_contact_location(pusher_pose_body, loc, config)
+    ]
+    if len(matching_locs) == 0:
+        return True
+    else:
+        return False
+    
+def _slider_within_workspace(
+    workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
+) -> bool:
+    """
+    Checks whether the entire slider is within the workspace
+    """
+    R_WB = pose.two_d_rot_matrix()
+    p_WB = pose.pos()
+
+    p_Wv_s = [
+        slider.get_p_Wv_i(vertex_idx, R_WB, p_WB).flatten()
+        for vertex_idx in range(len(slider.vertices))
+    ]
+
+    lb, ub = workspace.slider.bounds
+    vertices_within_workspace: bool = np.all([v <= ub for v in p_Wv_s]) and np.all(
+        [v >= lb for v in p_Wv_s]
+    )
+    return vertices_within_workspace
+
+def _get_slider_pose_within_workspace(
+    workspace: PlanarPushingWorkspace,
+    slider: CollisionGeometry,
+    pusher_pose: PlanarPose,
+    config: PlanarPlanConfig,
+    limit_rotations: bool = False,
+    enforce_entire_slider_within_workspace: bool = True,
+) -> PlanarPose:
+    valid_pose = False
+
+    slider_pose = None
+    while not valid_pose:
+        x_initial = np.random.uniform(workspace.slider.x_min, workspace.slider.x_max)
+        y_initial = np.random.uniform(workspace.slider.y_min, workspace.slider.y_max)
+        EPS = 0.01
+        if limit_rotations:
+            # th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+            th_initial = np.random.uniform(-np.pi / 4 + EPS, np.pi / 4 - EPS)
+        else:
+            th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
+
+        slider_pose = PlanarPose(x_initial, y_initial, th_initial)
+
+        collides_with_pusher = _check_collision(pusher_pose, slider_pose, config)
+        within_workspace = _slider_within_workspace(workspace, slider_pose, slider)
+
+        if enforce_entire_slider_within_workspace:
+            valid_pose = within_workspace and not collides_with_pusher
+        else:
+            valid_pose = not collides_with_pusher
+
+    assert slider_pose is not None  # fix LSP errors
+
+    return slider_pose
 
 class OutputFeedbackTableEnvironment:
     def __init__(
@@ -77,11 +176,28 @@ class OutputFeedbackTableEnvironment:
         self._plant = self._robot_system.station_plant
         self._scene_graph = self._robot_system._scene_graph
         self._slider = self._robot_system.slider
-        
+
         if self._multi_run_config:
             self._multi_run_idx = 0
             self._last_reset_time = 0.0
             self._total_runs = len(self._multi_run_config.initial_slider_poses)
+
+            # used for reseting environment
+            self._workspace = PlanarPushingWorkspace(
+                slider=BoxWorkspace(
+                        width=0.35,
+                        height=0.5,
+                        center=np.array([0.5, 0.0]),
+                        buffer=0,
+                    ),
+                )
+            self._plan_config = get_default_plan_config(
+                slider_type='tee',
+                pusher_radius=0.015,
+                hardware=False,
+            )
+
+            
         
         self._robot_model_instance = self._plant.GetModelInstanceByName(
             self._robot_system.robot_model_name
@@ -327,10 +443,11 @@ class OutputFeedbackTableEnvironment:
             target_slider_pose.y-trans_tol <= slider_pose.y <= target_slider_pose.y+trans_tol and \
             target_slider_pose.theta-rot_tol <= slider_pose.theta <= target_slider_pose.theta+rot_tol
 
-        if reached_pusher_target_pose and reached_slider_target_pose:
+        # if reached_pusher_target_pose and reached_slider_target_pose:
+        if reached_slider_target_pose:
             print(f"\n[Run {self._multi_run_idx}] Success! Reseting slider pose.")
-            print("Initial pusher pose: ", 
-                  self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
+            print("Initial pusher pose: ",
+                    self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
             print("Final slider pose: ", slider_pose)
             return {'pusher': False, 'slider': True}
         
@@ -355,13 +472,30 @@ class OutputFeedbackTableEnvironment:
         
         # reset slider
         if reset_dict['slider']:
-            self.set_slider_planar_pose(self._multi_run_config.initial_slider_poses[self._multi_run_idx])
-            self._multi_run_idx += 1
+            # get a valid slider pose.
+            slider_pose = self._multi_run_config.initial_slider_poses[self._multi_run_idx]
+            slider_geometry = self._sim_config.dynamics_config.slider.geometry
+            pusher_position = self._plant.GetPositions(self.mbp_context, self._robot_model_instance)
+            pusher_pose = PlanarPose(*pusher_position, 0.0)
 
-        # reset diffusion policy
-        # pusher_position = self._plant.GetPositions(self.mbp_context, self._robot_model_instance)
-        # self._desired_position_source._diffusion_policy_controller.reset(pusher_position)
+            collides_with_pusher = _check_collision(pusher_pose, slider_pose, self._plan_config)
+            within_workspace = _slider_within_workspace(self._workspace, slider_pose, slider_geometry)
+            valid_pose = within_workspace and not collides_with_pusher
+
+            if not valid_pose:
+                print("here")
+                slider_pose = _get_slider_pose_within_workspace(
+                    self._workspace, 
+                    slider_geometry, 
+                    pusher_pose, 
+                    self._plan_config
+                )
+            
+            self.set_slider_planar_pose(slider_pose)
+            self._multi_run_idx += 1
+        
         self._last_reset_time = time
+
 
     def save_data(self, save_dir):
         if self._sim_config.collect_data:

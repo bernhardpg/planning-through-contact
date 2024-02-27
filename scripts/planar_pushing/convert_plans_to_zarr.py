@@ -91,7 +91,7 @@ def main():
 
         state = np.array(state) # T x 3
         action = np.array(state)[:,:2] # T x 2
-        # np.concatenate([state[1:,:2], state[-1:,:2]], axis=0) # T x 2 (discard theta)
+        action = np.concatenate([action[1:, :], action[-1:, :]], axis=0)
         images = np.array(images)
 
         # get target

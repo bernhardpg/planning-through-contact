@@ -150,7 +150,7 @@ def get_predefined_plan(traj_number: int) -> PlanarPushingStartAndGoal:
 
 def _slider_within_workspace(
     workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
-) -> bool
+) -> bool:
     """
     Checks whether the entire slider is within the workspace
     """
@@ -513,7 +513,7 @@ if __name__ == "__main__":
         config.contact_config.lam_min = 0.15
         config.contact_config.lam_max = 0.85
         config.non_collision_cost.distance_to_object_socp = \
-            2.0 if slider_type == "box" else 0.25
+            2.0 if slider_type == "box" else 0.2
 
         output_dir = f"data_collection_trajectories_{slider_type}"
         if os.path.exists(output_dir):
@@ -543,7 +543,8 @@ if __name__ == "__main__":
             (0.5, 0.0),
             init_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
             limit_rotations=True if slider_type == "box" else False,
-            noise_final_pose=True,
+            # noise_final_pose=True,
+            noise_final_pose=False,
         )
         print("Finished finding random plans within workspace")
 
