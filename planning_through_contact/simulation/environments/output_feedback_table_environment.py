@@ -466,8 +466,8 @@ class OutputFeedbackTableEnvironment:
             target_slider_pose.y-trans_tol <= slider_pose.y <= target_slider_pose.y+trans_tol and \
             target_slider_pose.theta-rot_tol <= slider_pose.theta <= target_slider_pose.theta+rot_tol
 
-        # if reached_pusher_target_pose and reached_slider_target_pose:
-        if reached_slider_target_pose:
+        if reached_pusher_target_pose and reached_slider_target_pose:
+        # if reached_slider_target_pose:
             print(f"\n[Run {self._multi_run_idx}] Success! Reseting slider pose.")
             print("Initial pusher pose: ",
                     self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
@@ -506,7 +506,6 @@ class OutputFeedbackTableEnvironment:
             valid_pose = within_workspace and not collides_with_pusher
 
             if not valid_pose:
-                print("here")
                 slider_pose = _get_slider_pose_within_workspace(
                     self._workspace, 
                     slider_geometry, 
