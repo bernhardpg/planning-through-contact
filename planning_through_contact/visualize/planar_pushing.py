@@ -556,7 +556,7 @@ def plot_forces(
 def make_traj_figure(
     traj: PlanarPushingTrajectory,
     filename: Optional[str] = None,
-    plot_lims: Optional[Tuple[float, float, float, float]] = (0.3, 0.85, -0.35, 0.35),
+    plot_lims: Optional[Tuple[float, float, float, float]] = None,
     plot_knot_points: bool = True,
     show_workspace: bool = False,
     start_end_legend: bool = False,
@@ -866,6 +866,12 @@ def make_traj_figure(
                             isinstance(knot_points, FaceContactVariables)
                         ):
                             f_W = traj_segment.get_f_W(ts[idx]).flatten() * FORCE_SCALE
+
+                            TOL = 1e-3
+                            if np.linalg.norm(f_W) <= TOL:
+                                # don't plot zero forces
+                                continue
+                            
                             p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
                             ax.arrow(
                                 p_Wc[0],

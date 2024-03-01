@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 import numpy as np
+import pickle
 from pydrake.all import (
     ConstantVectorSource,
     Demultiplexer,
@@ -10,6 +11,7 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Simulator,
+    StateInterpolatorWithDiscreteDerivative
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -38,15 +40,20 @@ from planning_through_contact.simulation.state_estimators.state_estimator import
 from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_vector_system import (
     RigidTransformToPlanarPoseVectorSystem,
 )
+from planning_through_contact.simulation.systems.planar_pose_to_generalized_coords import (
+    PlanarPoseToGeneralizedCoords,
+)
 from planning_through_contact.visualize.analysis import (
     plot_joint_state_logs,
     plot_and_save_planar_pushing_logs_from_sim,
+    PlanarPushingLog,
+    CombinedPlanarPushingLogs
 )
 
 logger = logging.getLogger(__name__)
 
 
-class TableEnvironment:
+class DataCollectionTableEnvironment:
     def __init__(
         self,
         desired_position_source: DesiredPlanarPositionSourceBase,
@@ -100,6 +107,27 @@ class TableEnvironment:
                     X_optitrackBody_plantBody=optitrack_config.X_optitrackBody_plantBody,
                 ),
             )
+        
+        # Add system to convert desired position to desired position and velocity.
+        self._desired_state_source = builder.AddNamedSystem(
+            "DesiredStateInterpolator",
+            StateInterpolatorWithDiscreteDerivative(
+                self._robot_system._num_positions,
+                self._sim_config.time_step,
+                suppress_initial_transient=True,
+            ),
+        )
+
+        # Add system to convert slider_pose to generalized coords
+        # TODO: better way to get z_value
+        z_value = 0.025
+        self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
+            "PlanarPoseToGeneralizedCoords",
+            PlanarPoseToGeneralizedCoords(
+                z_value=z_value,
+                z_axis_is_positive=True,
+            ),
+        )
 
         ## Connect systems
 
@@ -126,10 +154,17 @@ class TableEnvironment:
 
         # Inputs to state estimator
         # Connections to update the robot state within state estimator
+        
         builder.Connect(
-            self._robot_system.GetOutputPort("robot_state_measured"),
+            self._desired_position_source.GetOutputPort("planar_position_command"),
+            self._desired_state_source.get_input_port(),
+        )
+
+        builder.Connect(
+            self._desired_state_source.get_output_port(),
             self._state_estimator.GetInputPort("robot_state"),
         )
+
         if sim_config.use_hardware:
             # TODO connect Optitrack system
             # For now set the object_position to be constant
@@ -144,28 +179,23 @@ class TableEnvironment:
             # )
             pass
         else:
-            # Connections to update the object position within state estimator
             self._plant = self._robot_system.station_plant
             self._slider = self._robot_system.slider
-            slider_demux = builder.AddSystem(
-                Demultiplexer(
-                    [
-                        self._plant.num_positions(self._slider),
-                        self._plant.num_velocities(self._slider),
-                    ]
-                )
+            
+            # Connections to update the object position within state estimator
+            builder.Connect(
+                self._desired_position_source.GetOutputPort(
+                    "desired_slider_planar_pose_vector"
+                ),
+                self._slider_pose_to_generalized_coords.get_input_port()
             )
             builder.Connect(
-                self._robot_system.GetOutputPort("object_state_measured"),
-                slider_demux.get_input_port(),
-            )
-            builder.Connect(
-                slider_demux.get_output_port(0),
+                self._slider_pose_to_generalized_coords.get_output_port(),
                 self._state_estimator.GetInputPort("object_position"),
             )
 
         # Will break if save plots during teleop
-        if sim_config.save_plots:
+        if sim_config.save_plots or sim_config.collect_data:
             assert not isinstance(
                 self._desired_position_source, TeleopPositionSource
             ), "Cannot save plots during teleop"
@@ -215,6 +245,41 @@ class TableEnvironment:
             self._control_desired_logger = LogVectorOutput(
                 self._desired_position_source.GetOutputPort("mpc_control_desired"),
                 builder,
+            )
+        
+        if sim_config.collect_data:
+            assert sim_config.camera_config is not None
+            from pydrake.systems.sensors import (
+                ImageWriter,
+                PixelType
+            )
+
+            if not os.path.exists(sim_config.data_dir):
+                os.mkdir(sim_config.data_dir)
+            traj_idx = 0
+            for path in os.listdir(sim_config.data_dir):
+                if os.path.isdir(os.path.join(sim_config.data_dir, path)):
+                    traj_idx += 1
+            image_dir = f'{sim_config.data_dir}/{traj_idx}/images'
+            os.makedirs(image_dir)
+                                    
+            image_writer_system = ImageWriter()
+            image_writer_system.DeclareImageInputPort(
+                pixel_type=PixelType.kRgba8U,
+                port_name="overhead_camera_image",
+                file_name_format= image_dir + '/{time_msec}.png',
+                publish_period=0.1,
+                start_time=0.0
+            )
+            image_writer = builder.AddNamedSystem(
+                "ImageWriter",
+                image_writer_system
+            )
+            builder.Connect(
+                self._state_estimator.GetOutputPort(
+                    "rgbd_sensor_state_estimator_overhead_camera"
+                ),
+                image_writer.get_input_port()
             )
 
         diagram = builder.Build()
@@ -286,7 +351,9 @@ class TableEnvironment:
         else:
             self._simulator.AdvanceTo(timeout)
         self.save_logs(recording_file, save_dir)
-
+        self.save_data()
+        
+    
     def save_logs(self, recording_file: Optional[str], save_dir: str):
         if recording_file:
             self._meshcat.StopRecording()
@@ -345,6 +412,52 @@ class TableEnvironment:
                 num_positions,
                 save_dir=save_dir,
             )
+    
+    def save_data(self):
+        import pathlib
+
+        if self._sim_config.collect_data:
+            assert self._sim_config.data_dir is not None
+
+            # Save the logs
+            pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
+            slider_pose_log = self._slider_pose_logger.FindLog(self.context)
+            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
+                self.context
+            )
+            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
+                self.context
+            )
+            control_log = self._control_logger.FindLog(self.context)
+            control_desired_log = self._control_desired_logger.FindLog(self.context)
+
+            pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_log)
+            slider_actual = PlanarPushingLog.from_log(slider_pose_log, control_log)
+            pusher_desired = PlanarPushingLog.from_pose_vector_log(
+                pusher_pose_desired_log
+            )
+            slider_desired = PlanarPushingLog.from_log(
+                slider_pose_desired_log,
+                control_desired_log,
+            )
+            combined = CombinedPlanarPushingLogs(
+                pusher_actual=pusher_actual,
+                slider_actual=slider_actual,
+                pusher_desired=pusher_desired,
+                slider_desired=slider_desired,
+            )
+
+            # assumes that a directory for this trajectory has already been
+            # created (when saving the images)
+            traj_idx = -1
+            for path in os.listdir(self._sim_config.data_dir):
+                if os.path.isdir(os.path.join(self._sim_config.data_dir, path)):
+                    traj_idx += 1
+            assert traj_idx >= 0
+            save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(str(traj_idx))
+            log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
+            with open(log_path, "wb") as f:
+                pickle.dump(combined, f)
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
