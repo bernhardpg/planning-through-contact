@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import pickle
 from typing import List, Optional, Tuple
 
@@ -241,8 +242,9 @@ def plot_and_save_planar_pushing_logs_from_sim(
         pusher_desired=pusher_desired,
         slider_desired=slider_desired,
     )
-
-    with open(f"{save_dir}/combined_planar_pushing_logs.pkl", "wb") as f:
+    
+    log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
+    with open(log_path, "wb") as f:
         pickle.dump(combined, f)
 
     plot_planar_pushing_trajectory(
@@ -260,7 +262,6 @@ def plot_and_save_planar_pushing_logs_from_sim(
         plot_control=False,
         save_dir=save_dir,
     )
-
 
 def plot_planar_pushing_trajectory(
     actual: PlanarPushingLog,

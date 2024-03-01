@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, fields
 from enum import Enum
 from functools import cached_property
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple, List
 
 import numpy as np
 import numpy.typing as npt
@@ -106,6 +106,7 @@ class SliderPusherSystemConfig:
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20
+    max_rounding_trials: int = 10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
     gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
@@ -274,6 +275,18 @@ class PlanarPlanConfig:
     @property
     def pusher_radius(self) -> float:
         return self.dynamics_config.pusher_radius
+
+    def __str__(self) -> str:
+        field_strings = [
+            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
+        ]
+        return "\n".join(field_strings)
+
+@dataclass
+class MultiRunConfig:
+    initial_slider_poses: List[PlanarPose] = field(default_factory=lambda: [])
+    target_slider_poses: List[PlanarPose] = field(default_factory=lambda: [])
+    max_attempt_duration: float = 50.0
 
     def __str__(self) -> str:
         field_strings = [

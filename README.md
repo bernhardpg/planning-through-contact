@@ -1,5 +1,7 @@
 # Planning Through Contact
 
+**Note: This repo is still under active development and is updated continuously.**
+
 ## Installation (Linux and MacOS)
 
 This repo uses Poetry for dependency management. To setup this project, first
@@ -32,6 +34,12 @@ python scripts/planar_pushing/create_plan.py
 
 which takes a number of command line arguments. Add the flag `--help` for a
 description of these.
+
+For instance, to generate 10 plans for a box slider geometry, run
+
+```python
+python scripts/planar_pushing/create_plan.py --body box --seed 0 --num 10
+```
 
 ## Running pre-commit hooks
 
