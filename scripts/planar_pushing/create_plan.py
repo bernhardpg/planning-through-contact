@@ -510,10 +510,9 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
 
         # update config
-        config.contact_config.lam_min = 0.15
-        config.contact_config.lam_max = 0.85
-        config.non_collision_cost.distance_to_object_socp = \
-            2.0 if slider_type == "box" else 0.2
+        config.contact_config.lam_min = 0.2
+        config.contact_config.lam_max = 1-config.contact_config.lam_min
+        config.non_collision_cost.distance_to_object_socp = 0.25
 
         output_dir = f"data_collection_trajectories_{slider_type}"
         if os.path.exists(output_dir):
@@ -530,7 +529,7 @@ if __name__ == "__main__":
             slider=BoxWorkspace(
                 width=0.35,
                 height=0.5,
-                center=np.array([0.5, 0.0]),
+                center=np.array([0.575, 0.0]),
                 buffer=0,
             ),
         )
@@ -540,9 +539,10 @@ if __name__ == "__main__":
             num_trajs,
             workspace,
             config,
-            (0.5, 0.0),
-            init_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
-            limit_rotations=True if slider_type == "box" else False,
+            (0.575, 0.0),
+            init_pusher_pose=PlanarPose(0.575, 0.25, 0.0),
+            # limit_rotations=True if slider_type == "box" else False,
+            limit_rotations=False,
             # noise_final_pose=True,
             noise_final_pose=False,
         )

@@ -20,3 +20,25 @@ class RobotSystemBase(Diagram):
     def robot_model_name(self) -> str:
         """The name of the robot model."""
         ...
+    
+    @property
+    @abstractmethod
+    def slider_model_name(self) -> str:
+        """The name of the robot model."""
+        ...
+    
+    @abstractmethod
+    def get_station_plant(self):
+        ...
+
+    @abstractmethod
+    def get_scene_graph(self):
+        ...
+    
+    @abstractmethod
+    def get_slider(self):
+        ...
+    
+    @abstractmethod
+    def get_meshcat(self):
+        ...

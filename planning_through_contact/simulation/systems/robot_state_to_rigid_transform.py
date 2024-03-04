@@ -6,15 +6,16 @@ from pydrake.all import (
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-import time
+import numpy as np
 
 
-class StateToRigidTransform(LeafSystem):
-    def __init__(self, plant: MultibodyPlant, robot_model_name: str, z_value: float):
+class RobotStateToRigidTransform(LeafSystem):
+    def __init__(self, plant: MultibodyPlant, robot_model_name: str, offset=None):
         super().__init__()
         
         self._plant = plant
-        self._z_value = z_value
+        self._plant_context = self._plant.CreateDefaultContext()
+        self._offset = offset
         self._robot_model_name = robot_model_name
         self._robot_model_instance_index = plant.GetModelInstanceByName(
             robot_model_name
@@ -36,9 +37,12 @@ class StateToRigidTransform(LeafSystem):
     
     def DoCalcOutput(self, context, output):
         robot_state = self.EvalVectorInput(context, 0).get_value()
-        robot_position = robot_state[:self._num_positions]
-        if self._num_positions == 7:
-            planar_pose = PlanarPose.from_generalized_coords(robot_position)
-        else:
-            planar_pose = PlanarPose(robot_position[0], robot_position[1], 0.0)
-        output.set_value(planar_pose.to_pose(z_value=self._z_value))
+        q = robot_state[:self._num_positions]
+        self._plant.SetPositions(self._plant_context, self._robot_model_instance_index, q)
+        pose = self._plant.EvalBodyPoseInWorld(
+            self._plant_context,
+            self._plant.GetBodyByName("pusher")
+        )
+        if self._offset:
+            pose.set_translation(pose.translation() + pose.rotation()*self._offset)
+        output.set_value(pose)

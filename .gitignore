@@ -8,6 +8,9 @@ temp
 *pdf
 *png
 diffusion_policy_logs/
+*.html
+*.pkl
+iiwa_tee_*
 
 # Vim
 *.swp
