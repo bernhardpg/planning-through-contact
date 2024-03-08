@@ -165,6 +165,8 @@ class BandSparseSemidefiniteRelaxation:
             Variables(np.concatenate(self.groups[idx]).reshape((-1, 1)))
             for idx in range(self.num_groups)
         ]
+        for g in groups:
+            print(f"Variable group length: {len(g)}")
 
         new_prog = self.prog.Clone()
         # remove l2 norm costs because drake does not currently support this in SDPs
@@ -180,7 +182,44 @@ class BandSparseSemidefiniteRelaxation:
             vars = cost.variables()
             relaxed_prog.AddL2NormCostUsingConicConstraint(A, b, vars)
 
+        print("### Program stats for using variable grouping in drake:")
+        self._print_program_attributes(relaxed_prog)
+
+        self.relaxed_prog = relaxed_prog
+
         return relaxed_prog
+
+    @staticmethod
+    def _print_program_attributes(prog: MathematicalProgram) -> None:
+        print(f"  Num variables: {len(prog.decision_variables())}")
+        print(f"  Num linear ineq constraints: {len(prog.linear_constraints())}")
+        print(f"  Num linear eq constraints: {len(prog.linear_equality_constraints())}")
+        print(f"  Num linear costs: {len(prog.linear_costs())}")
+        print(f"  Num PSD constraints: {len(prog.positive_semidefinite_constraints())}")
+
+        def _get_psd_size(const):
+            X = const.variables()
+            N = np.sqrt(len(X))
+            assert int(N) == N
+            X = X.reshape((int(N), int(N)))
+            return X.shape
+
+        counter = 1
+        for idx in range(len(prog.positive_semidefinite_constraints()) - 1):
+            c = prog.positive_semidefinite_constraints()[idx]
+            c_next = prog.positive_semidefinite_constraints()[idx + 1]
+            size = _get_psd_size(c)
+            size_next = _get_psd_size(c_next)
+            if size == size_next:
+                counter += 1
+            else:
+                print(f"   PSD cone size: {_get_psd_size(c)} x {counter}")
+                counter = 1
+
+            if (
+                idx + 1 == len(prog.positive_semidefinite_constraints()) - 1
+            ):  # last constraint
+                print(f"   PSD cone size: {_get_psd_size(c)} x {counter}")
 
     def make_relaxation(
         self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
@@ -475,6 +514,10 @@ class BandSparseSemidefiniteRelaxation:
                 relaxed_prog.AddLinearCost(trace_cost * np.trace(X))
 
         self.relaxed_prog = relaxed_prog
+
+        print("### Program stats for custom band sparse relaxation:")
+        self._print_program_attributes(relaxed_prog)
+
         return self.relaxed_prog
 
     def get_full_X(self) -> NpVariableArray:
