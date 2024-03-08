@@ -80,10 +80,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ## Plan parameters
 h = 0.1
 N = 4
-mu = 0.5
+mu = 0.9
 mass = 1.0
 
-box = Box2d(width=0.2, height=0.1)
+# box = Box2d(width=0.2, height=0.1)
+box = Box2d(width=0.2, height=0.2)
 
 f_grav_W = np.array([0, -mass * 9.81])
 
@@ -272,8 +273,8 @@ for i in range(N):
 # Final conditions
 # th_F = -1.0
 th_F = 0.0
-end_x_pos = 0.5
-prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
+end_x_pos = -0.3
+# prog.AddLinearConstraint(eq(p_BF[N - 1], p_BF_0))
 prog.AddLinearConstraint(p_WB[N - 1][0] == end_x_pos)
 # prog.AddLinearConstraint(p_cp2_W[N - 1][0] == box.width / 2)  # don't move right cp
 
