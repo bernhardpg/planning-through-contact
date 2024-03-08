@@ -106,8 +106,12 @@ class SliderPusherSystemConfig:
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20
-    max_rounding_trials: int = 10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
-    gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
+    max_rounding_trials: int = (
+        10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
+    )
+    gcs_convex_relaxation: bool = (
+        True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
+    )
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
@@ -252,6 +256,7 @@ class PlanarPlanConfig:
     continuity_on_pusher_velocity: bool = (
         False  # TODO: Move this into a NonCollisionConfig
     )
+    use_drake_for_band_sparsity: bool = False  # TODO: remove this
     allow_teleportation: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True

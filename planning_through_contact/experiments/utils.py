@@ -105,6 +105,7 @@ def get_default_plan_config(
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
     hardware: bool = False,
+    num_knot_points_override: Optional[int] = None,
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -153,8 +154,12 @@ def get_default_plan_config(
         time_contact = 4.0
         time_non_collision = 2.0
 
-        num_knot_points_non_collision = 3
-        num_knot_points_contact = 3
+        if num_knot_points_override is not None:
+            num_knot_points_non_collision = num_knot_points_override
+            num_knot_points_contact = num_knot_points_override
+        else:
+            num_knot_points_non_collision = 3
+            num_knot_points_contact = 3
 
     plan_cfg = PlanarPlanConfig(
         dynamics_config=slider_pusher_config,

@@ -38,16 +38,17 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 
 debug = True
-slider_type = "tee"
+slider_type = "box"
+# slider_type = "tee"
 pusher_radius = 0.035
 
 config = get_default_plan_config(
     slider_type=slider_type,
     pusher_radius=pusher_radius,
-    integration_constant=0.4,
-    friction_coeff=0.4,
-    lam_buffer=0.2,
+    num_knot_points_override=8,
 )
+config.use_band_sparsity = True
+config.use_drake_for_band_sparsity = True
 
 contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
 initial_pose = PlanarPose(0, 0, 0)
@@ -61,8 +62,8 @@ mode.set_slider_final_pose(final_pose)
 mode.formulate_convex_relaxation()
 
 print("Finished formulating convex relaxation")
-solver = ClarabelSolver()
-# solver = MosekSolver()
+# solver = ClarabelSolver()
+solver = MosekSolver()
 
 solver_options = SolverOptions()
 solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore

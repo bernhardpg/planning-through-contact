@@ -153,6 +153,12 @@ class BandSparseSemidefiniteRelaxation:
                         bounding_box_constraints.append(x_i - b_l)
 
         return np.array(bounding_box_constraints)
+    
+    # TODO: This is only to test the recent variablegrouping functionality in Drake
+    def make_relaxation_with_drake(
+        self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
+    ) -> MathematicalProgram:
+        breakpoint()
 
     def make_relaxation(
         self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False

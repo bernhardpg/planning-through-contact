@@ -188,9 +188,11 @@ class FaceContactVariables(AbstractModeVariables):
             get_float_from_result(self.friction_forces),
             get_float_from_result(self.cos_ths),
             get_float_from_result(self.sin_ths),
-            get_float_from_result(self.theta_dots)
-            if self.theta_dots is not None
-            else None,
+            (
+                get_float_from_result(self.theta_dots)
+                if self.theta_dots is not None
+                else None
+            ),
             get_float_from_result(self.p_WB_xs),
             get_float_from_result(self.p_WB_ys),
             self.pv1,
@@ -223,9 +225,11 @@ class FaceContactVariables(AbstractModeVariables):
             get_original_vars_from_reduced(self.friction_forces),
             get_original_vars_from_reduced(self.cos_ths),
             get_original_vars_from_reduced(self.sin_ths),
-            get_original_vars_from_reduced(self.theta_dots)
-            if self.theta_dots is not None
-            else None,
+            (
+                get_original_vars_from_reduced(self.theta_dots)
+                if self.theta_dots is not None
+                else None
+            ),
             get_original_vars_from_reduced(self.p_WB_xs),
             get_original_vars_from_reduced(self.p_WB_ys),
             self.pv1,
@@ -896,10 +900,16 @@ class FaceContactMode(AbstractContactMode):
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
             if self.config.use_band_sparsity:
-                self.relaxed_prog = self.prog_wrapper.make_relaxation(
-                    trace_cost=self.config.contact_config.cost.trace,
-                    add_l2_norm_cost=add_l2_norm_cost,
-                )
+                if self.config.use_drake_for_band_sparsity:
+                    self.relaxed_prog = self.prog_wrapper.make_relaxation_with_drake(
+                        trace_cost=self.config.contact_config.cost.trace,
+                        add_l2_norm_cost=add_l2_norm_cost,
+                    )
+                else:
+                    self.relaxed_prog = self.prog_wrapper.make_relaxation(
+                        trace_cost=self.config.contact_config.cost.trace,
+                        add_l2_norm_cost=add_l2_norm_cost,
+                    )
             else:
                 self.relaxed_prog = self.prog_wrapper.make_full_relaxation(
                     trace_cost=self.config.contact_config.cost.trace
