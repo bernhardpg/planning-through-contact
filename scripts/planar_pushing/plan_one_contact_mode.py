@@ -48,7 +48,7 @@ config = get_default_plan_config(
     num_knot_points_override=8,
 )
 config.use_band_sparsity = True
-config.use_drake_for_band_sparsity = True
+# config.use_drake_for_band_sparsity = True
 
 contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
 initial_pose = PlanarPose(0, 0, 0)

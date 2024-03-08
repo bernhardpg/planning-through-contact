@@ -10,6 +10,7 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
 )
+from pydrake.symbolic import Variables
 
 from planning_through_contact.convex_relaxation.sdp import (
     linear_bindings_to_homogenuous_form,
@@ -153,12 +154,33 @@ class BandSparseSemidefiniteRelaxation:
                         bounding_box_constraints.append(x_i - b_l)
 
         return np.array(bounding_box_constraints)
-    
+
     # TODO: This is only to test the recent variablegrouping functionality in Drake
     def make_relaxation_with_drake(
         self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
     ) -> MathematicalProgram:
-        breakpoint()
+
+        # First gather variables
+        groups = [
+            Variables(np.concatenate(self.groups[idx]).reshape((-1, 1)))
+            for idx in range(self.num_groups)
+        ]
+
+        new_prog = self.prog.Clone()
+        # remove l2 norm costs because drake does not currently support this in SDPs
+        for cost in self.l2_norm_costs:
+            new_prog.RemoveCost(cost)
+
+        relaxed_prog = MakeSemidefiniteRelaxation(new_prog, groups)
+
+        # Add l2 norm costs with conic formulation to relaxation
+        for cost in self.l2_norm_costs:
+            A = cost.evaluator().A()
+            b = cost.evaluator().b()
+            vars = cost.variables()
+            relaxed_prog.AddL2NormCostUsingConicConstraint(A, b, vars)
+
+        return relaxed_prog
 
     def make_relaxation(
         self, trace_cost: Optional[float] = None, add_l2_norm_cost: bool = False
