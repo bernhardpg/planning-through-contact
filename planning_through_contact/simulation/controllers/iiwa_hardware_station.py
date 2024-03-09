@@ -53,7 +53,10 @@ class IiwaHardwareStation(RobotSystemBase):
         super().__init__()
         self._sim_config = sim_config
         self._meshcat = meshcat
-        scenario_name = "demo"
+        if sim_config.use_hardware:
+            scenario_name = "speed-optimized"
+        else:
+            scenario_name = "accuracy-optimized"
         scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
         scenario = LoadScenario(
             filename=scenario_file_name, scenario_name=scenario_name
@@ -111,14 +114,15 @@ class IiwaHardwareStation(RobotSystemBase):
             robot.num_positions(), robot.num_velocities()
         )
         ik_params.set_time_step(sim_config.time_step)
-        # True velocity limits for the IIWA14
+        # True velocity limits for the IIWA14 and IIWA7
         # (in rad, rounded down to the first decimal)
-        IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-        velocity_limit_factor = 0.4
+        # IIWA14_VELOCITY_LIMITS = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
+        IIWA7_VELOCITY_LIMITS = np.array([1.7, 1.7, 1.7, 2.2, 2.4, 3.1, 3.1])
+        velocity_limit_factor = 0.3
         ik_params.set_joint_velocity_limits(
             (
-                -velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
-                velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
+                -velocity_limit_factor * IIWA7_VELOCITY_LIMITS,
+                velocity_limit_factor * IIWA7_VELOCITY_LIMITS,
             )
         )
         ik_params.set_nominal_joint_position(self._sim_config.default_joint_positions)
@@ -164,7 +168,7 @@ class IiwaHardwareStation(RobotSystemBase):
             "JointVelocityClamp",
             JointVelocityClamp(
                 num_positions=robot.num_positions(),
-                joint_velocity_limits=velocity_limit_factor * IIWA14_VELOCITY_LIMITS,
+                joint_velocity_limits=velocity_limit_factor * IIWA7_VELOCITY_LIMITS,
             ),
         )
 

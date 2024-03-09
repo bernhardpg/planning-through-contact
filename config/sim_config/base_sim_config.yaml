@@ -2,7 +2,7 @@ visualize_desired: True
 draw_frames: True
 time_step: 1e-3
 use_realtime: False
-delay_before_execution: 4
+delay_before_execution: 3
 closed_loop: False
 save_plots: True
 scene_directive_name: "planar_pushing_iiwa_plant_hydroelastic.yaml"

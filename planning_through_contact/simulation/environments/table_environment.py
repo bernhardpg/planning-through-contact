@@ -36,8 +36,12 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
     RigidTransformToPlanarPoseVectorSystem,
 )
 from planning_through_contact.visualize.analysis import (
+    plot_control_sols_vs_time,
+    plot_cost,
     plot_joint_state_logs,
     plot_and_save_planar_pushing_logs_from_sim,
+    plot_mpc_solve_times,
+    plot_realtime_rate,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,6 +62,8 @@ class TableEnvironment:
         self._sim_config = sim_config
         self._meshcat = station_meshcat
         self._simulator = None
+        # For evaluating the speed of the simulation
+        self._realtime_rate = []
 
         builder = DiagramBuilder()
 
@@ -256,9 +262,13 @@ class TableEnvironment:
         """
         :return: Returns a tuple of (success, simulation_time_s).
         """
-        if recording_file:
+        if (
+            recording_file
+            and self._state_estimator.meshcat is not None
+            and self._sim_config.visualize_desired
+        ):
             self._state_estimator.meshcat.StartRecording()
-            self._meshcat.StartRecording()
+            # self._meshcat.StartRecording()
         time_step = self._sim_config.time_step * 10
         if for_reset:
             self._state_estimator.meshcat.AddButton("Reset Done!")
@@ -272,27 +282,38 @@ class TableEnvironment:
                 self._visualize_desired_slider_pose(t)
             self._state_estimator.meshcat.DeleteAddedControls()
             return
-        if not isinstance(self._desired_position_source, TeleopPositionSource):
+        if (
+            not isinstance(self._desired_position_source, TeleopPositionSource)
+            and self._sim_config.visualize_desired
+        ):
             for t in np.append(np.arange(0, timeout, time_step), timeout):
                 self._simulator.AdvanceTo(t)
                 self._visualize_desired_slider_pose(t)
                 # Print the time every 5 seconds
                 if t % 5 == 0:
                     logger.info(f"t={t}")
-
+                self._realtime_rate.append(self._simulator.get_actual_realtime_rate())
         else:
-            self._simulator.AdvanceTo(timeout)
+            for t in np.append(np.arange(0, timeout, 5), timeout):
+                self._simulator.AdvanceTo(t)
+                logger.info(f"t={t}")
 
-        self.save_logs(recording_file, save_dir)
+        self.save_logs(recording_file, save_dir, rtr_time_step=time_step)
 
-    def save_logs(self, recording_file: Optional[str], save_dir: str):
-        if recording_file:
-            self._meshcat.StopRecording()
-            self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
-            self._meshcat.PublishRecording()
+    def save_logs(
+        self, recording_file: Optional[str], save_dir: str, rtr_time_step=1e-2
+    ):
+        if (
+            recording_file
+            and self._state_estimator.meshcat is not None
+            and self._sim_config.visualize_desired
+        ):
+            # self._meshcat.StopRecording()
+            # self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
+            # self._meshcat.PublishRecording()
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty(
-                "/drake/contact_forces", "visible", True
+                "/drake/contact_forces", "visible", False
             )
             self._state_estimator.meshcat.PublishRecording()
             res = self._state_estimator.meshcat.StaticHtml()
@@ -336,6 +357,22 @@ class TableEnvironment:
                 self._robot_system.robot.num_positions(),
                 save_dir=save_dir,
             )
+            plot_realtime_rate(
+                self._realtime_rate, save_dir=save_dir, time_step=rtr_time_step
+            )
+            for (
+                contact_loc,
+                mpc,
+            ) in (
+                self._desired_position_source._pusher_pose_controller.mpc_controllers.items()
+            ):
+                if len(mpc.control_log) > 0:
+                    plot_cost(mpc.cost_log, suffix=f"_{contact_loc}", save_dir=save_dir)
+                    plot_control_sols_vs_time(
+                        mpc.control_log, suffix=f"_{contact_loc}", save_dir=save_dir
+                    )
+                # if len(list(mpc._solve_time_log.values())[0]) > 0:
+                #     plot_mpc_solve_times(mpc._solve_time_log, suffix=f"_{contact_loc}")
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
