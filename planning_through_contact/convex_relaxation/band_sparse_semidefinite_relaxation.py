@@ -165,8 +165,12 @@ class BandSparseSemidefiniteRelaxation:
             Variables(np.concatenate(self.groups[idx]).reshape((-1, 1)))
             for idx in range(self.num_groups)
         ]
-        for g in groups:
-            print(f"Variable group length: {len(g)}")
+        for idx in range(len(groups) - 1):
+            groups[idx].insert(groups[idx + 1])
+        groups = groups[:-1]
+
+        # for g in groups:
+        #     print(f"Variable group length: {len(g)}")
 
         new_prog = self.prog.Clone()
         # remove l2 norm costs because drake does not currently support this in SDPs

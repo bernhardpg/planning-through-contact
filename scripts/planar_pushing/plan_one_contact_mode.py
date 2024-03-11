@@ -41,7 +41,7 @@ debug = True
 slider_type = "box"
 # slider_type = "tee"
 pusher_radius = 0.035
-num_knot_points = 3
+num_knot_points = 100
 
 config = get_default_plan_config(
     slider_type=slider_type,
@@ -54,6 +54,7 @@ print(f"    Num knot points: {num_knot_points}")
 
 config.use_band_sparsity = True
 config.use_drake_for_band_sparsity = True
+# config.use_drake_for_band_sparsity = False
 
 contact_location = PolytopeContactLocation(ContactLocation.FACE, 3)
 initial_pose = PlanarPose(0, 0, 0)
@@ -64,14 +65,14 @@ mode = FaceContactMode.create_from_plan_spec(contact_location, config)
 mode.set_slider_initial_pose(initial_pose)
 mode.set_slider_final_pose(final_pose)
 
-mode.formulate_convex_relaxation()
+mode.formulate_convex_relaxation(add_l2_norm_cost=True)
 
 print("Finished formulating convex relaxation")
 # solver = ClarabelSolver()
 solver = MosekSolver()
 
 solver_options = SolverOptions()
-# solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
 from time import time
 

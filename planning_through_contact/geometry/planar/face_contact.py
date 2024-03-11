@@ -902,12 +902,12 @@ class FaceContactMode(AbstractContactMode):
             if self.config.use_band_sparsity:
                 if self.config.use_drake_for_band_sparsity:
                     self.relaxed_prog = self.prog_wrapper.make_relaxation_with_drake(
-                        trace_cost=self.config.contact_config.cost.trace,
+                        # trace_cost=self.config.contact_config.cost.trace,
                         add_l2_norm_cost=add_l2_norm_cost,
                     )
                 else:
                     self.relaxed_prog = self.prog_wrapper.make_relaxation(
-                        trace_cost=self.config.contact_config.cost.trace,
+                        # trace_cost=self.config.contact_config.cost.trace,
                         add_l2_norm_cost=add_l2_norm_cost,
                     )
             else:
