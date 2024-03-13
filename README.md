@@ -31,10 +31,11 @@ At the moment, this code relies on a
 [customized version](https://github.com/bernhardpg/drake/tree/towards-tight-convex-relaxations)
 of Drake. To install, follow these instructions:
 
-Navigate to a desired location and run:
+Navigate to a desired installation location and run:
 
 ```console
 git clone git@github.com:bernhardpg/drake.git 
+cd drake
 git checkout towards-tight-convex-relaxations
 ```
 
