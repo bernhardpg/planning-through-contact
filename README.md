@@ -59,7 +59,7 @@ To activate the environment, run:
 poetry shell
 ```
 
-Further, to point the environment to the customized Drake build, run:
+Further, to tell the environment to use the customized Drake build, run:
 
 ```console
 export PYTHONPATH={DRAKE_BUILD_DIR_PATH}/install/lib/python3.11/site-packages:${PYTHONPATH}
