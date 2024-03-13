@@ -65,7 +65,7 @@ Further, to point the environment to the customized Drake build, run:
 export PYTHONPATH={DRAKE_BUILD_DIR_PATH}/install/lib/python3.11/site-packages:${PYTHONPATH}
 ```
 
-where `DRAKE_BUILD_DIR_PATH` should be replaced with the absolute path to the `drake-build` directory above.
+where `{DRAKE_BUILD_DIR_PATH}` should be replaced with the absolute path to the `drake-build` directory above.
 
 ---
 
