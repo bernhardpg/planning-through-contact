@@ -384,8 +384,8 @@ class OutputFeedbackTableEnvironment:
                 self._simulator.AdvanceTo(t)
                 # reset position if necessary
                 reset_dict = self._should_reset_environment(t,
-                                                            trans_tol=0.0075,
-                                                            rot_tol = 1.0*np.pi/180
+                                                            trans_tol=0.015,
+                                                            rot_tol = 1.5*np.pi/180
                 ) 
                 if reset_dict['pusher'] or reset_dict['slider']:
                     if reset_dict['pusher'] == False and reset_dict['slider'] == True:
