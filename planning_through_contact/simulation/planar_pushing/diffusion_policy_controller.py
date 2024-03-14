@@ -47,22 +47,16 @@ logger = logging.getLogger(__name__)
 # Set the print precision to 4 decimal places
 np.set_printoptions(precision=4)
 
-# TODO: hard code in temrination
-# if object is within tolerance and pusher is near final position
-
 class DiffusionPolicyController(LeafSystem):
     def __init__(
         self,
         checkpoint: str,
+        initial_pusher_pose: PlanarPose,
+        target_slider_pose: PlanarPose,
         diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
-        initial_pusher_pose: PlanarPose=PlanarPose(
-            x=0.5, y=0.25, theta=0.0
-        ),
-        target_slider_pose: PlanarPose=PlanarPose(
-            x=0.5, y=0.0, theta=0.0
-        ),
         freq: float = 10.0,
-        delay=1.0,
+        delay: float=1.0,
+        debug: bool = False
     ):
         super().__init__()
         self._checkpoint = pathlib.Path(checkpoint)
@@ -72,6 +66,7 @@ class DiffusionPolicyController(LeafSystem):
         self._freq = freq
         self._dt = 1.0 / freq
         self._delay = delay
+        self._debug = debug
         self._load_policy_from_checkpoint(self._checkpoint)
         
         # get parameters
@@ -86,8 +81,9 @@ class DiffusionPolicyController(LeafSystem):
         self._B = 1 # batch size is 1
 
         # indexing parameters for action predictions
-        self._start = self._obs_horizon - 1
+        self._start = self._obs_horizon-1
         self._end = self._start + self._action_steps
+        # self._end += 4
         # Hack to ensure backward compatibility with version 2 checkpoints
         # Version 2 checkpoints did not used shifted actions
         if 'push_tee_v2' in checkpoint:
@@ -185,20 +181,31 @@ class DiffusionPolicyController(LeafSystem):
         
         # Actions available: use next action
         if len(self._actions) == 0:
-            # print(f"Time: {time:.3f}, state_deque: {self._pusher_pose_deque}")
-            # for img in self._image_deque:
-            #     plt.imshow(img)
-            #     plt.show()
-            start_time = pytime.time()
+            if self._debug:
+                print(f"\nTime: {time:.3f}, state_deque:")
+                for state in self._pusher_pose_deque:
+                    print(state)
+                print()
+                for img in self._image_deque:
+                    plt.imshow(img)
+                    plt.show()
+                start_time = pytime.time()
+            
             with torch.no_grad():
                 action_prediction = self._policy.predict_action(obs_dict)['action_pred'][0]
           
             actions = action_prediction[self._start:self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())
-            # print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s")
+            
+            if self._debug:
+                print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s\n")
+                print("Action Predictions")
+                print(action_prediction)
+                print("\nActions")
+                print(actions)
 
-            # DEBUG: dummy actions (move pusher in positive x direction)
+            # dummy actions (move pusher in positive x direction)
             # new_desired_pose = self._pusher_pose_deque[-1].copy()
             # for i in range(self._action_steps):
             #     self._actions.append(np.array(
@@ -213,9 +220,10 @@ class DiffusionPolicyController(LeafSystem):
         output.set_value(self._current_action)
 
         # debug print statements
-        delta = np.linalg.norm(self._current_action - prev_action)
-        # print(f"Time: {time:.3f}, action delta: {delta}")
-        # print(f"Time: {time:.3f}, action: {self._current_action}")
+        if self._debug:
+            delta = np.linalg.norm(self._current_action - prev_action)
+            print(f"Time: {time:.3f}, action delta: {delta}")
+            print(f"Time: {time:.3f}, action: {self._current_action}")
         
     def reset(self, reset_position: np.ndarray):
         self._current_action = reset_position
@@ -248,6 +256,7 @@ class DiffusionPolicyController(LeafSystem):
         """ Update state and image observation history """
         pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
         image = self.camera_port.Eval(context)
+        # throws away z-dimension
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
         self._image_deque.append(image.data[:,:,:-1])

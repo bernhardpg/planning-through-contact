@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 from typing import List, Tuple, Optional
 
-from pydrake.all import ContactModel, StartMeshcat
+from pydrake.all import ContactModel, StartMeshcat, RollPitchYaw
 from pydrake.systems.sensors import (
     CameraConfig
 )
@@ -23,8 +23,8 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
-    CylinderActuatedStation,
+from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
+    IiwaHardwareStation,
 )
 from planning_through_contact.simulation.controllers.diffusion_policy_source import (
     DiffusionPolicySource,
@@ -90,31 +90,28 @@ def run_sim(
     print(f"Target slider pose: {traj.target_slider_planar_pose}")
 
     # camera set up
+    zoom = 1.0
+    position = np.array([0.5 + traj.target_slider_planar_pose.x, 0, 0.5]) / zoom
+    center_of_view = np.array([traj.target_slider_planar_pose.x, 0.0, 0.0])
+    angle = 0.9*np.arctan((position[0]-center_of_view[0])/(position[2]-center_of_view[2]))
+    orientation = RollPitchYaw(0, np.pi - angle, np.pi)
     camera_config = CameraConfig(
         name="overhead_camera",
         X_PB=Transform(
-            RigidTransform(
-                RotationMatrix.MakeXRotation(np.pi),
-                np.array([traj.target_slider_planar_pose.x, 
-                          traj.target_slider_planar_pose.y,
-                          1.0]
-                )
-            )
+            RigidTransform(orientation, position)
         ),
-        width=96,
-        height=96,
+        width=128,
+        height=128,
         show_rgb=False,
-        fps=10.0
     )
     
     # Set up multi run config
-    multi_run_config = get_multi_run_config(
-        num_runs,
-        max_attempt_duration,
-        seed=seed,
-        traj_idx=traj_idx,
-        initial_pusher_pose=traj.initial_pusher_planar_pose,
-        target_slider_pose=traj.target_slider_planar_pose
+    multi_run_config = get_multi_run_config(num_runs,
+                                            max_attempt_duration,
+                                            seed=seed,
+                                            traj_idx=traj_idx,
+                                            initial_slider_pose=traj.initial_slider_planar_pose,
+                                            target_slider_pose=traj.target_slider_planar_pose
     )
 
     sim_config = PlanarPushingSimConfig(
@@ -127,7 +124,7 @@ def run_sim(
         draw_frames=True,
         time_step=1e-3,
         use_realtime=False,
-        delay_before_execution=1,
+        delay_before_execution=5,
         closed_loop=False,
         dynamics_config=traj.config.dynamics_config,
         save_plots=False,
@@ -139,10 +136,15 @@ def run_sim(
         multi_run_config=multi_run_config
     )
     # Diffusion Policy source
-    position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
+    position_source = DiffusionPolicySource(
+        sim_config=sim_config, 
+        checkpoint=checkpoint, 
+        delay=5,
+        debug=False
+    )
 
     ## Set up position controller
-    position_controller = CylinderActuatedStation(
+    position_controller = IiwaHardwareStation(
         sim_config=sim_config, meshcat=station_meshcat
     )
 
@@ -302,7 +304,7 @@ def get_multi_run_config(num_runs,
                          max_attempt_duration, 
                          seed, 
                          traj_idx = None,
-                         initial_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
+                         initial_slider_pose=PlanarPose(0.5, 0.25, 0.0),
                          target_slider_pose=PlanarPose(0.5, 0.0, 0.0)):
     # Set up multi run config
     config = get_default_plan_config(
@@ -319,7 +321,7 @@ def get_multi_run_config(num_runs,
         slider=BoxWorkspace(
             width=0.35,
             height=0.5,
-            center=np.array([target_slider_pose.x, target_slider_pose.y]),
+            center=np.array([target_slider_pose.x, 0.0]),
             buffer=0,
         ),
     )
@@ -328,7 +330,7 @@ def get_multi_run_config(num_runs,
         num_plans=max(num_runs, 100),
         workspace=workspace,
         config=config,
-        pusher_pose=initial_pusher_pose,
+        pusher_pose=initial_slider_pose,
         limit_rotations=False,
     )
 
@@ -361,10 +363,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.checkpoint is None:
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v1_sc/checkpoints/epoch_148.ckpt'
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/working_better.ckpt'
-        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_box_v2/checkpoints/latest.ckpt'
-        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/push_tee_v2/checkpoints/epoch=0695-val_loss=0.035931.ckpt'
+        # checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_push_tee_v1/checkpoints/decent.ckpt'
+        checkpoint='/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v2/checkpoints/latest.ckpt'
     else:
         checkpoint = args.checkpoint
     
@@ -372,7 +372,10 @@ if __name__ == "__main__":
     station_meshcat = StartMeshcat()
     # plan path is used to extract sim_config
     # the trajectory in plan path is not used
-    plan = "data_collection_trajectories_box_v2/run_0/traj_0/trajectory/traj_rounded.pkl"
+
+    plan = "data_collection_trajectories_tee_v4/run_0/traj_0/trajectory/traj_rounded.pkl"
+    # plan = "data_collection_trajectories_tee_v3/run_0/traj_0/trajectory/traj_rounded.pkl"
+    
     run_sim(
         plan=plan,
         checkpoint=checkpoint,

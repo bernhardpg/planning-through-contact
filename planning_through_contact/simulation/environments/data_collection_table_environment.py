@@ -155,10 +155,16 @@ class DataCollectionTableEnvironment:
         # Inputs to state estimator
         # Connections to update the robot state within state estimator
         
-        builder.Connect(
-            self._desired_position_source.GetOutputPort("planar_position_command"),
-            self._desired_state_source.get_input_port(),
-        )
+        if isinstance(self._robot_system, IiwaHardwareStation):
+            builder.Connect(
+                self._robot_system.GetOutputPort("iiwa_position_command"),
+                self._desired_state_source.get_input_port(),
+            )
+        else:
+            builder.Connect(
+                self._desired_position_source.GetOutputPort("planar_position_command"),
+                self._desired_state_source.get_input_port(),
+            )
 
         builder.Connect(
             self._desired_state_source.get_output_port(),
@@ -441,10 +447,10 @@ class DataCollectionTableEnvironment:
                 control_desired_log,
             )
             combined = CombinedPlanarPushingLogs(
-                pusher_actual=pusher_actual,
-                slider_actual=slider_actual,
-                pusher_desired=pusher_desired,
-                slider_desired=slider_desired,
+                pusher_actual=pusher_actual,    # pusher_pose_estimated from StateEstimator
+                slider_actual=slider_actual,    # slider_pose_estimated from StateEstimator, mpc_control from PositionSource
+                pusher_desired=pusher_desired,  # planar_position_command from PositionSource
+                slider_desired=slider_desired,  # desired_slider_planar_pose_vector from PositionSource, mpc_control_desired from PositionSource
             )
 
             # assumes that a directory for this trajectory has already been

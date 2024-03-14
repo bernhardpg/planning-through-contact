@@ -82,8 +82,10 @@ class CylinderActuatedStation(RobotSystemBase):
         # )
         # Set the initial camera pose
         zoom = 1.8
-        camera_in_world = [0.5, -1/zoom, 1.5/zoom]
-        target_in_world = [0.5, 0, 0]
+        camera_in_world = [sim_config.slider_goal_pose.x, 
+                           (sim_config.slider_goal_pose.y-1)/zoom,
+                           1.5/zoom]
+        target_in_world = [sim_config.slider_goal_pose.x, sim_config.slider_goal_pose.y, 0]
         self._meshcat.SetCameraPose(camera_in_world, target_in_world)
         AddDefaultVisualization(builder, self._meshcat)
 
@@ -182,7 +184,22 @@ class CylinderActuatedStation(RobotSystemBase):
     @property
     def slider_model_name(self) -> str:
         """The name of the robot model."""
-        return "t_pusher"
+        if self._sim_config.slider.name == "box":
+            return "box"
+        else:
+            return "t_pusher"
+    
+    def get_station_plant(self):
+        return self.station_plant
+
+    def get_scene_graph(self):
+        return self._scene_graph
+    
+    def get_slider(self):
+        return self.slider
+    
+    def get_meshcat(self):
+        return self._meshcat
 
     ## Visualization functions
 

@@ -19,7 +19,7 @@ from planning_through_contact.simulation.planar_pushing.diffusion_policy_control
 )
 
 class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
-    """Uses the desired trajectory of the entire system and MPC controllers
+    """Uses the desired trajectory of the entire system and diffusion controller
     to generate desired positions for the robot."""
 
     def __init__(
@@ -27,6 +27,8 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         sim_config: PlanarPushingSimConfig,
         checkpoint: str,
         diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
+        delay: float = 1.0,
+        debug: bool = False
     ):
         super().__init__()
 
@@ -46,7 +48,8 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
                 initial_pusher_pose=self._sim_config.pusher_start_pose,
                 target_slider_pose=self._sim_config.slider_goal_pose,
                 freq=freq,
-                delay=1.0, # default
+                delay=delay,
+                debug=debug
             ),
         )
 

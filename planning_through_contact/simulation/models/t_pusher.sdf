@@ -30,7 +30,7 @@
           </box>
         </geometry>
         <material>
-          <diffuse> 0.26953125 0.54296875 0.453125 1. </diffuse>
+          <diffuse> 0.2 0.2 0.2 1. </diffuse>
         </material>
       </visual>
       <collision name="t_pusher_top_collision">
@@ -58,7 +58,7 @@
           </box>
         </geometry>
         <material>
-          <diffuse> 0.26953125 0.54296875 0.453125 1. </diffuse>
+          <diffuse> 0.2 0.2 0.2 1. </diffuse>
         </material>
       </visual>
       <collision name="t_pusher_bottom_collision">

@@ -95,7 +95,11 @@ def main():
         images = np.array(images)
 
         # get target
-        target = np.array([0.5, 0.0, 0.0]) # TODO: this is hardcoded
+        target = np.array([
+            pusher_desired.x[-1],
+            pusher_desired.y[-1],
+            pusher_desired.theta[-1]]
+        )
         target = np.array([target for _ in range(len(state))])
 
         # update concatenated arrays
