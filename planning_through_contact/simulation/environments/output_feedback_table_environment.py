@@ -384,6 +384,8 @@ class OutputFeedbackTableEnvironment:
                 self._simulator.AdvanceTo(t)
                 # reset position if necessary
                 reset_dict = self._should_reset_environment(t,
+                                                            target_slider_pose=self._sim_config.slider_goal_pose,
+                                                            target_pusher_pose=self._sim_config.pusher_start_pose,
                                                             trans_tol=0.015,
                                                             rot_tol = 1.5*np.pi/180
                 ) 
@@ -441,7 +443,7 @@ class OutputFeedbackTableEnvironment:
                                   time: float,
                                   target_pusher_pose: PlanarPose=PlanarPose(0.5, 0.25, 0.0),
                                   target_slider_pose: PlanarPose=PlanarPose(0.5, 0.0, 0.0),
-                                  trans_tol: float=0.02, # +/- 2cm
+                                  trans_tol: float=0.01, # +/- 2cm
                                   rot_tol: float=2.0*np.pi/180, # +/- 2 degrees
         ) -> dict[str, bool]:
         false_dict = {'pusher': False, 'slider': False}
@@ -462,6 +464,7 @@ class OutputFeedbackTableEnvironment:
         reached_pusher_target_pose = target_pusher_pose.x-2*trans_tol <= pusher_pose.x <= target_pusher_pose.x+2*trans_tol and \
             target_pusher_pose.y-2*trans_tol <= pusher_pose.y <= target_pusher_pose.y+2*trans_tol
 
+        # TODO: add flag to determine if we care about orientation
         if self._sim_config.slider.name == "box":
             reached_slider_target_pose = target_slider_pose.x-trans_tol <= slider_pose.x <= target_slider_pose.x+trans_tol and \
                 target_slider_pose.y-trans_tol <= slider_pose.y <= target_slider_pose.y+trans_tol
@@ -470,8 +473,9 @@ class OutputFeedbackTableEnvironment:
                 target_slider_pose.y-trans_tol <= slider_pose.y <= target_slider_pose.y+trans_tol and \
                 target_slider_pose.theta-rot_tol <= slider_pose.theta <= target_slider_pose.theta+rot_tol
 
-        if reached_pusher_target_pose and reached_slider_target_pose:
-        # if reached_slider_target_pose:
+        # TODO: add flag to determine if we care about pusher final position
+        # if reached_pusher_target_pose and reached_slider_target_pose:
+        if reached_slider_target_pose:
             print(f"\n[Run {self._multi_run_idx}] Success! Reseting slider pose.")
             print("Initial pusher pose: ",
                     self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
