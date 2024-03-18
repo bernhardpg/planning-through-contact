@@ -2,6 +2,8 @@ import numpy as np
 import argparse
 import os
 from tqdm import tqdm
+import hydra
+from omegaconf import OmegaConf
 
 from pydrake.all import ContactModel, StartMeshcat
 from pydrake.systems.sensors import (
@@ -42,7 +44,6 @@ from planning_through_contact.visualize.analysis import (
     plot_cost,
     plot_velocities,
 )
-
 
 def run_sim(
     plan: str,
@@ -111,6 +112,8 @@ def run_sim(
         collect_data=True,
         data_dir = data_collection_dir
     )
+    cfg = OmegaConf.load('config/sim_config/test_sim_config.yaml')
+
     # Using MPCPositionSource in open loop to output the pusher and slider
     # states directly to the state estimator for data collection
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
@@ -189,8 +192,7 @@ if __name__ == "__main__":
         print(f"state estimator meshcat")
         state_estimator_meshcat = StartMeshcat()
         run_sim(
-            plan="data_collection_trajectories_tee_v1/run_0/traj_0/trajectory/traj_rounded.pkl",
-            # plan='diffusion_policy_logs/0/combined_planar_pushing_logs.pkl',
+            plan="trajectories/data_collection_trajectories_box_v2/run_0/traj_0/trajectory/traj_rounded.pkl",
             data_collection_dir=args.save_dir,
             save_recording=True,
             debug=False,

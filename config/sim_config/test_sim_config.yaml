@@ -1,0 +1,67 @@
+dynamics_config:
+  _target_: planning_through_contact.planning.planar.planar_plan_config.SliderPusherSystemConfig
+  pusher_radius: 0.015
+  friction_coeff_table_slider: 0.5
+  friction_coeff_slider_pusher: 0.1
+  grav_acc: 9.81
+  integration_constant: 0.3
+  force_scale: 0.01
+slider_type: 'box'
+contact_model: ContactModel.kHydroelastic
+visualize_desired: true
+slider_goal_pose:
+  _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
+  x: 0.575
+  y: 0.0
+  theta: 0.0
+pusher_start_pose:
+  _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
+  x: 0.575
+  y: 0.25
+  theta: 0.0
+slider_start_pose:
+  _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
+  x: 0.5459577016459009
+  y: 0.11016224672107905
+  theta: -3.1308763029142876
+# for kuka
+default_joint_positions: [
+    0.0776,
+    1.0562,
+    0.3326,
+    -1.3048,
+    2.7515,
+    -0.8441,
+    0.5127,
+]
+time_step: 0.001
+closed_loop: false
+draw_frames: true
+use_realtime: false
+delay_before_execution: 5.0
+save_plots: false
+mpc_config:
+  _target_: planning_through_contact.simulation.controllers.hybrid_mpc.HybridMpcConfig
+  step_size: 0.03
+  horizon: 35
+  num_sliding_steps: 1
+  rate_Hz: 50
+  Q: [300, 300, 1, 0]
+  Q_N: [6000, 6000, 20, 0]
+  R: [0.5, 0.5, 0]
+  u_max_magnitude: [0.3, 0.3, 0.1]
+  lam_max: 1.0
+  lam_min: 0.0
+scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+use_hardware: false
+pusher_z_offset: 0.03
+camera_config:
+  name: 'overhead_camera'
+  orientation: 'default' # if default, computes default pose
+  position: [0.5, 0.5, 1.0]
+  width: 96
+  height: 96
+  show_rgb: false
+collect_data: true
+data_dir: temp
+multi_run_config: null
