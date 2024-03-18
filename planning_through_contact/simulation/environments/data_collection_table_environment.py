@@ -254,7 +254,7 @@ class DataCollectionTableEnvironment:
             )
         
         if sim_config.collect_data:
-            assert sim_config.camera_config is not None
+            assert sim_config.camera_configs is not None
             from pydrake.systems.sensors import (
                 ImageWriter,
                 PixelType

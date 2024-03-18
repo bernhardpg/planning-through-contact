@@ -65,7 +65,7 @@ class PlanarPushingSimConfig:
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
-    camera_config: CameraConfig = None # TODO: make this a list of cameras
+    camera_configs: List[CameraConfig] = None # TODO: make this a list of cameras
     collect_data: bool = False
     data_dir: str = None # remove this
 
@@ -96,25 +96,27 @@ class PlanarPushingSimConfig:
         slider_start_pose: PlanarPose = hydra.utils.instantiate(cfg.slider_start_pose)
         default_joint_positions = np.array(cfg.default_joint_positions)
         mpc_config: HybridMpcConfig = hydra.utils.instantiate(cfg.mpc_config)
+        breakpoint()
         
-        if 'camera_config' in cfg and cfg.camera_config:
-            if cfg.camera_config.orientation == 'default':
-                X_PB = Transform(
-                    RigidTransform(
-                        RotationMatrix.MakeXRotation(np.pi),
-                        np.array([0.5, 0.0, 1.0])
+        if 'camera_configs' in cfg and cfg.camera_configs:
+            for camera_config in cfg.camera_configs:
+                if cfg.camera_config.orientation == 'default':
+                    X_PB = Transform(
+                        RigidTransform(
+                            RotationMatrix.MakeXRotation(np.pi),
+                            np.array([0.5, 0.0, 1.0])
+                        )
                     )
+                else:
+                    # TODO: X_PB from yaml
+                    raise NotImplementedError
+                camera_config = CameraConfig(
+                    name=cfg.camera_config.name,
+                    X_PB=X_PB,
+                    width=cfg.camera_config.width,
+                    height=cfg.camera_config.height,
+                    show_rgb=cfg.camera_config.show_rgb,
                 )
-            else:
-                # TODO: X_PB from yaml
-                raise NotImplementedError
-            camera_config = CameraConfig(
-                name=cfg.camera_config.name,
-                X_PB=X_PB,
-                width=cfg.camera_config.width,
-                height=cfg.camera_config.height,
-                show_rgb=cfg.camera_config.show_rgb,
-            )
         else:
             camera_config = None
         

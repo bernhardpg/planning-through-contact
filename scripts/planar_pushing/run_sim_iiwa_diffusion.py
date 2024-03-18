@@ -130,7 +130,7 @@ def run_sim(
         save_plots=False,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
-        camera_config=camera_config,
+        camera_configs=[camera_config],
         collect_data=False,
         data_dir='diffusion_policy_logs',
         multi_run_config=multi_run_config
@@ -373,8 +373,7 @@ if __name__ == "__main__":
     # plan path is used to extract sim_config
     # the trajectory in plan path is not used
 
-    plan = "data_collection_trajectories_tee_v4/run_0/traj_0/trajectory/traj_rounded.pkl"
-    # plan = "data_collection_trajectories_tee_v3/run_0/traj_0/trajectory/traj_rounded.pkl"
+    plan = "trajectories/data_collection_trajectories_tee_v4/run_0/traj_0/trajectory/traj_rounded.pkl"
     
     run_sim(
         plan=plan,

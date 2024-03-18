@@ -75,8 +75,9 @@ class IiwaHardwareStation(RobotSystemBase):
             filename=scenario_file_name, scenario_name=scenario_name
         )
         # Add cameras to scenario
-        if sim_config.camera_config:
-            scenario.cameras = {'overhead_camera': sim_config.camera_config}
+        if sim_config.camera_configs:
+            for camera_config in sim_config.camera_configs:
+                scenario.cameras[camera_config.name] = camera_config
 
         def add_slider_to_parser(parser):
             slider_sdf_url = GetSliderUrl(sim_config)
@@ -323,11 +324,12 @@ class IiwaHardwareStation(RobotSystemBase):
                 "object_state_measured",
             )
         
-        if self._sim_config.camera_config:
-            builder.ExportOutput(
-                self.station.GetOutputPort("overhead_camera.rgb_image"),
-                "rgbd_sensor_overhead_camera",
-            )
+        if self._sim_config.camera_configs:
+            for camera_config in self._sim_config.camera_configs:
+                builder.ExportOutput(
+                    self.station.GetOutputPort(f"{camera_config.name}.rgb_image"),
+                    f"rgbd_sensor_{camera_config.name}",
+                )
 
         # Set the initial camera pose
         zoom = 1.8

@@ -55,13 +55,13 @@ mpc_config:
 scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
 use_hardware: false
 pusher_z_offset: 0.03
-camera_config:
-  name: 'overhead_camera'
-  orientation: 'default' # if default, computes default pose
-  position: [0.5, 0.5, 1.0]
-  width: 96
-  height: 96
-  show_rgb: false
+camera_configs:
+  - name: 'overhead_camera'
+    orientation: 'default' # default orientation is facing downwards
+    position: [0.5, 0.5, 1.0]
+    width: 96
+    height: 96
+    show_rgb: false
 collect_data: true
 data_dir: temp
 multi_run_config: null

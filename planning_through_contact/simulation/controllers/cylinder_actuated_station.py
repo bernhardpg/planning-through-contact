@@ -112,15 +112,15 @@ class CylinderActuatedStation(RobotSystemBase):
             ),
         )
 
-        if sim_config.camera_config is not None:
+        if sim_config.camera_configs is not None:
             from pydrake.systems.sensors import (
                 ApplyCameraConfig
             )
-
-            ApplyCameraConfig(
-                config=sim_config.camera_config,
-                builder=builder
-            )
+            for camera_config in sim_config.camera_configs:
+                ApplyCameraConfig(
+                    config=camera_config,
+                    builder=builder
+                )
 
         ## Connect systems
 
@@ -161,13 +161,14 @@ class CylinderActuatedStation(RobotSystemBase):
             "object_state_measured",
         )
 
-        if self._sim_config.camera_config:
-            builder.ExportOutput(
-                builder.GetSubsystemByName(
-                    "rgbd_sensor_overhead_camera"
-                ).color_image_output_port(),
-                "rgbd_sensor_overhead_camera",
-            )
+        if self._sim_config.camera_configs:
+            for camera_config in self._sim_config.camera_configs:
+                builder.ExportOutput(
+                    builder.GetSubsystemByName(
+                        f"rgbd_sensor_{camera_config.name}"
+                    ).color_image_output_port(),
+                    f"rgbd_sensor_{camera_config.name}",
+                )
 
         builder.BuildInto(self)
 

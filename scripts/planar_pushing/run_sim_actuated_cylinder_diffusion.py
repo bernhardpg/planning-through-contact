@@ -133,7 +133,7 @@ def run_sim(
         save_plots=False,
         scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
         pusher_z_offset=0.03,
-        camera_config=camera_config,
+        camera_configs=[camera_config],
         collect_data=False,
         data_dir='diffusion_policy_logs',
         multi_run_config=multi_run_config

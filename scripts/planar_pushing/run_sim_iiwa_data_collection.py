@@ -136,28 +136,10 @@ def run_sim(
             0.5127,
         ],
         # Adam's additions
-        camera_config=camera_config,
+        camera_configs=[camera_config],
         collect_data=True,
         data_dir = data_collection_dir
     )
-    # camera set up
-    # X_PB = Transform(
-    #         RigidTransform(
-    #             RotationMatrix.MakeYRotation(-np.pi/12),
-    #             np.array([0.1, 0, -0.1])
-    #         )
-    # )
-    # X_PB.base_frame="pusher_base"
-    # camera_config = CameraConfig(
-    #     name="wrist_camera",
-    #     X_PB=X_PB,
-    #     # width=112,
-    #     # height=112,
-    #     width = 640,
-    #     height = 480,
-    #     show_rgb=True,
-    # )
-    # sim_config.camera_config = camera_config
 
     # Option 2: Use open/closed loop controller based on planned trajectory
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
@@ -226,7 +208,7 @@ if __name__ == "__main__":
         print(f"state estimator meshcat")
         state_estimator_meshcat = StartMeshcat()
         run_sim(
-            plan="data_collection_trajectories_tee_v1/run_0/traj_1/trajectory/traj_rounded.pkl",
+            plan="trajectories/data_collection_trajectories_tee_v1/run_0/traj_1/trajectory/traj_rounded.pkl",
             save_recording=True,
             debug=False,
             station_meshcat=station_meshcat,
