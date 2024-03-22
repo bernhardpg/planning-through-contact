@@ -2,6 +2,8 @@
 
 **Note: This repo is still under active development and is updated continuously.**
 
+---
+
 ## Installation (Linux and MacOS)
 
 This repo uses Poetry for dependency management. To setup this project, first
@@ -23,6 +25,50 @@ poetry install -vvv
 
 (the `-vvv` flag adds verbose output).
 
+#### (Mandatory) Installing customized Drake version
+
+At the moment, this code relies on a
+[customized version](https://github.com/bernhardpg/drake/tree/towards-tight-convex-relaxations)
+of Drake. To install, follow these instructions:
+
+Navigate to a desired installation location and run:
+
+```console
+git clone git@github.com:bernhardpg/drake.git 
+cd drake
+git checkout towards-tight-convex-relaxations
+```
+
+To build Drake and the python bindings, run:
+
+```console
+cd ../
+mkdir drake-build
+cd drake-build
+cmake -DWITH_MOSEK=ON ../drake
+make install
+```
+
+See [the docs](https://drake.mit.edu/from_source.html) for more information on building Drake.
+
+#### Activating the environment
+
+To activate the environment, run:
+
+```console
+poetry shell
+```
+
+Further, to tell the environment to use the customized Drake build, run:
+
+```console
+export PYTHONPATH={DRAKE_BUILD_DIR_PATH}/install/lib/python3.11/site-packages:${PYTHONPATH}
+```
+
+where `{DRAKE_BUILD_DIR_PATH}` should be replaced with the absolute path to the `drake-build` directory above.
+
+---
+
 ## Generating planar pushing plans
 
 Currently, the main entrypoint for generating planar pushing plans is the
@@ -41,16 +87,6 @@ For instance, to generate 10 plans for a box slider geometry, run
 python scripts/planar_pushing/create_plan.py --body box --seed 0 --num 10
 ```
 
-## Running pre-commit hooks
-
-The repo is setup to do automatic linting and code checking on every commit
-through the use of pre-commits. To run all the pre-commit hooks (which will
-clean up all files in the repo), run the following command:
-
-```python
-poetry run pre-commit run --all-files
-```
-
 ## Running a single hardware experiment
 
 Create a config file specifying the experiment in `config` and run it using the
@@ -62,17 +98,6 @@ python3 scripts/planar_pushing/run_planar_pushing_experiment.py --config-name si
 
 where `single_experiment` should be replaced with your config name.
 
-## Running hardware simulations
-
-Make sure to download `lcm` and build it to a desired directory:
-[lcm](https://github.com/lcm-proj/lcm). Then, add `lcm` to the pythonpath, e.g. like this:
-
-```python
-export PYTHONPATH="$PYTHONPATH:/Users/bernhardpg/software/lcm/build/python"
-```
-
-TODO: @bernhardpg complete this
-
 ## (Optional) Additional packages
 
 Make sure to have graphviz installed on your computer. On MacOS, run the following
@@ -81,14 +106,3 @@ command:
 ```python
 brew install graphviz
 ```
-
-## (Optional) Using external Drake build
-
-Externally built Drake must be added to the Python path:
-
-```python
-export PYTHONPATH=~/software/drake-build/install/lib/python3.11/site-packages:${PYTHONPATH}
-```
-
-See [the docs](https://drake.mit.edu/from_source.html) for how to build the
-Python bindings.
