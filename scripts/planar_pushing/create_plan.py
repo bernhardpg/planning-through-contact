@@ -527,7 +527,8 @@ if __name__ == "__main__":
 
         workspace = PlanarPushingWorkspace(
             slider=BoxWorkspace(
-                width=0.35,
+                width=0.5,
+                # width=0.35,
                 height=0.5,
                 center=np.array([0.575, 0.0]),
                 buffer=0,

@@ -474,8 +474,8 @@ class OutputFeedbackTableEnvironment:
                 target_slider_pose.theta-rot_tol <= slider_pose.theta <= target_slider_pose.theta+rot_tol
 
         # TODO: add flag to determine if we care about pusher final position
-        # if reached_pusher_target_pose and reached_slider_target_pose:
-        if reached_slider_target_pose:
+        if reached_pusher_target_pose and reached_slider_target_pose:
+        # if reached_slider_target_pose:
             print(f"\n[Run {self._multi_run_idx}] Success! Reseting slider pose.")
             print("Initial pusher pose: ",
                     self._multi_run_config.initial_slider_poses[self._multi_run_idx-1])
