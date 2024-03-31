@@ -13,7 +13,7 @@ diffusion_policy_logs/
 iiwa_tee_*
 
 # adam debug scripts
-scripts/adam/.
+scripts/adam
 
 # Vim
 *.swp
