@@ -3,6 +3,7 @@ import argparse
 import os
 from tqdm import tqdm
 from typing import List, Tuple, Optional
+from omegaconf import OmegaConf
 
 from pydrake.all import ContactModel, StartMeshcat
 from pydrake.systems.sensors import (
@@ -71,9 +72,6 @@ def run_sim(
     max_attempt_duration: float,
     seed: int,
     traj_idx: int,
-    diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
-    initial_pusher_planar_pose: PlanarPose = None,
-    target_slider_planar_pose: PlanarPose = None,
     data_collection_dir: str = None,
     save_recording: bool = False,
     debug: bool = False,
@@ -83,61 +81,24 @@ def run_sim(
     logging.getLogger(
         "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
     ).setLevel(logging.DEBUG)
-    traj = PlanarPushingTrajectory.load(plan)
-    slider = traj.config.dynamics_config.slider
 
-    print(f"Initial finger pose: {traj.initial_pusher_planar_pose}")
-    print(f"Target slider pose: {traj.target_slider_planar_pose}")
-
-    # camera set up
-    camera_config = CameraConfig(
-        name="overhead_camera",
-        X_PB=Transform(
-            RigidTransform(
-                RotationMatrix.MakeXRotation(np.pi),
-                np.array([traj.target_slider_planar_pose.x, 
-                          traj.target_slider_planar_pose.y,
-                          1.0]
-                )
-            )
-        ),
-        width=96,
-        height=96,
-        show_rgb=False,
-        fps=10.0
-    )
-    
-    # Set up multi run config
-    multi_run_config = get_multi_run_config(
+    # load sim_config
+    cfg = OmegaConf.load('config/sim_config/test_sim_config.yaml')
+    sim_config = PlanarPushingSimConfig.from_yaml(cfg)
+    sim_config.multi_run_config = get_multi_run_config(
         num_runs,
         max_attempt_duration,
         seed=seed,
+        slider_type=cfg.slider_type,
         traj_idx=traj_idx,
-        initial_pusher_pose=traj.initial_pusher_planar_pose,
-        target_slider_pose=traj.target_slider_planar_pose
+        initial_pusher_pose=sim_config.pusher_start_pose,
+        target_slider_pose=sim_config.slider_goal_pose
     )
 
-    sim_config = PlanarPushingSimConfig(
-        slider=slider,
-        contact_model=ContactModel.kHydroelastic,
-        pusher_start_pose=traj.initial_pusher_planar_pose,
-        slider_start_pose=traj.initial_slider_planar_pose,
-        slider_goal_pose=traj.target_slider_planar_pose,
-        visualize_desired=True,
-        draw_frames=True,
-        time_step=1e-3,
-        use_realtime=False,
-        delay_before_execution=1,
-        closed_loop=False,
-        dynamics_config=traj.config.dynamics_config,
-        save_plots=False,
-        scene_directive_name="planar_pushing_cylinder_plant_hydroelastic.yaml",
-        pusher_z_offset=0.03,
-        camera_configs=[camera_config],
-        collect_data=False,
-        data_dir='diffusion_policy_logs',
-        multi_run_config=multi_run_config
-    )
+    # print some debugging config info
+    print(f"Initial finger pose: {sim_config.pusher_start_pose}")
+    print(f"Target slider pose: {sim_config.slider_goal_pose}")
+
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config=sim_config, checkpoint=checkpoint)
 
@@ -301,12 +262,13 @@ def get_slider_start_poses(
 def get_multi_run_config(num_runs, 
                          max_attempt_duration, 
                          seed, 
+                         slider_type='tee',
                          traj_idx = None,
                          initial_pusher_pose=PlanarPose(0.5, 0.25, 0.0),
                          target_slider_pose=PlanarPose(0.5, 0.0, 0.0)):
     # Set up multi run config
     config = get_default_plan_config(
-        slider_type='tee',
+        slider_type=slider_type,
         pusher_radius=0.015,
         hardware=False,
     )

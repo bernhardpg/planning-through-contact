@@ -56,6 +56,7 @@ class DiffusionPolicyController(LeafSystem):
         diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
         freq: float = 10.0,
         delay: float=1.0,
+        device='cuda:0',
         debug: bool = False
     ):
         super().__init__()
@@ -67,6 +68,7 @@ class DiffusionPolicyController(LeafSystem):
         self._dt = 1.0 / freq
         self._delay = delay
         self._debug = debug
+        self._device = device
         self._load_policy_from_checkpoint(self._checkpoint)
         
         # get parameters
@@ -128,6 +130,7 @@ class DiffusionPolicyController(LeafSystem):
         # load checkpoint
         payload = torch.load(open(checkpoint, 'rb'), pickle_module=dill)
         self._cfg = payload['cfg']
+        self._cfg.training.device = self._device
         cls = hydra.utils.get_class(self._cfg._target_)
         workspace: BaseWorkspace
         workspace = cls(self._cfg)

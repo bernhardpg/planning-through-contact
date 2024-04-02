@@ -28,7 +28,8 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         checkpoint: str,
         diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
         delay: float = 1.0,
-        debug: bool = False
+        debug: bool = False,
+        device = 'cuda:0'
     ):
         super().__init__()
 
@@ -49,7 +50,8 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
                 target_slider_pose=self._sim_config.slider_goal_pose,
                 freq=freq,
                 delay=delay,
-                debug=debug
+                debug=debug,
+                device=device
             ),
         )
 

@@ -65,7 +65,7 @@ class PlanarPushingSimConfig:
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
-    camera_configs: List[CameraConfig] = None # TODO: make this a list of cameras
+    camera_configs: List[CameraConfig] = None
     collect_data: bool = False
     data_dir: str = None # remove this
 
@@ -96,11 +96,12 @@ class PlanarPushingSimConfig:
         slider_start_pose: PlanarPose = hydra.utils.instantiate(cfg.slider_start_pose)
         default_joint_positions = np.array(cfg.default_joint_positions)
         mpc_config: HybridMpcConfig = hydra.utils.instantiate(cfg.mpc_config)
-        breakpoint()
         
+        camera_configs = None
         if 'camera_configs' in cfg and cfg.camera_configs:
+            camera_configs = []
             for camera_config in cfg.camera_configs:
-                if cfg.camera_config.orientation == 'default':
+                if camera_config.orientation == 'default':
                     X_PB = Transform(
                         RigidTransform(
                             RotationMatrix.MakeXRotation(np.pi),
@@ -110,15 +111,16 @@ class PlanarPushingSimConfig:
                 else:
                     # TODO: X_PB from yaml
                     raise NotImplementedError
-                camera_config = CameraConfig(
-                    name=cfg.camera_config.name,
-                    X_PB=X_PB,
-                    width=cfg.camera_config.width,
-                    height=cfg.camera_config.height,
-                    show_rgb=cfg.camera_config.show_rgb,
+                
+                camera_configs.append(
+                    CameraConfig(
+                        name=camera_config.name,
+                        X_PB=X_PB,
+                        width=camera_config.width,
+                        height=camera_config.height,
+                        show_rgb=camera_config.show_rgb,
+                    )
                 )
-        else:
-            camera_config = None
         
         if 'multi_run_config' in cfg and cfg.multi_run_config:
             multi_run_config = hydra.utils.instantiate(cfg.multi_run_config)
@@ -144,7 +146,7 @@ class PlanarPushingSimConfig:
             scene_directive_name=cfg.scene_directive_name,
             use_hardware=cfg.use_hardware,
             pusher_z_offset=cfg.pusher_z_offset,
-            camera_config=camera_config,
+            camera_configs=camera_configs,
             collect_data=cfg.collect_data,
             data_dir=cfg.data_dir,
             multi_run_config=multi_run_config
