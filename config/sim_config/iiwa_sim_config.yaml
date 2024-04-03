@@ -19,7 +19,6 @@ pusher_start_pose:
   x: 0.575
   y: 0.25
   theta: 0.0
-default_joint_positions: [0.0776, 1.0562, 0.3326, -1.3048, 2.7515, -0.8441, 0.5127,]
 time_step: 0.001
 closed_loop: false # MPC flag
 draw_frames: true
@@ -38,7 +37,6 @@ diffusion_policy_config:
   device: 'cuda:0'
   cfg_overrides:
     n_action_steps: 8
-scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
 use_hardware: false
 pusher_z_offset: 0.03
 camera_configs:
@@ -66,3 +64,14 @@ multi_run_config:
   slider_goal_pose: ${slider_goal_pose}
   workspace_width: 0.35
   workspace_height: 0.5
+
+##  Robot specific configs
+# sim_config
+scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
+default_joint_positions: [0.0776, 1.0562, 0.3326, -1.3048, 2.7515, -0.8441, 0.5127,]
+
+# position controller / robot station
+robot_station:
+  _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
+  sim_config: null  # override in hydra.utils.instantiate
+  meshcat: null     # override in hydra.utils.instantiate

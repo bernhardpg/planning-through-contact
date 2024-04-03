@@ -1,12 +1,13 @@
 import logging
 import hydra
 import pathlib
+import importlib
 
 from omegaconf import OmegaConf
 from pydrake.all import StartMeshcat
 
-from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
-    IiwaHardwareStation,
+from planning_through_contact.simulation.controllers.robot_system_base import (
+    RobotSystemBase,
 )
 from planning_through_contact.simulation.controllers.diffusion_policy_source import (
     DiffusionPolicySource,
@@ -42,8 +43,15 @@ def run_sim(cfg: OmegaConf):
     position_source = DiffusionPolicySource(sim_config.diffusion_policy_config)
 
     # Set up position controller
-    position_controller = IiwaHardwareStation(
-        sim_config=sim_config, meshcat=station_meshcat
+    # TODO: load with hydra instead (currently giving camera config errors)
+    # overrides = {'sim_config': sim_config, 'meshcat': station_meshcat}
+    # position_controller: RobotSystemBase = hydra.utils.instantiate(cfg.robot_station, **overrides)
+    
+    module_name, class_name = cfg.robot_station._target_.rsplit(".", 1)
+    robot_system_class = getattr(importlib.import_module(module_name), class_name)
+    position_controller: RobotSystemBase = robot_system_class(
+        sim_config=sim_config, 
+        meshcat=station_meshcat
     )
 
     # Set up environment

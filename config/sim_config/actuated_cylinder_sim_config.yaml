@@ -37,7 +37,6 @@ diffusion_policy_config:
   device: 'cuda:0'
   cfg_overrides:
     n_action_steps: 8
-scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
 use_hardware: false
 pusher_z_offset: 0.03
 camera_configs:
@@ -59,3 +58,13 @@ multi_run_config:
   slider_goal_pose: ${slider_goal_pose}
   workspace_width: 0.35
   workspace_height: 0.5
+
+##  Robot specific configs
+# sim_config
+scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+
+# position controller / robot station
+robot_station:
+  _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
+  sim_config: null  # override in hydra.utils.instantiate
+  meshcat: null     # override in hydra.utils.instantiate
