@@ -21,7 +21,7 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
 
 @hydra.main(
     version_base=None,
-    config_path=str(pathlib.Path(__file__).parent.parent.parent.joinpath(
+    config_path=str(pathlib.Path(__file__).parents[3].joinpath(
         'config','sim_config'))
 )
 def run_sim(cfg: OmegaConf):
@@ -75,13 +75,17 @@ def run_sim(cfg: OmegaConf):
         end_time = num_runs * max_attempt_duration
     
     successful_idx, save_dir = environment.simulate(end_time, recording_file=recording_name)
-    with open("diffusion_policy_logs/checkpoint_statistics.txt", "a") as f:
+    
+    # Update logs and save config file
+    OmegaConf.save(cfg, f"{save_dir}/sim_config.yaml")
+    with open(f"{cfg.data_dir}/checkpoint_statistics.txt", "a") as f:
         f.write(f"{sim_config.diffusion_policy_config.checkpoint}\n")
         f.write(f"Seed: {seed}\n")
         f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
         f.write(f"Success_idx: {successful_idx}\n")
         f.write(f"Save dir: {save_dir}\n")
         f.write("\n")
+    
 
 if __name__ == "__main__":
     """
