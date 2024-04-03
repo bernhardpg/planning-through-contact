@@ -20,7 +20,7 @@ pusher_start_pose:
   y: 0.25
   theta: 0.0
 time_step: 0.001
-closed_loop: false
+closed_loop: false # MPC flag
 draw_frames: true
 use_realtime: false
 delay_before_execution: 5.0

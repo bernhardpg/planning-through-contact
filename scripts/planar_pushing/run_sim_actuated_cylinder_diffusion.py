@@ -34,7 +34,6 @@ def run_sim(cfg: OmegaConf):
     station_meshcat = StartMeshcat()
 
     # load sim_config
-    cfg = OmegaConf.load('config/sim_config/actuated_cylinder_sim_config.yaml')
     sim_config = PlanarPushingSimConfig.from_yaml(cfg)
     print(f"Initial finger pose: {sim_config.pusher_start_pose}")
     print(f"Target slider pose: {sim_config.slider_goal_pose}")
@@ -42,7 +41,7 @@ def run_sim(cfg: OmegaConf):
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config.diffusion_policy_config)
 
-    ## Set up position controller
+    # Set up position controller
     position_controller = CylinderActuatedStation(
         sim_config=sim_config, meshcat=station_meshcat
     )

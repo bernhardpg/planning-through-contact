@@ -16,8 +16,9 @@ from pydrake.systems.sensors import (
 )
 from pydrake.math import (
     RigidTransform, 
-    RotationMatrix
+    RotationMatrix,
 )
+from pydrake.all import RollPitchYaw
 from pydrake.common.schema import (
     Transform
 )
@@ -185,12 +186,18 @@ class PlanarPushingSimConfig:
                     X_PB = Transform(
                         RigidTransform(
                             RotationMatrix.MakeXRotation(np.pi),
-                            np.array([0.5, 0.0, 1.0])
+                            np.array(camera_config.position)
                         )
                     )
                 else:
-                    # TODO: X_PB from yaml
-                    raise NotImplementedError
+                    orientation = RollPitchYaw(
+                        roll=camera_config.orientation.roll,
+                        pitch=camera_config.orientation.pitch,
+                        yaw=camera_config.orientation.yaw
+                    )
+                    X_PB=Transform(
+                        RigidTransform(orientation, np.array(camera_config.position))
+                    )
                 
                 camera_configs.append(
                     CameraConfig(
