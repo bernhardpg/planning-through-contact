@@ -281,15 +281,3 @@ class PlanarPlanConfig:
             f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
         ]
         return "\n".join(field_strings)
-
-@dataclass
-class MultiRunConfig:
-    initial_slider_poses: List[PlanarPose] = field(default_factory=lambda: [])
-    target_slider_poses: List[PlanarPose] = field(default_factory=lambda: [])
-    max_attempt_duration: float = 50.0
-
-    def __str__(self) -> str:
-        field_strings = [
-            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
-        ]
-        return "\n".join(field_strings)

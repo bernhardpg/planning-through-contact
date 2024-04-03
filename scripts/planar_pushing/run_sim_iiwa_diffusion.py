@@ -35,9 +35,6 @@ from planning_through_contact.simulation.environments.output_feedback_table_envi
 )
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
-)
-
-from planning_through_contact.planning.planar.planar_plan_config import (
     MultiRunConfig
 )
 
@@ -46,7 +43,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarPushingWorkspace,
-    MultiRunConfig
 )
 
 from planning_through_contact.geometry.planar.non_collision import (

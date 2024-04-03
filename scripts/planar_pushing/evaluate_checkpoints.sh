@@ -17,7 +17,7 @@ for ((i=${#checkpoints[@]}-1; i>=0; i--)); do
     checkpoint_name="${checkpoint_filename%.*}"
 
     # Run the Python script with the --checkpoint argument
-    python "${python_script}" --checkpoint "${checkpoint}" --num_runs 10 --max_attempt_duration 90 --seed 9001
+    python "${python_script}" --checkpoint "${checkpoint}" --num-runs 10 --max-attempt-duration 90 --seed 9001
 
     echo "Evaluated checkpoint: ${checkpoint_name}"
 done
