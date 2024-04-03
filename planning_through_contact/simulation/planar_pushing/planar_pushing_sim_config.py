@@ -33,6 +33,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingWorkspace,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
+from planning_through_contact.simulation.controllers.diffusion_policy_source import DiffusionPolicyConfig
 from planning_through_contact.experiments.utils import (
     get_box,
     get_tee,
@@ -80,6 +81,8 @@ class MultiRunConfig:
             pusher_pose=pusher_start_pose,
             limit_rotations=False,
         )
+        self.num_runs = num_runs
+        self.seed = seed
         self.target_slider_poses = [slider_goal_pose] * num_runs
         self.max_attempt_duration = max_attempt_duration
     
@@ -114,6 +117,7 @@ class PlanarPushingSimConfig:
     delay_before_execution: float = 5.0
     save_plots: bool = False
     mpc_config: HybridMpcConfig = field(default_factory=lambda: HybridMpcConfig())
+    diffusion_policy_config: DiffusionPolicyConfig = None
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
@@ -172,6 +176,8 @@ class PlanarPushingSimConfig:
             sim_config.default_joint_positions = np.array(cfg.default_joint_positions)
         if 'mpc_config' in cfg:
             sim_config.mpc_config = hydra.utils.instantiate(cfg.mpc_config)
+        if 'diffusion_policy_config' in cfg:
+            sim_config.diffusion_policy_config = hydra.utils.instantiate(cfg.diffusion_policy_config)
         if 'camera_configs' in cfg and cfg.camera_configs:
             camera_configs = []
             for camera_config in cfg.camera_configs:

@@ -57,7 +57,8 @@ class DiffusionPolicyController(LeafSystem):
         freq: float = 10.0,
         delay: float=1.0,
         device='cuda:0',
-        debug: bool = False
+        debug: bool = False,
+        cfg_overrides: dict = {}
     ):
         super().__init__()
         self._checkpoint = pathlib.Path(checkpoint)
@@ -70,6 +71,8 @@ class DiffusionPolicyController(LeafSystem):
         self._debug = debug
         self._device = device
         self._load_policy_from_checkpoint(self._checkpoint)
+        for key, value in cfg_overrides.items():
+            self._cfg[key] = value
         
         # get parameters
         self._obs_horizon = self._cfg.n_obs_steps
@@ -85,7 +88,6 @@ class DiffusionPolicyController(LeafSystem):
         # indexing parameters for action predictions
         self._start = self._obs_horizon-1
         self._end = self._start + self._action_steps
-        # self._end += 4
         # Hack to ensure backward compatibility with version 2 checkpoints
         # Version 2 checkpoints did not used shifted actions
         if 'push_tee_v2' in checkpoint:
