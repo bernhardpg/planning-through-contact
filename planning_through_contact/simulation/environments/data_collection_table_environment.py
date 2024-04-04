@@ -375,20 +375,16 @@ class DataCollectionTableEnvironment:
 
             # Save the logs
             pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
-            slider_pose_log = self._slider_pose_logger.FindLog(self.context)
             pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
                 self.context
             )
-            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
-                self.context
-            )
-
+            
             pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_log)
             pusher_desired = PlanarPushingLog.from_pose_vector_log(
                 pusher_pose_desired_log
             )
 
-            # Only log pusher information in DataCollectionTableEnvironment
+            # Only log pusher information
             combined = CombinedPlanarPushingLogs(
                 pusher_actual=pusher_actual,    # pusher_pose_estimated from StateEstimator
                 slider_actual=None,    # slider_pose_estimated from StateEstimator, mpc_control from PositionSource
