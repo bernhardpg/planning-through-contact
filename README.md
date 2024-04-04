@@ -45,7 +45,17 @@ To build Drake and the python bindings, run:
 cd ../
 mkdir drake-build
 cd drake-build
-cmake -DWITH_MOSEK=ON ../drake
+cmake -DWITH_MOSEK=ON -DWITH_SNOPT=ON ../drake
+make install
+```
+
+if you are a member of the RLG, run:
+
+```console
+cd ../
+mkdir drake-build
+cd drake-build
+cmake -DWITH_MOSEK=ON -DWITH_ROBOTLOCOMOTION_SNOPT=ON ../drake
 make install
 ```
 

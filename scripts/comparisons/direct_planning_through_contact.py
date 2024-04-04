@@ -8,11 +8,24 @@ from planning_through_contact.experiments.utils import (
     get_sugar_box,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+    SimplePlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.utilities import (
     cross_2d,
     two_d_rotation_matrix_from_angle,
 )
-from planning_through_contact.tools.utils import calc_displacements
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPushingStartAndGoal,
+)
+from planning_through_contact.tools.utils import (
+    calc_displacements,
+    evaluate_np_expressions_array,
+)
+from planning_through_contact.visualize.planar_pushing import (
+    visualize_planar_pushing_trajectory,
+)
 
 num_time_steps = 10  # TODO: Change
 dt = 0.1  # TODO: Change
@@ -21,10 +34,20 @@ end_time = num_time_steps * dt - dt
 config = get_default_plan_config()
 dynamics_config = config.dynamics_config
 
+slider = get_sugar_box()
+
+slider_initial_pose = PlanarPose(0, 0, 0)
+slider_target_pose = PlanarPose(0.3, 0, np.pi / 2)
+pusher_initial_pose = PlanarPose(-0.3, -0.3, 0)
+pusher_target_pose = PlanarPose(-0.3, -0.3, 0)
+
+config.start_and_goal = PlanarPushingStartAndGoal(
+    slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
+)
+
 NUM_DIMS = 2
 
 prog = MathematicalProgram()
-
 # Define decision variables
 p_WBs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_WBs")
 p_BPs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_BPs")
@@ -47,6 +70,8 @@ p_WPs = [
     _create_p_WP(p_WB, R_WB, p_BP) for p_WB, R_WB, p_BP in zip(p_WBs, R_WBs, p_BPs)
 ]
 
+f_c_Ws = [R_WB @ f_c_B for R_WB, f_c_B in zip(R_WBs, f_c_Bs)]
+
 v_WBs = calc_displacements(p_WBs, dt)
 r_WBs_dot = calc_displacements(r_WBs, dt)
 R_WBs_dot = [
@@ -55,13 +80,6 @@ R_WBs_dot = [
 ]
 # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
 omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WBs_dot)]
-
-slider = get_sugar_box()
-
-slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.3, 0, np.pi / 2)
-pusher_initial_pose = PlanarPose(-0.3, -0.3, 0)
-pusher_target_pose = PlanarPose(-0.3, -0.3, 0)
 
 
 # Initial and target constraints on slider
@@ -161,4 +179,19 @@ snopt = SnoptSolver()
 result = snopt.Solve(prog)  # type: ignore
 assert result.is_success()
 
-breakpoint()
+traj = SimplePlanarPushingTrajectory(
+    result.GetSolution(p_WBs),
+    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+    evaluate_np_expressions_array(p_WPs, result),  # type: ignore
+    evaluate_np_expressions_array(f_c_Ws, result),  # type: ignore
+    dt,
+    config,
+)
+
+visualize_planar_pushing_trajectory(
+    traj,  # type: ignore
+    save=True,
+    # show=True,
+    filename=f"direct_trajopt_test",
+    visualize_knot_points=True,
+)
