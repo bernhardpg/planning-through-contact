@@ -115,7 +115,7 @@ def run_sim(
 
     position_source = ReplayPositionSource(
         traj=traj,
-        # dt = 1 / 10*sim_config.diffusion_policy_config.freq,
+        dt = 0.025,
         delay=sim_config.delay_before_execution
     )
 
