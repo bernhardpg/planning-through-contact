@@ -243,15 +243,6 @@ class DataCollectionTableEnvironment:
             self._joint_state_logger = LogVectorOutput(
                 self._robot_system.GetOutputPort("robot_state_measured"), builder
             )
-            # Actual command logger
-            self._control_logger = LogVectorOutput(
-                self._desired_position_source.GetOutputPort("mpc_control"), builder
-            )
-            # Desired command logger
-            self._control_desired_logger = LogVectorOutput(
-                self._desired_position_source.GetOutputPort("mpc_control_desired"),
-                builder,
-            )
         
         if sim_config.collect_data:
             assert sim_config.camera_configs is not None
@@ -375,49 +366,6 @@ class DataCollectionTableEnvironment:
                 recording_file = os.path.join(save_dir, recording_file)
             with open(recording_file, "w") as f:
                 f.write(res)
-
-        if self._sim_config.save_plots:
-            pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
-            slider_pose_log = self._slider_pose_logger.FindLog(self.context)
-            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
-                self.context
-            )
-            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
-                self.context
-            )
-            control_log = self._control_logger.FindLog(self.context)
-            control_desired_log = self._control_desired_logger.FindLog(self.context)
-
-            last_planar_pose = slider_pose_log.data()[:, -1]
-            last_desired_planar_pose = slider_pose_desired_log.data()[:, -1]
-            error = last_planar_pose - last_desired_planar_pose
-            error_norm = np.linalg.norm(error)
-            logger.info(
-                f"\nSUMMARY:\n last planar pose: {last_planar_pose}"
-                f"\n last desired planar pose: {last_desired_planar_pose}"
-                f"\n error: {error}\n error norm: {error_norm:.4f}"
-            )
-            plot_and_save_planar_pushing_logs_from_sim(
-                pusher_pose_log,
-                slider_pose_log,
-                control_log,
-                control_desired_log,
-                pusher_pose_desired_log,
-                slider_pose_desired_log,
-                save_dir=save_dir,
-            )
-
-            # Hack to get num_positions from cylinder object
-            num_positions = None
-            if isinstance(self._robot_system, CylinderActuatedStation):
-                num_positions = self._robot_system._num_positions
-            else:
-                num_positions = self._robot_system.robot.num_positions()
-            plot_joint_state_logs(
-                self._joint_state_logger.FindLog(self.context),
-                num_positions,
-                save_dir=save_dir,
-            )
     
     def save_data(self):
         import pathlib
@@ -434,23 +382,18 @@ class DataCollectionTableEnvironment:
             slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
                 self.context
             )
-            control_log = self._control_logger.FindLog(self.context)
-            control_desired_log = self._control_desired_logger.FindLog(self.context)
 
             pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_log)
-            slider_actual = PlanarPushingLog.from_log(slider_pose_log, control_log)
             pusher_desired = PlanarPushingLog.from_pose_vector_log(
                 pusher_pose_desired_log
             )
-            slider_desired = PlanarPushingLog.from_log(
-                slider_pose_desired_log,
-                control_desired_log,
-            )
+
+            # Only log pusher information in DataCollectionTableEnvironment
             combined = CombinedPlanarPushingLogs(
                 pusher_actual=pusher_actual,    # pusher_pose_estimated from StateEstimator
-                slider_actual=slider_actual,    # slider_pose_estimated from StateEstimator, mpc_control from PositionSource
+                slider_actual=None,    # slider_pose_estimated from StateEstimator, mpc_control from PositionSource
                 pusher_desired=pusher_desired,  # planar_position_command from PositionSource
-                slider_desired=slider_desired,  # desired_slider_planar_pose_vector from PositionSource, mpc_control_desired from PositionSource
+                slider_desired=None,  # desired_slider_planar_pose_vector from PositionSource, mpc_control_desired from PositionSource
             )
 
             # assumes that a directory for this trajectory has already been

@@ -65,7 +65,7 @@ multi_run_config:
   workspace_width: 0.35
   workspace_height: 0.5
 
-##  Robot specific configs
+## Robot specific configs
 # sim_config
 scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
 default_joint_positions: [0.0776, 1.0562, 0.3326, -1.3048, 2.7515, -0.8441, 0.5127,]
@@ -75,3 +75,7 @@ robot_station:
   _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
   sim_config: null  # override in hydra.utils.instantiate
   meshcat: null     # override in hydra.utils.instantiate
+
+## Data Collection Config
+data_collection_config:
+  _target_: 'insert class name here'

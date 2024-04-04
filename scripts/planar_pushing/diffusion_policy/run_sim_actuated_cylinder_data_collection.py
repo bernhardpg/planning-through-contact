@@ -27,8 +27,8 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
     CylinderActuatedStation,
 )
-from planning_through_contact.simulation.controllers.mpc_position_source import (
-    MPCPositionSource,
+from planning_through_contact.simulation.controllers.replay_position_source import (
+    ReplayPositionSource,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 
@@ -112,11 +112,12 @@ def run_sim(
         collect_data=True,
         data_dir = data_collection_dir
     )
-    cfg = OmegaConf.load('config/sim_config/test_sim_config.yaml')
 
-    # Using MPCPositionSource in open loop to output the pusher and slider
-    # states directly to the state estimator for data collection
-    position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
+    position_source = ReplayPositionSource(
+        traj=traj,
+        # dt = 1 / 10*sim_config.diffusion_policy_config.freq,
+        delay=sim_config.delay_before_execution
+    )
 
     ## Set up position controller
     position_controller = CylinderActuatedStation(
@@ -136,27 +137,11 @@ def run_sim(
         if save_recording
         else None
     )
-    # recording_name = "./recording_1.html"
     environment.export_diagram("environment_diagram.pdf")
     environment.simulate(traj.end_time + 0.5, recording_file=recording_name)
-    # environment.simulate(10, save_recording_as=recording_name)
-
-    if debug and isinstance(position_source, MPCPositionSource):
-        for (
-            contact_loc,
-            mpc,
-        ) in position_source._pusher_pose_controller.mpc_controllers.items():
-            if len(mpc.control_log) > 0:
-                plot_cost(mpc.cost_log, suffix=f"_{contact_loc}")
-                plot_control_sols_vs_time(mpc.control_log, suffix=f"_{contact_loc}")
-                # plot_velocities(
-                #     mpc.desired_velocity_log,
-                #     mpc.commanded_velocity_log,
-                #     suffix=f"_{contact_loc}",
-                # )
 
 
-def run_multiple(
+def run_multiple( 
     plans: list,
     save_dir: str,
     station_meshcat=None, 

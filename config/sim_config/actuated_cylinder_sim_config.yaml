@@ -59,7 +59,7 @@ multi_run_config:
   workspace_width: 0.35
   workspace_height: 0.5
 
-##  Robot specific configs
+## Robot specific configs
 # sim_config
 scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
 
