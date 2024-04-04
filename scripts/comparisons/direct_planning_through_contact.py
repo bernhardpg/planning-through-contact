@@ -3,13 +3,23 @@ import numpy.typing as npt
 from pydrake.math import eq
 from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve
 
-from planning_through_contact.experiments.utils import get_sugar_box
+from planning_through_contact.experiments.utils import (
+    get_default_plan_config,
+    get_sugar_box,
+)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
+from planning_through_contact.geometry.utilities import (
+    cross_2d,
+    two_d_rotation_matrix_from_angle,
+)
+from planning_through_contact.tools.utils import calc_displacements
 
-num_time_steps = 10
-dt = 0.1
+num_time_steps = 10  # TODO: Change
+dt = 0.1  # TODO: Change
 end_time = num_time_steps * dt - dt
+
+config = get_default_plan_config()
+dynamics_config = config.dynamics_config
 
 NUM_DIMS = 2
 
@@ -36,6 +46,15 @@ R_WBs = [_two_d_rot_matrix_from_cos_sin(r_WB[0], r_WB[1]) for r_WB in r_WBs]
 p_WPs = [
     _create_p_WP(p_WB, R_WB, p_BP) for p_WB, R_WB, p_BP in zip(p_WBs, R_WBs, p_BPs)
 ]
+
+v_WBs = calc_displacements(p_WBs, dt)
+r_WBs_dot = calc_displacements(r_WBs, dt)
+R_WBs_dot = [
+    np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
+    for cos_dot, sin_dot in r_WBs_dot
+]
+# In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
+omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WBs_dot)]
 
 slider = get_sugar_box()
 
@@ -72,7 +91,25 @@ for c in eq(p_WP_target, pusher_target_pose.pos().flatten()):
 for cos_th, sin_th in r_WBs:
     prog.AddConstraint(cos_th**2 + sin_th**2 == 1)
 
-snopt = SnoptSolver()
+# Dynamics
+# Limit surface constants
+c_f = dynamics_config.f_max**-2
+c_tau = dynamics_config.tau_max**-2
+
+for k in range(num_time_steps - 1):
+    f_c_B = f_c_Bs[k]
+    v_WB = v_WBs[k]
+    p_Bc = p_BPs[k]  # TODO: Add radius
+    R_WB = R_WBs[k]
+    omega_WB = omega_WBs[k]
+
+    trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
+    for c in trans_vel_constraint:
+        prog.AddQuadraticConstraint(c, 0, 0)
+
+    torque = c_tau * cross_2d(p_Bc.reshape((2, 1)), f_c_B.reshape((2, 1)))
+    ang_vel_constraint = omega_WB - torque
+    prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
 
 
 # Create initial guess as straight line interpolation
@@ -119,6 +156,8 @@ p_BPs_interpolated = _interpolate_traj(
 )
 prog.SetInitialGuess(p_BPs, p_BPs_interpolated)  # type: ignore
 
+# Solve program
+snopt = SnoptSolver()
 result = snopt.Solve(prog)  # type: ignore
 assert result.is_success()
 
