@@ -9,6 +9,7 @@ from planning_through_contact.geometry.utilities import two_d_rotation_matrix_fr
 
 num_time_steps = 10
 dt = 0.1
+end_time = num_time_steps * dt - dt
 
 NUM_DIMS = 2
 
@@ -39,7 +40,7 @@ p_WPs = [
 slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.3, 0, 0)
+slider_target_pose = PlanarPose(0.3, 0, np.pi / 2)
 pusher_initial_pose = PlanarPose(-0.3, -0.3, 0)
 pusher_target_pose = PlanarPose(-0.3, -0.3, 0)
 
@@ -67,8 +68,56 @@ for c in eq(p_WP_initial, pusher_initial_pose.pos().flatten()):
 for c in eq(p_WP_target, pusher_target_pose.pos().flatten()):
     prog.AddLinearEqualityConstraint(c)
 
+# SO(2) constraints
+for cos_th, sin_th in r_WBs:
+    prog.AddConstraint(cos_th**2 + sin_th**2 == 1)
 
 snopt = SnoptSolver()
+
+
+# Create initial guess as straight line interpolation
+def _interpolate_traj_1d(
+    initial_val: float, target_val: float
+) -> npt.NDArray[np.float64]:
+    xs = np.array([0, end_time])
+    ys = np.array([initial_val, target_val])
+    x_interpolate = np.arange(0, end_time + dt, dt)
+    y_interpolated = np.interp(x_interpolate, xs, ys)
+    return y_interpolated
+
+
+def _interpolate_traj(
+    initial_val: npt.NDArray[np.float64], target_val: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    if len(initial_val.shape) == 2:
+        initial_val = initial_val.flatten()
+        target_val = target_val.flatten()
+
+    num_dims = initial_val.shape[0]
+    trajs = np.vstack(
+        [
+            _interpolate_traj_1d(initial_val[dim], target_val[dim])
+            for dim in range(num_dims)
+        ]
+    ).T  # (num_time_steps, num_dims)
+    return trajs
+
+
+th_interpolated = _interpolate_traj_1d(
+    slider_initial_pose.theta, slider_target_pose.theta
+)
+r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
+prog.SetInitialGuess(r_WBs, r_WBs_initial_guess)  # type: ignore
+
+p_WBs_interpolated = _interpolate_traj(
+    slider_initial_pose.pos(), slider_target_pose.pos()
+)
+prog.SetInitialGuess(p_WBs, p_WBs_interpolated)  # type: ignore
+
+p_BPs_interpolated = _interpolate_traj(
+    pusher_initial_pose.pos(), pusher_target_pose.pos()
+)
+prog.SetInitialGuess(p_BPs, p_BPs_interpolated)  # type: ignore
 
 result = snopt.Solve(prog)  # type: ignore
 assert result.is_success()
