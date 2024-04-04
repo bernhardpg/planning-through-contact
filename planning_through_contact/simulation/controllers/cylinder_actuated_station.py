@@ -73,13 +73,6 @@ class CylinderActuatedStation(RobotSystemBase):
             sim_config, self.station_plant, self._scene_graph
         )
 
-        # self._meshcat.SetTransform(
-        #     path="/Cameras/default",
-        #     matrix=RigidTransform(
-        #         RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-        #         np.array([1, 0, 0]),
-        #     ).GetAsMatrix4(),
-        # )
         # Set the initial camera pose
         zoom = 1.8
         camera_in_world = [sim_config.slider_goal_pose.x, 

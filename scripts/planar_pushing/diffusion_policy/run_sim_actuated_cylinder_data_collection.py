@@ -121,19 +121,18 @@ def run_sim(
 
     ## Set up position controller
     position_controller = CylinderActuatedStation(
-        sim_config=sim_config, meshcat=station_meshcat
+        sim_config=sim_config, meshcat=state_estimator_meshcat
     )
 
     environment = DataCollectionTableEnvironment(
         desired_position_source=position_source,
         robot_system=position_controller,
         sim_config=sim_config,
-        station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
-        optitrack_config=None,
     )
+
     recording_name = (
-        plan.split(".")[0] + f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html"
+        "recording.html"
         if save_recording
         else None
     )
