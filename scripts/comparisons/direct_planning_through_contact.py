@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq
@@ -6,6 +7,10 @@ from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve
 from planning_through_contact.experiments.utils import (
     get_default_plan_config,
     get_sugar_box,
+)
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -51,7 +56,8 @@ prog = MathematicalProgram()
 # Define decision variables
 p_WBs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_WBs")
 p_BPs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_BPs")
-f_c_Bs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "f_c_Bs")
+normal_forces = prog.NewContinuousVariables(num_time_steps - 1, "lambda_n")
+friction_forces = prog.NewContinuousVariables(num_time_steps - 1, "lambda_f")
 # r_WB_k = [cos_th; sin_th]
 r_WBs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "r_WBs")
 
@@ -70,7 +76,9 @@ p_WPs = [
     _create_p_WP(p_WB, R_WB, p_BP) for p_WB, R_WB, p_BP in zip(p_WBs, R_WBs, p_BPs)
 ]
 
-f_c_Ws = [R_WB @ f_c_B for R_WB, f_c_B in zip(R_WBs, f_c_Bs)]
+# TODO: fix forces
+# f_c_Bs = prog.NewContinuousVariables(num_time_steps - 1, NUM_DIMS, "f_c_Bs")
+# f_c_Ws = [R_WB @ f_c_B for R_WB, f_c_B in zip(R_WBs, f_c_Bs)]
 
 v_WBs = calc_displacements(p_WBs, dt)
 r_WBs_dot = calc_displacements(r_WBs, dt)
@@ -115,19 +123,33 @@ c_f = dynamics_config.f_max**-2
 c_tau = dynamics_config.tau_max**-2
 
 for k in range(num_time_steps - 1):
-    f_c_B = f_c_Bs[k]
+    # f_c_B = f_c_Bs[k]
     v_WB = v_WBs[k]
     p_Bc = p_BPs[k]  # TODO: Add radius
     R_WB = R_WBs[k]
     omega_WB = omega_WBs[k]
 
-    trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
-    for c in trans_vel_constraint:
-        prog.AddQuadraticConstraint(c, 0, 0)
+    # trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
+    # for c in trans_vel_constraint:
+    #     prog.AddQuadraticConstraint(c, 0, 0)
 
-    torque = c_tau * cross_2d(p_Bc.reshape((2, 1)), f_c_B.reshape((2, 1)))
-    ang_vel_constraint = omega_WB - torque
-    prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
+    # torque = c_tau * cross_2d(p_Bc.reshape((2, 1)), f_c_B.reshape((2, 1)))
+    # ang_vel_constraint = omega_WB - torque
+    # prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
+
+
+# Enforce non-penetration
+sdf = lambda pos: np.array([slider.geometry.get_signed_distance(pos)])  # type: ignore
+for k in range(num_time_steps):
+    prog.AddConstraint(sdf, np.zeros((1,)), np.ones((1,)) * np.inf, vars=p_BPs[k])
+
+
+# # Enforce friction cone
+# for k in range(num_time_steps):
+
+# # Complementarity constraints
+# for k in range(num_time_steps - 1):
+#     breakpoint()
 
 
 # Create initial guess as straight line interpolation

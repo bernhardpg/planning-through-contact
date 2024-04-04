@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import Any, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.geometry import Box as DrakeBox
+from pydrake.math import sqrt
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -367,3 +368,136 @@ class Box2d(CollisionGeometry):
             raise ValueError(f"Can not get collision free region for idx {idx}")
 
         return planes
+
+    def get_signed_distance(self, pos: npt.NDArray) -> float:
+        """
+        Returns the signed distance from the pos to the closest point on the box.
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        pos_x = pos[0, 0]
+        pos_y = pos[1, 0]
+
+        # Left
+        if (
+            pos_x <= -self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return -pos_x - self.width / 2
+        # Right
+        elif (
+            pos_x >= self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return pos_x - self.width / 2
+        # Top
+        elif (
+            pos_y >= self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return pos_y - self.height / 2
+        # Bottom
+        elif (
+            pos_y <= -self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return -pos_y - self.height / 2
+
+        # Bottom left corner
+        elif pos_y <= -self.height / 2 and pos_x <= -self.width / 2:
+            diff = pos - self.vertices[3]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Top left corner
+        elif pos_y >= self.height / 2 and pos_x <= -self.width / 2:
+            diff = pos - self.vertices[0]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Top right corner
+        elif pos_y >= self.height / 2 and pos_x >= self.width / 2:
+            diff = pos - self.vertices[1]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Bottom right corner
+        elif pos_y <= -self.height / 2 and pos_x >= self.width / 2:
+            diff = pos - self.vertices[2]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+        else:
+            raise NotImplementedError(
+                "SDF not implemented for positions that penetrate geometry"
+            )
+
+    def get_contact_jacobian(self, pos: npt.NDArray) -> npt.NDArray[Any]:
+        """
+        Returns the contact jacobian for the point that is closest to the box
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        def _make_jacobian(
+            normal_vec: npt.NDArray[np.float64],
+            tangent_vec: npt.NDArray[np.float64],
+            pos_x: Any,
+            pos_y: Any,
+        ) -> npt.NDArray[Any]:
+            last_col = np.array([-pos_y, pos_x]).reshape((-1, 1))
+            return np.hstack([normal_vec, tangent_vec, last_col])
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        pos_x = pos[0, 0]
+        pos_y = pos[1, 0]
+
+        # Left
+        if (
+            pos_x <= -self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return _make_jacobian(
+                self.normal_vecs[3], self.tangent_vecs[3], pos_x, pos_y
+            )
+        # Right
+        elif (
+            pos_x >= self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return _make_jacobian(
+                self.normal_vecs[1], self.tangent_vecs[1], pos_x, pos_y
+            )
+        # Top
+        elif (
+            pos_y >= self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return _make_jacobian(
+                self.normal_vecs[0], self.tangent_vecs[0], pos_x, pos_y
+            )
+        # Bottom
+        elif (
+            pos_y <= -self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return _make_jacobian(
+                self.normal_vecs[2], self.tangent_vecs[2], pos_x, pos_y
+            )
+        else:
+            raise NotImplementedError(
+                "Contact jacobian not implemented for positions that penetrate geometry"
+            )
