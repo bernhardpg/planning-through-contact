@@ -1,7 +1,10 @@
+from typing import Any, List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from pydrake.math import eq
+from pydrake.autodiffutils import AutoDiffXd
+from pydrake.math import eq, sqrt
 from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve, SolverOptions
 
 from planning_through_contact.experiments.utils import (
@@ -48,9 +51,9 @@ dynamics_config = config.dynamics_config
 slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.1, 0, 0)
-pusher_initial_pose = PlanarPose(-0.3, -0.05, 0)
-pusher_target_pose = PlanarPose(-0.3, -0.05, 0)
+slider_target_pose = PlanarPose(0.4, 0.2, 0)
+pusher_initial_pose = PlanarPose(-0.3, 0, 0)
+pusher_target_pose = PlanarPose(-0.3, 0, 0)
 
 config.start_and_goal = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -205,6 +208,98 @@ for k in range(num_time_steps - 1):
 # Non-sliding constraint
 # TODO
 
+# Cost
+cost_config = config.contact_config.cost
+
+
+def _get_slider_vertices(slider: CollisionGeometry) -> List[List[npt.NDArray]]:
+    """
+    Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
+    are linear in the decision varibles of the program
+    """
+    p_Wv_is = [
+        [
+            slider.get_p_Wv_i(vertex_idx, R_WB, p_WB.reshape((2, 1)))
+            for vertex_idx in range(len(slider.vertices))
+        ]
+        for p_WB, R_WB in zip(p_WBs, R_WBs)
+    ]
+    return p_Wv_is
+
+
+p_Wv_is = _get_slider_vertices(slider.geometry)
+num_keypoints = len(slider.geometry.vertices)
+
+# Slider keypoint arc length
+assert cost_config.keypoint_arc_length is not None
+for k in range(num_time_steps - 1):
+    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+        diff = vertex_k_next - vertex_k
+        dist = sqrt((diff.T @ diff).item())
+        cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
+
+# Slider keypoint velocity length
+assert cost_config.keypoint_velocity_regularization is not None
+for k in range(num_time_steps - 1):
+    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+        vel = (vertex_k_next - vertex_k) / dt
+        squared_vel = (vel.T @ vel).item()
+        cost_expr = (
+            cost_config.keypoint_velocity_regularization
+            * (1 / num_keypoints)
+            * squared_vel
+        )
+
+# Time in contact cost
+assert cost_config.time is not None
+
+
+def _only_time_cost_when_contact(p_BP: npt.NDArray) -> Any:
+    sdf = calc_sdf(p_BP)
+
+    if sdf <= 1e-5:
+        cost = AutoDiffXd(cost_config.time * dt)  # type: ignore
+        return cost
+    else:
+        zero = AutoDiffXd(0.0)
+        return zero
+
+
+for k in range(num_time_steps):
+    p_BP = p_BPs[k]
+    prog.AddCost(_only_time_cost_when_contact, vars=p_BP)
+
+# Pusher velocity cost
+cost_config_noncoll = config.non_collision_cost
+v_BPs = np.vstack(
+    [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
+)
+
+assert cost_config_noncoll.pusher_velocity_regularization is not None
+for v_BP in v_BPs:
+    squared_vel = v_BP.T @ v_BP
+    cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
+    prog.AddCost(cost)
+
+# Pusher arc length
+for k in range(num_time_steps - 1):
+    p_BP_curr = p_BPs[k]
+    p_BP_next = p_BPs[k + 1]
+
+    diff = p_BP_next - p_BP_curr
+    EPS = 1e-7
+    dist = sqrt(diff.T @ diff + EPS)
+    prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
+
+# Squared forces
+for lambda_n, lambda_f in force_comps:
+    cost = (
+        cost_config.force_regularization
+        * (lambda_n**2 + lambda_f**2)
+        * config.dynamics_config.force_scale**2
+    )
+    prog.AddCost(cost)
+
 
 # Create initial guess as straight line interpolation
 def _interpolate_traj_1d(
@@ -250,10 +345,10 @@ p_BPs_interpolated = _interpolate_traj(
 )
 prog.SetInitialGuess(p_BPs, p_BPs_interpolated)  # type: ignore
 
-normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.1
+normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.2
 prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
 
-friction_forces_initial_guess = np.ones(friction_forces.shape) * 0.0
+friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
 prog.SetInitialGuess(friction_forces, friction_forces_initial_guess)  # type: ignore
 
 # Solve program
@@ -304,6 +399,8 @@ solver_options.SetOption(
 
 result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
 assert result.is_success()
+
+print(f"Cost: {result.get_optimal_cost()}")
 
 
 def _calc_f_c_B(force_comp, p_BP):
