@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve
+from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve, SolverOptions
 
 from planning_through_contact.experiments.utils import (
     get_default_plan_config,
+    get_default_solver_params,
     get_sugar_box,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -43,9 +44,9 @@ dynamics_config = config.dynamics_config
 slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.3, 0, np.pi / 2)
-pusher_initial_pose = PlanarPose(-0.3, -0.3, 0)
-pusher_target_pose = PlanarPose(-0.3, -0.3, 0)
+slider_target_pose = PlanarPose(0.1, 0, 0)
+pusher_initial_pose = PlanarPose(-0.3, 0, 0)
+pusher_target_pose = PlanarPose(-0.3, 0, 0)
 
 config.start_and_goal = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -94,8 +95,8 @@ def _add_slider_equal_pose_constraint(idx: int, target: PlanarPose):
     prog.AddLinearConstraint(eq(r_WBs[idx], np.array([target.cos(), target.sin()])))
 
 
-_add_slider_equal_pose_constraint(0, slider_target_pose)
-_add_slider_equal_pose_constraint(-1, slider_initial_pose)
+_add_slider_equal_pose_constraint(0, slider_initial_pose)
+_add_slider_equal_pose_constraint(-1, slider_target_pose)
 
 # Initial and target constraint on pusher
 for c in eq(p_WP_initial, pusher_initial_pose.pos().flatten()):
@@ -108,10 +109,6 @@ for cos_th, sin_th in r_WBs:
     prog.AddConstraint(cos_th**2 + sin_th**2 == 1)
 
 # Dynamics
-# Limit surface constants
-c_f = dynamics_config.f_max**-2
-c_tau = dynamics_config.tau_max**-2
-
 _calc_contact_jacobian = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)  # type: ignore
 
 
@@ -122,6 +119,11 @@ def _calc_omega_WB(r_WB_curr, r_WB_next):
     # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
     omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
     return omega_WB
+
+
+# Limit surface constants
+c_f = dynamics_config.f_max**-2
+c_tau = dynamics_config.tau_max**-2
 
 
 def _dynamics_constraint(vars: npt.NDArray) -> npt.NDArray:
@@ -145,7 +147,8 @@ def _dynamics_constraint(vars: npt.NDArray) -> npt.NDArray:
     tau_c_B = gen_force[2]
     ang_vel_constraint = omega_WB - tau_c_B
 
-    return np.concatenate([trans_vel_constraint, [ang_vel_constraint]])
+    constraint_value = np.concatenate([trans_vel_constraint, [ang_vel_constraint]])
+    return constraint_value
 
 
 for k in range(num_time_steps - 1):
@@ -223,16 +226,91 @@ p_BPs_interpolated = _interpolate_traj(
 )
 prog.SetInitialGuess(p_BPs, p_BPs_interpolated)  # type: ignore
 
+normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.1
+prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
+
+friction_forces_initial_guess = np.ones(friction_forces.shape) * 0.0
+prog.SetInitialGuess(friction_forces, friction_forces_initial_guess)  # type: ignore
+
 # Solve program
+# Copied from the convex planning code (PlanarPushingPath)
 snopt = SnoptSolver()
-result = snopt.Solve(prog)  # type: ignore
+
+solver_options = SolverOptions()
+solver_params = get_default_solver_params(True, clarabel=False)
+solver_params.save_solver_output = True
+
+if solver_params.save_solver_output:
+    import os
+
+    snopt_log_path = "direct_trajopt_snopt_output.txt"
+    # Delete log file if it already exists as Snopt just keeps writing to the same file
+    if os.path.exists(snopt_log_path):
+        os.remove(snopt_log_path)
+
+    solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
+
+solver_options.SetOption(
+    snopt.solver_id(),
+    "Major Feasibility Tolerance",
+    solver_params.nonl_round_major_feas_tol,
+)
+solver_options.SetOption(
+    snopt.solver_id(),
+    "Major Optimality Tolerance",
+    solver_params.nonl_round_opt_tol,
+)
+# The performance seems to be better when these (minor step) parameters are left
+# to their default value
+# solver_options.SetOption(
+#     snopt.solver_id(),
+#     "Minor Feasibility Tolerance",
+#     solver_params.nonl_round_minor_feas_tol,
+# )
+# solver_options.SetOption(
+#     snopt.solver_id(),
+#     "Minor Optimality Tolerance",
+#     solver_params.nonl_round_opt_tol,
+# )
+solver_options.SetOption(
+    snopt.solver_id(),
+    "Major iterations limit",
+    solver_params.nonl_round_major_iter_limit,
+)
+
+result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
 assert result.is_success()
+
+
+def _calc_f_c_B(force_comp, p_BP):
+    J_c = _calc_contact_jacobian(p_BP)
+    gen_force = J_c.T @ force_comp
+    f_c_B = gen_force[0:2]
+    return f_c_B
+
+
+def _calc_f_c_W(force_comp, p_BP, R_WB):
+    f_c_B = _calc_f_c_B(force_comp, p_BP)
+    return R_WB @ f_c_B
+
+
+force_comps_sols = result.GetSolution(force_comps)
+p_BPs_sols = result.GetSolution(p_BPs)
+R_WBs_sols = [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs]
+f_c_Ws_sols = np.vstack(
+    [
+        _calc_f_c_W(force_comp_sol, p_BP_sol, R_WB_sol)
+        for force_comp_sol, p_BP_sol, R_WB_sol in zip(
+            force_comps_sols, p_BPs_sols, R_WBs_sols
+        )
+    ]
+)
 
 traj = SimplePlanarPushingTrajectory(
     result.GetSolution(p_WBs),
     [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
     evaluate_np_expressions_array(p_WPs, result),  # type: ignore
-    evaluate_np_expressions_array(f_c_Ws, result),  # type: ignore
+    f_c_Ws_sols,
     dt,
     config,
 )
