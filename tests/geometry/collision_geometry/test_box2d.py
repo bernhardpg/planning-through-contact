@@ -223,20 +223,26 @@ def test_get_jacobian() -> None:
     f = _get_f(-box.width / 2, 0)
     assert np.isclose(f[0], force_comps[0])
     assert np.isclose(f[1], force_comps[1])
+    target_torque = -box.width / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
 
     # right
-    f = _get_f(-box.width / 2, 0)
-    assert np.isclose(f[0], force_comps[0])
-    assert np.isclose(f[1], force_comps[1])
+    f = _get_f(box.width / 2, 0)
+    assert np.isclose(f[0], -force_comps[0])
+    assert np.isclose(f[1], -force_comps[1])
+    target_torque = -box.width / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
 
     # top
-    f = _get_f(-box.width / 2, 0)
-    assert np.isclose(f[0], force_comps[0])
-    assert np.isclose(f[1], force_comps[1])
+    f = _get_f(0, box.height / 2)
+    assert np.isclose(f[0], -force_comps[1])
+    assert np.isclose(f[1], force_comps[0])
+    target_torque = -box.height / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
 
     # bottom
-    f = _get_f(-box.width / 2, 0)
-    assert np.isclose(f[0], force_comps[0])
-    assert np.isclose(f[1], force_comps[1])
-
-    breakpoint()
+    f = _get_f(0, -box.height / 2)
+    assert np.isclose(f[0], force_comps[1])
+    assert np.isclose(f[1], -force_comps[0])
+    target_torque = -box.height / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)

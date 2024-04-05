@@ -15,7 +15,7 @@ from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
 )
-from planning_through_contact.geometry.utilities import normalize_vec
+from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 @dataclass(frozen=True)
@@ -449,10 +449,11 @@ class Box2d(CollisionGeometry):
         def _make_jacobian(
             normal_vec: npt.NDArray[np.float64],
             tangent_vec: npt.NDArray[np.float64],
-            pos_x: Any,
-            pos_y: Any,
+            pos: npt.NDArray[Any],
         ) -> npt.NDArray[Any]:
-            last_col = np.array([-pos_y, pos_x]).reshape((-1, 1))
+            last_col = np.array(
+                [cross_2d(pos, normal_vec), cross_2d(pos, tangent_vec)]
+            ).reshape((2, 1))
             return np.hstack([normal_vec, tangent_vec, last_col])
 
         if len(pos.shape) == 1:
@@ -467,36 +468,28 @@ class Box2d(CollisionGeometry):
             and pos_y >= -self.height / 2
             and pos_y <= self.height / 2
         ):
-            return _make_jacobian(
-                self.normal_vecs[3], self.tangent_vecs[3], pos_x, pos_y
-            )
+            return _make_jacobian(self.normal_vecs[3], self.tangent_vecs[3], pos)
         # Right
         elif (
             pos_x >= self.width / 2
             and pos_y >= -self.height / 2
             and pos_y <= self.height / 2
         ):
-            return _make_jacobian(
-                self.normal_vecs[1], self.tangent_vecs[1], pos_x, pos_y
-            )
+            return _make_jacobian(self.normal_vecs[1], self.tangent_vecs[1], pos)
         # Top
         elif (
             pos_y >= self.height / 2
             and pos_x >= -self.width / 2
             and pos_x <= self.width / 2
         ):
-            return _make_jacobian(
-                self.normal_vecs[0], self.tangent_vecs[0], pos_x, pos_y
-            )
+            return _make_jacobian(self.normal_vecs[0], self.tangent_vecs[0], pos)
         # Bottom
         elif (
             pos_y <= -self.height / 2
             and pos_x >= -self.width / 2
             and pos_x <= self.width / 2
         ):
-            return _make_jacobian(
-                self.normal_vecs[2], self.tangent_vecs[2], pos_x, pos_y
-            )
+            return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
         else:
             raise NotImplementedError(
                 "Contact jacobian not implemented for positions that penetrate geometry"
