@@ -18,6 +18,9 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
     SimplePlanarPushingTrajectory,
 )
+from planning_through_contact.geometry.planar.trajectory_builder import (
+    OldPlanarPushingTrajectory,
+)
 from planning_through_contact.geometry.utilities import (
     cross_2d,
     two_d_rotation_matrix_from_angle,
@@ -31,6 +34,7 @@ from planning_through_contact.tools.utils import (
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
+    visualize_planar_pushing_trajectory_legacy,
 )
 
 num_time_steps = 10  # TODO: Change
@@ -306,19 +310,32 @@ f_c_Ws_sols = np.vstack(
     ]
 )
 
-traj = SimplePlanarPushingTrajectory(
-    result.GetSolution(p_WBs),
-    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-    evaluate_np_expressions_array(p_WPs, result),  # type: ignore
-    f_c_Ws_sols,
-    dt,
-    config,
-)
-
-visualize_planar_pushing_trajectory(
-    traj,  # type: ignore
-    save=True,
-    # show=True,
-    filename=f"direct_trajopt_test",
-    visualize_knot_points=True,
-)
+visualizer = "old"
+if visualizer == "new":
+    traj = SimplePlanarPushingTrajectory(
+        result.GetSolution(p_WBs),
+        [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+        evaluate_np_expressions_array(p_WPs, result),  # type: ignore
+        f_c_Ws_sols,
+        dt,
+        config,
+    )
+    visualize_planar_pushing_trajectory(
+        traj,  # type: ignore
+        save=True,
+        # show=True,
+        filename=f"direct_trajopt_test",
+        visualize_knot_points=True,
+    )
+else:
+    traj_old = OldPlanarPushingTrajectory(
+        dt,
+        [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+        result.GetSolution(p_WBs).T,
+        evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
+        np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
+        result.GetSolution(p_BPs).T,
+    )
+    visualize_planar_pushing_trajectory_legacy(
+        traj_old, slider.geometry, pusher_radius=0.01
+    )
