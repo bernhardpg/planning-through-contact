@@ -208,6 +208,15 @@ def test_get_signed_distance() -> None:
     assert np.isclose(box.get_signed_distance(np.array([0.2, -0.2])), target_dist)
     assert np.isclose(box.get_signed_distance(np.array([0.2, 0.2])), target_dist)
 
+    # inside left
+    assert np.isclose(box.get_signed_distance(np.array([-0.1, 0])), -0.05)
+    # inside right
+    assert np.isclose(box.get_signed_distance(np.array([0.1, 0])), -0.05)
+    # inside top
+    assert np.isclose(box.get_signed_distance(np.array([0, 0.07])), -0.03)
+    # inside bottom
+    assert np.isclose(box.get_signed_distance(np.array([0, -0.07])), -0.03)
+
 
 def test_get_jacobian() -> None:
     box = Box2d(width=0.3, height=0.2)

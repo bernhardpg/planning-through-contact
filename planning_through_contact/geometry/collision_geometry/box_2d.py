@@ -434,10 +434,14 @@ class Box2d(CollisionGeometry):
             diff = pos - self.vertices[2]
             dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
             return dist
-        else:
-            raise NotImplementedError(
-                "SDF not implemented for positions that penetrate geometry"
-            )
+        else:  # inside box
+            dist_to_left = self.width / 2 + pos_x
+            dist_to_right = self.width / 2 - pos_x
+
+            dist_to_top = self.height / 2 - pos_y
+            dist_to_bottom = self.height / 2 + pos_y
+
+            return -min((dist_to_top, dist_to_bottom, dist_to_left, dist_to_right))
 
     def get_contact_jacobian(self, pos: npt.NDArray) -> npt.NDArray[Any]:
         """
