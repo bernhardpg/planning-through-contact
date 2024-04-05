@@ -35,6 +35,7 @@ from planning_through_contact.visualize.planar_pushing import (
 num_time_steps = 10  # TODO: Change
 dt = 0.1  # TODO: Change
 end_time = num_time_steps * dt - dt
+mu = 0.4
 
 config = get_default_plan_config()
 dynamics_config = config.dynamics_config
@@ -56,8 +57,10 @@ prog = MathematicalProgram()
 # Define decision variables
 p_WBs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_WBs")
 p_BPs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "p_BPs")
-normal_forces = prog.NewContinuousVariables(num_time_steps - 1, "lambda_n")
-friction_forces = prog.NewContinuousVariables(num_time_steps - 1, "lambda_f")
+normal_forces = prog.NewContinuousVariables(num_time_steps - 1, 1, "lambda_n")
+friction_forces = prog.NewContinuousVariables(num_time_steps - 1, 1, "lambda_f")
+force_comps = np.hstack((normal_forces, friction_forces))
+
 # r_WB_k = [cos_th; sin_th]
 r_WBs = prog.NewContinuousVariables(num_time_steps, NUM_DIMS, "r_WBs")
 
@@ -144,9 +147,14 @@ for k in range(num_time_steps):
     prog.AddConstraint(sdf, np.zeros((1,)), np.ones((1,)) * np.inf, vars=p_BPs[k])
 
 
-# # Enforce friction cone
-# for k in range(num_time_steps):
+# Enforce friction cone
+for lambda_n, lambda_f in force_comps:
+    prog.AddLinearConstraint(lambda_n >= 0)
+    prog.AddLinearConstraint(lambda_f <= mu * lambda_n)
+    prog.AddLinearConstraint(lambda_f >= -mu * lambda_n)
 
+
+J_c = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)
 # # Complementarity constraints
 # for k in range(num_time_steps - 1):
 #     breakpoint()

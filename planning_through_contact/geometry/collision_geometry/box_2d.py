@@ -492,5 +492,5 @@ class Box2d(CollisionGeometry):
             return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
         else:
             raise NotImplementedError(
-                "Contact jacobian not implemented for positions that penetrate geometry"
+                "Contact jacobian not implemented for positions that penetrate geometry or is on the corners"
             )
