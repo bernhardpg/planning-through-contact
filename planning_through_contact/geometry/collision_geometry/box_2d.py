@@ -468,36 +468,36 @@ class Box2d(CollisionGeometry):
         pos_x = pos[0, 0]
         pos_y = pos[1, 0]
 
+        TOL = 1e-12
+
         # Left and top left
         if (
-            pos_x <= -self.width / 2
+            pos_x <= -self.width / 2 + TOL
             and pos_y >= -self.height / 2
             # and pos_y <= self.height / 2
         ):
             return _make_jacobian(self.normal_vecs[3], self.tangent_vecs[3], pos)
         # Right and bottom right
         elif (
-            pos_x >= self.width / 2
+            pos_x >= self.width / 2 - TOL
             # and pos_y >= -self.height / 2
             and pos_y <= self.height / 2
         ):
             return _make_jacobian(self.normal_vecs[1], self.tangent_vecs[1], pos)
         # Top and top right
         elif (
-            pos_y >= self.height / 2
+            pos_y >= self.height / 2 - TOL
             and pos_x >= -self.width / 2
             # and pos_x <= self.width / 2
         ):
             return _make_jacobian(self.normal_vecs[0], self.tangent_vecs[0], pos)
         # Bottom and left bottom
         elif (
-            pos_y <= -self.height / 2
+            pos_y <= -self.height / 2 + TOL
             # and pos_x >= -self.width / 2
             and pos_x <= self.width / 2
         ):
             return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
-        else:
-            raise NotImplementedError(
-                "Contact jacobian not implemented for positions that \
-                penetrate geometry."
-            )
+        else:  # inside box we just return zero
+            # TODO: Could this potentially confuse the solver?
+            return np.zeros((2, 3))

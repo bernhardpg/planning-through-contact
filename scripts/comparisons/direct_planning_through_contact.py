@@ -49,8 +49,8 @@ slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
 slider_target_pose = PlanarPose(0.1, 0, 0)
-pusher_initial_pose = PlanarPose(-0.3, 0, 0)
-pusher_target_pose = PlanarPose(-0.3, 0, 0)
+pusher_initial_pose = PlanarPose(-0.3, -0.05, 0)
+pusher_target_pose = PlanarPose(-0.3, -0.05, 0)
 
 config.start_and_goal = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -169,9 +169,9 @@ for k in range(num_time_steps - 1):
     prog.AddConstraint(_dynamics_constraint, np.zeros((3,)), np.zeros((3,)), vars=vars)
 
 # Enforce non-penetration
-sdf = lambda pos: np.array([slider.geometry.get_signed_distance(pos)])  # type: ignore
+calc_sdf = lambda pos: np.array([slider.geometry.get_signed_distance(pos)])  # type: ignore
 for k in range(num_time_steps):
-    prog.AddConstraint(sdf, np.zeros((1,)), np.ones((1,)) * np.inf, vars=p_BPs[k])
+    prog.AddConstraint(calc_sdf, np.zeros((1,)), np.ones((1,)) * np.inf, vars=p_BPs[k])
 
 
 # Enforce friction cone
@@ -181,9 +181,29 @@ for lambda_n, lambda_f in force_comps:
     prog.AddLinearConstraint(lambda_f >= -mu * lambda_n)
 
 
-# # Complementarity constraints
-# for k in range(num_time_steps - 1):
-#     breakpoint()
+def _only_force_when_contact_constraint(vars: npt.NDArray) -> npt.NDArray:
+    p_BP = vars[0:2]
+    lambda_n = vars[2]
+    sdf = calc_sdf(p_BP)
+
+    constraint_val = sdf * lambda_n
+
+    return np.array([constraint_val])
+
+
+# Complementarity constraints
+for k in range(num_time_steps - 1):
+    p_BP = p_BPs[k]
+    lambda_n, _ = force_comps[k]
+    prog.AddConstraint(
+        _only_force_when_contact_constraint,
+        np.zeros((1,)),
+        np.zeros((1,)),
+        vars=np.concatenate([p_BP, [lambda_n]]),
+    )
+
+# Non-sliding constraint
+# TODO
 
 
 # Create initial guess as straight line interpolation
@@ -298,6 +318,7 @@ def _calc_f_c_W(force_comp, p_BP, R_WB):
     return R_WB @ f_c_B
 
 
+normal_force_sols = result.GetSolution(normal_forces)
 force_comps_sols = result.GetSolution(force_comps)
 p_BPs_sols = result.GetSolution(p_BPs)
 R_WBs_sols = [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs]
@@ -309,6 +330,14 @@ f_c_Ws_sols = np.vstack(
         )
     ]
 )
+
+sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
+compl_consts_vals = [
+    sdf * lambda_n for sdf, lambda_n in zip(sdfs_sols, normal_force_sols)
+]
+
+p_WBs_sols = result.GetSolution(p_WBs)
+p_BPs_sols = result.GetSolution(p_BPs)
 
 visualizer = "old"
 if visualizer == "new":
