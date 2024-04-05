@@ -40,7 +40,7 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
 
-num_time_steps = 10  # TODO: Change
+num_time_steps = 16  # TODO: Change
 dt = 0.1  # TODO: Change
 end_time = num_time_steps * dt - dt
 mu = 0.4
@@ -51,9 +51,9 @@ dynamics_config = config.dynamics_config
 slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.4, 0.2, 0)
-pusher_initial_pose = PlanarPose(-0.3, 0, 0)
-pusher_target_pose = PlanarPose(-0.3, 0, 0)
+slider_target_pose = PlanarPose(0.3, -0.3, 0.1)
+pusher_initial_pose = PlanarPose(-0.3, -0.05, 0)
+pusher_target_pose = PlanarPose(-0.3, -0.05, 0)
 
 config.start_and_goal = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -152,7 +152,7 @@ def _dynamics_constraint(vars: npt.NDArray) -> npt.NDArray:
     trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
 
     tau_c_B = gen_force[2]
-    ang_vel_constraint = omega_WB - tau_c_B
+    ang_vel_constraint = omega_WB - c_tau * tau_c_B
 
     constraint_value = np.concatenate([trans_vel_constraint, [ang_vel_constraint]])
     return constraint_value
@@ -303,17 +303,19 @@ for lambda_n, lambda_f in force_comps:
 
 # Create initial guess as straight line interpolation
 def _interpolate_traj_1d(
-    initial_val: float, target_val: float
+    initial_val: float, target_val: float, duration: float
 ) -> npt.NDArray[np.float64]:
     xs = np.array([0, end_time])
     ys = np.array([initial_val, target_val])
-    x_interpolate = np.arange(0, end_time + dt, dt)
+    x_interpolate = np.arange(0, 0 + duration, dt)
     y_interpolated = np.interp(x_interpolate, xs, ys)
     return y_interpolated
 
 
 def _interpolate_traj(
-    initial_val: npt.NDArray[np.float64], target_val: npt.NDArray[np.float64]
+    initial_val: npt.NDArray[np.float64],
+    target_val: npt.NDArray[np.float64],
+    duration: float,
 ) -> npt.NDArray[np.float64]:
     if len(initial_val.shape) == 2:
         initial_val = initial_val.flatten()
@@ -322,7 +324,7 @@ def _interpolate_traj(
     num_dims = initial_val.shape[0]
     trajs = np.vstack(
         [
-            _interpolate_traj_1d(initial_val[dim], target_val[dim])
+            _interpolate_traj_1d(initial_val[dim], target_val[dim], duration)
             for dim in range(num_dims)
         ]
     ).T  # (num_time_steps, num_dims)
@@ -330,20 +332,53 @@ def _interpolate_traj(
 
 
 th_interpolated = _interpolate_traj_1d(
-    slider_initial_pose.theta, slider_target_pose.theta
+    slider_initial_pose.theta, slider_target_pose.theta, duration=end_time + dt
 )
 r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
 prog.SetInitialGuess(r_WBs, r_WBs_initial_guess)  # type: ignore
 
 p_WBs_interpolated = _interpolate_traj(
-    slider_initial_pose.pos(), slider_target_pose.pos()
+    slider_initial_pose.pos(), slider_target_pose.pos(), duration=end_time + dt
 )
 prog.SetInitialGuess(p_WBs, p_WBs_interpolated)  # type: ignore
 
-p_BPs_interpolated = _interpolate_traj(
-    pusher_initial_pose.pos(), pusher_target_pose.pos()
+
+def find_closest_point_on_geometry(
+    point: npt.NDArray[np.float64], geometry: CollisionGeometry
+) -> npt.NDArray[np.float64]:
+    assert isinstance(geometry, Box2d)  # not yet implemented for T-pusher
+    _prog = MathematicalProgram()
+    closest_point = _prog.NewContinuousVariables(2, 1, "closest_point")
+    x, y = closest_point.flatten()
+
+    _prog.AddLinearConstraint(x <= geometry.width / 2)
+    _prog.AddLinearConstraint(x >= -geometry.width / 2)
+    _prog.AddLinearConstraint(y <= geometry.height / 2)
+    _prog.AddLinearConstraint(y >= -geometry.height / 2)
+
+    diff = closest_point - point
+    sq_dist = (diff.T @ diff).item()
+
+    _prog.AddQuadraticCost(sq_dist)  # type: ignore
+    _result = Solve(_prog)
+    assert _result.is_success()
+
+    return _result.GetSolution(closest_point).reshape((2, 1))
+
+
+closest_point = find_closest_point_on_geometry(
+    pusher_initial_pose.pos(), slider.geometry
 )
-prog.SetInitialGuess(p_BPs, p_BPs_interpolated)  # type: ignore
+
+p_BPs_interpolated_start = _interpolate_traj(
+    pusher_initial_pose.pos(), closest_point, duration=(end_time + dt) / 2
+)
+p_BPs_interpolated_end = _interpolate_traj(
+    closest_point, pusher_target_pose.pos(), duration=(end_time + dt) / 2
+)
+# We make the finger touch the object at the middle point as an initial guess
+p_BPs_initial_guess = np.vstack((p_BPs_interpolated_start, p_BPs_interpolated_end))
+prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
 
 normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.2
 prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
@@ -455,7 +490,7 @@ if visualizer == "new":
     )
 else:
     traj_old = OldPlanarPushingTrajectory(
-        dt,
+        dt * 5,
         [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
         result.GetSolution(p_WBs).T,
         evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore

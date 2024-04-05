@@ -457,10 +457,10 @@ class Box2d(CollisionGeometry):
             tangent_vec: npt.NDArray[np.float64],
             pos: npt.NDArray[Any],
         ) -> npt.NDArray[Any]:
-            last_col = np.array(
-                [cross_2d(pos, normal_vec), cross_2d(pos, tangent_vec)]
-            ).reshape((2, 1))
-            return np.hstack([normal_vec, tangent_vec, last_col])
+            col_1 = np.vstack((normal_vec, cross_2d(pos, normal_vec)))
+            col_2 = np.vstack((tangent_vec, cross_2d(pos, tangent_vec)))
+            J_T = np.hstack([col_1, col_2])
+            return J_T.T
 
         if len(pos.shape) == 1:
             pos = pos.reshape((-1, 1))
