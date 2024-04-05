@@ -441,7 +441,9 @@ class Box2d(CollisionGeometry):
 
     def get_contact_jacobian(self, pos: npt.NDArray) -> npt.NDArray[Any]:
         """
-        Returns the contact jacobian for the point that is closest to the box
+        Returns the contact jacobian for the point that is closest to the box.
+        If the closest point is on a corner, one of the corner faces is picked
+        arbitrarily (but deterministically).
 
         @param pos: position relative to the COM of the box.
         """
@@ -462,35 +464,36 @@ class Box2d(CollisionGeometry):
         pos_x = pos[0, 0]
         pos_y = pos[1, 0]
 
-        # Left
+        # Left and top left
         if (
             pos_x <= -self.width / 2
             and pos_y >= -self.height / 2
-            and pos_y <= self.height / 2
+            # and pos_y <= self.height / 2
         ):
             return _make_jacobian(self.normal_vecs[3], self.tangent_vecs[3], pos)
-        # Right
+        # Right and bottom right
         elif (
             pos_x >= self.width / 2
-            and pos_y >= -self.height / 2
+            # and pos_y >= -self.height / 2
             and pos_y <= self.height / 2
         ):
             return _make_jacobian(self.normal_vecs[1], self.tangent_vecs[1], pos)
-        # Top
+        # Top and top right
         elif (
             pos_y >= self.height / 2
             and pos_x >= -self.width / 2
-            and pos_x <= self.width / 2
+            # and pos_x <= self.width / 2
         ):
             return _make_jacobian(self.normal_vecs[0], self.tangent_vecs[0], pos)
-        # Bottom
+        # Bottom and left bottom
         elif (
             pos_y <= -self.height / 2
-            and pos_x >= -self.width / 2
+            # and pos_x >= -self.width / 2
             and pos_x <= self.width / 2
         ):
             return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
         else:
             raise NotImplementedError(
-                "Contact jacobian not implemented for positions that penetrate geometry or is on the corners"
+                "Contact jacobian not implemented for positions that \
+                penetrate geometry."
             )

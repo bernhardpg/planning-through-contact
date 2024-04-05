@@ -79,19 +79,6 @@ p_WPs = [
     _create_p_WP(p_WB, R_WB, p_BP) for p_WB, R_WB, p_BP in zip(p_WBs, R_WBs, p_BPs)
 ]
 
-# TODO: fix forces
-# f_c_Bs = prog.NewContinuousVariables(num_time_steps - 1, NUM_DIMS, "f_c_Bs")
-# f_c_Ws = [R_WB @ f_c_B for R_WB, f_c_B in zip(R_WBs, f_c_Bs)]
-
-v_WBs = calc_displacements(p_WBs, dt)
-r_WBs_dot = calc_displacements(r_WBs, dt)
-R_WBs_dot = [
-    np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
-    for cos_dot, sin_dot in r_WBs_dot
-]
-# In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
-omega_WBs = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(R_WBs, R_WBs_dot)]
-
 
 # Initial and target constraints on slider
 p_WB_initial = slider_initial_pose.pos().flatten()
@@ -125,21 +112,54 @@ for cos_th, sin_th in r_WBs:
 c_f = dynamics_config.f_max**-2
 c_tau = dynamics_config.tau_max**-2
 
+_calc_contact_jacobian = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)  # type: ignore
+
+
+def _calc_omega_WB(r_WB_curr, r_WB_next):
+    R_WB_curr = _two_d_rot_matrix_from_cos_sin(r_WB_curr[0], r_WB_curr[1])
+    R_WB_next = _two_d_rot_matrix_from_cos_sin(r_WB_next[0], r_WB_next[1])
+    R_WB_dot = (R_WB_next - R_WB_curr) / dt
+    # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
+    omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
+    return omega_WB
+
+
+def _dynamics_constraint(vars: npt.NDArray) -> npt.NDArray:
+    p_WB_curr = vars[0:2]
+    p_WB_next = vars[2:4]
+    r_WB_curr = vars[4:6]
+    r_WB_next = vars[6:8]
+    f_comps = vars[8:10]
+    p_BP = vars[10:12]
+
+    R_WB = _two_d_rot_matrix_from_cos_sin(r_WB_curr[0], r_WB_curr[1])
+    v_WB = (p_WB_next - p_WB_curr) / dt
+    omega_WB = _calc_omega_WB(r_WB_curr, r_WB_next)
+
+    J_c = _calc_contact_jacobian(p_BP)
+    gen_force = J_c.T @ f_comps
+
+    f_c_B = gen_force[:2]
+    trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
+
+    tau_c_B = gen_force[2]
+    ang_vel_constraint = omega_WB - tau_c_B
+
+    return np.concatenate([trans_vel_constraint, [ang_vel_constraint]])
+
+
 for k in range(num_time_steps - 1):
-    # f_c_B = f_c_Bs[k]
-    v_WB = v_WBs[k]
-    p_Bc = p_BPs[k]  # TODO: Add radius
-    R_WB = R_WBs[k]
-    omega_WB = omega_WBs[k]
+    p_WB_curr = p_WBs[k]
+    p_WB_next = p_WBs[k + 1]
+    r_WB_curr = r_WBs[k]
+    r_WB_next = r_WBs[k + 1]
+    f_comp_curr = force_comps[k]
+    p_BP_curr = p_BPs[k]
 
-    # trans_vel_constraint = v_WB - R_WB @ (c_f * f_c_B)
-    # for c in trans_vel_constraint:
-    #     prog.AddQuadraticConstraint(c, 0, 0)
-
-    # torque = c_tau * cross_2d(p_Bc.reshape((2, 1)), f_c_B.reshape((2, 1)))
-    # ang_vel_constraint = omega_WB - torque
-    # prog.AddQuadraticConstraint(ang_vel_constraint, 0, 0)
-
+    vars = np.concatenate(
+        (p_WB_curr, p_WB_next, r_WB_curr, r_WB_next, f_comp_curr, p_BP_curr)
+    )
+    prog.AddConstraint(_dynamics_constraint, np.zeros((3,)), np.zeros((3,)), vars=vars)
 
 # Enforce non-penetration
 sdf = lambda pos: np.array([slider.geometry.get_signed_distance(pos)])  # type: ignore
@@ -154,7 +174,6 @@ for lambda_n, lambda_f in force_comps:
     prog.AddLinearConstraint(lambda_f >= -mu * lambda_n)
 
 
-J_c = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)
 # # Complementarity constraints
 # for k in range(num_time_steps - 1):
 #     breakpoint()
