@@ -45,7 +45,7 @@ camera_configs:
     position: [0.5, 0.0, 1.0]
     width: 96
     height: 96
-    show_rgb: true
+    show_rgb: false
 collect_data: false
 data_dir: 'diffusion_policy_logs'
 multi_run_config:

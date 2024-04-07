@@ -44,7 +44,9 @@ from planning_through_contact.visualize.analysis import (
     plot_cost,
     plot_velocities,
 )
-
+from planning_through_contact.simulation.controllers.replay_position_source import (
+    ReplayPositionSource,
+)
 
 def run_sim(
     plan: str,
@@ -141,8 +143,11 @@ def run_sim(
         data_dir = data_collection_dir
     )
 
-    # Option 2: Use open/closed loop controller based on planned trajectory
-    position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
+    position_source = ReplayPositionSource(
+        traj=traj,
+        dt = 0.025,
+        delay=sim_config.delay_before_execution
+    )
 
     ## Set up position controller
     position_controller = IiwaHardwareStation(
@@ -206,7 +211,7 @@ if __name__ == "__main__":
         print(f"state estimator meshcat")
         state_estimator_meshcat = StartMeshcat()
         run_sim(
-            plan="trajectories/data_collection_trajectories_tee_v1/run_0/traj_1/trajectory/traj_rounded.pkl",
+            plan="trajectories/data_collection_trajectories_tee_v1/run_0/traj_0/trajectory/traj_rounded.pkl",
             save_recording=True,
             debug=False,
             station_meshcat=station_meshcat,

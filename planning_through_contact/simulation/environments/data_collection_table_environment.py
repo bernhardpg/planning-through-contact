@@ -11,6 +11,7 @@ from pydrake.all import (
     Simulator,
     StateInterpolatorWithDiscreteDerivative,
     DiscreteTimeDelay,
+    ZeroOrderHold
 )
 from pydrake.systems.sensors import (
     ImageWriter,
@@ -95,7 +96,7 @@ class DataCollectionTableEnvironment:
             "DesiredStateInterpolator",
             StateInterpolatorWithDiscreteDerivative(
                 self._robot_system._num_positions,
-                self._sim_config.time_step,
+                self._diff_ik_time_step,
                 suppress_initial_transient=True,
             ),
         )
@@ -128,6 +129,12 @@ class DataCollectionTableEnvironment:
                 ),
             )
 
+            self._diff_ik_zoh = builder.AddSystem(
+                ZeroOrderHold(
+                    period_sec = self._diff_ik_time_step,
+                    vector_size = diff_ik_plant.num_positions()
+                )
+            )
 
         # Add system to convert slider_pose to generalized coords
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
@@ -164,6 +171,11 @@ class DataCollectionTableEnvironment:
 
             builder.Connect(
                 self._diff_ik_system.get_output_port(),
+                self._diff_ik_zoh.get_input_port(),
+            )
+
+            builder.Connect(
+                self._diff_ik_zoh.get_output_port(),
                 self._desired_state_source.get_input_port(),
             )
 
