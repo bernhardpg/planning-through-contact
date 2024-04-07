@@ -62,6 +62,9 @@ multi_run_config:
 ## Robot specific configs
 # sim_config
 scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+default_joint_positions:
+  - {pusher_start_pose.x}
+  - {pusher_start_pose.y}
 
 # position controller / robot station
 robot_station:

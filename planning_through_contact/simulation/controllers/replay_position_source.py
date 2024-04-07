@@ -97,6 +97,7 @@ class ReplayPositionSource(DesiredPlanarPositionSourceBase):
         self._builder = builder = DiagramBuilder()
         self._replay_publisher = builder.AddSystem(ReplayPublisher(traj, delay))
         self._demux = builder.AddSystem(Demultiplexer([2,1]))
+        self.dt = dt
         
         # Connect Systems
         if dt is None:
@@ -145,3 +146,6 @@ class ReplayPositionSource(DesiredPlanarPositionSourceBase):
         )
 
         builder.BuildInto(self)
+    
+    def get_time_step(self):
+        return self.dt

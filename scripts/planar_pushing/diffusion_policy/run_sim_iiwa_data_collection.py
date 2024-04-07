@@ -153,8 +153,6 @@ def run_sim(
         desired_position_source=position_source,
         robot_system=position_controller,
         sim_config=sim_config,
-        optitrack_config=None,
-        station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
     )
     recording_name = (

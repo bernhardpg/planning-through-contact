@@ -9,7 +9,8 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Simulator,
-    StateInterpolatorWithDiscreteDerivative
+    StateInterpolatorWithDiscreteDerivative,
+    DiscreteTimeDelay,
 )
 from pydrake.systems.sensors import (
     ImageWriter,
@@ -39,6 +40,17 @@ from planning_through_contact.simulation.systems.planar_pose_to_generalized_coor
 from planning_through_contact.visualize.analysis import (
     PlanarPushingLog,
 )
+from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
+    PlanarTranslationToRigidTransformSystem,
+)
+from planning_through_contact.simulation.systems.diff_ik_system import DiffIKSystem
+from planning_through_contact.simulation.sim_utils import LoadRobotOnly
+from planning_through_contact.simulation.controllers.replay_position_source import (
+    ReplayPositionSource,
+)
+from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
+    CylinderActuatedStation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +65,13 @@ class DataCollectionTableEnvironment:
     ):
         self._desired_position_source = desired_position_source
         self._robot_system = robot_system
+        self._robot_model_name = robot_system.robot_model_name
         self._sim_config = sim_config
         self._meshcat = state_estimator_meshcat
         self._simulator = None
         self._save_dir = self._setup_data_dir(sim_config.data_dir)
         self._image_dir = f'{self._save_dir}/images'
+        self._diff_ik_time_step = self._get_diff_ik_time_step()
 
         builder = DiagramBuilder()
 
@@ -86,9 +100,36 @@ class DataCollectionTableEnvironment:
             ),
         )
 
+        # IK systems
+        z_value = sim_config.pusher_z_offset
+        if type(self._robot_system) != CylinderActuatedStation:
+            self._position_to_rigid_transform = builder.AddNamedSystem(
+                "PlanarTranslationToRigidTransformSystem",
+                PlanarTranslationToRigidTransformSystem(z_dist=z_value),
+            )
+
+            diff_ik_plant = LoadRobotOnly(sim_config, sim_config.scene_directive_name)
+            self._diff_ik_system = builder.AddNamedSystem(
+                "DiffIKSystem",
+                DiffIKSystem(
+                    plant=diff_ik_plant,
+                    time_step=self._diff_ik_time_step,
+                    default_joint_positions=sim_config.default_joint_positions,
+                    disregard_angle=False,
+                ),
+            )
+
+            state_size = diff_ik_plant.num_positions() + diff_ik_plant.num_velocities()
+            self._time_delay = builder.AddSystem(
+                DiscreteTimeDelay(
+                    update_sec=self._diff_ik_time_step,
+                    delay_time_steps=1,
+                    vector_size=state_size
+                ),
+            )
+
+
         # Add system to convert slider_pose to generalized coords
-        # TODO: better way to get z_value
-        z_value = 0.025
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
             "PlanarPoseToGeneralizedCoords",
             PlanarPoseToGeneralizedCoords(
@@ -97,15 +138,49 @@ class DataCollectionTableEnvironment:
             ),
         )
 
-        builder.Connect(
-            self._desired_position_source.GetOutputPort("planar_position_command"),
-            self._desired_state_source.get_input_port(),
-        )
+        
+        if type(self._robot_system) == CylinderActuatedStation:
+            # No diff IK required for actuated cylinder
+            builder.Connect(
+                self._desired_position_source.GetOutputPort("planar_position_command"),
+                self._desired_state_source.get_input_port(),
+            )
 
-        builder.Connect(
-            self._desired_state_source.get_output_port(),
-            self._state_estimator.GetInputPort("robot_state"),
-        )
+            builder.Connect(
+                self._desired_state_source.get_output_port(),
+                self._state_estimator.GetInputPort("robot_state"),
+            )
+        else:
+            # Diff IK connections
+            builder.Connect(
+                self._desired_position_source.GetOutputPort("planar_position_command"),
+                self._position_to_rigid_transform.GetInputPort("vector_input"),
+            )
+
+            builder.Connect(
+                self._position_to_rigid_transform.GetOutputPort("rigid_transform_output"),
+                self._diff_ik_system.GetInputPort("rigid_transform_input")
+            )
+
+            builder.Connect(
+                self._diff_ik_system.get_output_port(),
+                self._desired_state_source.get_input_port(),
+            )
+
+            builder.Connect(
+                self._desired_state_source.get_output_port(),
+                self._state_estimator.GetInputPort("robot_state"),
+            )
+
+            builder.Connect(
+                self._state_estimator.GetOutputPort(f"{self._robot_model_name}_state"),
+                self._time_delay.get_input_port()
+            )
+
+            builder.Connect(
+                self._time_delay.get_output_port(),
+                self._diff_ik_system.GetInputPort("state")
+            )
 
         # Connections to update the object position within state estimator
         builder.Connect(
@@ -159,6 +234,12 @@ class DataCollectionTableEnvironment:
         
         self.context = self._simulator.get_mutable_context()
 
+    def _get_diff_ik_time_step(self):
+        if type(self._desired_position_source) == ReplayPositionSource and \
+            self._desired_position_source.get_time_step() is not None:
+            return self._desired_position_source.get_time_step()
+        return self._sim_config.time_step
+
     def simulate(
         self,
         timeout=1e8,
@@ -173,7 +254,6 @@ class DataCollectionTableEnvironment:
             self._state_estimator.meshcat.StartRecording()
             self._meshcat.StartRecording()
 
-        # TODO: ask Bernhard why we need this line
         time_step = self._sim_config.time_step * 10
         for t in np.append(np.arange(0, timeout, time_step), timeout):
             self._simulator.AdvanceTo(t)

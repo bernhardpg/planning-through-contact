@@ -78,4 +78,4 @@ robot_station:
 
 ## Data Collection Config
 data_collection_config:
-  _target_: 'insert class name here'
+  _target_: 'insert class name here, class not yet created'

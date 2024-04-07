@@ -110,7 +110,8 @@ def run_sim(
         pusher_z_offset=0.03,
         camera_configs=[camera_config],
         collect_data=True,
-        data_dir = data_collection_dir
+        data_dir = data_collection_dir,
+        default_joint_positions=None
     )
 
     position_source = ReplayPositionSource(
