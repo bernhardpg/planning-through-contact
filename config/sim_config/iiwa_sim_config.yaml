@@ -52,8 +52,9 @@ camera_configs:
     width: 96
     height: 96
     show_rgb: false
-collect_data: false
-data_dir: 'diffusion_policy_logs'
+collect_data: true
+data_collection_dir: 'temp'
+log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
   num_runs: 1

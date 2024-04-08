@@ -6,7 +6,7 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'box'
+slider_type: 'tee'
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:
@@ -46,8 +46,9 @@ camera_configs:
     width: 96
     height: 96
     show_rgb: false
-collect_data: false
-data_dir: 'diffusion_policy_logs'
+collect_data: true
+log_dir: 'diffusion_policy_logs'
+data_collection_dir: 'temp'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
   num_runs: 1

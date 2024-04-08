@@ -30,11 +30,6 @@ from planning_through_contact.simulation.controllers.robot_system_base import (
         'config','sim_config'))
 )
 def run_sim(cfg: OmegaConf):
-    logging.basicConfig(level=logging.INFO)
-    logging.getLogger(
-        "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
-    ).setLevel(logging.DEBUG)
-
     # start meshcat
     print(f"station meshcat")
     station_meshcat = StartMeshcat()
@@ -46,6 +41,7 @@ def run_sim(cfg: OmegaConf):
     
     # TODO: move into data_collection config
     plan="trajectories/data_collection_trajectories_box_v2/run_0/traj_0/trajectory/traj_rounded.pkl"
+    # plan="trajectories/data_collection_trajectories_tee_v4/run_0/traj_0/trajectory/traj_rounded.pkl"
     traj = PlanarPushingTrajectory.load(plan)
     position_source = ReplayPositionSource(
         traj=traj,
@@ -55,9 +51,6 @@ def run_sim(cfg: OmegaConf):
 
     ## Set up position controller
     # TODO: load with hydra instead (currently giving camera config errors)
-    # overrides = {'sim_config': sim_config, 'meshcat': station_meshcat}
-    # position_controller: RobotSystemBase = hydra.utils.instantiate(cfg.robot_station, **overrides)
-    
     module_name, class_name = cfg.robot_station._target_.rsplit(".", 1)
     robot_system_class = getattr(importlib.import_module(module_name), class_name)
     position_controller: RobotSystemBase = robot_system_class(

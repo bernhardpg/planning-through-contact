@@ -1,4 +1,5 @@
 import numpy as np
+import logging
 
 from pydrake.systems.framework import LeafSystem
 from pydrake.all import (
@@ -13,7 +14,6 @@ from pydrake.all import (
 )
 from pydrake.solvers import Solve
 
-
 class DiffIKSystem(LeafSystem):
     """Solves inverse kinematics"""
 
@@ -21,7 +21,8 @@ class DiffIKSystem(LeafSystem):
             self, plant: MultibodyPlant,
             time_step: float,
             default_joint_positions: np.ndarray = None,
-            disregard_angle: bool = False # TODO: implement this
+            disregard_angle: bool = False, # TODO: implement this
+            log_path: str = None # TODO: implement with python logging instead
         ):
         super().__init__()
         if default_joint_positions is not None:
@@ -32,9 +33,14 @@ class DiffIKSystem(LeafSystem):
         self._time_step = time_step
         self._default_joint_positions = default_joint_positions
         self._disregard_angle = disregard_angle
+        self._log_path = log_path
         self._paramters = self._get_diff_ik_params()
         self._pusher_frame = self._plant.GetFrameByName("pusher_end")
         self._consequtive_ik_fails = 0
+        self._max_consequtive_ik_fails = 0
+        if log_path is not None:
+            with open(self._log_path, 'w') as f:
+                    f.write(f"Max consequtive IK fails: {self._max_consequtive_ik_fails}")
 
         # Declare I/O ports
         self.DeclareAbstractInputPort(
@@ -69,6 +75,11 @@ class DiffIKSystem(LeafSystem):
             return
 
         self._consequitive_ik_fails += 1
+        if self._consequitive_ik_fails > self._max_consequtive_ik_fails:
+            self._max_consequtive_ik_fails = self._consequitive_ik_fails
+            if self._log_path is not None:
+                with open(self._log_path, 'w') as f:
+                    f.write(f"Max consequtive IK fails: {self._max_consequtive_ik_fails}")
         output.SetFromVector(state[:self._plant.num_positions()])
     
     def _get_diff_ik_params(self):

@@ -70,8 +70,9 @@ class DataCollectionTableEnvironment:
         self._sim_config = sim_config
         self._meshcat = state_estimator_meshcat
         self._simulator = None
-        self._save_dir = self._setup_data_dir(sim_config.data_dir)
-        self._image_dir = f'{self._save_dir}/images'
+        self._data_collection_dir = self._setup_data_collection_dir(sim_config.data_collection_dir)
+        self._image_dir = f'{self._data_collection_dir}/images'
+        self._log_path = f'{self._data_collection_dir}/log.txt'
         self._diff_ik_time_step = self._get_diff_ik_time_step()
 
         builder = DiagramBuilder()
@@ -117,6 +118,7 @@ class DataCollectionTableEnvironment:
                     time_step=self._diff_ik_time_step,
                     default_joint_positions=sim_config.default_joint_positions,
                     disregard_angle=False,
+                    log_path=self._log_path,
                 ),
             )
 
@@ -140,7 +142,7 @@ class DataCollectionTableEnvironment:
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
             "PlanarPoseToGeneralizedCoords",
             PlanarPoseToGeneralizedCoords(
-                z_value=z_value,
+                z_value=0.025, # Assumes objects are 5cm tall
                 z_axis_is_positive=True,
             ),
         )
@@ -276,7 +278,7 @@ class DataCollectionTableEnvironment:
 
         else:
             self._simulator.AdvanceTo(timeout)
-        self.save_logs(recording_file, self._save_dir)
+        self.save_logs(recording_file, self._data_collection_dir)
         self.save_data()
 
     def export_diagram(self, filename: str):
@@ -310,7 +312,7 @@ class DataCollectionTableEnvironment:
         To log additional information, refer to table_environment.py
         """
         if self._sim_config.collect_data:
-            assert self._sim_config.data_dir is not None
+            assert self._sim_config.data_collection_dir is not None
 
             # Save the logs
             pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
@@ -320,7 +322,7 @@ class DataCollectionTableEnvironment:
                 pusher_pose_desired_log
             )
 
-            log_path = os.path.join(self._save_dir, "planar_position_command.pkl")
+            log_path = os.path.join(self._data_collection_dir, "planar_position_command.pkl")
             with open(log_path, "wb") as f:
                 pickle.dump(pusher_desired, f)
 
@@ -342,18 +344,19 @@ class DataCollectionTableEnvironment:
             time_in_recording=t,
         )
     
-    def _setup_data_dir(self, data_dir: str) -> str:
-        assert data_dir is not None
-        # Create data_dir if it doesn't already exist
-        if not os.path.exists(data_dir):
-            os.mkdir(data_dir)
+    def _setup_data_collection_dir(self, data_collection_dir: str) -> str:
+        assert data_collection_dir is not None
+        # Create data_collection_dir if it doesn't already exist
+        if not os.path.exists(data_collection_dir):
+            os.mkdir(data_collection_dir)
 
         # Find the next available trajectory index
         traj_idx = 0
-        for path in os.listdir(data_dir):
-            if os.path.isdir(os.path.join(data_dir, path)):
+        for path in os.listdir(data_collection_dir):
+            if os.path.isdir(os.path.join(data_collection_dir, path)):
                 traj_idx += 1
         
         # Setup the current directory
-        os.makedirs(f'{data_dir}/{traj_idx}/images')
-        return f'{data_dir}/{traj_idx}'
+        os.makedirs(f'{data_collection_dir}/{traj_idx}/images')
+        open(f'{data_collection_dir}/{traj_idx}/log.txt', 'w').close()
+        return f'{data_collection_dir}/{traj_idx}'

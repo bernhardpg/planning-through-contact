@@ -26,9 +26,6 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
 )
 def run_sim(cfg: OmegaConf):
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger(
-        "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
-    ).setLevel(logging.DEBUG)
 
     # start meshcat
     print(f"station meshcat")
@@ -44,9 +41,6 @@ def run_sim(cfg: OmegaConf):
 
     # Set up position controller
     # TODO: load with hydra instead (currently giving camera config errors)
-    # overrides = {'sim_config': sim_config, 'meshcat': station_meshcat}
-    # position_controller: RobotSystemBase = hydra.utils.instantiate(cfg.robot_station, **overrides)
-    
     module_name, class_name = cfg.robot_station._target_.rsplit(".", 1)
     robot_system_class = getattr(importlib.import_module(module_name), class_name)
     position_controller: RobotSystemBase = robot_system_class(
@@ -78,7 +72,7 @@ def run_sim(cfg: OmegaConf):
     
     # Update logs and save config file
     OmegaConf.save(cfg, f"{save_dir}/sim_config.yaml")
-    with open(f"{cfg.data_dir}/checkpoint_statistics.txt", "a") as f:
+    with open(f"{cfg.data_collection_dir}/checkpoint_statistics.txt", "a") as f:
         f.write(f"{sim_config.diffusion_policy_config.checkpoint}\n")
         f.write(f"Seed: {seed}\n")
         f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")

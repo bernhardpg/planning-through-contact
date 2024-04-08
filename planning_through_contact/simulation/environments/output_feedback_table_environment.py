@@ -412,12 +412,12 @@ class OutputFeedbackTableEnvironment:
             self._simulator.AdvanceTo(timeout)
 
         traj_idx = 0
-        if os.path.exists(self._sim_config.data_dir):
-            for path in os.listdir(self._sim_config.data_dir):
-                if os.path.isdir(os.path.join(self._sim_config.data_dir, path)):
+        if os.path.exists(self._sim_config.log_dir):
+            for path in os.listdir(self._sim_config.log_dir):
+                if os.path.isdir(os.path.join(self._sim_config.log_dir, path)):
                     traj_idx += 1
-        os.makedirs(os.path.join(self._sim_config.data_dir, str(traj_idx)))
-        save_dir = pathlib.Path(self._sim_config.data_dir).joinpath(str(traj_idx))
+        os.makedirs(os.path.join(self._sim_config.log_dir, str(traj_idx)))
+        save_dir = pathlib.Path(self._sim_config.log_dir).joinpath(str(traj_idx))
         
         self.save_logs(recording_file, save_dir)
         self.save_data(save_dir)
@@ -531,7 +531,7 @@ class OutputFeedbackTableEnvironment:
 
     def save_data(self, save_dir):
         if self._sim_config.collect_data:
-            assert self._sim_config.data_dir is not None
+            assert self._sim_config.log_dir is not None
 
             # Save the logs
             pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
