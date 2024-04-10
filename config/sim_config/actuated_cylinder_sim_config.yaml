@@ -74,7 +74,7 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: true
+  generate_plans: false
   render_plans: true
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
@@ -100,12 +100,12 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 163
-    num_plans: 10
+    num_plans: 2
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
     noise_final_pose: false
 
   ## Supercloud
-  LLSUB_RANK: 2
-  LLSUB_SIZE: 3
+  LLSUB_RANK: null
+  LLSUB_SIZE: null

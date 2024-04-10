@@ -362,15 +362,10 @@ class DataCollectionTableEnvironment:
         if recording_file:
             self._state_estimator.meshcat.StartRecording()
             self._meshcat.StartRecording()
-
-        time_step = self._sim_config.time_step * 10
-        for t in np.append(np.arange(0, timeout, time_step), timeout):
-            self._simulator.AdvanceTo(t)
-            self._visualize_desired_slider_pose(t)
-            # Print the time every 5 seconds
-            if t % 5 == 0:
-                logger.info(f"t={t}")
-
+            time_step = self._sim_config.time_step * 10
+            for t in np.append(np.arange(0, timeout, time_step), timeout):
+                self._simulator.AdvanceTo(t)
+                self._visualize_desired_slider_pose(t)
         else:
             self._simulator.AdvanceTo(timeout)
         self.save_logs(recording_file, self._data_collection_dir)
@@ -439,7 +434,7 @@ class DataCollectionTableEnvironment:
         assert data_collection_dir is not None
         # Create data_collection_dir if it doesn't already exist
         if not os.path.exists(data_collection_dir):
-            os.mkdir(data_collection_dir)
+            os.makedirs(data_collection_dir)
 
         # Find the next available trajectory index
         traj_idx = 0
