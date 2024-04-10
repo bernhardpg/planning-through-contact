@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Parse command line arguments
+# Usage: ./submit_data_generation.sh --config-name CONFIG_NAME [NUM_NODE, NUM_PROC, NUM_THREAD]
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -c|--config-name) CONFIG_NAME="$2"; shift ;;

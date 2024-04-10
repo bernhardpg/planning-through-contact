@@ -1,10 +1,25 @@
 #!/bin/bash
 
-# Set the path to the directory containing checkpoints
-checkpoint_dir="/home/adam/workspace/gcs-diffusion/data/outputs/push_box_v2/checkpoints"
+# Initialize variables
+checkpoint_dir=""
+
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -d|--checkpoint-dir) checkpoint_dir="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+# Check if checkpoint_dir is set
+if [ -z "$checkpoint_dir" ]; then
+    echo "Checkpoint directory is not provided. Use -d or --checkpoint-dir to specify the checkpoint directory."
+    exit 1
+fi
 
 # Set the path to your Python script
-python_script="scripts/planar_pushing/run_sim_actuated_cylinder_diffusion.py"
+python_script="scripts/planar_pushing/diffusion_policy/run_sim_diffusion.py"
 
 # Get a list of checkpoints in reverse alphabetical order
 checkpoints=($(ls -r "${checkpoint_dir}"/*.ckpt))
@@ -17,17 +32,7 @@ for ((i=${#checkpoints[@]}-1; i>=0; i--)); do
     checkpoint_name="${checkpoint_filename%.*}"
 
     # Run the Python script with the --checkpoint argument
-    python "${python_script}" --config-name "${config_name}" diffusion_policy_config.checkpoint="${checkpoint}" \
-        multi_run_config.num_runs=10 multi_run_config.max_attempt_duration=90 multi_run_config.seed=9001
+    python "${python_script}" --config-name "${config_name}" diffusion_policy_config.checkpoint="${checkpoint}"
 
     echo "Evaluated checkpoint: ${checkpoint_name}"
 done
-
-# # Iterate through --traj_idx values from 5 to 50
-# for traj_idx in {6..99}; do
-#     # Run the Python script with the --traj_idx argument
-#     # uses default checkpoint, seed, etc
-#     python "${python_script}" --num_runs 1 --traj_idx "${traj_idx}"
-
-#     # Optionally, you can print a message for reference
-#     echo "Evaluated --traj_idx: ${traj_idx}"
