@@ -1,5 +1,4 @@
 import numpy as np
-import logging
 
 from pydrake.systems.framework import LeafSystem
 from pydrake.all import (
@@ -11,8 +10,8 @@ from pydrake.all import (
     DifferentialInverseKinematicsParameters,
     DifferentialInverseKinematicsStatus,
     InverseKinematics,
+    Solve
 )
-from pydrake.solvers import Solve
 
 class DiffIKSystem(LeafSystem):
     """Solves inverse kinematics"""
@@ -21,26 +20,19 @@ class DiffIKSystem(LeafSystem):
             self, plant: MultibodyPlant,
             time_step: float,
             default_joint_positions: np.ndarray = None,
-            disregard_angle: bool = False, # TODO: implement this
-            log_path: str = None # TODO: implement with python logging instead
+            log_path: str = None
         ):
         super().__init__()
-        if default_joint_positions is not None:
-            assert len(default_joint_positions) == plant.num_positions()
         
         self._plant = plant
         self._plant_context = self._plant.CreateDefaultContext()
         self._time_step = time_step
         self._default_joint_positions = default_joint_positions
-        self._disregard_angle = disregard_angle
         self._log_path = log_path
         self._paramters = self._get_diff_ik_params()
         self._pusher_frame = self._plant.GetFrameByName("pusher_end")
         self._consequtive_ik_fails = 0
         self._max_consequtive_ik_fails = 0
-        if log_path is not None:
-            with open(self._log_path, 'w') as f:
-                    f.write(f"Max consequtive IK fails: {self._max_consequtive_ik_fails}")
 
         # Declare I/O ports
         self.DeclareAbstractInputPort(
@@ -58,8 +50,9 @@ class DiffIKSystem(LeafSystem):
         state = self.EvalVectorInput(context, 1).get_mutable_value()
         if np.allclose(state, np.zeros_like(state)):
             state[:self._plant.num_positions()] = self._default_joint_positions
+        
+        # Solve diff IK
         diff_ik_result = self._solve_diff_ik(state, rigid_transform)
-
         if diff_ik_result.status == DifferentialInverseKinematicsStatus.kSolutionFound:
             v = diff_ik_result.joint_velocities
             q = state[:self._plant.num_positions()] + v * self._time_step
@@ -67,13 +60,14 @@ class DiffIKSystem(LeafSystem):
             output.SetFromVector(q)
             return
         
-        # Try regular IK
-        ik_result = self._attempt_to_solve_ik(rigid_transform, disregard_angle=self._disregard_angle)
+        # Diff IK failed: try optimization-based IK
+        ik_result = self._attempt_to_solve_ik(rigid_transform, disregard_angle=False)
         if ik_result.is_success():
             output.SetFromVector(ik_result.GetSolution())
             self._consequitive_ik_fails = 0
             return
 
+        # Diff IK and optimization-based IK failed
         self._consequitive_ik_fails += 1
         if self._consequitive_ik_fails > self._max_consequtive_ik_fails:
             self._max_consequtive_ik_fails = self._consequitive_ik_fails
@@ -120,15 +114,6 @@ class DiffIKSystem(LeafSystem):
         ik_result = self._solve_ik(pose, disregard_angle, eps = 1e-2)
         if ik_result.is_success():
             return ik_result
-        
-        # if not disregard_angle:
-        #     ik_result = self._solve_ik(pose, disregard_angle=True, eps = 1e-3)
-        #     if ik_result.is_success():
-        #         return ik_result
-
-        #     ik_result = self._solve_ik(pose, disregard_angle=True, eps = 1e-2)
-        #     if ik_result.is_success():
-        #         return ik_result
             
         # all ik attempts failed
         return ik_result
@@ -172,7 +157,6 @@ class DiffIKSystem(LeafSystem):
                 0 - eps,
                 0 + eps,
             )
-
         else:
             ik.AddOrientationConstraint(
                 self._pusher_frame,

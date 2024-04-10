@@ -285,6 +285,7 @@ class TableEnvironment:
 
         else:
             self._simulator.AdvanceTo(timeout)
+        
         self.save_logs(recording_file, save_dir)
 
     def save_logs(self, recording_file: Optional[str], save_dir: str):
@@ -333,16 +334,9 @@ class TableEnvironment:
                 slider_pose_desired_log,
                 save_dir=save_dir,
             )
-
-            # Hack to get num_positions from cylinder object
-            num_positions = None
-            if isinstance(self._robot_system, CylinderActuatedStation):
-                num_positions = self._robot_system._num_positions
-            else:
-                num_positions = self._robot_system.robot.num_positions()
             plot_joint_state_logs(
                 self._joint_state_logger.FindLog(self.context),
-                num_positions,
+                self._robot_system.num_positions(),
                 save_dir=save_dir,
             )
 

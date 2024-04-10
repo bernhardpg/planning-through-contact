@@ -21,7 +21,6 @@ from pydrake.all import (
     PortSwitch,
     Demultiplexer,
     Multiplexer,
-    AddDefaultVisualization,
     RigidTransform,
     Box as DrakeBox,
     RigidBody as DrakeRigidBody,
@@ -31,12 +30,7 @@ from pydrake.all import (
 
 )
 from planning_through_contact.visualize.colors import COLORS
-
 from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
-
-from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
-    solve_ik,
-)
 from planning_through_contact.simulation.systems.joint_velocity_clamp import (
     JointVelocityClamp,
 )
@@ -53,7 +47,6 @@ from planning_through_contact.simulation.sim_utils import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
@@ -324,7 +317,7 @@ class IiwaHardwareStation(RobotSystemBase):
                 "object_state_measured",
             )
         
-        if self._sim_config.camera_configs:
+        if sim_config.camera_configs:
             for camera_config in self._sim_config.camera_configs:
                 builder.ExportOutput(
                     self.station.GetOutputPort(f"{camera_config.name}.rgb_image"),
@@ -358,7 +351,13 @@ class IiwaHardwareStation(RobotSystemBase):
     @property
     def slider_model_name(self) -> str:
         """The name of the robot model."""
-        return "t_pusher"
+        if self._sim_config.slider.name == "box":
+            return "box"
+        else:
+            return "t_pusher"
+        
+    def num_positions(self) -> int:
+        return self._num_positions
     
     def get_station_plant(self):
         return self.station_plant

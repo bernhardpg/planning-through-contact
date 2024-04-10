@@ -10,11 +10,9 @@ from pydrake.all import (
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
-
 from planning_through_contact.simulation.planar_pushing.diffusion_policy_controller import (
     DiffusionPolicyController,
 )
-
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 @dataclass
@@ -41,7 +39,7 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         ## Add Leaf systems
 
         # Diffusion Policy Controller
-        freq = 10.0
+        freq = diffusion_policy_config.freq
         self._diffusion_policy_controller = builder.AddNamedSystem(
             "DiffusionPolicyController",
             DiffusionPolicyController(
@@ -58,17 +56,15 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         )
 
         # Zero Order Hold
-
         self._zero_order_hold = builder.AddNamedSystem(
             "ZeroOrderHold",
             ZeroOrderHold(
                 period_sec=1/freq, 
                 vector_size=2, 
-                # offset_sec=1/(2.0*freq)
-            ),  # Just the x and y positions
+            ),
         )
 
-        # AppendZeros
+        # AppendZeros (add theta to x y positions)
         self._append_zeros = builder.AddSystem(
             AppendZeros(input_size=2, num_zeros=1)
         )

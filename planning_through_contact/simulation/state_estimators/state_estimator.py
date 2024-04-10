@@ -161,13 +161,6 @@ class StateEstimator(Diagram):
         visualizer = MeshcatVisualizer.AddToBuilder(
             builder, self._scene_graph.get_query_output_port(), self.meshcat
         )
-        # self.meshcat.SetTransform(
-        #     path="/Cameras/default",
-        #     matrix=RigidTransform(
-        #         RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-        #         np.array([1, 0, 0]),
-        #     ).GetAsMatrix4(),
-        # )
         zoom = 1.8
         camera_in_world = [sim_config.slider_goal_pose.x, 
                            (sim_config.slider_goal_pose.y-1)/zoom,

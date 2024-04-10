@@ -1,11 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, List
-
 import numpy as np
 import numpy.typing as npt
-
 import hydra
-import torch
 from omegaconf import OmegaConf
 
 from pydrake.multibody.plant import (
@@ -51,8 +48,8 @@ class MultiRunConfig:
             slider_type,
             pusher_start_pose,
             slider_goal_pose,
-            workspace_width=0.35,
-            workspace_height=0.5,
+            workspace_width,
+            workspace_height,
     ):
         # Set up multi run config
         config = get_default_plan_config(

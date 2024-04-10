@@ -1,15 +1,13 @@
 # Generated files
 demos/
 trajectories/
+trajectories_rendered/
 outputs/
 multirun/
 data*
 temp
 *pdf
-*png
 diffusion_policy_logs/
-*.html
-*.pkl
 iiwa_tee_*
 
 # adam debug scripts

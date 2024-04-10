@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, fields
 from enum import Enum
 from functools import cached_property
-from typing import Literal, Optional, Tuple, List
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt

@@ -1,10 +1,12 @@
-from typing import List, Optional, Tuple
 import logging
-
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
 import pathlib
+import time as pytime
+from typing import List, Optional, Tuple
+
+# Pydrake imports
 from pydrake.common.value import AbstractValue, Value
 from pydrake.math import RigidTransform
 from pydrake.systems.framework import (
@@ -16,9 +18,6 @@ from pydrake.systems.sensors import (
     Image
 )
 
-import time as pytime
-
-
 # Diffusion Policy imports
 import torch
 import dill
@@ -26,21 +25,7 @@ import hydra
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
 
-
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    PlanarPushingContactMode,
-)
-from planning_through_contact.planning.planar.planar_plan_config import (
-    SliderPusherSystemConfig,
-)
-from planning_through_contact.simulation.controllers.hybrid_mpc import (
-    HybridMpc,
-    HybridMpcConfig,
-)
-from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_system import (
-    SliderPusherSystem,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +54,9 @@ class DiffusionPolicyController(LeafSystem):
         self._dt = 1.0 / freq
         self._delay = delay
         self._debug = debug
-        self._device = device
+        self._device = torch.device(device)
         self._load_policy_from_checkpoint(self._checkpoint)
+        # Override diffusion policy config
         for key, value in cfg_overrides.items():
             self._cfg[key] = value
         
@@ -87,13 +73,10 @@ class DiffusionPolicyController(LeafSystem):
 
         # indexing parameters for action predictions
         self._start = self._obs_horizon-1
+        if 'push_tee_v2' in checkpoint: # for backwards compatibility
+            print("Using push_tee_v2 slicing for action predictions")
+            self._start += 1
         self._end = self._start + self._action_steps
-        # Hack to ensure backward compatibility with version 2 checkpoints
-        # Version 2 checkpoints did not used shifted actions
-        if 'push_tee_v2' in checkpoint:
-            print("Using version 2 slicing for action predictions")
-            self._start = self._obs_horizon
-            self._end = self._start + self._action_steps
         
         # observation histories
         self._pusher_pose_deque = deque(
@@ -142,9 +125,7 @@ class DiffusionPolicyController(LeafSystem):
         self._cfg.task.dataset.zarr_path = self._diffusion_policy_path.joinpath(
             self._cfg.task.dataset.zarr_path
         )
-        dataset: BaseImageDataset
-        dataset = hydra.utils.instantiate(self._cfg.task.dataset)
-        assert isinstance(dataset, BaseImageDataset)
+        dataset: BaseImageDataset = hydra.utils.instantiate(self._cfg.task.dataset)
         self._normalizer = dataset.get_normalizer()
 
         # get policy from workspace
@@ -153,10 +134,6 @@ class DiffusionPolicyController(LeafSystem):
         if self._cfg.training.use_ema:
             self._policy = workspace.ema_model
             self._policy.set_normalizer(self._normalizer)
-        
-        self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
         self._policy.to(self._device)
         self._policy.eval()
     
@@ -168,7 +145,7 @@ class DiffusionPolicyController(LeafSystem):
             self._update_history(context)
             output.set_value(self._current_action)
             return
-        
+        # Accumulate new observations after reset
         if len(self._pusher_pose_deque) < self._obs_horizon or len(self._image_deque) < self._obs_horizon:
             self._update_history(context)
             output.set_value(self._current_action)
@@ -184,41 +161,29 @@ class DiffusionPolicyController(LeafSystem):
             self._target_slider_pose.vector()
         )
         
-        # Actions available: use next action
         if len(self._actions) == 0:
-            if self._debug:
-                print(f"\nTime: {time:.3f}, state_deque:")
-                for state in self._pusher_pose_deque:
-                    print(state)
-                print()
-                for img in self._image_deque:
-                    plt.imshow(img)
-                    plt.show()
-                start_time = pytime.time()
-            
+            # Compute new actions
+            start_time = pytime.time()
             with torch.no_grad():
                 action_prediction = self._policy.predict_action(obs_dict)['action_pred'][0]
-          
             actions = action_prediction[self._start:self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())
             
             if self._debug:
                 print(f"[TIME: {time:.3f}] Computed new actions in {pytime.time() - start_time:.3f}s\n")
-                print("Action Predictions")
+                print("Observations:")
+                for state in self._pusher_pose_deque:
+                    print(state)
+                for img in self._image_deque:
+                    plt.imshow(img)
+                    plt.show()
+                print("\nAction Predictions:")
                 print(action_prediction)
                 print("\nActions")
                 print(actions)
 
-            # dummy actions (move pusher in positive x direction)
-            # new_desired_pose = self._pusher_pose_deque[-1].copy()
-            # for i in range(self._action_steps):
-            #     self._actions.append(np.array(
-            #         [new_desired_pose[0], new_desired_pose[1]]
-            #     ))
-            #     new_desired_pose[0] += 0.01 # move freq*0.01m/s
-
-        # get next action and increment next update time
+        # get next action
         assert len(self._actions) > 0
         prev_action = self._current_action
         self._current_action = self._actions.popleft()
@@ -226,8 +191,7 @@ class DiffusionPolicyController(LeafSystem):
 
         # debug print statements
         if self._debug:
-            delta = np.linalg.norm(self._current_action - prev_action)
-            print(f"Time: {time:.3f}, action delta: {delta}")
+            print(f"Time: {time:.3f}, action delta: {np.linalg.norm(self._current_action - prev_action)}")
             print(f"Time: {time:.3f}, action: {self._current_action}")
         
     def reset(self, reset_position: np.ndarray):
@@ -242,26 +206,24 @@ class DiffusionPolicyController(LeafSystem):
                       target: np.ndarray
                     ):      
         state_tensor = torch.cat(
-            [torch.from_numpy(obs) for obs in obs_deque], 
-            dim=0
+            [torch.from_numpy(obs) for obs in obs_deque], dim=0
         ).reshape(self._B, self._obs_horizon, self._state_dim)
         img_tensor = torch.cat(
-            [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], 
-            dim=0
+            [torch.from_numpy(np.moveaxis(img,-1,-3) / 255.0) for img in img_deque], dim=0
         ).reshape(self._B, self._obs_horizon, self._num_image_channels, self._image_width, self._image_height)
         target_tensor = torch.from_numpy(target).reshape(1, self._target_dim) # 1, D_t
-        return {'obs': {
-                    'image': img_tensor.to(self._device), # 1, T_obs, C, H, W
-                    'agent_pos': state_tensor.to(self._device), # 1, T_obs, D_x
-                },
-                'target': target_tensor.to(self._device), # 1, D_t
+        return {
+            'obs': {
+                'image': img_tensor.to(self._device), # 1, T_obs, C, H, W
+                'agent_pos': state_tensor.to(self._device), # 1, T_obs, D_x
+            },
+            'target': target_tensor.to(self._device), # 1, D_t
         }
 
     def _update_history(self, context):
         """ Update state and image observation history """
         pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
         image = self.camera_port.Eval(context)
-        # throws away z-dimension
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
         self._image_deque.append(image.data[:,:,:-1])

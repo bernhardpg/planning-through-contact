@@ -108,6 +108,7 @@ class ReplayPositionSource(DesiredPlanarPositionSourceBase):
             pusher_pose_port = self._replay_publisher.GetOutputPort("desired_pusher_planar_pose_vector")
             slider_pose_port = self._replay_publisher.GetOutputPort("desired_slider_planar_pose_vector")
         else:
+            # Insert zero order holds
             self._pusher_zoh = builder.AddSystem(ZeroOrderHold(period_sec = dt, vector_size = 3))
             self._slider_zoh = builder.AddSystem(ZeroOrderHold(period_sec = dt, vector_size = 3))
 

@@ -4,6 +4,11 @@ import numpy as np
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.collision_geometry.collision_geometry import (
+    CollisionGeometry,
+    ContactLocation,
+    PolytopeContactLocation,
+)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -20,12 +25,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 
 from planning_through_contact.geometry.planar.non_collision import (
     check_finger_pose_in_contact_location,
-)
-
-from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
-    ContactLocation,
-    PolytopeContactLocation,
 )
 
 def get_box() -> RigidBody:

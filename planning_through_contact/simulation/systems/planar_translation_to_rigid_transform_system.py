@@ -9,7 +9,7 @@ class PlanarTranslationToRigidTransformSystem(LeafSystem):
     def __init__(self, z_dist: float = 0.02):
         super().__init__()
         self._z_dist = z_dist
-        self.DeclareVectorInputPort("vector_input", 2)
+        self.DeclareVectorInputPort("planar_position_input", 2)
         self.DeclareAbstractOutputPort(
             "rigid_transform_output",
             lambda: AbstractValue.Make(RigidTransform()),

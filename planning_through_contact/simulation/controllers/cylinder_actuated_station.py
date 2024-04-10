@@ -8,7 +8,6 @@ from pydrake.all import (
     StateInterpolatorWithDiscreteDerivative,
     AddMultibodyPlantSceneGraph,
     RigidTransform,
-    RollPitchYaw,
     AddDefaultVisualization,
     Meshcat,
     Box as DrakeBox,
@@ -17,26 +16,16 @@ from pydrake.all import (
     MakePhongIllustrationProperties,
     Rgba,
 )
-
-from pydrake.math import (
-    RotationMatrix
-)
-
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-
 from .robot_system_base import RobotSystemBase
 from planning_through_contact.simulation.sim_utils import (
     GetParser,
     AddSliderAndConfigureContact,
 )
-
 from planning_through_contact.visualize.colors import COLORS
-
-
 
 class CylinderActuatedStation(RobotSystemBase):
     """Base controller class for an actuated floating cylinder robot."""
@@ -50,7 +39,6 @@ class CylinderActuatedStation(RobotSystemBase):
         self._sim_config = sim_config
         self._meshcat = meshcat
         self._pid_gains = dict(kp=3200, ki=100, kd=50)
-        # self._pid_gains = dict(kp=1600, ki=100, kd=50)
         self._num_positions = 2  # Number of dimensions for robot position
         self._goal_geometries = []
 
@@ -105,7 +93,8 @@ class CylinderActuatedStation(RobotSystemBase):
             ),
         )
 
-        if sim_config.camera_configs is not None:
+        # Add cameras
+        if sim_config.camera_configs:
             from pydrake.systems.sensors import (
                 ApplyCameraConfig
             )
@@ -113,6 +102,12 @@ class CylinderActuatedStation(RobotSystemBase):
                 ApplyCameraConfig(
                     config=camera_config,
                     builder=builder
+                )
+                builder.ExportOutput(
+                    builder.GetSubsystemByName(
+                        f"rgbd_sensor_{camera_config.name}"
+                    ).color_image_output_port(),
+                    f"rgbd_sensor_{camera_config.name}",
                 )
 
         ## Connect systems
@@ -154,15 +149,6 @@ class CylinderActuatedStation(RobotSystemBase):
             "object_state_measured",
         )
 
-        if self._sim_config.camera_configs:
-            for camera_config in self._sim_config.camera_configs:
-                builder.ExportOutput(
-                    builder.GetSubsystemByName(
-                        f"rgbd_sensor_{camera_config.name}"
-                    ).color_image_output_port(),
-                    f"rgbd_sensor_{camera_config.name}",
-                )
-
         builder.BuildInto(self)
 
         ## Set default position for the robot
@@ -182,6 +168,9 @@ class CylinderActuatedStation(RobotSystemBase):
             return "box"
         else:
             return "t_pusher"
+    
+    def num_positions(self) -> int:
+        return self._num_positions
     
     def get_station_plant(self):
         return self.station_plant

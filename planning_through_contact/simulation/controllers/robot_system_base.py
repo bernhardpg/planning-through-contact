@@ -21,6 +21,14 @@ class RobotSystemBase(Diagram):
         """The name of the robot model."""
         ...
     
+    @abstractmethod
+    def num_positions(self) -> int:
+        """The number of positions in the robot model."""
+        ...
+    
+    # TODO: see if possible to remove these abstract methods
+    # They were originall added for visualization purposes
+
     @property
     @abstractmethod
     def slider_model_name(self) -> str:
