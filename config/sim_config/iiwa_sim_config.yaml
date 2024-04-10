@@ -78,7 +78,7 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: false
+  generate_plans: true
   render_plans: true
   convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
