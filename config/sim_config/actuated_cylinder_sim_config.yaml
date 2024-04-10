@@ -6,7 +6,7 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'tee'
+slider_type: 'box'
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:
@@ -46,9 +46,7 @@ camera_configs:
     width: 96
     height: 96
     show_rgb: false
-collect_data: true
 log_dir: 'diffusion_policy_logs'
-data_collection_dir: 'temp'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
   num_runs: 1
@@ -72,3 +70,42 @@ robot_station:
   _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
   sim_config: null  # override in hydra.utils.instantiate
   meshcat: null     # override in hydra.utils.instantiate
+
+## Data Collection Config
+data_collection_config:
+  _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
+  generate_plans: true
+  render_plans: true
+  convert_to_zarr: false
+  convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
+  plans_dir: 'temp/plans'
+  rendered_plans_dir: 'temp/rendered'
+  zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
+  policy_freq: 10.0
+  state_chunk_length: 1024
+  action_chunk_length: 2048
+  target_chunk_length: 1024
+  image_chunk_length: 128
+  plan_config:
+    _target_: planning_through_contact.simulation.environments.data_collection_table_environment.PlanConfig
+    slider_type: ${slider_type}
+    pusher_radius: 0.015
+    contact_lam_min: 0.2
+    contact_lam_max: 0.8
+    distance_to_object_socp: 0.25
+    width: 0.5
+    height: 0.5
+    center:
+      - ${slider_goal_pose.x}
+      - ${slider_goal_pose.y}
+    buffer: 0.0
+    seed: 163
+    num_plans: 10
+    pusher_start_pose: ${pusher_start_pose}
+    slider_goal_pose: ${slider_goal_pose}
+    limit_rotations: false
+    noise_final_pose: false
+
+  ## Supercloud
+  LLSUB_RANK: 2
+  LLSUB_SIZE: 3

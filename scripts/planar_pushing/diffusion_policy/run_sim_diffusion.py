@@ -72,7 +72,7 @@ def run_sim(cfg: OmegaConf):
     
     # Update logs and save config file
     OmegaConf.save(cfg, f"{save_dir}/sim_config.yaml")
-    with open(f"{cfg.data_collection_dir}/checkpoint_statistics.txt", "a") as f:
+    with open(f"{cfg.log_dir}/checkpoint_statistics.txt", "a") as f:
         f.write(f"{sim_config.diffusion_policy_config.checkpoint}\n")
         f.write(f"Seed: {seed}\n")
         f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")

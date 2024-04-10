@@ -139,7 +139,6 @@ def run_sim(
         ],
         # Adam's additions
         camera_configs=[camera_config],
-        collect_data=True,
         data_dir = data_collection_dir
     )
 

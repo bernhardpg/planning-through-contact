@@ -263,66 +263,65 @@ class OutputFeedbackTableEnvironment:
         )
 
         # Add loggers
-        # if self._sim_config.collect_data:
-        #     # Actual pusher state loggers
-        #     pusher_pose_to_vector = builder.AddSystem(
-        #         RigidTransformToPlanarPoseVectorSystem()
-        #     )
-        #     builder.Connect(
-        #         self._robot_state_to_rigid_transform.GetOutputPort("pose"),
-        #         pusher_pose_to_vector.get_input_port(),
-        #     )
-        #     self._pusher_pose_logger = LogVectorOutput(
-        #         pusher_pose_to_vector.get_output_port(), builder
-        #     )
+        # Actual pusher state loggers
+        pusher_pose_to_vector = builder.AddSystem(
+            RigidTransformToPlanarPoseVectorSystem()
+        )
+        builder.Connect(
+            self._robot_state_to_rigid_transform.GetOutputPort("pose"),
+            pusher_pose_to_vector.get_input_port(),
+        )
+        self._pusher_pose_logger = LogVectorOutput(
+            pusher_pose_to_vector.get_output_port(), builder
+        )
 
-        #     # Actual slider state loggers
-        #     # TODO: after changing StateToRigidTransform to RobotStateToRigidTransform
-        #     # this no longer works (since the slider input is generalized coords)
-        #     slider_state_to_rigid_transform = builder.AddNamedSystem(
-        #         "SliderStateToRigidTransform",
-        #         StateToRigidTransform(
-        #             self._plant, 
-        #             self._robot_system.slider_model_name,
-        #             z_value=z_value
-        #         ),
-        #     )
-        #     slider_pose_to_vector = builder.AddSystem(
-        #         RigidTransformToPlanarPoseVectorSystem()
-        #     )
-        #     builder.Connect(
-        #         self._robot_system.GetOutputPort("object_state_measured"),
-        #         slider_state_to_rigid_transform.GetInputPort("state"),
-        #     )
-        #     builder.Connect(
-        #         slider_state_to_rigid_transform.GetOutputPort("pose"),
-        #         slider_pose_to_vector.get_input_port(),
-        #     )
-        #     self._slider_pose_logger = LogVectorOutput(
-        #         slider_pose_to_vector.get_output_port(), builder
-        #     )
+        # # Actual slider state loggers
+        # # TODO: after changing StateToRigidTransform to RobotStateToRigidTransform
+        # # this no longer works (since the slider input is generalized coords)
+        # slider_state_to_rigid_transform = builder.AddNamedSystem(
+        #     "SliderStateToRigidTransform",
+        #     StateToRigidTransform(
+        #         self._plant, 
+        #         self._robot_system.slider_model_name,
+        #         z_value=z_value
+        #     ),
+        # )
+        # slider_pose_to_vector = builder.AddSystem(
+        #     RigidTransformToPlanarPoseVectorSystem()
+        # )
+        # builder.Connect(
+        #     self._robot_system.GetOutputPort("object_state_measured"),
+        #     slider_state_to_rigid_transform.GetInputPort("state"),
+        # )
+        # builder.Connect(
+        #     slider_state_to_rigid_transform.GetOutputPort("pose"),
+        #     slider_pose_to_vector.get_input_port(),
+        # )
+        # self._slider_pose_logger = LogVectorOutput(
+        #     slider_pose_to_vector.get_output_port(), builder
+        # )
 
-        #     # Desired pusher state loggers
-        #     self._pusher_pose_desired_logger = LogVectorOutput(
-        #         self._desired_position_source.GetOutputPort("planar_position_command"),
-        #         builder,
-        #     )
-            
-        #     # Desired slider state loggers
-        #     desired_slider_source = builder.AddNamedSystem(
-        #         "DesiredSliderSource",
-        #         ConstantVectorSource(np.array([0.5, 0.0, 0.0]))
-        #     )
-        #     self._slider_pose_desired_logger = LogVectorOutput(
-        #         desired_slider_source.get_output_port(),
-        #         builder,
-        #     )
+        # # Desired pusher state loggers
+        # self._pusher_pose_desired_logger = LogVectorOutput(
+        #     self._desired_position_source.GetOutputPort("planar_position_command"),
+        #     builder,
+        # )
+        
+        # # Desired slider state loggers
+        # desired_slider_source = builder.AddNamedSystem(
+        #     "DesiredSliderSource",
+        #     ConstantVectorSource(np.array([0.5, 0.0, 0.0]))
+        # )
+        # self._slider_pose_desired_logger = LogVectorOutput(
+        #     desired_slider_source.get_output_port(),
+        #     builder,
+        # )
 
-        #     # Actual command loggers and desired command loggers are the same
-        #     self._control_logger = LogVectorOutput(
-        #         self._desired_position_source.GetOutputPort("planar_pose_command"),
-        #         builder,
-        #     )
+        # # Actual command loggers and desired command loggers are the same
+        # self._control_logger = LogVectorOutput(
+        #     self._desired_position_source.GetOutputPort("planar_pose_command"),
+        #     builder,
+        # )
 
         diagram = builder.Build()
         self._diagram = diagram
@@ -420,7 +419,7 @@ class OutputFeedbackTableEnvironment:
         save_dir = pathlib.Path(self._sim_config.log_dir).joinpath(str(traj_idx))
         
         self.save_logs(recording_file, save_dir)
-        self.save_data(save_dir)
+        # self.save_data(save_dir)
         return successful_idx, save_dir
     
     def _print_distance_to_target_pose(self, 
@@ -530,46 +529,42 @@ class OutputFeedbackTableEnvironment:
 
 
     def save_data(self, save_dir):
-        if self._sim_config.collect_data:
-            assert self._sim_config.log_dir is not None
+        # TODO: this no longer works (see TODO comment from above)
+        assert self._sim_config.log_dir is not None
 
-            # Save the logs
-            pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
-            slider_pose_log = self._slider_pose_logger.FindLog(self.context)
-            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
-                self.context
-            )
-            slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
-                self.context
-            )
-            control_log = self._control_logger.FindLog(self.context)
+        # Save the logs
+        pusher_pose_log = self._pusher_pose_logger.FindLog(self.context)
+        slider_pose_log = self._slider_pose_logger.FindLog(self.context)
+        pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
+            self.context
+        )
+        slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
+            self.context
+        )
+        control_log = self._control_logger.FindLog(self.context)
 
-            pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_log)
-            slider_actual = PlanarPushingLog.from_log(slider_pose_log, control_log)
-            pusher_desired = PlanarPushingLog.from_pose_vector_log(
-                pusher_pose_desired_log
-            )
-            slider_desired = PlanarPushingLog.from_log(
-                slider_pose_desired_log,
-                control_log,
-            )
-            # TODO: didn't actually need to save it in this format
-            # actually want to save as PlanarPushingTrajectory
-            # and call its save method
-            # Worry about this later
-            combined = CombinedPlanarPushingLogs(
-                pusher_actual=pusher_actual,
-                slider_actual=slider_actual,
-                pusher_desired=pusher_desired,
-                slider_desired=slider_desired,
-            )
+        pusher_actual = PlanarPushingLog.from_pose_vector_log(pusher_pose_log)
+        slider_actual = PlanarPushingLog.from_log(slider_pose_log, control_log)
+        pusher_desired = PlanarPushingLog.from_pose_vector_log(
+            pusher_pose_desired_log
+        )
+        slider_desired = PlanarPushingLog.from_log(
+            slider_pose_desired_log,
+            control_log,
+        )
+        combined = CombinedPlanarPushingLogs(
+            pusher_actual=pusher_actual,
+            slider_actual=slider_actual,
+            pusher_desired=pusher_desired,
+            slider_desired=slider_desired,
+        )
 
-            # assumes that a directory for this trajectory has already been
-            # created (when saving the images)
-            log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
-            print(f"Saving combined logs to {log_path}")
-            with open(log_path, "wb") as f:
-                pickle.dump(combined, f)
+        # assumes that a directory for this trajectory has already been
+        # created (when saving the images)
+        log_path = os.path.join(save_dir, "combined_planar_pushing_logs.pkl")
+        print(f"Saving combined logs to {log_path}")
+        with open(log_path, "wb") as f:
+            pickle.dump(combined, f)
     
     def save_logs(self, recording_file: Optional[str], save_dir: str):
         if recording_file:

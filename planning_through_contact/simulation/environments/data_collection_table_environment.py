@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Optional
 import numpy as np
+from math import ceil
+from dataclasses import dataclass
 
 import pickle
 from pydrake.all import (
@@ -55,6 +57,96 @@ from planning_through_contact.simulation.controllers.cylinder_actuated_station i
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class PlanConfig:
+    # Geometry
+    slider_type: str
+    pusher_radius: float
+
+    # Solver
+    contact_lam_min: float
+    contact_lam_max: float
+    distance_to_object_socp: float
+
+    # Workspace
+    width: float
+    height: float
+    center: np.ndarray
+    buffer: float
+
+    # Plan generation
+    seed: int
+    num_plans: int
+    pusher_start_pose: PlanarPose
+    slider_goal_pose: PlanarPose
+    limit_rotations: bool
+    noise_final_pose: float
+    
+class DataCollectionConfig:
+    generate_plans: bool
+    render_plans: bool
+    convert_to_zarr: bool
+    convert_to_zarr_reduce: bool
+    plans_dir: str
+    rendered_plans_dir: str
+    zarr_path: str
+    policy_freq: float
+    state_chunk_length: int
+    action_chunk_length: int
+    target_chunk_length: int
+    image_chunk_length: int
+    plan_config: PlanConfig = None
+    LLSUB_RANK: int = None
+    LLSUB_SIZE: int = None
+
+    def __init__(
+        self,
+        generate_plans: bool,
+        render_plans: bool,
+        convert_to_zarr: bool,
+        convert_to_zarr_reduce: bool,
+        plans_dir: str,
+        rendered_plans_dir: str,
+        zarr_path: str,
+        policy_freq: float,
+        state_chunk_length: int,
+        action_chunk_length: int,
+        target_chunk_length: int,
+        image_chunk_length: int,
+        plan_config: PlanConfig = None,
+        LLSUB_RANK: int = None,
+        LLSUB_SIZE: int = None,
+    ):  
+        self.generate_plans = generate_plans
+        self.render_plans = render_plans
+        self.convert_to_zarr = convert_to_zarr
+        self.convert_to_zarr_reduce = convert_to_zarr_reduce
+        self.plans_dir = plans_dir
+        self.rendered_plans_dir = rendered_plans_dir
+        self.zarr_path = zarr_path
+        self.policy_freq = policy_freq
+        self.state_chunk_length = state_chunk_length
+        self.action_chunk_length = action_chunk_length
+        self.target_chunk_length = target_chunk_length
+        self.image_chunk_length = image_chunk_length
+        self.plan_config = plan_config
+        self.LLSUB_RANK = LLSUB_RANK
+        self.LLSUB_SIZE = LLSUB_SIZE
+
+        # Supercloud settings
+        if self.LLSUB_RANK is not None and self.LLSUB_SIZE is not None:
+            assert not self.convert_to_zarr and not self.convert_to_zarr_reduce
+
+            self.plans_dir = f"{self.plans_dir}/run_{self.LLSUB_RANK}"
+            self.rendered_plans_dir = f"{self.rendered_plans_dir}/run_{self.LLSUB_RANK}"
+            self.plan_config.seed += self.LLSUB_RANK
+            num_plans_per_run = ceil(1.0*self.plan_config.num_plans / self.LLSUB_SIZE)
+            if self.LLSUB_RANK != self.LLSUB_SIZE - 1:
+                self.plan_config.num_plans = num_plans_per_run
+            else:
+                num_plans = self.plan_config.num_plans - num_plans_per_run*(self.LLSUB_SIZE - 1)
+                self.plan_config.num_plans = num_plans
+
 
 class DataCollectionTableEnvironment:
     def __init__(
@@ -62,6 +154,7 @@ class DataCollectionTableEnvironment:
         desired_position_source: DesiredPlanarPositionSourceBase,
         robot_system: RobotSystemBase,
         sim_config: PlanarPushingSimConfig,
+        data_collection_config: DataCollectionConfig,
         state_estimator_meshcat: Optional[Meshcat] = None,
     ):
         self._desired_position_source = desired_position_source
@@ -70,7 +163,10 @@ class DataCollectionTableEnvironment:
         self._sim_config = sim_config
         self._meshcat = state_estimator_meshcat
         self._simulator = None
-        self._data_collection_dir = self._setup_data_collection_dir(sim_config.data_collection_dir)
+        self._data_collection_config = data_collection_config
+        self._data_collection_dir = self._setup_data_collection_dir(
+            data_collection_config.rendered_plans_dir
+        )
         self._image_dir = f'{self._data_collection_dir}/images'
         self._log_path = f'{self._data_collection_dir}/log.txt'
         self._diff_ik_time_step = self._get_diff_ik_time_step()
@@ -208,35 +304,34 @@ class DataCollectionTableEnvironment:
             self._state_estimator.GetInputPort("object_position"),
         )
 
-        if sim_config.collect_data:
-            # Set up camera logging
-            # TODO: add image writer per camera
-            assert sim_config.camera_configs is not None
-                                    
-            image_writer_system = ImageWriter()
-            image_writer_system.DeclareImageInputPort(
-                pixel_type=PixelType.kRgba8U,
-                port_name="overhead_camera_image",
-                file_name_format= self._image_dir + '/{time_msec}.png',
-                publish_period=0.1,
-                start_time=0.0
-            )
-            image_writer = builder.AddNamedSystem(
-                "ImageWriter",
-                image_writer_system
-            )
-            builder.Connect(
-                self._state_estimator.GetOutputPort(
-                    "rgbd_sensor_state_estimator_overhead_camera"
-                ),
-                image_writer.get_input_port()
-            )
+        # Set up camera logging
+        # TODO: add image writer per camera
+        assert sim_config.camera_configs is not None
+                                
+        image_writer_system = ImageWriter()
+        image_writer_system.DeclareImageInputPort(
+            pixel_type=PixelType.kRgba8U,
+            port_name="overhead_camera_image",
+            file_name_format= self._image_dir + '/{time_msec}.png',
+            publish_period=0.1,
+            start_time=0.0
+        )
+        image_writer = builder.AddNamedSystem(
+            "ImageWriter",
+            image_writer_system
+        )
+        builder.Connect(
+            self._state_estimator.GetOutputPort(
+                "rgbd_sensor_state_estimator_overhead_camera"
+            ),
+            image_writer.get_input_port()
+        )
 
-            # Set up desired pusher planar pose loggers
-            self._pusher_pose_desired_logger = LogVectorOutput(
-                self._desired_position_source.GetOutputPort("planar_position_command"),
-                builder,
-            )
+        # Set up desired pusher planar pose loggers
+        self._pusher_pose_desired_logger = LogVectorOutput(
+            self._desired_position_source.GetOutputPort("planar_position_command"),
+            builder,
+        )
             
 
         diagram = builder.Build()
@@ -291,9 +386,6 @@ class DataCollectionTableEnvironment:
 
     def save_logs(self, recording_file: Optional[str], save_dir: str):
         if recording_file:
-            self._meshcat.StopRecording()
-            self._meshcat.SetProperty("/drake/contact_forces", "visible", False)
-            self._meshcat.PublishRecording()
             self._state_estimator.meshcat.StopRecording()
             self._state_estimator.meshcat.SetProperty(
                 "/drake/contact_forces", "visible", True
@@ -311,20 +403,19 @@ class DataCollectionTableEnvironment:
         is all that is needed to train diffusion policies).
         To log additional information, refer to table_environment.py
         """
-        if self._sim_config.collect_data:
-            assert self._sim_config.data_collection_dir is not None
+        assert self._data_collection_dir is not None
 
-            # Save the logs
-            pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
-                self.context
-            )
-            pusher_desired = PlanarPushingLog.from_pose_vector_log(
-                pusher_pose_desired_log
-            )
+        # Save the logs
+        pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
+            self.context
+        )
+        pusher_desired = PlanarPushingLog.from_pose_vector_log(
+            pusher_pose_desired_log
+        )
 
-            log_path = os.path.join(self._data_collection_dir, "planar_position_command.pkl")
-            with open(log_path, "wb") as f:
-                pickle.dump(pusher_desired, f)
+        log_path = os.path.join(self._data_collection_dir, "planar_position_command.pkl")
+        with open(log_path, "wb") as f:
+            pickle.dump(pusher_desired, f)
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose

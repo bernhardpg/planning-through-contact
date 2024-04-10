@@ -123,8 +123,6 @@ class PlanarPushingSimConfig:
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
     camera_configs: List[CameraConfig] = None
-    collect_data: bool = False
-    data_collection_dir: str = None # directory for data collection
     log_dir: str = None # directory for logging rollouts from output_feedback_table_environment
 
     multi_run_config: MultiRunConfig = None
@@ -167,8 +165,6 @@ class PlanarPushingSimConfig:
             scene_directive_name=cfg.scene_directive_name,
             use_hardware=cfg.use_hardware,
             pusher_z_offset=cfg.pusher_z_offset,
-            collect_data=cfg.collect_data,
-            data_collection_dir=cfg.data_collection_dir,
             log_dir=cfg.log_dir,
         )
 
