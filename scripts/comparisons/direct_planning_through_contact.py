@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.autodiffutils import AutoDiffXd
-from pydrake.math import eq, sqrt
+from pydrake.math import eq, ge, sqrt
 from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve, SolverOptions
 
 from planning_through_contact.experiments.utils import (
@@ -40,6 +40,9 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
 
+visualize_initial_guess = False
+
+
 num_time_steps = 16  # TODO: Change
 dt = 0.1  # TODO: Change
 end_time = num_time_steps * dt - dt
@@ -51,9 +54,10 @@ dynamics_config = config.dynamics_config
 slider = get_sugar_box()
 
 slider_initial_pose = PlanarPose(0, 0, 0)
-slider_target_pose = PlanarPose(0.3, -0.3, 0.1)
-pusher_initial_pose = PlanarPose(-0.3, -0.05, 0)
-pusher_target_pose = PlanarPose(-0.3, -0.05, 0)
+slider_target_pose = PlanarPose(0, 0.3, 0)
+# slider_target_pose = PlanarPose(0.3, -0.3, 0.1)
+pusher_initial_pose = PlanarPose(-0.3, 0.00, 0)
+pusher_target_pose = PlanarPose(-0.3, 0.00, 0)
 
 config.start_and_goal = PlanarPushingStartAndGoal(
     slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -80,6 +84,18 @@ def _two_d_rot_matrix_from_cos_sin(cos, sin) -> npt.NDArray:
 
 def _create_p_WP(p_WB, R_WB, p_BP):
     return p_WB + R_WB @ p_BP
+
+
+def _calc_f_c_B(force_comp, p_BP):
+    J_c = _calc_contact_jacobian(p_BP)
+    gen_force = J_c.T @ force_comp
+    f_c_B = gen_force[0:2]
+    return f_c_B
+
+
+def _calc_f_c_W(force_comp, p_BP, R_WB):
+    f_c_B = _calc_f_c_B(force_comp, p_BP)
+    return R_WB @ f_c_B
 
 
 R_WBs = [_two_d_rot_matrix_from_cos_sin(r_WB[0], r_WB[1]) for r_WB in r_WBs]
@@ -171,115 +187,124 @@ for k in range(num_time_steps - 1):
     )
     prog.AddConstraint(_dynamics_constraint, np.zeros((3,)), np.zeros((3,)), vars=vars)
 
-# Enforce non-penetration
-calc_sdf = lambda pos: np.array([slider.geometry.get_signed_distance(pos)])  # type: ignore
-for k in range(num_time_steps):
-    prog.AddConstraint(calc_sdf, np.zeros((1,)), np.ones((1,)) * np.inf, vars=p_BPs[k])
+# Note: Complementarity constraints are encoded similarly to 3.2 in
+# M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
+# of rigid bodies through contact”
+sdf_slacks = prog.NewContinuousVariables(num_time_steps, "sdf_slacks")
+prog.AddLinearConstraint(ge(sdf_slacks, 0))
 
+# Enforce non-penetration
+calc_sdf = lambda pos: slider.geometry.get_signed_distance(pos)  # type: ignore
+
+
+def _sdf_equal_to_slack(vars: npt.NDArray) -> npt.NDArray:
+    pos = vars[:2]
+    slack = vars[2]
+
+    sdf = calc_sdf(pos)
+    constraint_res = sdf - slack
+    return np.array([constraint_res])
+
+
+for k in range(num_time_steps):
+    prog.AddConstraint(
+        _sdf_equal_to_slack,
+        np.zeros((1,)),
+        np.zeros((1,)),
+        vars=np.concatenate([p_BPs[k], [sdf_slacks[k]]]),
+    )
+
+
+lambda_n_slacks = prog.NewContinuousVariables(num_time_steps, "lambda_n_slacks")
+prog.AddLinearConstraint(ge(lambda_n_slacks, 0))
 
 # Enforce friction cone
-for lambda_n, lambda_f in force_comps:
-    prog.AddLinearConstraint(lambda_n >= 0)
+for (lambda_n, lambda_f), lambda_n_slack in zip(force_comps, lambda_n_slacks):
+    prog.AddLinearConstraint(lambda_n == lambda_n_slack)
     prog.AddLinearConstraint(lambda_f <= mu * lambda_n)
     prog.AddLinearConstraint(lambda_f >= -mu * lambda_n)
 
 
-def _only_force_when_contact_constraint(vars: npt.NDArray) -> npt.NDArray:
-    p_BP = vars[0:2]
-    lambda_n = vars[2]
-    sdf = calc_sdf(p_BP)
-
-    constraint_val = sdf * lambda_n
-
-    return np.array([constraint_val])
-
-
 # Complementarity constraints
-for k in range(num_time_steps - 1):
-    p_BP = p_BPs[k]
-    lambda_n, _ = force_comps[k]
-    prog.AddConstraint(
-        _only_force_when_contact_constraint,
-        np.zeros((1,)),
-        np.zeros((1,)),
-        vars=np.concatenate([p_BP, [lambda_n]]),
-    )
+for k in range(num_time_steps):
+    s_sdf = sdf_slacks[k]
+    s_lambda_n = lambda_n_slacks[k]
+    prog.AddConstraint(s_sdf * s_lambda_n <= 0)
 
 # Non-sliding constraint
 # TODO
 
 # Cost
+add_cost = False
+
 cost_config = config.contact_config.cost
+if add_cost:
 
-
-def _get_slider_vertices(slider: CollisionGeometry) -> List[List[npt.NDArray]]:
-    """
-    Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
-    are linear in the decision varibles of the program
-    """
-    p_Wv_is = [
-        [
-            slider.get_p_Wv_i(vertex_idx, R_WB, p_WB.reshape((2, 1)))
-            for vertex_idx in range(len(slider.vertices))
+    def _get_slider_vertices(slider: CollisionGeometry) -> List[List[npt.NDArray]]:
+        """
+        Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
+        are linear in the decision varibles of the program
+        """
+        p_Wv_is = [
+            [
+                slider.get_p_Wv_i(vertex_idx, R_WB, p_WB.reshape((2, 1)))
+                for vertex_idx in range(len(slider.vertices))
+            ]
+            for p_WB, R_WB in zip(p_WBs, R_WBs)
         ]
-        for p_WB, R_WB in zip(p_WBs, R_WBs)
-    ]
-    return p_Wv_is
+        return p_Wv_is
 
+    p_Wv_is = _get_slider_vertices(slider.geometry)
+    num_keypoints = len(slider.geometry.vertices)
 
-p_Wv_is = _get_slider_vertices(slider.geometry)
-num_keypoints = len(slider.geometry.vertices)
+    # Slider keypoint arc length
+    assert cost_config.keypoint_arc_length is not None
+    for k in range(num_time_steps - 1):
+        for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+            diff = vertex_k_next - vertex_k
+            dist = sqrt((diff.T @ diff).item())
+            cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
 
-# Slider keypoint arc length
-assert cost_config.keypoint_arc_length is not None
-for k in range(num_time_steps - 1):
-    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-        diff = vertex_k_next - vertex_k
-        dist = sqrt((diff.T @ diff).item())
-        cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
+    # Slider keypoint velocity length
+    assert cost_config.keypoint_velocity_regularization is not None
+    for k in range(num_time_steps - 1):
+        for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+            vel = (vertex_k_next - vertex_k) / dt
+            squared_vel = (vel.T @ vel).item()
+            cost_expr = (
+                cost_config.keypoint_velocity_regularization
+                * (1 / num_keypoints)
+                * squared_vel
+            )
 
-# Slider keypoint velocity length
-assert cost_config.keypoint_velocity_regularization is not None
-for k in range(num_time_steps - 1):
-    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-        vel = (vertex_k_next - vertex_k) / dt
-        squared_vel = (vel.T @ vel).item()
-        cost_expr = (
-            cost_config.keypoint_velocity_regularization
-            * (1 / num_keypoints)
-            * squared_vel
-        )
+    # Time in contact cost
+    assert cost_config.time is not None
 
-# Time in contact cost
-assert cost_config.time is not None
+    def _only_time_cost_when_contact(p_BP: npt.NDArray) -> Any:
+        sdf = calc_sdf(p_BP)
 
+        if sdf <= 1e-5:
+            cost = AutoDiffXd(cost_config.time * dt)  # type: ignore
+            return cost
+        else:
+            zero = AutoDiffXd(0.0)
+            return zero
 
-def _only_time_cost_when_contact(p_BP: npt.NDArray) -> Any:
-    sdf = calc_sdf(p_BP)
-
-    if sdf <= 1e-5:
-        cost = AutoDiffXd(cost_config.time * dt)  # type: ignore
-        return cost
-    else:
-        zero = AutoDiffXd(0.0)
-        return zero
-
-
-for k in range(num_time_steps):
-    p_BP = p_BPs[k]
-    prog.AddCost(_only_time_cost_when_contact, vars=p_BP)
+    for k in range(num_time_steps):
+        p_BP = p_BPs[k]
+        prog.AddCost(_only_time_cost_when_contact, vars=p_BP)
 
 # Pusher velocity cost
 cost_config_noncoll = config.non_collision_cost
-v_BPs = np.vstack(
-    [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
-)
+# v_BPs = np.vstack(
+#     [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
+# )
 
-assert cost_config_noncoll.pusher_velocity_regularization is not None
-for v_BP in v_BPs:
-    squared_vel = v_BP.T @ v_BP
-    cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
-    prog.AddCost(cost)
+# assert cost_config_noncoll.pusher_velocity_regularization is not None
+# for v_BP in v_BPs:
+#     squared_vel = v_BP.T @ v_BP
+#     cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
+#     prog.AddCost(cost)
 
 # Pusher arc length
 for k in range(num_time_steps - 1):
@@ -337,10 +362,10 @@ th_interpolated = _interpolate_traj_1d(
 r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
 prog.SetInitialGuess(r_WBs, r_WBs_initial_guess)  # type: ignore
 
-p_WBs_interpolated = _interpolate_traj(
+p_WBs_initial_guess = _interpolate_traj(
     slider_initial_pose.pos(), slider_target_pose.pos(), duration=end_time + dt
 )
-prog.SetInitialGuess(p_WBs, p_WBs_interpolated)  # type: ignore
+prog.SetInitialGuess(p_WBs, p_WBs_initial_guess)  # type: ignore
 
 
 def find_closest_point_on_geometry(
@@ -366,25 +391,57 @@ def find_closest_point_on_geometry(
     return _result.GetSolution(closest_point).reshape((2, 1))
 
 
-closest_point = find_closest_point_on_geometry(
-    pusher_initial_pose.pos(), slider.geometry
-)
+use_touching_initial_guess = False
+if use_touching_initial_guess:
+    closest_point = find_closest_point_on_geometry(
+        pusher_initial_pose.pos(), slider.geometry
+    )
 
-p_BPs_interpolated_start = _interpolate_traj(
-    pusher_initial_pose.pos(), closest_point, duration=(end_time + dt) / 2
-)
-p_BPs_interpolated_end = _interpolate_traj(
-    closest_point, pusher_target_pose.pos(), duration=(end_time + dt) / 2
-)
-# We make the finger touch the object at the middle point as an initial guess
-p_BPs_initial_guess = np.vstack((p_BPs_interpolated_start, p_BPs_interpolated_end))
-prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
+    p_BPs_interpolated_start = _interpolate_traj(
+        pusher_initial_pose.pos(), closest_point, duration=(end_time + dt) / 2
+    )
+    p_BPs_interpolated_end = _interpolate_traj(
+        closest_point, pusher_target_pose.pos(), duration=(end_time + dt) / 2
+    )
+    # We make the finger touch the object at the middle point as an initial guess
+    p_BPs_initial_guess = np.vstack((p_BPs_interpolated_start, p_BPs_interpolated_end))
+    prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
+else:
+    p_BPs_initial_guess = _interpolate_traj(
+        pusher_initial_pose.pos(), pusher_target_pose.pos(), duration=end_time + dt
+    )
+    prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
+
 
 normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.2
 prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
 
 friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
 prog.SetInitialGuess(friction_forces, friction_forces_initial_guess)  # type: ignore
+
+# Make quantities so we can plot initial guess
+R_WBs_initial_guess = [
+    _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
+]
+p_WPs_initial_guess = np.vstack(
+    [
+        _create_p_WP(p_WB, R_WB, p_BP)
+        for p_WB, R_WB, p_BP in zip(
+            p_WBs_initial_guess, R_WBs_initial_guess, p_BPs_initial_guess
+        )
+    ]
+)
+force_comps_initial_guess = np.hstack(
+    (normal_forces_initial_guess, friction_forces_initial_guess)
+)
+f_c_Ws_initial_guess = np.vstack(
+    [
+        _calc_f_c_W(force_comp, p_BP, R_WB)
+        for force_comp, p_BP, R_WB in zip(
+            force_comps_initial_guess, p_BPs_initial_guess, R_WBs_initial_guess
+        )
+    ]
+)
 
 # Solve program
 # Copied from the convex planning code (PlanarPushingPath)
@@ -404,16 +461,16 @@ if solver_params.save_solver_output:
 
     solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
 
-solver_options.SetOption(
-    snopt.solver_id(),
-    "Major Feasibility Tolerance",
-    solver_params.nonl_round_major_feas_tol,
-)
-solver_options.SetOption(
-    snopt.solver_id(),
-    "Major Optimality Tolerance",
-    solver_params.nonl_round_opt_tol,
-)
+# solver_options.SetOption(
+#     snopt.solver_id(),
+#     "Major Feasibility Tolerance",
+#     solver_params.nonl_round_major_feas_tol,
+# )
+# solver_options.SetOption(
+#     snopt.solver_id(),
+#     "Major Optimality Tolerance",
+#     solver_params.nonl_round_opt_tol,
+# )
 # The performance seems to be better when these (minor step) parameters are left
 # to their default value
 # solver_options.SetOption(
@@ -426,28 +483,17 @@ solver_options.SetOption(
 #     "Minor Optimality Tolerance",
 #     solver_params.nonl_round_opt_tol,
 # )
-solver_options.SetOption(
-    snopt.solver_id(),
-    "Major iterations limit",
-    solver_params.nonl_round_major_iter_limit,
-)
+# solver_options.SetOption(
+#     snopt.solver_id(),
+#     "Major iterations limit",
+#     solver_params.nonl_round_major_iter_limit,
+# )
 
 result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
-assert result.is_success()
+if not visualize_initial_guess:
+    assert result.is_success()
 
 print(f"Cost: {result.get_optimal_cost()}")
-
-
-def _calc_f_c_B(force_comp, p_BP):
-    J_c = _calc_contact_jacobian(p_BP)
-    gen_force = J_c.T @ force_comp
-    f_c_B = gen_force[0:2]
-    return f_c_B
-
-
-def _calc_f_c_W(force_comp, p_BP, R_WB):
-    f_c_B = _calc_f_c_B(force_comp, p_BP)
-    return R_WB @ f_c_B
 
 
 normal_force_sols = result.GetSolution(normal_forces)
@@ -463,10 +509,10 @@ f_c_Ws_sols = np.vstack(
     ]
 )
 
-sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
-compl_consts_vals = [
-    sdf * lambda_n for sdf, lambda_n in zip(sdfs_sols, normal_force_sols)
-]
+# sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
+# compl_consts_vals = [
+#     sdf * lambda_n for sdf, lambda_n in zip(sdfs_sols, normal_force_sols)
+# ]
 
 p_WBs_sols = result.GetSolution(p_WBs)
 p_BPs_sols = result.GetSolution(p_BPs)
@@ -489,14 +535,25 @@ if visualizer == "new":
         visualize_knot_points=True,
     )
 else:
-    traj_old = OldPlanarPushingTrajectory(
-        dt * 5,
-        [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-        result.GetSolution(p_WBs).T,
-        evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
-        np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
-        result.GetSolution(p_BPs).T,
-    )
+
+    if visualize_initial_guess:
+        traj_old = OldPlanarPushingTrajectory(
+            dt * 5,
+            R_WBs_initial_guess,
+            p_WBs_initial_guess.T,
+            p_WPs_initial_guess.T,  # type: ignore
+            np.hstack([f_c_Ws_initial_guess.T, np.zeros((2, 1))]),
+            p_BPs_initial_guess.T,
+        )
+    else:
+        traj_old = OldPlanarPushingTrajectory(
+            dt * 5,
+            [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+            result.GetSolution(p_WBs).T,
+            evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
+            np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
+            result.GetSolution(p_BPs).T,
+        )
     visualize_planar_pushing_trajectory_legacy(
         traj_old, slider.geometry, pusher_radius=0.01
     )
