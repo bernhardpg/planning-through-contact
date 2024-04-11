@@ -49,14 +49,18 @@ camera_configs:
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
-  num_runs: 1
-  max_attempt_duration: 90
+  num_runs: 2
+  max_attempt_duration: 60
   seed: 42
   slider_type: ${slider_type}
   pusher_start_pose: ${pusher_start_pose}
   slider_goal_pose: ${slider_goal_pose}
   workspace_width: 0.35
   workspace_height: 0.5
+  trans_tol: 0.01
+  rot_tol: 1.5 # degrees
+  evaluate_final_pusher_position: true
+  evaluate_final_slider_rotation: true
 
 ## Robot specific configs
 # sim_config
@@ -74,7 +78,7 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: true
+  generate_plans: false
   render_plans: true
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step

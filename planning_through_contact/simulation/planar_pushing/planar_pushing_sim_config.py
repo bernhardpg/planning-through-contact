@@ -50,6 +50,10 @@ class MultiRunConfig:
             slider_goal_pose,
             workspace_width,
             workspace_height,
+            trans_tol: float = 0.01,
+            rot_tol: float = 0.01, # degrees
+            evaluate_final_pusher_position=True,
+            evaluate_final_slider_rotation=True,
     ):
         # Set up multi run config
         config = get_default_plan_config(
@@ -83,6 +87,10 @@ class MultiRunConfig:
         self.seed = seed
         self.target_slider_poses = [slider_goal_pose] * num_runs
         self.max_attempt_duration = max_attempt_duration
+        self.trans_tol = trans_tol
+        self.rot_tol = rot_tol
+        self.evaluate_final_pusher_position = evaluate_final_pusher_position
+        self.evaluate_final_slider_rotation = evaluate_final_slider_rotation
     
     def __str__(self):
         slider_pose_str = f"initial_slider_poses: {self.initial_slider_poses}"
@@ -139,7 +147,12 @@ class PlanarPushingSimConfig:
     def from_yaml(cls, cfg: OmegaConf):
         # Create sim_config with mandatory fields
         # TODO: read slider directly from yaml instead of if statement
-        slider: RigidBody = get_box() if cfg.slider_type == "box" else get_tee()
+        if cfg.slider_type == "box":
+            slider: RigidBody = get_box()
+        elif cfg.slider_type == "tee":
+            slider: RigidBody = get_tee()
+        else:
+            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
             cfg.dynamics_config,
         )

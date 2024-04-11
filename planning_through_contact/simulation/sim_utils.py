@@ -79,3 +79,5 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
     else:
         raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
     return slider_sdf_url
+
+## Meshcat visualizations

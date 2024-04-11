@@ -115,7 +115,7 @@ class DiffusionPolicyController(LeafSystem):
         # load checkpoint
         payload = torch.load(open(checkpoint, 'rb'), pickle_module=dill)
         self._cfg = payload['cfg']
-        self._cfg.training.device = self._device
+        # self._cfg.training.device = self._device
         cls = hydra.utils.get_class(self._cfg._target_)
         workspace: BaseWorkspace
         workspace = cls(self._cfg)

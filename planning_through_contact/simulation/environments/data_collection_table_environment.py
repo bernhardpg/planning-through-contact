@@ -81,24 +81,8 @@ class PlanConfig:
     slider_goal_pose: PlanarPose
     limit_rotations: bool
     noise_final_pose: float
-    
-class DataCollectionConfig:
-    generate_plans: bool
-    render_plans: bool
-    convert_to_zarr: bool
-    convert_to_zarr_reduce: bool
-    plans_dir: str
-    rendered_plans_dir: str
-    zarr_path: str
-    policy_freq: float
-    state_chunk_length: int
-    action_chunk_length: int
-    target_chunk_length: int
-    image_chunk_length: int
-    plan_config: PlanConfig = None
-    LLSUB_RANK: int = None
-    LLSUB_SIZE: int = None
 
+class DataCollectionConfig:
     def __init__(
         self,
         generate_plans: bool,
@@ -108,35 +92,42 @@ class DataCollectionConfig:
         plans_dir: str,
         rendered_plans_dir: str,
         zarr_path: str,
-        policy_freq: float,
         state_chunk_length: int,
         action_chunk_length: int,
         target_chunk_length: int,
         image_chunk_length: int,
-        plan_config: PlanConfig = None,
+        policy_freq: float,
+        plan_config: PlanConfig,
         LLSUB_RANK: int = None,
-        LLSUB_SIZE: int = None,
-    ):  
+        LLSUB_SIZE: int = None,    
+    ):
+        # Data collection steps
         self.generate_plans = generate_plans
         self.render_plans = render_plans
         self.convert_to_zarr = convert_to_zarr
         self.convert_to_zarr_reduce = convert_to_zarr_reduce
+
+        # Data collection directories
         self.plans_dir = plans_dir
         self.rendered_plans_dir = rendered_plans_dir
         self.zarr_path = zarr_path
-        self.policy_freq = policy_freq
+
+        # zarr params
         self.state_chunk_length = state_chunk_length
         self.action_chunk_length = action_chunk_length
         self.target_chunk_length = target_chunk_length
         self.image_chunk_length = image_chunk_length
+        self.policy_freq = policy_freq
+
+        # Plan generatino config
         self.plan_config = plan_config
-        self.LLSUB_RANK = LLSUB_RANK
-        self.LLSUB_SIZE = LLSUB_SIZE
 
         # Supercloud settings
+        self.LLSUB_RANK = LLSUB_RANK
+        self.LLSUB_SIZE = LLSUB_SIZE
         if self.LLSUB_RANK is not None and self.LLSUB_SIZE is not None:
             assert not self.convert_to_zarr and not self.convert_to_zarr_reduce
-
+            
             self.plans_dir = f"{self.plans_dir}/run_{self.LLSUB_RANK}"
             self.rendered_plans_dir = f"{self.rendered_plans_dir}/run_{self.LLSUB_RANK}"
             self.plan_config.seed += self.LLSUB_RANK
@@ -213,7 +204,6 @@ class DataCollectionTableEnvironment:
                     plant=diff_ik_plant,
                     time_step=self._diff_ik_time_step,
                     default_joint_positions=sim_config.default_joint_positions,
-                    disregard_angle=False,
                     log_path=self._log_path,
                 ),
             )
@@ -259,7 +249,7 @@ class DataCollectionTableEnvironment:
             # Diff IK connections
             builder.Connect(
                 self._desired_position_source.GetOutputPort("planar_position_command"),
-                self._position_to_rigid_transform.GetInputPort("vector_input"),
+                self._position_to_rigid_transform.GetInputPort("planar_position_input"),
             )
 
             builder.Connect(
@@ -305,34 +295,32 @@ class DataCollectionTableEnvironment:
         )
 
         # Set up camera logging
-        # TODO: add image writer per camera
-        assert sim_config.camera_configs is not None
-                                
-        image_writer_system = ImageWriter()
-        image_writer_system.DeclareImageInputPort(
-            pixel_type=PixelType.kRgba8U,
-            port_name="overhead_camera_image",
-            file_name_format= self._image_dir + '/{time_msec}.png',
-            publish_period=0.1,
-            start_time=0.0
-        )
-        image_writer = builder.AddNamedSystem(
-            "ImageWriter",
-            image_writer_system
-        )
-        builder.Connect(
-            self._state_estimator.GetOutputPort(
-                "rgbd_sensor_state_estimator_overhead_camera"
-            ),
-            image_writer.get_input_port()
-        )
+        image_writers = []
+        for camera_config in sim_config.camera_configs:                
+            image_writers.append(ImageWriter())
+            image_writers[-1].DeclareImageInputPort(
+                pixel_type=PixelType.kRgba8U,
+                port_name=f"{camera_config.name}_image",
+                file_name_format= self._image_dir + '/{time_msec}.png',
+                publish_period=0.1,
+                start_time=0.0
+            )
+            builder.AddNamedSystem(
+                f"{camera_config}_image_writer",
+                image_writers[-1]
+            )
+            builder.Connect(
+                self._state_estimator.GetOutputPort(
+                    f"rgbd_sensor_state_estimator_{camera_config.name}"
+                ),
+                image_writers[-1].get_input_port()
+            )
 
         # Set up desired pusher planar pose loggers
         self._pusher_pose_desired_logger = LogVectorOutput(
             self._desired_position_source.GetOutputPort("planar_position_command"),
             builder,
         )
-            
 
         diagram = builder.Build()
         self._diagram = diagram
@@ -342,12 +330,6 @@ class DataCollectionTableEnvironment:
             self._simulator.set_target_realtime_rate(1.0)
         
         self.context = self._simulator.get_mutable_context()
-
-    def _get_diff_ik_time_step(self):
-        if type(self._desired_position_source) == ReplayPositionSource and \
-            self._desired_position_source.get_time_step() is not None:
-            return self._desired_position_source.get_time_step()
-        return self._sim_config.time_step
 
     def simulate(
         self,
@@ -446,3 +428,9 @@ class DataCollectionTableEnvironment:
         os.makedirs(f'{data_collection_dir}/{traj_idx}/images')
         open(f'{data_collection_dir}/{traj_idx}/log.txt', 'w').close()
         return f'{data_collection_dir}/{traj_idx}'
+    
+    def _get_diff_ik_time_step(self):
+        if type(self._desired_position_source) == ReplayPositionSource and \
+            self._desired_position_source.get_time_step() is not None:
+            return self._desired_position_source.get_time_step()
+        return self._sim_config.time_step
