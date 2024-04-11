@@ -465,11 +465,6 @@ class Box2d(CollisionGeometry):
         if len(pos.shape) == 1:
             pos = pos.reshape((-1, 1))
 
-        pos_x = pos[0, 0]
-        pos_y = pos[1, 0]
-
-        TOL = 1e-12
-
         planes_left = self.get_planes_for_collision_free_region(3)
         planes_right = self.get_planes_for_collision_free_region(1)
         planes_top = self.get_planes_for_collision_free_region(0)
