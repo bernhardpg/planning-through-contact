@@ -470,33 +470,21 @@ class Box2d(CollisionGeometry):
 
         TOL = 1e-12
 
-        # Left and top left
-        if (
-            pos_x <= -self.width / 2 + TOL
-            and pos_y >= -self.height / 2
-            # and pos_y <= self.height / 2
-        ):
+        planes_left = self.get_planes_for_collision_free_region(3)
+        planes_right = self.get_planes_for_collision_free_region(1)
+        planes_top = self.get_planes_for_collision_free_region(0)
+        planes_bottom = self.get_planes_for_collision_free_region(2)
+        # Left
+        if planes_left[0].dist_to(pos) >= 0 and planes_left[1].dist_to(pos) >= 0:
             return _make_jacobian(self.normal_vecs[3], self.tangent_vecs[3], pos)
-        # Right and bottom right
-        elif (
-            pos_x >= self.width / 2 - TOL
-            # and pos_y >= -self.height / 2
-            and pos_y <= self.height / 2
-        ):
+        # Right
+        elif planes_right[0].dist_to(pos) >= 0 and planes_right[1].dist_to(pos) >= 0:
             return _make_jacobian(self.normal_vecs[1], self.tangent_vecs[1], pos)
-        # Top and top right
-        elif (
-            pos_y >= self.height / 2 - TOL
-            and pos_x >= -self.width / 2
-            # and pos_x <= self.width / 2
-        ):
+        # Top
+        elif planes_top[0].dist_to(pos) >= 0 and planes_top[1].dist_to(pos) >= 0:
             return _make_jacobian(self.normal_vecs[0], self.tangent_vecs[0], pos)
-        # Bottom and left bottom
-        elif (
-            pos_y <= -self.height / 2 + TOL
-            # and pos_x >= -self.width / 2
-            and pos_x <= self.width / 2
-        ):
+        # Bottom
+        elif planes_bottom[0].dist_to(pos) >= 0 and planes_bottom[1].dist_to(pos) >= 0:
             return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
         else:  # inside box we just return zero
             # TODO: Could this potentially confuse the solver?

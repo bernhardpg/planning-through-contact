@@ -183,7 +183,7 @@ class Visualizer2d:
     WINDOW_WIDTH: int = 1200
     WINDOW_HEIGHT: int = 900
     PLOT_SCALE: int = 500
-    FORCE_SCALE: float = 2.0
+    FORCE_SCALE: float = 5.0
     POINT_RADIUS: float = 1.0
 
     def __post_init__(self) -> None:
