@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,10 +45,15 @@ from planning_through_contact.visualize.planar_pushing import (
 from scripts.planar_pushing.create_plan import get_plan_start_and_goals_to_point
 
 
-def dir_trajopt(start_and_goal: PlanarPushingStartAndGoal) -> bool:
-    visualize = False
+def dir_trajopt(
+    start_and_goal: PlanarPushingStartAndGoal, name: Optional[str] = None
+) -> bool:
+    visualize = True
+    # visualizer = "old"
+    visualizer = "new"
     visualize_initial_guess = False
     assert_found_solution = False
+    print_cost = False
 
     num_time_steps = 16  # TODO: Change
     dt = 0.4  # TODO: Change
@@ -57,7 +62,8 @@ def dir_trajopt(start_and_goal: PlanarPushingStartAndGoal) -> bool:
 
     dynamics_config = config.dynamics_config
 
-    slider = get_sugar_box()
+    slider = dynamics_config.slider
+    pusher_radius = dynamics_config.pusher_radius
 
     slider_initial_pose = start_and_goal.slider_initial_pose
     slider_target_pose = start_and_goal.slider_target_pose
@@ -217,7 +223,7 @@ def dir_trajopt(start_and_goal: PlanarPushingStartAndGoal) -> bool:
     prog.AddLinearConstraint(ge(sdf_slacks, 0))
 
     # Enforce non-penetration
-    calc_sdf = lambda pos: slider.geometry.get_signed_distance(pos)  # type: ignore
+    calc_sdf = lambda pos: slider.geometry.get_signed_distance(pos) - pusher_radius  # type: ignore
 
     def _sdf_equal_to_slack(vars: npt.NDArray) -> npt.NDArray:
         pos = vars[:2]
@@ -540,78 +546,82 @@ def dir_trajopt(start_and_goal: PlanarPushingStartAndGoal) -> bool:
     if not visualize_initial_guess and assert_found_solution:
         assert result.is_success()
 
-    if not assert_found_solution:
-        return result.is_success()
+    if result.is_success():
+        if print_cost:
+            print(f"Cost: {result.get_optimal_cost()}")
 
-    print(f"Cost: {result.get_optimal_cost()}")
+        normal_force_sols = result.GetSolution(normal_forces)
+        force_comps_sols = result.GetSolution(force_comps)
+        p_BPs_sols = result.GetSolution(p_BPs)
+        R_WBs_sols = [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs]
+        f_c_Ws_sols = np.vstack(
+            [
+                _calc_f_c_W(force_comp_sol, p_BP_sol, R_WB_sol)
+                for force_comp_sol, p_BP_sol, R_WB_sol in zip(
+                    force_comps_sols, p_BPs_sols, R_WBs_sols
+                )
+            ]
+        )
 
-    normal_force_sols = result.GetSolution(normal_forces)
-    force_comps_sols = result.GetSolution(force_comps)
-    p_BPs_sols = result.GetSolution(p_BPs)
-    R_WBs_sols = [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs]
-    f_c_Ws_sols = np.vstack(
-        [
-            _calc_f_c_W(force_comp_sol, p_BP_sol, R_WB_sol)
-            for force_comp_sol, p_BP_sol, R_WB_sol in zip(
-                force_comps_sols, p_BPs_sols, R_WBs_sols
-            )
-        ]
-    )
+        theta_WB_sols = [np.arccos(R[0, 0]) for R in R_WBs_sols]
 
-    theta_WB_sols = [np.arccos(R[0, 0]) for R in R_WBs_sols]
+        # sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
+        # compl_consts_vals = [
+        #     sdf * lambda_n for sdf, lambda_n in zip(sdfs_sols, normal_force_sols)
+        # ]
 
-    # sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
-    # compl_consts_vals = [
-    #     sdf * lambda_n for sdf, lambda_n in zip(sdfs_sols, normal_force_sols)
-    # ]
+        p_WBs_sols = result.GetSolution(p_WBs)
+        p_BPs_sols = result.GetSolution(p_BPs)
 
-    p_WBs_sols = result.GetSolution(p_WBs)
-    p_BPs_sols = result.GetSolution(p_BPs)
-
-    if visualize:
-        visualizer = "old"
-        if visualizer == "new":
-            traj = SimplePlanarPushingTrajectory(
-                result.GetSolution(p_WBs),
-                [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-                evaluate_np_expressions_array(p_WPs, result),  # type: ignore
-                f_c_Ws_sols,
-                dt,
-                config,
-            )
-            visualize_planar_pushing_trajectory(
-                traj,  # type: ignore
-                save=True,
-                # show=True,
-                filename=f"direct_trajopt_test",
-                visualize_knot_points=True,
-            )
-        else:
-
-            if visualize_initial_guess:
-                traj_old = OldPlanarPushingTrajectory(
+        if visualize:
+            if visualizer == "new":
+                traj = SimplePlanarPushingTrajectory(
+                    result.GetSolution(p_WBs),
+                    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+                    evaluate_np_expressions_array(p_WPs, result),  # type: ignore
+                    f_c_Ws_sols,
                     dt,
-                    R_WBs_initial_guess,
-                    p_WBs_initial_guess.T,
-                    p_WPs_initial_guess.T,  # type: ignore
-                    np.hstack([f_c_Ws_initial_guess.T, np.zeros((2, 1))]),
-                    p_BPs_initial_guess.T,
+                    config,
+                )
+                output_folder = "dir_trajopt/"
+                if name is None:
+                    name = "untitled"
+
+                filename = f"{output_folder + name}"
+                visualize_planar_pushing_trajectory(
+                    traj,  # type: ignore
+                    save=True,
+                    filename=filename,
+                    visualize_knot_points=True,
                 )
             else:
-                traj_old = OldPlanarPushingTrajectory(
-                    dt,
-                    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-                    result.GetSolution(p_WBs).T,
-                    evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
-                    np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
-                    result.GetSolution(p_BPs).T,
+
+                if visualize_initial_guess:
+                    traj_old = OldPlanarPushingTrajectory(
+                        dt,
+                        R_WBs_initial_guess,
+                        p_WBs_initial_guess.T,
+                        p_WPs_initial_guess.T,  # type: ignore
+                        np.hstack([f_c_Ws_initial_guess.T, np.zeros((2, 1))]),
+                        p_BPs_initial_guess.T,
+                    )
+                else:
+                    traj_old = OldPlanarPushingTrajectory(
+                        dt,
+                        [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+                        result.GetSolution(p_WBs).T,
+                        evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
+                        np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
+                        result.GetSolution(p_BPs).T,
+                    )
+                visualize_planar_pushing_trajectory_legacy(
+                    traj_old, slider.geometry, pusher_radius=0.01
                 )
-            visualize_planar_pushing_trajectory_legacy(
-                traj_old, slider.geometry, pusher_radius=0.01
-            )
+
+    return result.is_success()
 
 
-num_trajs = 10
+num_trajs = 5
 seed = 1
 workspace = PlanarPushingWorkspace(
     slider=BoxWorkspace(
@@ -621,7 +631,7 @@ workspace = PlanarPushingWorkspace(
         buffer=0,
     ),
 )
-config = get_default_plan_config()
+config = get_default_plan_config("sugar_box")
 plans = get_plan_start_and_goals_to_point(
     seed,
     num_trajs,
@@ -631,4 +641,5 @@ plans = get_plan_start_and_goals_to_point(
     limit_rotations=False,
 )
 
-found_results = [dir_trajopt(plan) for plan in tqdm(plans)]
+found_results = [dir_trajopt(plan, str(idx)) for idx, plan in enumerate(tqdm(plans))]
+print(f"Found solution in {(sum(found_results) / num_trajs)*100}% of instances.")
