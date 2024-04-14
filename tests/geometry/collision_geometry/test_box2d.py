@@ -190,3 +190,68 @@ def test_get_p_BP_from_lam() -> None:
 #
 # def test_get_proximate_vertices_from_location(box_geometry: Box2d) -> None:
 #     ...
+
+
+def test_get_signed_distance() -> None:
+    box = Box2d(width=0.3, height=0.2)
+
+    # left, right, top, bottom
+    assert np.isclose(box.get_signed_distance(np.array([-0.2, 0])), 0.05)
+    assert np.isclose(box.get_signed_distance(np.array([0.2, 0])), 0.05)
+    assert np.isclose(box.get_signed_distance(np.array([0, 0.2])), 0.1)
+    assert np.isclose(box.get_signed_distance(np.array([0, -0.2])), 0.1)
+
+    # corners
+    target_dist = np.sqrt((0.2 - box.width / 2) ** 2 + (0.2 - box.height / 2) ** 2)
+    assert np.isclose(box.get_signed_distance(np.array([-0.2, -0.2])), target_dist)
+    assert np.isclose(box.get_signed_distance(np.array([-0.2, 0.2])), target_dist)
+    assert np.isclose(box.get_signed_distance(np.array([0.2, -0.2])), target_dist)
+    assert np.isclose(box.get_signed_distance(np.array([0.2, 0.2])), target_dist)
+
+    # inside left
+    assert np.isclose(box.get_signed_distance(np.array([-0.1, 0])), -0.05)
+    # inside right
+    assert np.isclose(box.get_signed_distance(np.array([0.1, 0])), -0.05)
+    # inside top
+    assert np.isclose(box.get_signed_distance(np.array([0, 0.07])), -0.03)
+    # inside bottom
+    assert np.isclose(box.get_signed_distance(np.array([0, -0.07])), -0.03)
+
+
+def test_get_jacobian() -> None:
+    box = Box2d(width=0.3, height=0.2)
+
+    force_comps = np.array([0.1, 0.05]).reshape((2, 1))
+
+    def _get_f(x, y):
+        J = box.get_contact_jacobian(np.array([x, y]))
+        f = J.T @ force_comps
+        return f.flatten()
+
+    # left
+    f = _get_f(-box.width / 2, 0)
+    assert np.isclose(f[0], force_comps[0])
+    assert np.isclose(f[1], force_comps[1])
+    target_torque = -box.width / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
+
+    # right
+    f = _get_f(box.width / 2, 0)
+    assert np.isclose(f[0], -force_comps[0])
+    assert np.isclose(f[1], -force_comps[1])
+    target_torque = -box.width / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
+
+    # top
+    f = _get_f(0, box.height / 2)
+    assert np.isclose(f[0], force_comps[1])
+    assert np.isclose(f[1], -force_comps[0])
+    target_torque = -box.height / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)
+
+    # bottom
+    f = _get_f(0, -box.height / 2)
+    assert np.isclose(f[0], -force_comps[1])
+    assert np.isclose(f[1], force_comps[0])
+    target_torque = -box.height / 2 * force_comps[1].item()
+    assert np.isclose(f[2], target_torque)

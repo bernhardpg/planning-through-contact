@@ -69,8 +69,9 @@ class VisualizationPolygon2d(VisualizationPoint2d):
         cls,
         com_position: npt.NDArray[np.float64],  # (num_steps, n)
         rotation: npt.NDArray[np.float64],  # (num_steps, n ** 2)
-        polytope: RigidBody2d
-        | CollisionGeometry,  # TODO: RigidBody2d will be deprecated!
+        polytope: (
+            RigidBody2d | CollisionGeometry
+        ),  # TODO: RigidBody2d will be deprecated!
         color: RGB,
     ) -> "VisualizationPolygon2d":
         # Transform points into world frame
@@ -182,7 +183,7 @@ class Visualizer2d:
     WINDOW_WIDTH: int = 1200
     WINDOW_HEIGHT: int = 900
     PLOT_SCALE: int = 500
-    FORCE_SCALE: float = 2.0
+    FORCE_SCALE: float = 5.0
     POINT_RADIUS: float = 1.0
 
     def __post_init__(self) -> None:

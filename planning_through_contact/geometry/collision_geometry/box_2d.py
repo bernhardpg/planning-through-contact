@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Literal, Tuple
+from typing import Any, List, Literal, Tuple
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.geometry import Box as DrakeBox
+from pydrake.math import sqrt
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -14,7 +15,7 @@ from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
 )
-from planning_through_contact.geometry.utilities import normalize_vec
+from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 @dataclass(frozen=True)
@@ -367,3 +368,119 @@ class Box2d(CollisionGeometry):
             raise ValueError(f"Can not get collision free region for idx {idx}")
 
         return planes
+
+    def get_signed_distance(self, pos: npt.NDArray) -> float:
+        """
+        Returns the signed distance from the pos to the closest point on the box.
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        pos_x = pos[0, 0]
+        pos_y = pos[1, 0]
+
+        # Left
+        if (
+            pos_x <= -self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return -pos_x - self.width / 2
+        # Right
+        elif (
+            pos_x >= self.width / 2
+            and pos_y >= -self.height / 2
+            and pos_y <= self.height / 2
+        ):
+            return pos_x - self.width / 2
+        # Top
+        elif (
+            pos_y >= self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return pos_y - self.height / 2
+        # Bottom
+        elif (
+            pos_y <= -self.height / 2
+            and pos_x >= -self.width / 2
+            and pos_x <= self.width / 2
+        ):
+            return -pos_y - self.height / 2
+
+        # Bottom left corner
+        elif pos_y <= -self.height / 2 and pos_x <= -self.width / 2:
+            diff = pos - self.vertices[3]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Top left corner
+        elif pos_y >= self.height / 2 and pos_x <= -self.width / 2:
+            diff = pos - self.vertices[0]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Top right corner
+        elif pos_y >= self.height / 2 and pos_x >= self.width / 2:
+            diff = pos - self.vertices[1]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+
+        # Bottom right corner
+        elif pos_y <= -self.height / 2 and pos_x >= self.width / 2:
+            diff = pos - self.vertices[2]
+            dist = sqrt(diff[0, 0] ** 2 + diff[1, 0] ** 2)
+            return dist
+        else:  # inside box
+            dist_to_left = self.width / 2 + pos_x
+            dist_to_right = self.width / 2 - pos_x
+
+            dist_to_top = self.height / 2 - pos_y
+            dist_to_bottom = self.height / 2 + pos_y
+
+            return -min((dist_to_top, dist_to_bottom, dist_to_left, dist_to_right))
+
+    def get_contact_jacobian(self, pos: npt.NDArray) -> npt.NDArray[Any]:
+        """
+        Returns the contact jacobian for the point that is closest to the box.
+        If the closest point is on a corner, one of the corner faces is picked
+        arbitrarily (but deterministically).
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        def _make_jacobian(
+            normal_vec: npt.NDArray[np.float64],
+            tangent_vec: npt.NDArray[np.float64],
+            pos: npt.NDArray[Any],
+        ) -> npt.NDArray[Any]:
+            col_1 = np.vstack((normal_vec, cross_2d(pos, normal_vec)))
+            col_2 = np.vstack((tangent_vec, cross_2d(pos, tangent_vec)))
+            J_T = np.hstack([col_1, col_2])
+            return J_T.T
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        planes_left = self.get_planes_for_collision_free_region(3)
+        planes_right = self.get_planes_for_collision_free_region(1)
+        planes_top = self.get_planes_for_collision_free_region(0)
+        planes_bottom = self.get_planes_for_collision_free_region(2)
+        # Left
+        if planes_left[0].dist_to(pos) >= 0 and planes_left[1].dist_to(pos) >= 0:
+            return _make_jacobian(self.normal_vecs[3], self.tangent_vecs[3], pos)
+        # Right
+        elif planes_right[0].dist_to(pos) >= 0 and planes_right[1].dist_to(pos) >= 0:
+            return _make_jacobian(self.normal_vecs[1], self.tangent_vecs[1], pos)
+        # Top
+        elif planes_top[0].dist_to(pos) >= 0 and planes_top[1].dist_to(pos) >= 0:
+            return _make_jacobian(self.normal_vecs[0], self.tangent_vecs[0], pos)
+        # Bottom
+        elif planes_bottom[0].dist_to(pos) >= 0 and planes_bottom[1].dist_to(pos) >= 0:
+            return _make_jacobian(self.normal_vecs[2], self.tangent_vecs[2], pos)
+        else:  # inside box we just return zero
+            # TODO: Could this potentially confuse the solver?
+            return np.zeros((2, 3))

@@ -871,7 +871,7 @@ def make_traj_figure(
                             if np.linalg.norm(f_W) <= TOL:
                                 # don't plot zero forces
                                 continue
-                            
+
                             p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
                             ax.arrow(
                                 p_Wc[0],
