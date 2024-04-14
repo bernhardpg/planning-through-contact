@@ -3,7 +3,13 @@ from typing import List, Optional
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge, sqrt
-from pydrake.solvers import MathematicalProgram, SnoptSolver, Solve, SolverOptions
+from pydrake.solvers import (
+    MathematicalProgram,
+    MathematicalProgramResult,
+    SnoptSolver,
+    Solve,
+    SolverOptions,
+)
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -36,7 +42,8 @@ def direct_trajopt_through_contact(
     output_name: Optional[str] = None,
     output_folder: str = "direct_trajopt",
     visualize: bool = True,
-) -> bool:
+    print_success: bool = False,
+) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
     M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -45,13 +52,14 @@ def direct_trajopt_through_contact(
 
     import os
 
-    os.makedirs(output_folder, exist_ok=True)
+    output_path = f"{output_folder}/{output_name}"
+    output_name = f"direct_trajopt_{output_name}"
+    os.makedirs(output_path, exist_ok=True)
 
     # visualizer = "old"
     visualizer = "new"
     visualize_initial_guess = False
     assert_found_solution = False
-    print_cost = True
 
     num_time_steps = 16  # TODO: Change
     dt = 0.4  # TODO: Change
@@ -553,10 +561,10 @@ def direct_trajopt_through_contact(
     snopt = SnoptSolver()
 
     solver_options = SolverOptions()
-    if solver_params.save_solver_output:
+    if solver_params.nonl_rounding_save_solver_output:
         import os
 
-        snopt_log_path = f"{output_folder}/{output_name}_snopt_output.txt"
+        snopt_log_path = f"{output_path}/{output_name}_snopt_output.txt"
         # Delete log file if it already exists as Snopt just keeps writing to the same file
         if os.path.exists(snopt_log_path):
             os.remove(snopt_log_path)
@@ -595,10 +603,11 @@ def direct_trajopt_through_contact(
     if not visualize_initial_guess and assert_found_solution:
         assert result.is_success()
 
-    print(f"{output_name}: result.is_success() = {result.is_success()}")
+    if print_success:
+        print(f"{output_name}: result.is_success() = {result.is_success()}")
     if result.is_success():
-        if print_cost:
-            print(f"Cost: {result.get_optimal_cost()}")
+        if solver_params.print_cost:
+            print(f"Direct trajopt cost: {result.get_optimal_cost()}")
 
         normal_force_sols = result.GetSolution(normal_forces)
         force_comps_sols = result.GetSolution(force_comps)
@@ -692,7 +701,7 @@ def direct_trajopt_through_contact(
                 if output_name is None:
                     output_name = "untitled"
 
-                filename = f"{output_folder}/{output_name}"
+                filename = f"{output_path}/{output_name}"
                 visualize_planar_pushing_trajectory(
                     traj,  # type: ignore
                     save=True,
@@ -723,4 +732,4 @@ def direct_trajopt_through_contact(
                     traj_old, slider.geometry, pusher_radius=pusher_radius
                 )
 
-    return result.is_success()
+    return result

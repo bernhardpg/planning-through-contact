@@ -39,55 +39,59 @@ if __name__ == "__main__":
         type=int,
         default=100,
     )
-    parser.add_argument(
-        "--debug",
-        help="Debug mode. Will print additional information, including solver output.",
-        action="store_true",
-    )
 
     args = parser.parse_args()
     seed = args.seed
     traj_number = args.traj
-    debug = args.debug
     slider_type = args.body
     num_trajs = args.num
 
     config = get_default_plan_config(slider_type)
-    solver_params = get_default_solver_params(True, clarabel=False)
-    solver_params.save_solver_output = True
+    solver_params = get_default_solver_params()
+    solver_params.nonl_rounding_save_solver_output = False
+    solver_params.print_cost = False
 
     plans = get_default_experiment_plans(seed, num_trajs, config)
     output_folder = "baseline_comparison"
 
     if traj_number is not None:
-        traj_output_folder = create_output_folder(
-            output_folder, slider_type, traj_number
-        )
-
-        plan = plans[traj_number]
-        output_name = str(traj_number)
-        res = direct_trajopt_through_contact(
-            plan,
-            config,
-            solver_params,
-            output_name=output_name,
-            output_folder=traj_output_folder,
-        )
-        create_plan(
-            plan,
-            config,
-            solver_params,
-            output_name=output_name,
-            output_folder=traj_output_folder,
-        )
-
+        plans_to_run = [plans[traj_number]]
     else:
-        found_results = [
-            direct_trajopt_through_contact(
-                plan, config, solver_params, output_name=str(idx)
-            )
-            for idx, plan in enumerate(tqdm(plans))
-        ]
-        print(
-            f"Found solution in {(sum(found_results) / num_trajs)*100}% of instances."
+        plans_to_run = plans
+
+    traj_output_folder = create_output_folder(output_folder, slider_type, traj_number)
+
+    for idx, plan in enumerate(plans_to_run):
+
+        output_name = str(idx)
+        direct_trajopt_result = direct_trajopt_through_contact(
+            plan,
+            config,
+            solver_params,
+            output_name=output_name,
+            output_folder=traj_output_folder,
         )
+        gcs_solve_data = create_plan(
+            plan,
+            config,
+            solver_params,
+            output_name=output_name,
+            output_folder=traj_output_folder,
+            debug=True,
+        )
+        with open(f"{traj_output_folder}/costs.txt", "w") as f:
+            lines = []
+            if gcs_solve_data is None:
+                lines.append("GCS cost: infeasible")
+            else:
+                lines.append(f"GCS cost: {gcs_solve_data.feasible_cost}")
+
+            if direct_trajopt_result.is_success():
+                lines.append(
+                    f"Direct trajopt cost: {direct_trajopt_result.get_optimal_cost()}"
+                )
+            else:
+                lines.append(f"Direct trajopt cost: infeasible")
+
+            for l in lines:
+                print(l, file=f)

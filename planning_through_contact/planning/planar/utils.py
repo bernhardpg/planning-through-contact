@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -406,16 +407,16 @@ def create_plan(
     solver_params: PlanarSolverParams,
     output_folder: str = "",
     output_name: str = "Untitled_traj",
-    save_video: bool = False,
+    save_video: bool = True,
     do_rounding: bool = True,
     interpolate_video: bool = False,
     animation_lims: Optional[Tuple[float, float, float, float]] = None,
-    save_traj: bool = False,
+    save_traj: bool = True,
     save_analysis: bool = False,
     debug: bool = False,
     hardware: bool = False,
     save_relaxed: bool = False,
-):
+) -> SingleRunResult | None:
     """
     Creates a planar pushing plan.
 
@@ -429,7 +430,8 @@ def create_plan(
     trajectory_folder = f"{folder_name}/trajectory"
     os.makedirs(trajectory_folder, exist_ok=True)
     analysis_folder = f"{folder_name}/analysis"
-    os.makedirs(analysis_folder, exist_ok=True)
+    if save_analysis or debug:
+        os.makedirs(analysis_folder, exist_ok=True)
 
     if debug:
         visualize_planar_pushing_start_and_goal(
@@ -487,7 +489,7 @@ def create_plan(
         if save_relaxed:
             make_traj_figure(
                 traj_relaxed,
-                filename=f"{analysis_folder}/relaxed_traj",
+                filename=f"relaxed_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
                 show_workspace=hardware,
@@ -495,13 +497,13 @@ def create_plan(
 
             if save_analysis:
                 plot_forces(
-                    traj_relaxed, filename=f"{analysis_folder}/relaxed_traj_forces"
+                    traj_relaxed, filename=f"{trajectory_folder}/relaxed_traj_forces"
                 )
 
         if traj_rounded is not None:
             make_traj_figure(
                 traj_rounded,
-                filename=f"{analysis_folder}/rounded_traj",
+                filename=f"rounded_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
                 show_workspace=hardware,
@@ -509,7 +511,7 @@ def create_plan(
 
             if save_analysis:
                 plot_forces(
-                    traj_rounded, filename=f"{analysis_folder}/rounded_traj_forces"
+                    traj_rounded, filename=f"{trajectory_folder}/rounded_traj_forces"
                 )
 
                 compare_trajs(
@@ -517,7 +519,7 @@ def create_plan(
                     traj_rounded,
                     traj_a_legend="relaxed",
                     traj_b_legend="rounded",
-                    filename=f"{analysis_folder}/comparison",
+                    filename=f"{trajectory_folder}/comparison",
                 )
 
         if save_video:
@@ -525,8 +527,7 @@ def create_plan(
                 ani = visualize_planar_pushing_trajectory(
                     traj_relaxed,  # type: ignore
                     save=True,
-                    # show=True,
-                    filename=f"{analysis_folder}/relaxed_traj",
+                    filename=f"relaxed_traj",
                     visualize_knot_points=not interpolate_video,
                     lims=animation_lims,
                 )
@@ -535,9 +536,10 @@ def create_plan(
                 ani = visualize_planar_pushing_trajectory(
                     traj_rounded,  # type: ignore
                     save=True,
-                    # show=True,
-                    filename=f"{analysis_folder}/rounded_traj",
+                    filename=f"rounded_traj",
                     visualize_knot_points=not interpolate_video,
                     lims=animation_lims,
                 )
-                return ani
+
+    if debug:
+        return solve_data

@@ -134,6 +134,7 @@ class PlanarSolverParams:
         1e-4  # Feasibility treshold for nonlinear rounding
     )
     nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    nonl_rounding_save_solver_output: bool = False
     # nonl_round_major_feas_tol: float = (
     #     1e-6  # Feasibility treshold for nonlinear rounding
     # )
