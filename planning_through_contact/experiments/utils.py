@@ -1,3 +1,5 @@
+import os
+from datetime import datetime
 from typing import List, Literal, Optional
 
 import numpy as np
@@ -23,6 +25,25 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.planning.planar.utils import (
     get_plan_start_and_goals_to_point,
 )
+
+
+def create_output_folder(
+    output_dir: str, slider_type: str, traj_number: Optional[int]
+) -> str:
+    os.makedirs(output_dir, exist_ok=True)
+    folder_name = f"{output_dir}/run_{get_time_as_str()}_{slider_type}"
+    if traj_number is not None:
+        folder_name += f"_traj_{traj_number}"
+    os.makedirs(folder_name, exist_ok=True)
+
+    return folder_name
+
+
+def get_time_as_str() -> str:
+    current_time = datetime.now()
+    # For example, YYYYMMDDHHMMSS format
+    formatted_time = current_time.strftime("%Y%m%d%H%M%S")
+    return formatted_time
 
 
 def get_box() -> RigidBody:

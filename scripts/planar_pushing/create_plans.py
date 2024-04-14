@@ -1,33 +1,13 @@
 import argparse
-import os
-from datetime import datetime
-from typing import Optional
 
 from planning_through_contact.experiments.utils import (
+    create_output_folder,
     get_default_experiment_plans,
     get_default_plan_config,
     get_default_solver_params,
     get_hardware_plans,
 )
 from planning_through_contact.planning.planar.utils import create_plan
-
-
-def _create_output_folder(output_dir: str, traj_number: Optional[int]) -> str:
-    os.makedirs(output_dir, exist_ok=True)
-    folder_name = f"{output_dir}/run_{_get_time_as_str()}_{slider_type}"
-    if traj_number is not None:
-        folder_name += f"_traj_{traj_number}"
-    os.makedirs(folder_name, exist_ok=True)
-
-    return folder_name
-
-
-def _get_time_as_str() -> str:
-    current_time = datetime.now()
-    # For example, YYYYMMDDHHMMSS format
-    formatted_time = current_time.strftime("%Y%m%d%H%M%S")
-    return formatted_time
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -105,11 +85,11 @@ if __name__ == "__main__":
 
     if hardware_demos:
         output_dir = "hardware_demos"
-        folder_name = _create_output_folder(output_dir, traj_number)
+        folder_name = create_output_folder(output_dir, slider_type, traj_number)
 
         plans = get_hardware_plans(seed, config)
     else:
-        folder_name = _create_output_folder(output_dir, traj_number)
+        folder_name = create_output_folder(output_dir, slider_type, traj_number)
         plans = get_default_experiment_plans(seed, num_trajs, config)
 
     if traj_number is not None:
@@ -122,9 +102,9 @@ if __name__ == "__main__":
             plan,
             config,
             solver_params,
-            output_dir=folder_name,
+            output_folder=folder_name,
             debug=debug,
-            traj_name=f"hw_demo_{idx}",
+            output_name=f"hw_demo_{idx}",
             save_video=True,
             save_traj=True,
             animation_lims=None,

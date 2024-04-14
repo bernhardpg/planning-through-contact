@@ -404,8 +404,8 @@ def create_plan(
     start_and_target: PlanarPushingStartAndGoal,
     config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
-    output_dir: str = "",
-    traj_name: str = "Untitled_traj",
+    output_folder: str = "",
+    output_name: str = "Untitled_traj",
     save_video: bool = False,
     do_rounding: bool = True,
     interpolate_video: bool = False,
@@ -424,7 +424,7 @@ def create_plan(
     @param solver_params: Parameters for the underlying optimization solver.
     """
     # Set up folders
-    folder_name = f"{output_dir}/{traj_name}"
+    folder_name = f"{output_folder}/{output_name}"
     os.makedirs(folder_name, exist_ok=True)
     trajectory_folder = f"{folder_name}/trajectory"
     os.makedirs(trajectory_folder, exist_ok=True)

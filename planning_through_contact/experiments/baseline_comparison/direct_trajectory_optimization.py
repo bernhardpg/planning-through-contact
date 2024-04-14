@@ -35,13 +35,18 @@ def direct_trajopt_through_contact(
     solver_params: PlanarSolverParams,
     output_name: Optional[str] = None,
     output_folder: str = "direct_trajopt",
+    visualize: bool = True,
 ) -> bool:
     """
     Runs the direct transcription method described in
     M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
     of rigid bodies through contact”
     """
-    visualize = True
+
+    import os
+
+    os.makedirs(output_folder, exist_ok=True)
+
     # visualizer = "old"
     visualizer = "new"
     visualize_initial_guess = False
