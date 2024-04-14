@@ -179,7 +179,9 @@ def dir_trajopt(
         R_WB = two_d_rotation_matrix_from_angle(theta_WB_curr)
         v_WB = (p_WB_next - p_WB_curr) / dt
         # omega_WB = _calc_omega_WB(r_WB_curr, r_WB_next)
-        omega_WB = _calc_omega_WB_from_theta(theta_WB_curr, theta_WB_next)
+        # omega_WB = _calc_omega_WB_from_theta(theta_WB_curr, theta_WB_next)
+
+        omega_WB = (theta_WB_next - theta_WB_curr) / dt
 
         J_c = _calc_contact_jacobian(p_BP)
         gen_force = J_c.T @ f_comps
@@ -221,6 +223,7 @@ def dir_trajopt(
         )
         dynamics_constraints.append(const)
 
+        # TODO: remove?
         # NOTE:
         # We constrain the difference in theta between knot points to be less than pi,
         # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
@@ -228,9 +231,8 @@ def dir_trajopt(
         # omega_WB = 0.
         # Note that in principle this should not be a limiting constraint.
         delta_theta_WB = theta_WB_next - theta_WB_curr
-        EPS = 0.1
-        prog.AddConstraint(delta_theta_WB <= np.pi - EPS)
-        prog.AddConstraint(delta_theta_WB >= -(np.pi - EPS))
+        prog.AddConstraint(delta_theta_WB <= np.pi * 2 / 3)
+        prog.AddConstraint(delta_theta_WB >= -np.pi * 2 / 3)
 
     # Note: Complementarity constraints are encoded similarly to 3.2 in
     # M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -274,7 +276,29 @@ def dir_trajopt(
         prog.AddConstraint(s_sdf * s_lambda_n <= EPS)
 
     # Non-sliding constraint
-    # TODO
+    def _nonsliding_constraint(vars: npt.NDArray) -> npt.NDArray:
+        p_BP_curr = vars[0:2]
+        p_BP_next = vars[2:4]
+        s_lambda_n = vars[4]
+
+        J_c = _calc_contact_jacobian(p_BP_curr)
+        v_BP = (p_BP_next - p_BP_curr) / dt
+
+        v_in_contact_frame = (J_c.T @ v_BP)[:-1]
+        v_tangential = v_in_contact_frame[1]
+
+        res = v_tangential * s_lambda_n
+        return np.array([res])
+
+    for k in range(num_time_steps - 1):
+        p_BP_curr = p_BPs[k]
+        p_BP_next = p_BPs[k + 1]
+        s_lambda_n = lambda_n_slacks[k]
+
+        vars = np.hstack([p_BP_curr, p_BP_next, [s_lambda_n]])
+        prog.AddConstraint(
+            _nonsliding_constraint, np.zeros((1,)), np.zeros((1,)), vars=vars
+        )
 
     # Cost
 
@@ -573,6 +597,7 @@ def dir_trajopt(
     if not visualize_initial_guess and assert_found_solution:
         assert result.is_success()
 
+    print(f"{name}: result.is_success() = {result.is_success()}")
     if result.is_success():
         if print_cost:
             print(f"Cost: {result.get_optimal_cost()}")
@@ -697,7 +722,7 @@ def dir_trajopt(
 traj = None
 # traj = 0
 
-num_trajs = 100
+num_trajs = 30
 seed = 2
 workspace = PlanarPushingWorkspace(
     slider=BoxWorkspace(
@@ -718,7 +743,8 @@ plans = get_plan_start_and_goals_to_point(
 )
 
 if traj is not None:
-    dir_trajopt(plans[traj], str(traj))
+    res = dir_trajopt(plans[traj], str(traj))
+    print(f"result.is_success() = {res}")
 else:
     found_results = [
         dir_trajopt(plan, str(idx)) for idx, plan in enumerate(tqdm(plans))
