@@ -53,7 +53,7 @@ def dir_trajopt(
     visualizer = "new"
     visualize_initial_guess = False
     assert_found_solution = False
-    print_cost = False
+    print_cost = True
 
     num_time_steps = 16  # TODO: Change
     dt = 0.4  # TODO: Change
@@ -69,6 +69,9 @@ def dir_trajopt(
     slider_target_pose = start_and_goal.slider_target_pose
     pusher_initial_pose = start_and_goal.pusher_initial_pose
     pusher_target_pose = start_and_goal.pusher_target_pose
+
+    assert pusher_initial_pose is not None
+    assert pusher_target_pose is not None
 
     config.start_and_goal = PlanarPushingStartAndGoal(
         slider_initial_pose, slider_target_pose, pusher_initial_pose, pusher_target_pose
@@ -190,6 +193,7 @@ def dir_trajopt(
         constraint_value = np.concatenate([trans_vel_constraint, [ang_vel_constraint]])
         return constraint_value
 
+    dynamics_constraints = []
     for k in range(num_time_steps - 1):
         p_WB_curr = p_WBs[k]
         p_WB_next = p_WBs[k + 1]
@@ -212,9 +216,21 @@ def dir_trajopt(
                 p_BP_curr,
             )
         )
-        prog.AddConstraint(
+        const = prog.AddConstraint(
             _dynamics_constraint, np.zeros((3,)), np.zeros((3,)), vars=vars
         )
+        dynamics_constraints.append(const)
+
+        # NOTE:
+        # We constrain the difference in theta between knot points to be less than pi,
+        # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
+        # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
+        # omega_WB = 0.
+        # Note that in principle this should not be a limiting constraint.
+        delta_theta_WB = theta_WB_next - theta_WB_curr
+        EPS = 0.1
+        prog.AddConstraint(delta_theta_WB <= np.pi - EPS)
+        prog.AddConstraint(delta_theta_WB >= -(np.pi - EPS))
 
     # Note: Complementarity constraints are encoded similarly to 3.2 in
     # M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -323,16 +339,26 @@ def dir_trajopt(
     #     p_BP = p_BPs[k]
     #     prog.AddCost(_only_time_cost_when_contact, vars=p_BP)
 
-    # Pusher velocity cost
     cost_config_noncoll = config.non_collision_cost
+    # Avoid object
+    EPS = 1e-5
+    assert cost_config_noncoll.distance_to_object_socp is not None
+    for s in sdf_slacks:
+        prog.AddCost(
+            cost_config_noncoll.distance_to_object_socp * 1 / (s + pusher_radius)
+        )
+
+    # Pusher velocity cost
     v_BPs = np.vstack(
         [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
     )
     assert cost_config_noncoll.pusher_velocity_regularization is not None
     for v_BP in v_BPs:
         squared_vel = v_BP.T @ v_BP
-        cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
+        cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel * 100
         prog.AddCost(cost)
+
+        prog.AddConstraint(squared_vel <= 0.2**2)
 
     # Pusher arc length
     for k in range(num_time_steps - 1):
@@ -461,6 +487,7 @@ def dir_trajopt(
         )
         prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
     else:
+        # print("Using straight line interpolation as initial guess")
         p_BPs_initial_guess = _interpolate_traj(
             pusher_initial_pose.pos(), pusher_target_pose.pos(), duration=end_time + dt
         )
@@ -563,7 +590,8 @@ def dir_trajopt(
             ]
         )
 
-        theta_WB_sols = [np.arccos(R[0, 0]) for R in R_WBs_sols]
+        # theta_WBs_sols = [np.arccos(R[0, 0]) for R in R_WBs_sols]
+        theta_WBs_sols = result.GetSolution(theta_WBs)
 
         # sdfs_sols = [calc_sdf(p_BP_sol).item() for p_BP_sol in p_BPs_sols]
         # compl_consts_vals = [
@@ -572,6 +600,51 @@ def dir_trajopt(
 
         p_WBs_sols = result.GetSolution(p_WBs)
         p_BPs_sols = result.GetSolution(p_BPs)
+
+        # TODO: Remove
+        c_res = []
+        for const in dynamics_constraints:
+            eval = const.evaluator()
+            vars = const.variables()
+            vars_val = result.GetSolution(vars)
+
+            res = eval.Eval(vars_val)
+            c_res.append(res)
+
+        omega_WB_sols = [
+            _calc_omega_WB_from_theta(th, th_next)
+            for th, th_next in zip(theta_WBs_sols[:-1], theta_WBs_sols[1:])
+        ]
+
+        J_c_sols = [_calc_contact_jacobian(p_BP) for p_BP in p_BPs_sols]
+        gen_force_sols = [
+            J_c.T @ f_comps for J_c, f_comps in zip(J_c_sols, force_comps_sols)
+        ]
+
+        dynamics_violations = []
+        for k in range(num_time_steps - 1):
+            # for k in [1]:
+            p_WB_curr = p_WBs_sols[k]
+            p_WB_next = p_WBs_sols[k + 1]
+            theta_WB_curr = theta_WBs_sols[k]
+            theta_WB_next = theta_WBs_sols[k + 1]
+            f_comp_curr = force_comps_sols[k]
+            p_BP_curr = p_BPs_sols[k]
+
+            vars = np.concatenate(
+                (
+                    p_WB_curr,
+                    p_WB_next,
+                    [theta_WB_curr, theta_WB_next],
+                    f_comp_curr,
+                    p_BP_curr,
+                )
+            )
+            dynamics_violations.append(_dynamics_constraint(vars))
+
+            const = dynamics_constraints[k]
+            const_vars = const.variables()
+            vars_sol = result.GetSolution(const_vars)
 
         if visualize:
             if visualizer == "new":
@@ -615,14 +688,17 @@ def dir_trajopt(
                         result.GetSolution(p_BPs).T,
                     )
                 visualize_planar_pushing_trajectory_legacy(
-                    traj_old, slider.geometry, pusher_radius=0.01
+                    traj_old, slider.geometry, pusher_radius=pusher_radius
                 )
 
     return result.is_success()
 
 
-num_trajs = 5
-seed = 1
+traj = None
+# traj = 0
+
+num_trajs = 100
+seed = 2
 workspace = PlanarPushingWorkspace(
     slider=BoxWorkspace(
         width=0.6,
@@ -641,5 +717,10 @@ plans = get_plan_start_and_goals_to_point(
     limit_rotations=False,
 )
 
-found_results = [dir_trajopt(plan, str(idx)) for idx, plan in enumerate(tqdm(plans))]
-print(f"Found solution in {(sum(found_results) / num_trajs)*100}% of instances.")
+if traj is not None:
+    dir_trajopt(plans[traj], str(traj))
+else:
+    found_results = [
+        dir_trajopt(plan, str(idx)) for idx, plan in enumerate(tqdm(plans))
+    ]
+    print(f"Found solution in {(sum(found_results) / num_trajs)*100}% of instances.")
