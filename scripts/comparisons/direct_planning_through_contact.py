@@ -230,9 +230,9 @@ def dir_trajopt(
         # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
         # omega_WB = 0.
         # Note that in principle this should not be a limiting constraint.
-        delta_theta_WB = theta_WB_next - theta_WB_curr
-        prog.AddConstraint(delta_theta_WB <= np.pi * 2 / 3)
-        prog.AddConstraint(delta_theta_WB >= -np.pi * 2 / 3)
+        # delta_theta_WB = theta_WB_next - theta_WB_curr
+        # prog.AddConstraint(delta_theta_WB <= np.pi * 2 / 3)
+        # prog.AddConstraint(delta_theta_WB >= -np.pi * 2 / 3)
 
     # Note: Complementarity constraints are encoded similarly to 3.2 in
     # M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -367,24 +367,29 @@ def dir_trajopt(
     # Avoid object
     EPS = 1e-5
     assert cost_config_noncoll.distance_to_object_socp is not None
+    # cost_config_noncoll.distance_to_object_socp = 1e-2
+    distance_to_object_cost = []
     for s in sdf_slacks:
-        prog.AddCost(
-            cost_config_noncoll.distance_to_object_socp * 1 / (s + pusher_radius)
+        cost = prog.AddCost(
+            cost_config_noncoll.distance_to_object_socp * 1 / (s + pusher_radius + 0.05)
         )
+        distance_to_object_cost.append(cost)
 
     # Pusher velocity cost
     v_BPs = np.vstack(
         [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
     )
     assert cost_config_noncoll.pusher_velocity_regularization is not None
+    cost_config_noncoll.pusher_velocity_regularization = 10
     for v_BP in v_BPs:
         squared_vel = v_BP.T @ v_BP
-        cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel * 100
+        cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
         prog.AddCost(cost)
 
-        prog.AddConstraint(squared_vel <= 0.2**2)
+        # prog.AddConstraint(squared_vel <= 0.2**2)
 
     # Pusher arc length
+    cost_config_noncoll.pusher_arc_length = 1
     for k in range(num_time_steps - 1):
         p_BP_curr = p_BPs[k]
         p_BP_next = p_BPs[k + 1]
@@ -395,13 +400,11 @@ def dir_trajopt(
         prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
 
     # Squared forces
+    sq_forces_cost = []
+    cost_config.force_regularization = 100
     for lambda_n, lambda_f in force_comps:
-        cost = (
-            cost_config.force_regularization
-            * (lambda_n**2 + lambda_f**2)
-            * config.dynamics_config.force_scale**2
-        )
-        prog.AddCost(cost)
+        cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2)
+        sq_forces_cost.append(prog.AddCost(cost))
 
     # Create initial guess as straight line interpolation
     def _interpolate_traj_1d(
@@ -646,6 +649,16 @@ def dir_trajopt(
             J_c.T @ f_comps for J_c, f_comps in zip(J_c_sols, force_comps_sols)
         ]
 
+        sq_forces_costs_vals = [
+            cost.evaluator().Eval(result.GetSolution(cost.variables()))
+            for cost in sq_forces_cost
+        ]
+
+        distance_to_object_costs_vals = [
+            cost.evaluator().Eval(result.GetSolution(cost.variables()))
+            for cost in distance_to_object_cost
+        ]
+
         dynamics_violations = []
         for k in range(num_time_steps - 1):
             # for k in [1]:
@@ -720,9 +733,9 @@ def dir_trajopt(
 
 
 traj = None
-# traj = 0
+# traj = 1
 
-num_trajs = 30
+num_trajs = 50
 seed = 2
 workspace = PlanarPushingWorkspace(
     slider=BoxWorkspace(
