@@ -274,6 +274,14 @@ class PlanarPlanConfig:
     use_approx_exponential_map: bool = False
 
     @property
+    def dt_contact(self) -> float:
+        return self.time_in_contact / self.num_knot_points_contact
+
+    @property
+    def dt_non_collision(self) -> float:
+        return self.time_non_collision / self.num_knot_points_non_collision
+
+    @property
     def slider_geometry(self) -> CollisionGeometry:
         return self.dynamics_config.slider.geometry
 

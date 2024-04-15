@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from tqdm import tqdm
 
@@ -7,6 +8,7 @@ from planning_through_contact.experiments.baseline_comparison.direct_trajectory_
 )
 from planning_through_contact.experiments.utils import (
     create_output_folder,
+    get_baseline_comparison_configs,
     get_default_experiment_plans,
     get_default_plan_config,
     get_default_solver_params,
@@ -46,10 +48,7 @@ if __name__ == "__main__":
     slider_type = args.body
     num_trajs = args.num
 
-    config = get_default_plan_config(slider_type)
-    solver_params = get_default_solver_params()
-    solver_params.nonl_rounding_save_solver_output = False
-    solver_params.print_cost = False
+    config, solver_params = get_baseline_comparison_configs(slider_type)
 
     plans = get_default_experiment_plans(seed, num_trajs, config)
     output_folder = "baseline_comparison"
@@ -62,8 +61,10 @@ if __name__ == "__main__":
     traj_output_folder = create_output_folder(output_folder, slider_type, traj_number)
 
     for idx, plan in enumerate(plans_to_run):
-
         output_name = str(idx)
+        output_path = f"{traj_output_folder}/{output_name}"
+        os.makedirs(output_path, exist_ok=True)
+
         direct_trajopt_result = direct_trajopt_through_contact(
             plan,
             config,
@@ -79,7 +80,7 @@ if __name__ == "__main__":
             output_folder=traj_output_folder,
             debug=True,
         )
-        with open(f"{traj_output_folder}/costs.txt", "w") as f:
+        with open(f"{output_path}/costs.txt", "w") as f:
             lines = []
             if gcs_solve_data is None:
                 lines.append("GCS cost: infeasible")

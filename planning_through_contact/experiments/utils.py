@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -292,3 +292,30 @@ def run_ablation_with_default_config(
     )
     solver_params = get_default_solver_params()
     run_ablation(config, solver_params, num_experiments, filename)  # type: ignore
+
+
+def get_baseline_comparison_costs() -> Tuple[ContactCost, NonCollisionCost]:
+    contact_cost = get_default_contact_cost()
+    non_collision_cost = get_default_non_collision_cost()
+
+    return contact_cost, non_collision_cost
+
+
+def get_baseline_comparison_configs(
+    slider_type: str = "sugar_box",
+) -> Tuple[PlanarPlanConfig, PlanarSolverParams]:
+    config = get_default_plan_config()
+    dt = 0.25
+    config.num_knot_points_contact = 4
+    config.time_in_contact = config.num_knot_points_contact * dt
+    config.num_knot_points_non_collision = 3
+    config.time_non_collision = config.num_knot_points_non_collision * dt
+
+    assert config.dt_contact == config.dt_non_collision
+
+    solver_params = get_default_solver_params()
+
+    solver_params.nonl_rounding_save_solver_output = False
+    solver_params.print_cost = False
+
+    return config, solver_params

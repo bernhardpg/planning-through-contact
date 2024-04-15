@@ -426,6 +426,7 @@ def create_plan(
     """
     # Set up folders
     folder_name = f"{output_folder}/{output_name}"
+    video_folder = folder_name
     os.makedirs(folder_name, exist_ok=True)
     trajectory_folder = f"{folder_name}/trajectory"
     os.makedirs(trajectory_folder, exist_ok=True)
@@ -527,7 +528,7 @@ def create_plan(
                 ani = visualize_planar_pushing_trajectory(
                     traj_relaxed,  # type: ignore
                     save=True,
-                    filename=f"relaxed_traj",
+                    filename=f"{video_folder}/relaxed_traj",
                     visualize_knot_points=not interpolate_video,
                     lims=animation_lims,
                 )
@@ -536,7 +537,7 @@ def create_plan(
                 ani = visualize_planar_pushing_trajectory(
                     traj_rounded,  # type: ignore
                     save=True,
-                    filename=f"rounded_traj",
+                    filename=f"{video_folder}/rounded_traj",
                     visualize_knot_points=not interpolate_video,
                     lims=animation_lims,
                 )
