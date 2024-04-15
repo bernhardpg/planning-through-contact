@@ -132,9 +132,26 @@ class SingleRunResult:
             f"sdp_optimality_gap: {self.binary_flows_optimality_gap}",
         ]
 
-        field_strings = [
-            f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
-        ]
+        field_attributes = {
+            field.name: getattr(self, field.name) for field in fields(self)
+        }
+        field_strings = []
+
+        # Avoid printing scientific and with too many decimals
+        np.set_printoptions(precision=3, suppress=True)
+
+        for key, val in field_attributes.items():
+            if type(val) is dict:
+                field_strings.append(f"{key}: ----")
+                for d_key, d_val in val.items():
+                    if type(d_val) is dict:
+                        field_strings.append(f"   {d_key}: ----")
+                        for dd_key, dd_val in d_val.items():
+                            field_strings.append(f"      {dd_key}: {dd_val}")
+                    else:
+                        field_strings.append(f"   {d_key}: {d_val}")
+            else:
+                field_strings.append(f"{key}: {val}")
 
         # Combine field and property strings
         all_strings = field_strings + property_strings
