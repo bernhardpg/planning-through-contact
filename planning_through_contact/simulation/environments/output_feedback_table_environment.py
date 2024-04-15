@@ -43,6 +43,8 @@ from planning_through_contact.simulation.sim_utils import (
     check_collision,
     slider_within_workspace,
     get_slider_pose_within_workspace,
+    create_goal_geometries,
+    visualize_desired_slider_pose,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,7 @@ class OutputFeedbackTableEnvironment:
         self._multi_run_config = sim_config.multi_run_config
         self._meshcat = station_meshcat
         self._simulator = None
+        self._goal_geometries = []
         
         self._plant = self._robot_system.get_station_plant()
         self._scene_graph = self._robot_system.get_scene_graph()
@@ -236,10 +239,16 @@ class OutputFeedbackTableEnvironment:
                     self._reset_slider(t)
                 
                 # visualization of target pose
-                self._visualize_desired_slider_pose(
-                    t,
+                if len(self._goal_geometries) == 0:
+                    self._goal_geometries = create_goal_geometries(
+                        self._robot_system,
+                        self._sim_config.slider_goal_pose,
+                    )
+                visualize_desired_slider_pose(
+                    self._robot_system,
                     self._sim_config.slider_goal_pose,
-                    scale_factor=1.0
+                    self._goal_geometries,
+                    time_in_recording=t,
                 )
 
                 # Print every 5 seconds
@@ -329,7 +338,6 @@ class OutputFeedbackTableEnvironment:
         else:
             return ResetStatus.NO_RESET
 
-
     def _reset_slider(self, time) -> None:
         # Extract variables for collision checking       
         slider_geometry = self._sim_config.dynamics_config.slider.geometry
@@ -355,7 +363,7 @@ class OutputFeedbackTableEnvironment:
         
         self.set_slider_planar_pose(slider_pose)
         self._multi_run_idx += 1
-        self._last_reset_time = time
+        self._last_reset_time = time        
     
     def save_logs(self, recording_file: Optional[str], save_dir: str):
         if recording_file:
@@ -367,13 +375,3 @@ class OutputFeedbackTableEnvironment:
                 recording_file = os.path.join(save_dir, recording_file)
             with open(recording_file, "w") as f:
                 f.write(res)
-
-    def _visualize_desired_slider_pose(self, t, 
-                                       desired_slider_pose: PlanarPose,
-                                       scale_factor: float = 1.0):
-        # Visualizing the desired slider pose
-        self._robot_system._visualize_desired_slider_pose(
-            desired_slider_pose,
-            time_in_recording=t,
-            scale_factor=scale_factor
-        )

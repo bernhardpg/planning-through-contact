@@ -11,6 +11,12 @@ from pydrake.all import (
     ContactModel,
     DiscreteContactApproximation,
     ModelInstanceIndex,
+    Box as DrakeBox,
+    RigidBody as DrakeRigidBody,
+    GeometryInstance,
+    MakePhongIllustrationProperties,
+    Rgba,
+    RigidTransform,
 )
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -20,6 +26,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
+from planning_through_contact.simulation.controllers.robot_system_base import RobotSystemBase
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
@@ -29,6 +36,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.geometry.planar.non_collision import (
     check_finger_pose_in_contact_location,
 )
+from planning_through_contact.visualize.colors import COLORS
 
 package_xml_file = os.path.join(os.path.dirname(__file__), "models/package.xml")
 models_folder = os.path.join(os.path.dirname(__file__), "models")
@@ -205,3 +213,93 @@ def slider_within_workspace(
 
 
 ## Meshcat visualizations
+
+def get_slider_body(robot_system: RobotSystemBase) -> DrakeRigidBody:
+    slider_body = robot_system.station_plant.GetUniqueFreeBaseBodyOrThrow(robot_system.slider)
+    return slider_body
+
+def get_slider_shapes(robot_system: RobotSystemBase) -> List[DrakeBox]:
+    slider_body = get_slider_body(robot_system)
+    collision_geometries_ids = robot_system.station_plant.GetCollisionGeometriesForBody(
+        slider_body
+    )
+
+    inspector = robot_system._scene_graph.model_inspector()
+    shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
+
+    # for now we only support Box shapes
+    assert all([isinstance(shape, DrakeBox) for shape in shapes])
+
+    return shapes
+
+def get_slider_shape_poses(robot_system: RobotSystemBase) -> List[DrakeBox]:
+    slider_body = get_slider_body(robot_system)
+    collision_geometries_ids = robot_system.station_plant.GetCollisionGeometriesForBody(
+        slider_body
+    )
+
+    inspector = robot_system._scene_graph.model_inspector()
+    poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]
+
+    return poses
+
+def create_goal_geometries(
+    robot_system: RobotSystemBase,
+    desired_planar_pose: PlanarPose,
+    box_color = COLORS["emeraldgreen"],
+    desired_pose_alpha = 0.3,
+) -> List[str]:
+    shapes = get_slider_shapes(robot_system)
+    poses = get_slider_shape_poses(robot_system)
+    heights = [shape.height() for shape in shapes]
+    min_height = min(heights)
+    desired_pose = desired_planar_pose.to_pose(
+        min_height / 2, z_axis_is_positive=True
+    )
+    
+    source_id = robot_system._scene_graph.RegisterSource()
+
+    goal_geometries = []
+    for idx, (shape, pose) in enumerate(zip(shapes, poses)):
+        geom_instance = GeometryInstance(
+            desired_pose.multiply(pose),
+            shape,
+            f"shape_{idx}",
+        )
+        curr_shape_geometry_id = robot_system._scene_graph.RegisterAnchoredGeometry(
+            source_id,
+            geom_instance,
+        )
+        robot_system._scene_graph.AssignRole(
+            source_id,
+            curr_shape_geometry_id,
+            MakePhongIllustrationProperties(
+                box_color.diffuse(desired_pose_alpha)
+            ),
+        )
+        geom_name = f"goal_shape_{idx}"
+        goal_geometries.append(geom_name)
+        robot_system._meshcat.SetObject(
+            geom_name, shape, rgba=Rgba(*box_color.diffuse(desired_pose_alpha))
+        )
+    return goal_geometries
+
+def visualize_desired_slider_pose(
+    robot_system: RobotSystemBase,
+    desired_planar_pose: PlanarPose,
+    goal_geometries: List[str], 
+    time_in_recording: float = 0.0,
+) -> None:
+    shapes = get_slider_shapes(robot_system)
+    poses = get_slider_shape_poses(robot_system)
+
+    heights = [shape.height() for shape in shapes]
+    min_height = min(heights)
+    desired_pose = desired_planar_pose.to_pose(
+        min_height / 2, z_axis_is_positive=True
+    )
+
+    for pose, geom_name in zip(poses, goal_geometries):
+        robot_system._meshcat.SetTransform(
+            geom_name, desired_pose.multiply(pose), time_in_recording
+        )

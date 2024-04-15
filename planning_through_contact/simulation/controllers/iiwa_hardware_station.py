@@ -60,7 +60,6 @@ class IiwaHardwareStation(RobotSystemBase):
         self._sim_config = sim_config
         self._meshcat = meshcat
         self._num_positions = 7
-        self._goal_geometries = []
 
         scenario_name = "demo"
         scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
@@ -371,100 +370,3 @@ class IiwaHardwareStation(RobotSystemBase):
     def get_meshcat(self):
         return self._meshcat
     
-    ## Visualization functions
-
-    def get_slider_shapes(self) -> List[DrakeBox]:
-        slider_body = self.get_slider_body()
-        collision_geometries_ids = self.station_plant.GetCollisionGeometriesForBody(
-            slider_body
-        )
-
-        inspector = self._scene_graph.model_inspector()
-        shapes = [inspector.GetShape(id) for id in collision_geometries_ids]
-
-        # for now we only support Box shapes
-        assert all([isinstance(shape, DrakeBox) for shape in shapes])
-
-        return shapes
-    
-    def get_slider_shape_poses(self) -> List[DrakeBox]:
-        slider_body = self.get_slider_body()
-        collision_geometries_ids = self.station_plant.GetCollisionGeometriesForBody(
-            slider_body
-        )
-
-        inspector = self._scene_graph.model_inspector()
-        poses = [inspector.GetPoseInFrame(id) for id in collision_geometries_ids]
-
-        return poses
-    
-    def get_slider_body(self) -> DrakeRigidBody:
-        slider_body = self.station_plant.GetUniqueFreeBaseBodyOrThrow(self.slider)
-        return slider_body
-    
-    def _visualize_desired_slider_pose(
-        self, desired_planar_pose: PlanarPose, 
-        time_in_recording: float = 0.0,
-        scale_factor: float = 1.0
-    ) -> None:
-        actual_shapes = self.get_slider_shapes()
-        actual_poses = self.get_slider_shape_poses()
-
-        shapes = []
-        poses = []
-        if scale_factor != 1.0:
-            for (shape, pose) in zip(actual_shapes, actual_poses):
-                shapes.append(
-                    DrakeBox(
-                        shape.width() * scale_factor,
-                        shape.depth() * scale_factor,
-                        shape.height()
-                    )
-                )
-                translation = pose.translation()
-                new_translation = np.array([
-                    translation[0] * scale_factor, 
-                    translation[1] * scale_factor, 
-                    translation[2]]
-                )
-                poses.append(RigidTransform(pose.rotation(), new_translation))
-        else:
-            shapes = actual_shapes
-            poses = actual_poses
-
-        heights = [shape.height() for shape in shapes]
-        min_height = min(heights)
-        desired_pose = desired_planar_pose.to_pose(
-            min_height / 2, z_axis_is_positive=True
-        )
-        if len(self._goal_geometries) == 0:
-            source_id = self._scene_graph.RegisterSource()
-            BOX_COLOR = COLORS["gray20"]
-            DESIRED_POSE_ALPHA = 0.4
-            for idx, (shape, pose) in enumerate(zip(shapes, poses)):
-                geom_instance = GeometryInstance(
-                    desired_pose.multiply(pose),
-                    shape,
-                    f"shape_{idx}",
-                )
-                curr_shape_geometry_id = self._scene_graph.RegisterAnchoredGeometry(
-                    source_id,
-                    geom_instance,
-                )
-                self._scene_graph.AssignRole(
-                    source_id,
-                    curr_shape_geometry_id,
-                    MakePhongIllustrationProperties(
-                        BOX_COLOR.diffuse(DESIRED_POSE_ALPHA)
-                    ),
-                )
-                geom_name = f"goal_shape_{idx}"
-                self._goal_geometries.append(geom_name)
-                self._meshcat.SetObject(
-                    geom_name, shape, rgba=Rgba(*BOX_COLOR.diffuse(DESIRED_POSE_ALPHA))
-                )
-        else:
-            for pose, geom_name in zip(poses, self._goal_geometries):
-                self._meshcat.SetTransform(
-                    geom_name, desired_pose.multiply(pose), time_in_recording
-                )
