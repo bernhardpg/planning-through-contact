@@ -63,6 +63,10 @@ multi_run_config:
   slider_goal_pose: ${slider_goal_pose}
   workspace_width: 0.35
   workspace_height: 0.5
+  trans_tol: 0.01
+  rot_tol: 1.5 # degrees
+  evaluate_final_pusher_position: true
+  evaluate_final_slider_rotation: true
 
 ## Robot specific configs
 # sim_config
@@ -80,7 +84,7 @@ data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: false
   render_plans: true
-  convert_to_zarr: true
+  convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
   plans_dir: 'temp/plans'
   rendered_plans_dir: 'temp/rendered'

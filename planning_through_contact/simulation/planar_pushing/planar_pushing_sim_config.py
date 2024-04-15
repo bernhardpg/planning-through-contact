@@ -36,6 +36,8 @@ from planning_through_contact.experiments.utils import (
     get_box,
     get_tee,
     get_default_plan_config,
+)
+from planning_through_contact.simulation.sim_utils import (
     get_slider_start_poses,
 )
 

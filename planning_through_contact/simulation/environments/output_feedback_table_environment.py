@@ -38,9 +38,11 @@ from planning_through_contact.simulation.systems.robot_state_to_rigid_transform 
 )
 from planning_through_contact.experiments.utils import (
     get_default_plan_config,
-    _check_collision,
-    _slider_within_workspace,
-    _get_slider_pose_within_workspace,
+)
+from planning_through_contact.simulation.sim_utils import (
+    check_collision,
+    slider_within_workspace,
+    get_slider_pose_within_workspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -339,12 +341,12 @@ class OutputFeedbackTableEnvironment:
         
         # Determine slider reset pose
         slider_pose = self._multi_run_config.initial_slider_poses[self._multi_run_idx]
-        collides_with_pusher = _check_collision(pusher_pose, slider_pose, self._plan_config)
-        within_workspace = _slider_within_workspace(self._workspace, slider_pose, slider_geometry)
+        collides_with_pusher = check_collision(pusher_pose, slider_pose, self._plan_config)
+        within_workspace = slider_within_workspace(self._workspace, slider_pose, slider_geometry)
         valid_pose = within_workspace and not collides_with_pusher
 
         if not valid_pose:
-            slider_pose = _get_slider_pose_within_workspace(
+            slider_pose = get_slider_pose_within_workspace(
                 self._workspace, 
                 slider_geometry, 
                 pusher_pose, 
