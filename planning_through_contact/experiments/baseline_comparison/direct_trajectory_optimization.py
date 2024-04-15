@@ -379,6 +379,7 @@ def direct_trajopt_through_contact(
     num_keypoints = len(slider.geometry.vertices)
 
     # Slider keypoint arc length
+    keypoint_costs = []
     EPS = 1e-5
     assert cost_config.keypoint_arc_length is not None
     for k in range(num_time_steps - 1):
@@ -386,9 +387,11 @@ def direct_trajopt_through_contact(
             diff = vertex_k_next - vertex_k
             dist = sqrt((diff.T @ diff).item() + EPS)
             cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
-            prog.AddCost(cost_expr)  # type: ignore
+            cost = prog.AddCost(cost_expr)  # type: ignore
+            keypoint_costs.append(cost)
 
     # Slider keypoint velocity
+    keypoint_velocity_costs = []
     assert cost_config.keypoint_velocity_regularization is not None
     for k in range(num_time_steps - 1):
         for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
@@ -399,54 +402,38 @@ def direct_trajopt_through_contact(
                 * (1 / num_keypoints)
                 * squared_vel
             )
-            prog.AddCost(cost_expr)  # type: ignore
-
-    # Time in contact cost
-    # assert cost_config.time is not None
-    #
-    #
-    # def _only_time_cost_when_contact(p_BP: npt.NDArray) -> Any:
-    #     sdf = calc_sdf(p_BP)
-    #
-    #     if sdf <= 1e-5:
-    #         cost = AutoDiffXd(cost_config.time * dt)  # type: ignore
-    #         return cost
-    #     else:
-    #         zero = AutoDiffXd(0.0)
-    #         return zero
-    #
-    #
-    # for k in range(num_time_steps):
-    #     p_BP = p_BPs[k]
-    #     prog.AddCost(_only_time_cost_when_contact, vars=p_BP)
+            cost = prog.AddCost(cost_expr)  # type: ignore
+            keypoint_velocity_costs.append(cost)
 
     cost_config_noncoll = config.non_collision_cost
     # Avoid object
-    EPS = 1e-5
     assert cost_config_noncoll.distance_to_object_socp is not None
-    # cost_config_noncoll.distance_to_object_socp = 1e-2
     distance_to_object_cost = []
-    for s in sdf_slacks:
-        cost = prog.AddCost(
-            cost_config_noncoll.distance_to_object_socp * 1 / (s + pusher_radius + 0.05)
-        )
+
+    assert config.contact_config.cost.time is not None
+    c_1 = config.contact_config.cost.time * dt
+    assert config.non_collision_cost.distance_to_object_socp is not None
+
+    c_2 = 1 / (config.non_collision_cost.distance_to_object_socp * dt)
+
+    for phi in sdf_slacks:
+        cost = prog.AddCost(c_1 / (1 + c_2 * phi))
         distance_to_object_cost.append(cost)
 
     # Pusher velocity cost
     v_BPs = np.vstack(
         [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
     )
+    pusher_vel_costs = []
     assert cost_config_noncoll.pusher_velocity_regularization is not None
-    cost_config_noncoll.pusher_velocity_regularization = 10
     for v_BP in v_BPs:
         squared_vel = v_BP.T @ v_BP
         cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
-        prog.AddCost(cost)
-
-        # prog.AddConstraint(squared_vel <= 0.2**2)
+        cost = prog.AddCost(cost)
+        pusher_vel_costs.append(cost)
 
     # Pusher arc length
-    cost_config_noncoll.pusher_arc_length = 1
+    pusher_arc_length_cost = []
     for k in range(num_time_steps - 1):
         p_BP_curr = p_BPs[k]
         p_BP_next = p_BPs[k + 1]
@@ -648,7 +635,7 @@ def direct_trajopt_through_contact(
             ]
         )
 
-        debug = False
+        debug = True
         if debug:  # some useful quantities for debugging
             theta_WBs_sols = result.GetSolution(r_WBs)
 
@@ -665,15 +652,32 @@ def direct_trajopt_through_contact(
                 J_c.T @ f_comps for J_c, f_comps in zip(J_c_sols, force_comps_sols)
             ]
 
-            sq_forces_costs_vals = [
-                cost.evaluator().Eval(result.GetSolution(cost.variables()))
-                for cost in sq_forces_cost
-            ]
+            def _eval_binding(b, result):
+                return b.evaluator().Eval(result.GetSolution(b.variables()))
 
-            distance_to_object_costs_vals = [
-                cost.evaluator().Eval(result.GetSolution(cost.variables()))
-                for cost in distance_to_object_cost
-            ]
+            def _eval_bindings(bs):
+                return np.concatenate([_eval_binding(b, result) for b in bs])
+
+            # Only print a few decimals
+            np.set_printoptions(precision=3, suppress=True)
+
+            cost_term_vals = {
+                "force_reg": _eval_bindings(sq_forces_cost),
+                "distance_to_object": _eval_bindings(distance_to_object_cost),
+                "keypoint_dist": _eval_bindings(keypoint_costs),
+                "keypoint_vel_reg": _eval_bindings(keypoint_velocity_costs),
+                "pusher_vel": _eval_bindings(pusher_vel_costs),
+                "pusher_arc_length": _eval_bindings(pusher_arc_length_cost),
+            }
+            analysis_folder = f"{output_path}/analysis"
+            os.makedirs(analysis_folder, exist_ok=True)
+
+            with open(f"{analysis_folder}/direct_trajopt_cost.txt", "w") as f:
+                for key, val in cost_term_vals.items():
+                    print(f"{key}: {val}", file=f)
+
+                for key, val in cost_term_vals.items():
+                    print(f"sum({key}): {np.sum(val)}", file=f)
 
         if visualize:
             if visualizer == "new":
