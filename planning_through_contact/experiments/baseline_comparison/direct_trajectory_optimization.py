@@ -441,13 +441,13 @@ def direct_trajopt_through_contact(
         diff = p_BP_next - p_BP_curr
         EPS = 1e-5
         dist = sqrt(diff.T @ diff + EPS)
-        prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
+        cost = prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
+        pusher_arc_length_cost.append(cost)
 
     # Squared forces
     sq_forces_cost = []
-    cost_config.force_regularization = 100
     for lambda_n, lambda_f in force_comps:
-        cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2)
+        cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
         sq_forces_cost.append(prog.AddCost(cost))
 
     # Create initial guess as straight line interpolation

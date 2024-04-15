@@ -312,6 +312,11 @@ def get_baseline_comparison_configs(
     config.num_knot_points_non_collision = 3
     config.time_non_collision = config.num_knot_points_non_collision * dt
 
+    config.contact_config.cost.force_regularization = 1000
+    config.contact_config.cost.keypoint_velocity_regularization = 10
+    config.non_collision_cost.pusher_arc_length = 1
+    config.non_collision_cost.pusher_velocity_regularization = 1
+
     # No force scaling
     # TODO: The force scaling will be removed entirely
     config.dynamics_config.force_scale = 1

@@ -624,6 +624,7 @@ class FaceContactMode(AbstractContactMode):
                         k,
                         k,
                         cost_config.force_regularization
+                        * self.variables.dt
                         * c_n**2
                         * self.dynamics_config.force_scale**2,
                     )
@@ -634,6 +635,7 @@ class FaceContactMode(AbstractContactMode):
                         k,
                         k,
                         cost_config.force_regularization
+                        * self.variables.dt
                         * c_f**2
                         * self.dynamics_config.force_scale**2,
                     )
