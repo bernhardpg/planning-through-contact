@@ -294,17 +294,9 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
-                position_diffs = [
-                    p_next - p_curr
-                    for p_next, p_curr in zip(
-                        self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
-                    )
-                ]
-                position_diffs = np.vstack(position_diffs)
-                # position_diffs is now one long vector with diffs in each entry
-                squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+                squared_vels = np.sum([v_BP.T @ v_BP for v_BP in self.variables.v_BPs])
                 cost = self.prog.AddQuadraticCost(
-                    self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
+                    self.cost_config.pusher_velocity_regularization * squared_vels,
                     is_convex=True,
                 )
                 Q = cost.evaluator().Q()
@@ -337,6 +329,7 @@ class NonCollisionMode(AbstractContactMode):
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
 
+            # TODO: Remove this cost
             if self.cost_config.distance_to_object_quadratic is not None:
                 c = self.cost_config.distance_to_object_quadratic
                 for k in range(1, self.num_knot_points - 1):
