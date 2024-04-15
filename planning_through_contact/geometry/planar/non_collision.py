@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from pydrake.all import DecomposeAffineExpression
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
@@ -357,26 +358,36 @@ class NonCollisionMode(AbstractContactMode):
                     self.contact_location.idx
                 )
                 for plane in planes:
-                    for p_BP in self.variables.p_BPs[1:-1]:
+                    for p_BP in self.variables.p_BPs:
                         # A = [a^T; 0]
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
                         # We want:
-                        #   min k * (1 / (a^T x + b))
+                        #   min (c_1 / (1 + c_2 * phi)) where phi = a^T x + b
                         # which we formulate with
                         #   min z_1^2 + ... + z_n^2 / z_0
                         # where
-                        # z = Ax + b = [(1/k) * a^T x + b; 1]
-                        # A = [(1/k) * a^T; 0]
-                        A[0, :] = plane.a.T * (
-                            1 / self.cost_config.distance_to_object_socp
+                        # z = [(1/c_1) + (c_2/c_1) * phi; 1]
+                        assert self.config.contact_config.cost.time is not None
+                        c_1 = self.config.contact_config.cost.time * self.dt
+                        assert (
+                            self.config.non_collision_cost.distance_to_object_socp
+                            is not None
                         )
-                        # b = [(1/k) * b; 1]
-                        b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b * (1 / self.cost_config.distance_to_object_socp)
 
-                        # z = [a^T x + b; 1]
+                        c_2 = 1 / (
+                            self.config.non_collision_cost.distance_to_object_socp
+                            * self.dt
+                        )
+
+                        phi = (
+                            plane.dist_to(p_BP)
+                            - self.config.dynamics_config.pusher_radius
+                        )
+                        z = np.array([(1 / c_1) + (c_2 / c_1) * phi, 1])
+                        A, b = sym.DecomposeAffineExpressions(z, p_BP.flatten())  # type: ignore
+
                         cost = PerspectiveQuadraticCost(A, b)
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
