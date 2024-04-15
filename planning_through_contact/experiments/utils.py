@@ -305,11 +305,19 @@ def get_baseline_comparison_configs(
     slider_type: str = "sugar_box",
 ) -> Tuple[PlanarPlanConfig, PlanarSolverParams]:
     config = get_default_plan_config()
+    # Make the dt's for contact and noncontact the same
     dt = 0.25
     config.num_knot_points_contact = 4
     config.time_in_contact = config.num_knot_points_contact * dt
     config.num_knot_points_non_collision = 3
     config.time_non_collision = config.num_knot_points_non_collision * dt
+
+    # No force scaling
+    # TODO: The force scaling will be removed entirely
+    config.dynamics_config.force_scale = 1
+
+    config.contact_config.lam_min = 0
+    config.contact_config.lam_max = 1
 
     assert config.dt_contact == config.dt_non_collision
 

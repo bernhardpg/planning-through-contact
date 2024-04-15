@@ -646,14 +646,14 @@ class FaceContactMode(AbstractContactMode):
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                        disp = vertex_k_next - vertex_k
-                        sq_disp = (disp.T @ disp).item()
+                        vel = (vertex_k_next - vertex_k) / self.variables.dt
+                        sq_vel = (vel.T @ vel).item()
                         cost = self.prog_wrapper.add_quadratic_cost(
                             k,
                             k + 1,
                             cost_config.keypoint_velocity_regularization
                             * (1 / num_keypoints)
-                            * sq_disp,
+                            * sq_vel,
                         )
                         self.costs["keypoint_reg"].append(cost)
 
@@ -716,8 +716,8 @@ class FaceContactMode(AbstractContactMode):
             for k in range(self.num_knot_points - 1):
                 for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     disp = vertex_k_next - vertex_k
-                    sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
+                    sq_vel = (disp.T @ disp).item()
+                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_vel)
 
         elif cost_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             assert self.config.start_and_goal is not None
