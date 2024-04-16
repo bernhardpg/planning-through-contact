@@ -307,7 +307,7 @@ def get_baseline_comparison_configs(
     config = get_default_plan_config(slider_type=slider_type)
     # Make the dt's for contact and noncontact the same
     dt = 0.25
-    config.num_knot_points_contact = 4
+    config.num_knot_points_contact = 3
     config.time_in_contact = config.num_knot_points_contact * dt
     config.num_knot_points_non_collision = 3
     config.time_non_collision = config.num_knot_points_non_collision * dt
@@ -316,6 +316,9 @@ def get_baseline_comparison_configs(
     config.contact_config.cost.keypoint_velocity_regularization = 10
     config.non_collision_cost.pusher_arc_length = 1
     config.non_collision_cost.pusher_velocity_regularization = 1
+
+    config.contact_config.cost.time = None
+    config.non_collision_cost.distance_to_object_socp = None
 
     # No force scaling
     # TODO: The force scaling will be removed entirely

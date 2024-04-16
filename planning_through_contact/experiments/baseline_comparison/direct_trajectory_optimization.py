@@ -501,18 +501,17 @@ def direct_trajopt_through_contact(
 
     cost_config_noncoll = config.non_collision_cost
     # Avoid object
-    assert cost_config_noncoll.distance_to_object_socp is not None
     distance_to_object_cost = []
 
-    assert config.contact_config.cost.time is not None
-    c_1 = config.contact_config.cost.time * dt
-    assert config.non_collision_cost.distance_to_object_socp is not None
+    if config.contact_config.cost.time is not None:
+        c_1 = config.contact_config.cost.time * dt
+        assert config.non_collision_cost.distance_to_object_socp is not None
 
-    c_2 = 1 / (config.non_collision_cost.distance_to_object_socp * dt)
+        c_2 = 1 / (config.non_collision_cost.distance_to_object_socp * dt)
 
-    for phi in sdf_slacks:
-        cost = prog.AddCost(c_1 / (1 + c_2 * phi))
-        distance_to_object_cost.append(cost)
+        for phi in sdf_slacks:
+            cost = prog.AddCost(1 / (1 / c_1 + (c_2 / c_1) * phi))
+            distance_to_object_cost.append(cost)
 
     # Pusher velocity cost
     pusher_vel_costs = []
@@ -762,6 +761,8 @@ def direct_trajopt_through_contact(
                 return b.evaluator().Eval(result.GetSolution(b.variables()))
 
             def _eval_bindings(bs):
+                if len(bs) == 0:
+                    return 0.0
                 return np.concatenate([_eval_binding(b, result) for b in bs])
 
             # Only print a few decimals

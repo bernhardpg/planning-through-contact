@@ -541,9 +541,9 @@ class FaceContactMode(AbstractContactMode):
             self.costs["mode_cost"].append(cost)
 
         if cost_config.time is not None:
-            cost = self.prog_wrapper.add_independent_cost(
-                cost_config.time * self.config.time_in_contact
-            )
+            c_1 = cost_config.time * self.variables.dt
+            total_contact_cost = c_1 * self.num_knot_points
+            cost = self.prog_wrapper.add_independent_cost(total_contact_cost)
             self.costs["contact_time"].append(cost)
 
         if cost_config.cost_type == ContactCostType.STANDARD:
