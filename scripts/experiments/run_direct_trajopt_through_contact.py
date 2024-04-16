@@ -3,9 +3,11 @@ import argparse
 from tqdm import tqdm
 
 from planning_through_contact.experiments.baseline_comparison.direct_trajectory_optimization import (
+    SmoothingSchedule,
     direct_trajopt_through_contact,
 )
 from planning_through_contact.experiments.utils import (
+    get_baseline_comparison_configs,
     get_default_experiment_plans,
     get_default_plan_config,
     get_default_solver_params,
@@ -37,34 +39,44 @@ if __name__ == "__main__":
         type=int,
         default=50,
     )
+    parser.add_argument(
+        "--smooth",
+        help="Use smoothing",
+        action="store_true",
+        default=False,
+    )
 
     args = parser.parse_args()
     seed = args.seed
     traj_number = args.traj
     slider_type = args.body
     num_trajs = args.num
+    use_smoothing = args.smooth
 
-    config = get_default_plan_config(slider_type)
-    solver_params = get_default_solver_params()
-    solver_params.nonl_rounding_save_solver_output = False
-    solver_params.print_cost = True
-
-    config = get_default_plan_config("sugar_box")
-    solver_params = get_default_solver_params(debug=True)
-    solver_params.print_cost = True
-    solver_params.nonl_rounding_save_solver_output = False
+    config, solver_params = get_baseline_comparison_configs(slider_type)
 
     plans = get_default_experiment_plans(seed, num_trajs, config)
 
+    if use_smoothing:
+        smoothing = SmoothingSchedule(0.01, 5, "exp")
+    else:
+        smoothing = None
+
     if traj_number is not None:
         res = direct_trajopt_through_contact(
-            plans[traj_number], config, solver_params, output_name=str(traj_number)
+            plans[traj_number],
+            config,
+            solver_params,
+            output_name=str(traj_number),
+            visualizer="new",
+            visualize=True,
+            smoothing=smoothing,
         )
-        print(f"result.is_success() = {res}")
+        print(f"result.is_success() = {res.is_success()}")
     else:
         found_results = [
             direct_trajopt_through_contact(
-                plan, config, solver_params, output_name=str(idx)
+                plan, config, solver_params, output_name=str(idx), smoothing=smoothing
             ).is_success()
             for idx, plan in enumerate(tqdm(plans))
         ]

@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge, sqrt
 from pydrake.solvers import (
+    Binding,
     MathematicalProgram,
     MathematicalProgramResult,
     SnoptSolver,
@@ -33,6 +34,39 @@ from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
 )
+
+
+def _interpolate_traj_1d(
+    initial_val: float, target_val: float, duration: float, end_time: float, dt: float
+) -> npt.NDArray[np.float64]:
+    xs = np.array([0, end_time])
+    ys = np.array([initial_val, target_val])
+    x_interpolate = np.arange(0, 0 + duration, dt)
+    y_interpolated = np.interp(x_interpolate, xs, ys)
+    return y_interpolated
+
+
+def _interpolate_traj(
+    initial_val: npt.NDArray[np.float64],
+    target_val: npt.NDArray[np.float64],
+    duration: float,
+    end_time: float,
+    dt: float,
+) -> npt.NDArray[np.float64]:
+    if len(initial_val.shape) == 2:
+        initial_val = initial_val.flatten()
+        target_val = target_val.flatten()
+
+    num_dims = initial_val.shape[0]
+    trajs = np.vstack(
+        [
+            _interpolate_traj_1d(
+                initial_val[dim], target_val[dim], duration, end_time, dt
+            )
+            for dim in range(num_dims)
+        ]
+    ).T  # (num_time_steps, num_dims)
+    return trajs
 
 
 def find_closest_point_on_geometry(
@@ -66,6 +100,33 @@ def _create_p_WP(p_WB, R_WB, p_BP):
     return p_WB + R_WB @ p_BP
 
 
+class SmoothingSchedule:
+    def __init__(
+        self,
+        eps_start: float = 1e-1,
+        num_steps: int = 5,
+        step_type: Literal["linear", "exp"] = "exp",
+    ) -> None:
+        self.eps_start = eps_start
+        self.num_steps = num_steps
+        self.step_type = step_type
+
+        self.eps = eps_start
+        self.step_count = 1
+
+    def step(self) -> None:
+        if self.step_type == "linear":
+            step_size = self.eps_start / (1 + self.num_steps)
+            self.eps -= step_size
+        else:  # exp
+            self.eps /= 10
+
+        if self.step_count >= self.num_steps - 1:
+            self.eps = 0
+
+        self.step_count += 1
+
+
 def direct_trajopt_through_contact(
     start_and_goal: PlanarPushingStartAndGoal,
     config: PlanarPlanConfig,
@@ -73,6 +134,7 @@ def direct_trajopt_through_contact(
     output_name: Optional[str] = None,
     output_folder: str = "direct_trajopt",
     visualize: bool = True,
+    visualizer: Literal["old", "new"] = "new",
     print_success: bool = False,
     dt: Optional[float] = None,
     num_time_steps: Optional[int] = None,
@@ -80,6 +142,8 @@ def direct_trajopt_through_contact(
     initial_guess_type: Literal["touching", "polar", "straight_line_interpolation"] = (
         "straight_line_interpolation"
     ),
+    smoothing: Optional[SmoothingSchedule] = None,
+    debug: bool = False,
 ) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
@@ -96,8 +160,6 @@ def direct_trajopt_through_contact(
     output_name = f"direct_trajopt_{output_name}"
     os.makedirs(output_path, exist_ok=True)
 
-    # visualizer = "old"
-    visualizer = "new"
     visualize_initial_guess = False
     assert_found_solution = False
 
@@ -122,6 +184,16 @@ def direct_trajopt_through_contact(
     slider_target_pose = start_and_goal.slider_target_pose
     pusher_initial_pose = start_and_goal.pusher_initial_pose
     pusher_target_pose = start_and_goal.pusher_target_pose
+
+    if debug:
+        diff_pos = np.linalg.norm(slider_target_pose.pos() - slider_initial_pose.pos())
+        diff_angle = np.abs(slider_target_pose.theta - slider_initial_pose.theta)
+        print(f"Commanded pos distance: {diff_pos:.2f} [m]")
+        print(f"Commanded angle distance: {diff_angle:.2f} [rad]")
+        avg_sol_vel = diff_pos / (num_time_steps * dt)
+        print(f"Avg. translational velocity: {avg_sol_vel:.2f} [m/s]")
+        avg_sol_rot_vel = diff_angle / (num_time_steps * dt)
+        print(f"Avg. rotational velocity: {avg_sol_rot_vel:.2f} [rad/s]")
 
     assert pusher_initial_pose is not None
     assert pusher_target_pose is not None
@@ -157,6 +229,14 @@ def direct_trajopt_through_contact(
     p_WPs = [
         _create_p_WP(p_WB, R_WB, p_BP) for p_WB, R_WB, p_BP in zip(p_WBs, R_WBs, p_BPs)
     ]
+
+    v_BPs = np.vstack(
+        [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
+    )
+
+    v_WBs = np.vstack(
+        [(p_next - p_curr) / dt for p_next, p_curr in zip(p_WBs[1:], p_WBs[:-1])]
+    )
 
     # Initial and target constraints on slider
     p_WB_initial = slider_initial_pose.pos().flatten()
@@ -280,16 +360,37 @@ def direct_trajopt_through_contact(
         )
         dynamics_constraints.append(const)
 
-        # TODO: remove?
-        # NOTE:
-        # We constrain the difference in theta between knot points to be less than pi,
-        # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
-        # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
-        # omega_WB = 0.
-        # Note that in principle this should not be a limiting constraint.
-        # delta_theta_WB = theta_WB_next - theta_WB_curr
-        # prog.AddConstraint(delta_theta_WB <= np.pi * 2 / 3)
-        # prog.AddConstraint(delta_theta_WB >= -np.pi * 2 / 3)
+    # Velocity constraints
+    # NOTE: We need to add this, otherwise 90% of the trajectories are garbage
+    VEL_LIMIT = 0.4  # m/s
+    for k in range(num_time_steps - 1):
+        v_BP = v_BPs[k]
+        sq_vel = v_BP.T @ v_BP
+        prog.AddConstraint(sq_vel <= VEL_LIMIT**2)
+
+    for k in range(num_time_steps - 1):
+        v_WB = v_WBs[k]
+        sq_vel = v_WB.T @ v_WB
+        prog.AddConstraint(sq_vel <= VEL_LIMIT**2)
+
+    # Rotation velocity constraints
+    for k in range(num_time_steps - 1):
+        r_WB_curr = r_WBs[k]
+        r_WB_next = r_WBs[k + 1]
+        if use_cos_sin:
+            # NOTE:
+            # We constrain the difference in theta between knot points to be less than pi,
+            # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
+            # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
+            # omega_WB = 0.
+            # Note that in principle this should not be a limiting constraint.
+            raise NotImplementedError(
+                "Not implemented rotation difference constraint for (cos, sin) parametrization yet."
+            )
+        else:  # we still add a maximum rotation per knot point, otherwise the plans are often useless
+            omega_WB_sq = ((r_WB_next - r_WB_curr) / dt) ** 2
+            ANG_VEL_LIMIT = (2 * np.pi) / 2
+            prog.AddConstraint(omega_WB_sq <= ANG_VEL_LIMIT**2)
 
     # Note: Complementarity constraints are encoded similarly to 3.2 in
     # M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -325,14 +426,7 @@ def direct_trajopt_through_contact(
         prog.AddLinearConstraint(lambda_f <= mu * lambda_n)
         prog.AddLinearConstraint(lambda_f >= -mu * lambda_n)
 
-    # Complementarity constraints
-    for k in range(num_time_steps):
-        s_sdf = sdf_slacks[k]
-        s_lambda_n = lambda_n_slacks[k]
-        EPS = 0.0
-        prog.AddConstraint(s_sdf * s_lambda_n <= EPS)
-
-    # Non-sliding constraint
+    # Non-sliding complimentarity constraint
     def _nonsliding_constraint(vars: npt.NDArray) -> npt.NDArray:
         p_BP_curr = vars[0:2]
         p_BP_next = vars[2:4]
@@ -421,9 +515,6 @@ def direct_trajopt_through_contact(
         distance_to_object_cost.append(cost)
 
     # Pusher velocity cost
-    v_BPs = np.vstack(
-        [(p_next - p_curr) / dt for p_next, p_curr in zip(p_BPs[1:], p_BPs[:-1])]
-    )
     pusher_vel_costs = []
     assert cost_config_noncoll.pusher_velocity_regularization is not None
     for v_BP in v_BPs:
@@ -451,35 +542,9 @@ def direct_trajopt_through_contact(
         sq_forces_cost.append(prog.AddCost(cost))
 
     # Create initial guess as straight line interpolation
-    def _interpolate_traj_1d(
-        initial_val: float, target_val: float, duration: float
-    ) -> npt.NDArray[np.float64]:
-        xs = np.array([0, end_time])
-        ys = np.array([initial_val, target_val])
-        x_interpolate = np.arange(0, 0 + duration, dt)
-        y_interpolated = np.interp(x_interpolate, xs, ys)
-        return y_interpolated
-
-    def _interpolate_traj(
-        initial_val: npt.NDArray[np.float64],
-        target_val: npt.NDArray[np.float64],
-        duration: float,
-    ) -> npt.NDArray[np.float64]:
-        if len(initial_val.shape) == 2:
-            initial_val = initial_val.flatten()
-            target_val = target_val.flatten()
-
-        num_dims = initial_val.shape[0]
-        trajs = np.vstack(
-            [
-                _interpolate_traj_1d(initial_val[dim], target_val[dim], duration)
-                for dim in range(num_dims)
-            ]
-        ).T  # (num_time_steps, num_dims)
-        return trajs
 
     th_interpolated = _interpolate_traj_1d(
-        slider_initial_pose.theta, slider_target_pose.theta, duration=end_time + dt
+        slider_initial_pose.theta, slider_target_pose.theta, end_time + dt, end_time, dt
     )
     r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
     if use_cos_sin:
@@ -488,7 +553,7 @@ def direct_trajopt_through_contact(
         prog.SetInitialGuess(r_WBs, th_interpolated)  # type: ignore
 
     p_WBs_initial_guess = _interpolate_traj(
-        slider_initial_pose.pos(), slider_target_pose.pos(), duration=end_time + dt
+        slider_initial_pose.pos(), slider_target_pose.pos(), end_time + dt, end_time, dt
     )
     prog.SetInitialGuess(p_WBs, p_WBs_initial_guess)  # type: ignore
 
@@ -498,10 +563,10 @@ def direct_trajopt_through_contact(
         )
 
         p_BPs_interpolated_start = _interpolate_traj(
-            pusher_initial_pose.pos(), closest_point, duration=(end_time + dt) / 2
+            pusher_initial_pose.pos(), closest_point, (end_time + dt) / 2, end_time, dt
         )
         p_BPs_interpolated_end = _interpolate_traj(
-            closest_point, pusher_target_pose.pos(), duration=(end_time + dt) / 2
+            closest_point, pusher_target_pose.pos(), (end_time + dt) / 2, end_time, dt
         )
         # We make the finger touch the object at the middle point as an initial guess
         p_BPs_initial_guess = np.vstack(
@@ -521,10 +586,10 @@ def direct_trajopt_through_contact(
         radius_target = np.linalg.norm(p_BP_target)
 
         angle_interpolated = _interpolate_traj_1d(
-            angle_initial, angle_target + 2 * np.pi, duration=end_time + dt
+            angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
         ) % (np.pi * 2)
         radius_interpolated = _interpolate_traj_1d(
-            radius_initial, radius_target, duration=end_time + dt  # type: ignore
+            radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
         )
 
         p_BPs_initial_guess = np.vstack(
@@ -536,7 +601,11 @@ def direct_trajopt_through_contact(
         prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
     else:  # "straight_line_interpolation"
         p_BPs_initial_guess = _interpolate_traj(
-            pusher_initial_pose.pos(), pusher_target_pose.pos(), duration=end_time + dt
+            pusher_initial_pose.pos(),
+            pusher_target_pose.pos(),
+            end_time + dt,
+            end_time,
+            dt,
         )
         prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
 
@@ -612,7 +681,45 @@ def direct_trajopt_through_contact(
     #     solver_params.nonl_round_major_iter_limit,
     # )
 
-    result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
+    def _add_complementarity_constraints(eps: float) -> List:
+        """
+        Adds the SDF/force complementarity constraints (could in principle also
+        have added the non-sliding complementarity constraints here)
+        """
+        consts = []
+        for k in range(num_time_steps):
+            s_sdf = sdf_slacks[k]
+            s_lambda_n = lambda_n_slacks[k]
+            const = prog.AddConstraint(s_sdf * s_lambda_n <= eps)
+            consts.append(const)
+
+        return consts
+
+    def _remove_constraints(consts: List) -> None:
+        for c in consts:
+            prog.RemoveConstraint(c)
+
+    if smoothing is None:
+        _add_complementarity_constraints(eps=0)  # no smoothing
+        result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
+    else:
+        initial_guess = None
+        for _ in range(smoothing.num_steps):
+            consts = _add_complementarity_constraints(eps=smoothing.eps)
+            if initial_guess is None:
+                result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
+            else:
+                result = snopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
+
+            if debug:
+                print(f"smoothing: {smoothing.eps}, is_success: {result.is_success()}")
+
+            if result.is_success():
+                initial_guess = result.GetSolution(prog.decision_variables())
+
+            _remove_constraints(consts)
+            smoothing.step()
+
     if not visualize_initial_guess and assert_found_solution:
         assert result.is_success()
 
@@ -635,7 +742,6 @@ def direct_trajopt_through_contact(
             ]
         )
 
-        debug = True
         if debug:  # some useful quantities for debugging
             theta_WBs_sols = result.GetSolution(r_WBs)
 

@@ -302,9 +302,9 @@ def get_baseline_comparison_costs() -> Tuple[ContactCost, NonCollisionCost]:
 
 
 def get_baseline_comparison_configs(
-    slider_type: str = "sugar_box",
+    slider_type: Literal["box", "sugar_box", "tee"] = "sugar_box",
 ) -> Tuple[PlanarPlanConfig, PlanarSolverParams]:
-    config = get_default_plan_config()
+    config = get_default_plan_config(slider_type=slider_type)
     # Make the dt's for contact and noncontact the same
     dt = 0.25
     config.num_knot_points_contact = 4
