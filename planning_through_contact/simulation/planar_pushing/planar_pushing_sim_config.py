@@ -44,18 +44,18 @@ from planning_through_contact.simulation.sim_utils import (
 class MultiRunConfig:
     def __init__(
             self,
-            num_runs, 
-            max_attempt_duration, 
-            seed, 
-            slider_type,
-            pusher_start_pose,
-            slider_goal_pose,
-            workspace_width,
-            workspace_height,
-            trans_tol: float = 0.01,
-            rot_tol: float = 0.01, # degrees
-            evaluate_final_pusher_position=True,
-            evaluate_final_slider_rotation=True,
+            num_runs: int, 
+            max_attempt_duration: float, 
+            seed: int, 
+            slider_type: str,
+            pusher_start_pose: PlanarPose,
+            slider_goal_pose: PlanarPose,
+            workspace_width: float,
+            workspace_height: float,
+            trans_tol: float=0.01,
+            rot_tol: float=0.01, # degrees
+            evaluate_final_pusher_position: bool=True,
+            evaluate_final_slider_rotation: bool=True,
     ):
         # Set up multi run config
         config = get_default_plan_config(
@@ -130,8 +130,7 @@ class PlanarPushingSimConfig:
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
     camera_configs: List[CameraConfig] = None
-    log_dir: str = None # directory for logging rollouts from output_feedback_table_environment
-
+    log_dir: str = None # directory for logging rollouts from output_feedback_table_environments
     multi_run_config: MultiRunConfig = None
 
     @classmethod
@@ -193,6 +192,7 @@ class PlanarPushingSimConfig:
             camera_configs = []
             for camera_config in cfg.camera_configs:
                 if camera_config.orientation == 'default':
+                    # default camera orientation is looking down
                     X_PB = Transform(
                         RigidTransform(
                             RotationMatrix.MakeXRotation(np.pi),

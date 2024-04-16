@@ -1,31 +1,21 @@
-import numpy as np
-from typing import List, Optional
-
 from pydrake.all import (
     DiagramBuilder,
     MultibodyPlant,
     InverseDynamicsController,
     StateInterpolatorWithDiscreteDerivative,
     AddMultibodyPlantSceneGraph,
-    RigidTransform,
     AddDefaultVisualization,
     Meshcat,
-    Box as DrakeBox,
-    RigidBody as DrakeRigidBody,
-    GeometryInstance,
-    MakePhongIllustrationProperties,
-    Rgba,
 )
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from .robot_system_base import RobotSystemBase
 from planning_through_contact.simulation.sim_utils import (
     GetParser,
     AddSliderAndConfigureContact,
 )
-from planning_through_contact.visualize.colors import COLORS
+
 
 class CylinderActuatedStation(RobotSystemBase):
     """Base controller class for an actuated floating cylinder robot."""

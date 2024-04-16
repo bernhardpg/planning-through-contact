@@ -26,8 +26,7 @@ class RobotSystemBase(Diagram):
         """The number of positions in the robot model."""
         ...
     
-    # TODO: see if possible to remove these abstract methods
-    # They were originall added for visualization purposes
+    # methods for visualization functions
 
     @property
     @abstractmethod

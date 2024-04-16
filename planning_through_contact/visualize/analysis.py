@@ -241,7 +241,7 @@ def plot_and_save_planar_pushing_logs_from_sim(
         pusher_desired=pusher_desired,
         slider_desired=slider_desired,
     )
-    
+
     with open(f"{save_dir}/combined_planar_pushing_logs.pkl", "wb") as f:
         pickle.dump(combined, f)
 

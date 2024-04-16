@@ -1,5 +1,4 @@
 import numpy as np
-from typing import List
 
 from manipulation.station import (
     MakeHardwareStation,
@@ -21,15 +20,7 @@ from pydrake.all import (
     PortSwitch,
     Demultiplexer,
     Multiplexer,
-    RigidTransform,
-    Box as DrakeBox,
-    RigidBody as DrakeRigidBody,
-    GeometryInstance,
-    MakePhongIllustrationProperties,
-    Rgba,
-
 )
-from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 from planning_through_contact.simulation.systems.joint_velocity_clamp import (
     JointVelocityClamp,
@@ -47,7 +38,6 @@ from planning_through_contact.simulation.sim_utils import (
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
 class IiwaHardwareStation(RobotSystemBase):

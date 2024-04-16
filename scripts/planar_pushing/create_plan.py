@@ -465,7 +465,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_dir", help="Output directory.", type=str, default="trajectories"
     )
-
     args = parser.parse_args()
     seed = args.seed
     traj_number = args.traj

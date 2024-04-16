@@ -16,9 +16,6 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
-from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
-    CylinderActuatedStation
-)
 from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
     IiwaHardwareStation,
 )
@@ -285,7 +282,7 @@ class TableEnvironment:
 
         else:
             self._simulator.AdvanceTo(timeout)
-        
+            
         self.save_logs(recording_file, save_dir)
 
     def save_logs(self, recording_file: Optional[str], save_dir: str):
