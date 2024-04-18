@@ -67,24 +67,24 @@ class StateEstimator(Diagram):
         )
 
         # Add camera
-        if sim_config.camera_config is not None:
+        if sim_config.camera_configs is not None:
             from pydrake.systems.sensors import (
                 ApplyCameraConfig
             )
+            for camera_config in sim_config.camera_configs:
+                ApplyCameraConfig(
+                    config=camera_config,
+                    builder=builder,
+                    plant=self._plant,
+                    scene_graph=self._scene_graph,
+                )
 
-            ApplyCameraConfig(
-                config=sim_config.camera_config,
-                builder=builder,
-                plant=self._plant,
-                scene_graph=self._scene_graph,
-            )
-
-            builder.ExportOutput(
-                builder.GetSubsystemByName(
-                    "rgbd_sensor_overhead_camera"
-                ).color_image_output_port(),
-                "rgbd_sensor_state_estimator_overhead_camera",
-            )
+                builder.ExportOutput(
+                    builder.GetSubsystemByName(
+                        f"rgbd_sensor_{camera_config.name}"
+                    ).color_image_output_port(),
+                    f"rgbd_sensor_state_estimator_{camera_config.name}",
+                )
 
         # Add system for updating the plant
         self._plant_updater: PlantUpdater = builder.AddNamedSystem(
@@ -161,13 +161,6 @@ class StateEstimator(Diagram):
         visualizer = MeshcatVisualizer.AddToBuilder(
             builder, self._scene_graph.get_query_output_port(), self.meshcat
         )
-        # self.meshcat.SetTransform(
-        #     path="/Cameras/default",
-        #     matrix=RigidTransform(
-        #         RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-        #         np.array([1, 0, 0]),
-        #     ).GetAsMatrix4(),
-        # )
         zoom = 1.8
         camera_in_world = [sim_config.slider_goal_pose.x, 
                            (sim_config.slider_goal_pose.y-1)/zoom,
@@ -180,7 +173,6 @@ class StateEstimator(Diagram):
             self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
         if sim_config.draw_frames:
-            print(f"Drawing frames")
             for frame_name in [
                 # "iiwa_link_7",
                 # "pusher_base",

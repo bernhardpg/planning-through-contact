@@ -1,4 +1,5 @@
 import numpy as np
+from dataclasses import dataclass, field
 
 from pydrake.all import (
     DiagramBuilder,
@@ -9,62 +10,61 @@ from pydrake.all import (
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
-
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
-    PlanarPushingSimConfig,
-)
-
 from planning_through_contact.simulation.planar_pushing.diffusion_policy_controller import (
     DiffusionPolicyController,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+
+@dataclass
+class DiffusionPolicyConfig:
+    checkpoint: str
+    initial_pusher_pose: PlanarPose
+    target_slider_pose: PlanarPose
+    diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion"
+    freq: float = 10.0
+    delay: float = 1.0
+    debug: bool = False
+    device: str = 'cuda:0'
+    cfg_overrides: dict = field(default_factory={})
 
 class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
     """Uses the desired trajectory of the entire system and diffusion controller
     to generate desired positions for the robot."""
 
-    def __init__(
-        self,
-        sim_config: PlanarPushingSimConfig,
-        checkpoint: str,
-        diffusion_policy_path: str = "/home/adam/workspace/gcs-diffusion",
-        delay: float = 1.0,
-        debug: bool = False
-    ):
+    def __init__(self, diffusion_policy_config: DiffusionPolicyConfig):
         super().__init__()
-
-        self._sim_config = sim_config
 
         builder = DiagramBuilder()
 
         ## Add Leaf systems
 
         # Diffusion Policy Controller
-        freq = 10.0
+        freq = diffusion_policy_config.freq
         self._diffusion_policy_controller = builder.AddNamedSystem(
             "DiffusionPolicyController",
             DiffusionPolicyController(
-                checkpoint=checkpoint,
-                diffusion_policy_path=diffusion_policy_path,
-                initial_pusher_pose=self._sim_config.pusher_start_pose,
-                target_slider_pose=self._sim_config.slider_goal_pose,
-                freq=freq,
-                delay=delay,
-                debug=debug
+                checkpoint=diffusion_policy_config.checkpoint,
+                diffusion_policy_path=diffusion_policy_config.diffusion_policy_path,
+                initial_pusher_pose=diffusion_policy_config.initial_pusher_pose,
+                target_slider_pose=diffusion_policy_config.target_slider_pose,
+                freq=diffusion_policy_config.freq,
+                delay=diffusion_policy_config.delay,
+                debug=diffusion_policy_config.debug,
+                device=diffusion_policy_config.device,
+                cfg_overrides=diffusion_policy_config.cfg_overrides,
             ),
         )
 
         # Zero Order Hold
-
         self._zero_order_hold = builder.AddNamedSystem(
             "ZeroOrderHold",
             ZeroOrderHold(
                 period_sec=1/freq, 
                 vector_size=2, 
-                # offset_sec=1/(2.0*freq)
-            ),  # Just the x and y positions
+            ),
         )
 
-        # AppendZeros
+        # AppendZeros (add theta to x y positions)
         self._append_zeros = builder.AddSystem(
             AppendZeros(input_size=2, num_zeros=1)
         )

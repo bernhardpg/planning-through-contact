@@ -21,6 +21,13 @@ class RobotSystemBase(Diagram):
         """The name of the robot model."""
         ...
     
+    @abstractmethod
+    def num_positions(self) -> int:
+        """The number of positions in the robot model."""
+        ...
+    
+    # methods for visualization functions
+
     @property
     @abstractmethod
     def slider_model_name(self) -> str:

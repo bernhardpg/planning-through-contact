@@ -1,0 +1,115 @@
+dynamics_config:
+  _target_: planning_through_contact.planning.planar.planar_plan_config.SliderPusherSystemConfig
+  pusher_radius: 0.015
+  friction_coeff_table_slider: 0.5
+  friction_coeff_slider_pusher: 0.1
+  grav_acc: 9.81
+  integration_constant: 0.3
+  force_scale: 0.01
+slider_type: 'box'
+contact_model: ContactModel.kHydroelastic
+visualize_desired: true
+slider_goal_pose:
+  _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
+  x: 0.575
+  y: 0.0
+  theta: 0.0
+pusher_start_pose:
+  _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
+  x: 0.575
+  y: 0.25
+  theta: 0.0
+time_step: 0.001
+closed_loop: false # MPC flag
+draw_frames: true
+use_realtime: false
+delay_before_execution: 5.0
+save_plots: false
+diffusion_policy_config:
+  _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/push_box_v5/checkpoints/latest.ckpt'
+  initial_pusher_pose: ${pusher_start_pose}
+  target_slider_pose: ${slider_goal_pose}
+  diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
+  freq: 10.0
+  delay: ${delay_before_execution}
+  debug: false
+  device: 'cuda:0'
+  cfg_overrides:
+    n_action_steps: 8
+use_hardware: false
+pusher_z_offset: 0.03
+camera_configs:
+  - name: 'overhead_camera'
+    orientation: 'default' # default orientation is facing downwards
+    position: [0.5, 0.0, 1.0]
+    width: 96
+    height: 96
+    show_rgb: false
+log_dir: 'diffusion_policy_logs'
+multi_run_config:
+  _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
+  num_runs: 2
+  max_attempt_duration: 60
+  seed: 42
+  slider_type: ${slider_type}
+  pusher_start_pose: ${pusher_start_pose}
+  slider_goal_pose: ${slider_goal_pose}
+  workspace_width: 0.35
+  workspace_height: 0.5
+  trans_tol: 0.01
+  rot_tol: 1.5 # degrees
+  evaluate_final_pusher_position: true
+  evaluate_final_slider_rotation: true
+
+## Robot specific configs
+# sim_config
+scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+default_joint_positions:
+  - {pusher_start_pose.x}
+  - {pusher_start_pose.y}
+
+# position controller / robot station
+robot_station:
+  _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
+  sim_config: null  # override in hydra.utils.instantiate
+  meshcat: null     # override in hydra.utils.instantiate
+
+## Data Collection Config
+data_collection_config:
+  _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
+  generate_plans: true
+  render_plans: true
+  convert_to_zarr: true
+  convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
+  plans_dir: 'temp/plans'
+  rendered_plans_dir: 'temp/rendered'
+  zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
+  policy_freq: 10.0
+  state_chunk_length: 1024
+  action_chunk_length: 2048
+  target_chunk_length: 1024
+  image_chunk_length: 128
+  plan_config:
+    _target_: planning_through_contact.simulation.environments.data_collection_table_environment.PlanConfig
+    slider_type: ${slider_type}
+    pusher_radius: 0.015
+    contact_lam_min: 0.2
+    contact_lam_max: 0.8
+    distance_to_object_socp: 0.25
+    width: 0.5
+    height: 0.5
+    center:
+      - ${slider_goal_pose.x}
+      - ${slider_goal_pose.y}
+    buffer: 0.0
+    seed: 163
+    num_plans: 2
+    pusher_start_pose: ${pusher_start_pose}
+    slider_goal_pose: ${slider_goal_pose}
+    limit_rotations: false
+    noise_final_pose: false
+
+  ## Supercloud
+  LLSUB_RANK: null
+  LLSUB_SIZE: null

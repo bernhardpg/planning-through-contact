@@ -1,6 +1,5 @@
 import argparse
 import os
-import shutil
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -244,7 +243,6 @@ def get_plan_start_and_goals_to_point(
     point: Tuple[float, float] = (0, 0),  # Default is origin
     init_pusher_pose: Optional[PlanarPose] = None,
     limit_rotations: bool = True,  # Use this to start with
-    noise_final_pose: bool = False,
 ) -> List[PlanarPushingStartAndGoal]:
     # We want the plans to always be the same
     np.random.seed(seed)
@@ -265,16 +263,7 @@ def get_plan_start_and_goals_to_point(
             workspace, slider, pusher_pose, config, limit_rotations
         )
 
-        if noise_final_pose:
-            tran_tol = 0.01 # 0.01cm
-            rot_tol = 1 * np.pi / 180 # 1 degrees
-            slider_target_pose = PlanarPose(
-                point[0] + np.random.uniform(-tran_tol, tran_tol),
-                point[1] + np.random.uniform(-tran_tol, tran_tol),
-                0 + np.random.uniform(-rot_tol, rot_tol),
-            )
-        else:
-            slider_target_pose = PlanarPose(point[0], point[1], 0)
+        slider_target_pose = PlanarPose(point[0], point[1], 0)
 
         plans.append(
             PlanarPushingStartAndGoal(
@@ -476,12 +465,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_dir", help="Output directory.", type=str, default="trajectories"
     )
-    parser.add_argument(
-        "--data_collection",
-        help="Run in data collectino mode. Overrides many other options.",
-        action="store_true",
-    )
-
     args = parser.parse_args()
     seed = args.seed
     traj_number = args.traj
@@ -493,7 +476,6 @@ if __name__ == "__main__":
     num_trajs = args.num
     output_dir = args.output_dir
     save_relaxed = args.save_relaxed
-    data_collection = args.data_collection
 
     pusher_radius = 0.015
 
@@ -504,71 +486,7 @@ if __name__ == "__main__":
     )
     solver_params = get_default_solver_params(debug, clarabel=False)
 
-    if data_collection:
-        from tqdm import tqdm
-        import logging
-        import matplotlib.pyplot as plt
-
-        # update config
-        config.contact_config.lam_min = 0.2
-        config.contact_config.lam_max = 1-config.contact_config.lam_min
-        config.non_collision_cost.distance_to_object_socp = 0.25
-
-        output_dir = f"data_collection_trajectories_{slider_type}"
-        if os.path.exists(output_dir):
-            user_input = input(f"{output_dir} already exists. Overwrite? (y/n): ")
-            if user_input.lower() != "y":
-                print("Exiting")
-                exit()
-            shutil.rmtree(output_dir)
-        os.makedirs(output_dir, exist_ok=True)
-        folder_name = f"{output_dir}"
-        os.makedirs(folder_name, exist_ok=True)
-
-        workspace = PlanarPushingWorkspace(
-            slider=BoxWorkspace(
-                width=0.35,
-                height=0.5,
-                center=np.array([0.575, 0.0]),
-                buffer=0,
-            ),
-        )
-
-        plans = get_plan_start_and_goals_to_point(
-            seed,
-            num_trajs,
-            workspace,
-            config,
-            (0.575, 0.0),
-            init_pusher_pose=PlanarPose(0.575, 0.25, 0.0),
-            # limit_rotations=True if slider_type == "box" else False,
-            limit_rotations=False,
-            # noise_final_pose=True,
-            noise_final_pose=False,
-        )
-        print("Finished finding random plans within workspace")
-
-        logging.getLogger('drake').setLevel(logging.WARNING)
-        pbar = tqdm(total=len(plans))
-        for idx, plan in enumerate(plans):
-            create_plan(
-                plan,
-                output_dir=folder_name,
-                debug=False,
-                traj_name=f"traj_{idx}",
-                save_video=False,
-                pusher_radius=pusher_radius,
-                save_traj=True,
-                animation_lims=None,
-                interpolate_video=interpolate,
-                save_analysis=False,
-                do_rounding=rounding,
-                hardware=False,
-                save_relaxed=False,
-            )
-            plt.close()
-            pbar.update(1)
-    elif hardware_demos:
+    if hardware_demos:
         output_dir = "hardware_demos"
         os.makedirs(output_dir, exist_ok=True)
         folder_name = f"{output_dir}/hw_demos_{_get_time_as_str()}_{slider_type}"

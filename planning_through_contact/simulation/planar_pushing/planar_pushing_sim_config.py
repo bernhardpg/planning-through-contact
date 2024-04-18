@@ -1,13 +1,23 @@
 from dataclasses import dataclass, field
-from typing import Optional
-
+from typing import Optional, List
 import numpy as np
 import numpy.typing as npt
+import hydra
+from omegaconf import OmegaConf
+
 from pydrake.multibody.plant import (
     ContactModel,
 )
 from pydrake.systems.sensors import (
     CameraConfig
+)
+from pydrake.math import (
+    RigidTransform, 
+    RotationMatrix,
+)
+from pydrake.all import RollPitchYaw
+from pydrake.common.schema import (
+    Transform
 )
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -16,10 +26,78 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    SliderPusherSystemConfig, 
-    MultiRunConfig
+    SliderPusherSystemConfig,
+    BoxWorkspace,
+    PlanarPushingWorkspace,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
+from planning_through_contact.simulation.controllers.diffusion_policy_source import DiffusionPolicyConfig
+from planning_through_contact.experiments.utils import (
+    get_box,
+    get_tee,
+    get_default_plan_config,
+)
+from planning_through_contact.simulation.sim_utils import (
+    get_slider_start_poses,
+)
+
+class MultiRunConfig:
+    def __init__(
+            self,
+            num_runs: int, 
+            max_attempt_duration: float, 
+            seed: int, 
+            slider_type: str,
+            pusher_start_pose: PlanarPose,
+            slider_goal_pose: PlanarPose,
+            workspace_width: float,
+            workspace_height: float,
+            trans_tol: float=0.01,
+            rot_tol: float=0.01, # degrees
+            evaluate_final_pusher_position: bool=True,
+            evaluate_final_slider_rotation: bool=True,
+    ):
+        # Set up multi run config
+        config = get_default_plan_config(
+            slider_type=slider_type,
+            pusher_radius=0.015,
+            hardware=False,
+        )
+        # update config (probably don't need these)
+        config.contact_config.lam_min = 0.15
+        config.contact_config.lam_max = 0.85
+        config.non_collision_cost.distance_to_object_socp = 0.25   
+
+        # Get initial slider poses
+        workspace = PlanarPushingWorkspace(
+            slider=BoxWorkspace(
+                width=workspace_width,
+                height=workspace_height,
+                center=np.array([slider_goal_pose.x, slider_goal_pose.y]),
+                buffer=0,
+            ),
+        )
+        self.initial_slider_poses = get_slider_start_poses(
+            seed=seed,
+            num_plans=num_runs,
+            workspace=workspace,
+            config=config,
+            pusher_pose=pusher_start_pose,
+            limit_rotations=False,
+        )
+        self.num_runs = num_runs
+        self.seed = seed
+        self.target_slider_poses = [slider_goal_pose] * num_runs
+        self.max_attempt_duration = max_attempt_duration
+        self.trans_tol = trans_tol
+        self.rot_tol = rot_tol
+        self.evaluate_final_pusher_position = evaluate_final_pusher_position
+        self.evaluate_final_slider_rotation = evaluate_final_slider_rotation
+    
+    def __str__(self):
+        slider_pose_str = f"initial_slider_poses: {self.initial_slider_poses}"
+        target_pose_str = f"target_slider_poses: {self.target_slider_poses}"
+        return f"{slider_pose_str}\n{target_pose_str}\nmax_attempt_duration: {self.max_attempt_duration}"
 
 
 @dataclass
@@ -47,13 +125,12 @@ class PlanarPushingSimConfig:
     delay_before_execution: float = 5.0
     save_plots: bool = False
     mpc_config: HybridMpcConfig = field(default_factory=lambda: HybridMpcConfig())
+    diffusion_policy_config: DiffusionPolicyConfig = None
     scene_directive_name: str = "planar_pushing_iiwa_plant_hydroelastic.yaml"
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
-    camera_config: CameraConfig = None
-    collect_data: bool = False
-    data_dir: str = None
-
+    camera_configs: List[CameraConfig] = None
+    log_dir: str = None # directory for logging rollouts from output_feedback_table_environments
     multi_run_config: MultiRunConfig = None
 
     @classmethod
@@ -66,3 +143,83 @@ class PlanarPushingSimConfig:
             slider_goal_pose=trajectory.target_slider_planar_pose,
             **kwargs
         )
+
+    @classmethod
+    def from_yaml(cls, cfg: OmegaConf):
+        # Create sim_config with mandatory fields
+        # TODO: read slider directly from yaml instead of if statement
+        if cfg.slider_type == "box":
+            slider: RigidBody = get_box()
+        elif cfg.slider_type == "tee":
+            slider: RigidBody = get_tee()
+        else:
+            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")
+        dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
+            cfg.dynamics_config,
+        )
+        dynamics_config.slider = slider
+        slider_goal_pose: PlanarPose = hydra.utils.instantiate(cfg.slider_goal_pose)
+        pusher_start_pose: PlanarPose = hydra.utils.instantiate(cfg.pusher_start_pose)   
+        sim_config = cls(
+            dynamics_config=dynamics_config,
+            slider=slider,
+            contact_model=eval(cfg.contact_model),
+            visualize_desired=cfg.visualize_desired,
+            slider_goal_pose=slider_goal_pose,
+            pusher_start_pose=pusher_start_pose,
+            time_step=cfg.time_step,
+            closed_loop=cfg.closed_loop,
+            draw_frames=cfg.draw_frames,
+            use_realtime=cfg.use_realtime,
+            delay_before_execution=cfg.delay_before_execution,
+            save_plots=cfg.save_plots,
+            scene_directive_name=cfg.scene_directive_name,
+            use_hardware=cfg.use_hardware,
+            pusher_z_offset=cfg.pusher_z_offset,
+            log_dir=cfg.log_dir,
+        )
+
+        # Optional fields
+        if 'slider_start_pose' in cfg:
+            sim_config.slider_start_pose = hydra.utils.instantiate(cfg.slider_start_pose)
+        if 'default_joint_positions' in cfg:
+            sim_config.default_joint_positions = np.array(cfg.default_joint_positions)
+        if 'mpc_config' in cfg:
+            sim_config.mpc_config = hydra.utils.instantiate(cfg.mpc_config)
+        if 'diffusion_policy_config' in cfg:
+            sim_config.diffusion_policy_config = hydra.utils.instantiate(cfg.diffusion_policy_config)
+        if 'camera_configs' in cfg and cfg.camera_configs:
+            camera_configs = []
+            for camera_config in cfg.camera_configs:
+                if camera_config.orientation == 'default':
+                    # default camera orientation is looking down
+                    X_PB = Transform(
+                        RigidTransform(
+                            RotationMatrix.MakeXRotation(np.pi),
+                            np.array(camera_config.position)
+                        )
+                    )
+                else:
+                    orientation = RollPitchYaw(
+                        roll=camera_config.orientation.roll,
+                        pitch=camera_config.orientation.pitch,
+                        yaw=camera_config.orientation.yaw
+                    )
+                    X_PB=Transform(
+                        RigidTransform(orientation, np.array(camera_config.position))
+                    )
+                
+                camera_configs.append(
+                    CameraConfig(
+                        name=camera_config.name,
+                        X_PB=X_PB,
+                        width=camera_config.width,
+                        height=camera_config.height,
+                        show_rgb=camera_config.show_rgb,
+                    )
+                )
+            sim_config.camera_configs = camera_configs
+        if 'multi_run_config' in cfg and cfg.multi_run_config:
+            sim_config.multi_run_config = hydra.utils.instantiate(cfg.multi_run_config)
+
+        return sim_config
