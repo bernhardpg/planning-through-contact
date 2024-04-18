@@ -484,4 +484,22 @@ class TPusher2d(CollisionGeometry):
                 else:
                     return self.faces[face_idx].dist_to(pos)
 
-        raise RuntimeError(f"Position {pos} is not inside any region for the Tee.")
+        # we must be inside the box
+        dists = [f.dist_to(pos) for f in self.faces]
+
+        if dists[2] >= 0:  # we are inside box_2
+            box_1_dists = [f.dist_to(pos) for f in self.box_1.faces]
+            if not np.all(box_1_dists):
+                raise RuntimeError(
+                    "Finger is inside of box 1, but not all sdfs are negative. This must be a bug!"
+                )
+            # we return the least penetration
+            return np.max(box_1_dists)
+        else:  # we are inside box_1
+            box_2_dists = [f.dist_to(pos) for f in self.box_2.faces]
+            if not np.all(box_2_dists):
+                raise RuntimeError(
+                    "Finger is inside of box 2, but not all sdfs are negative. This must be a bug!"
+                )
+            # we return the least penetration
+            return np.max(box_2_dists)

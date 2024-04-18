@@ -184,6 +184,12 @@ def direct_trajopt_through_contact(
     pusher_initial_pose = start_and_goal.pusher_initial_pose
     pusher_target_pose = start_and_goal.pusher_target_pose
 
+    # This plan works for the Tee
+    # slider_initial_pose = PlanarPose(-0.1, 0, 0)
+    # slider_target_pose = PlanarPose(0, 0, 0)
+    # pusher_initial_pose = PlanarPose(-0.5, 0.04, 0)
+    # pusher_target_pose = PlanarPose(-0.5, 0.04, 0)
+
     if debug:
         diff_pos = np.linalg.norm(slider_target_pose.pos() - slider_initial_pose.pos())
         diff_angle = np.abs(slider_target_pose.theta - slider_initial_pose.theta)
