@@ -455,7 +455,10 @@ class TPusher2d(CollisionGeometry):
                         self.normal_vecs[face_idx], self.tangent_vecs[face_idx], pos
                     )
 
-        raise RuntimeError(f"Position {pos} is not inside any region for the Tee.")
+        # inside box we just return zero
+        return np.zeros((2, 3))
+
+        # raise RuntimeError(f"Position {pos} is not inside any region for the Tee.")
 
     def get_signed_distance(self, pos: npt.NDArray) -> float:
         """

@@ -45,6 +45,12 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--vis_initial",
+        help="Visualize initial guess",
+        action="store_true",
+        default=False,
+    )
 
     args = parser.parse_args()
     seed = args.seed
@@ -52,6 +58,7 @@ if __name__ == "__main__":
     slider_type = args.body
     num_trajs = args.num
     use_smoothing = args.smooth
+    visualize_initial_guess = args.vis_initial
 
     config, solver_params = get_baseline_comparison_configs(slider_type)
 
@@ -71,6 +78,7 @@ if __name__ == "__main__":
             visualizer="new",
             visualize=True,
             smoothing=smoothing,
+            visualize_initial_guess=visualize_initial_guess,
         )
         print(f"result.is_success() = {res.is_success()}")
     else:

@@ -144,6 +144,7 @@ def direct_trajopt_through_contact(
     ),
     smoothing: Optional[SmoothingSchedule] = None,
     debug: bool = False,
+    visualize_initial_guess: bool = False,
 ) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
@@ -160,7 +161,6 @@ def direct_trajopt_through_contact(
     output_name = f"direct_trajopt_{output_name}"
     os.makedirs(output_path, exist_ok=True)
 
-    visualize_initial_guess = False
     assert_found_solution = False
 
     if num_time_steps is None:
@@ -237,6 +237,134 @@ def direct_trajopt_through_contact(
         [(p_next - p_curr) / dt for p_next, p_curr in zip(p_WBs[1:], p_WBs[:-1])]
     )
 
+    _calc_contact_jacobian = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)  # type: ignore
+
+    def _calc_f_c_B(force_comp, p_BP):
+        J_c = _calc_contact_jacobian(p_BP)
+        gen_force = J_c.T @ force_comp
+        f_c_B = gen_force[0:2]
+        return f_c_B
+
+    def _calc_f_c_W(force_comp, p_BP, R_WB):
+        f_c_B = _calc_f_c_B(force_comp, p_BP)
+        return R_WB @ f_c_B
+
+    def _calc_omega_WB_from_cos_sin(r_WB_curr, r_WB_next):
+        R_WB_curr = _two_d_rot_matrix_from_cos_sin(r_WB_curr[0], r_WB_curr[1])
+        R_WB_next = _two_d_rot_matrix_from_cos_sin(r_WB_next[0], r_WB_next[1])
+        R_WB_dot = (R_WB_next - R_WB_curr) / dt
+        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
+        omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
+        return omega_WB
+
+    def _calc_omega_WB_from_theta(theta_WB_curr, theta_WB_next):
+        R_WB_curr = two_d_rotation_matrix_from_angle(theta_WB_curr)
+        R_WB_next = two_d_rotation_matrix_from_angle(theta_WB_next)
+        R_WB_dot = (R_WB_next - R_WB_curr) / dt
+        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
+        omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
+        return omega_WB
+
+    # Create initial guess
+    th_interpolated = _interpolate_traj_1d(
+        slider_initial_pose.theta, slider_target_pose.theta, end_time + dt, end_time, dt
+    )
+    r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
+
+    p_WBs_initial_guess = _interpolate_traj(
+        slider_initial_pose.pos(), slider_target_pose.pos(), end_time + dt, end_time, dt
+    )
+
+    if initial_guess_type == "touching":
+        closest_point = find_closest_point_on_geometry(
+            pusher_initial_pose.pos(), slider.geometry
+        )
+
+        p_BPs_interpolated_start = _interpolate_traj(
+            pusher_initial_pose.pos(), closest_point, (end_time + dt) / 2, end_time, dt
+        )
+        p_BPs_interpolated_end = _interpolate_traj(
+            closest_point, pusher_target_pose.pos(), (end_time + dt) / 2, end_time, dt
+        )
+        # We make the finger touch the object at the middle point as an initial guess
+        p_BPs_initial_guess = np.vstack(
+            (p_BPs_interpolated_start, p_BPs_interpolated_end)
+        )
+    elif initial_guess_type == "polar":
+        # Use polar coordinates to initialize the finger to move around the object in a circle
+        p_BP_initial = pusher_initial_pose.pos()
+        angle_initial = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (
+            np.pi * 2
+        )
+        radius_initial = np.linalg.norm(p_BP_initial)
+
+        p_BP_target = pusher_target_pose.pos()
+        angle_target = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (np.pi * 2)
+        radius_target = np.linalg.norm(p_BP_target)
+
+        angle_interpolated = _interpolate_traj_1d(
+            angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
+        ) % (np.pi * 2)
+        radius_interpolated = _interpolate_traj_1d(
+            radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
+        )
+
+        p_BPs_initial_guess = np.vstack(
+            [
+                np.array([r * np.cos(phi), r * np.sin(phi)])
+                for r, phi in zip(radius_interpolated, angle_interpolated)
+            ]
+        )
+    else:  # "straight_line_interpolation"
+        p_BPs_initial_guess = _interpolate_traj(
+            pusher_initial_pose.pos(),
+            pusher_target_pose.pos(),
+            end_time + dt,
+            end_time,
+            dt,
+        )
+
+    normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.05
+    friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
+
+    # Make quantities so we can plot initial guess
+    R_WBs_initial_guess = [
+        _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
+    ]
+    p_WPs_initial_guess = np.vstack(
+        [
+            _create_p_WP(p_WB, R_WB, p_BP)
+            for p_WB, R_WB, p_BP in zip(
+                p_WBs_initial_guess, R_WBs_initial_guess, p_BPs_initial_guess
+            )
+        ]
+    )
+    force_comps_initial_guess = np.hstack(
+        (normal_forces_initial_guess, friction_forces_initial_guess)
+    )
+    f_c_Ws_initial_guess = np.vstack(
+        [
+            _calc_f_c_W(force_comp, p_BP, R_WB)
+            for force_comp, p_BP, R_WB in zip(
+                force_comps_initial_guess, p_BPs_initial_guess, R_WBs_initial_guess
+            )
+        ]
+    )
+
+    if visualize_initial_guess:
+        traj_old = OldPlanarPushingTrajectory(
+            dt,
+            R_WBs_initial_guess,
+            p_WBs_initial_guess.T,
+            p_WPs_initial_guess.T,  # type: ignore
+            np.hstack([f_c_Ws_initial_guess.T, np.zeros((2, 1))]),
+            p_BPs_initial_guess.T,
+        )
+
+        visualize_planar_pushing_trajectory_legacy(
+            traj_old, slider.geometry, pusher_radius=pusher_radius
+        )
+
     # Initial and target constraints on slider
     p_WB_initial = slider_initial_pose.pos().flatten()
     p_WB_target = slider_target_pose.pos().flatten()
@@ -265,33 +393,6 @@ def direct_trajopt_through_contact(
         prog.AddLinearEqualityConstraint(c)
 
     # Dynamics
-    _calc_contact_jacobian = lambda p_BP: slider.geometry.get_contact_jacobian(p_BP)  # type: ignore
-
-    def _calc_f_c_B(force_comp, p_BP):
-        J_c = _calc_contact_jacobian(p_BP)
-        gen_force = J_c.T @ force_comp
-        f_c_B = gen_force[0:2]
-        return f_c_B
-
-    def _calc_f_c_W(force_comp, p_BP, R_WB):
-        f_c_B = _calc_f_c_B(force_comp, p_BP)
-        return R_WB @ f_c_B
-
-    def _calc_omega_WB_from_cos_sin(r_WB_curr, r_WB_next):
-        R_WB_curr = _two_d_rot_matrix_from_cos_sin(r_WB_curr[0], r_WB_curr[1])
-        R_WB_next = _two_d_rot_matrix_from_cos_sin(r_WB_next[0], r_WB_next[1])
-        R_WB_dot = (R_WB_next - R_WB_curr) / dt
-        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
-        omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
-        return omega_WB
-
-    def _calc_omega_WB_from_theta(theta_WB_curr, theta_WB_next):
-        R_WB_curr = two_d_rotation_matrix_from_angle(theta_WB_curr)
-        R_WB_next = two_d_rotation_matrix_from_angle(theta_WB_next)
-        R_WB_dot = (R_WB_next - R_WB_curr) / dt
-        # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
-        omega_WB = R_WB_dot.dot(R_WB_curr.T)[1, 0]
-        return omega_WB
 
     # Limit surface constants
     c_f = dynamics_config.f_max**-2
@@ -556,103 +657,14 @@ def direct_trajopt_through_contact(
             cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
             sq_forces_cost.append(prog.AddCost(cost))
 
-    # Create initial guess as straight line interpolation
-
-    th_interpolated = _interpolate_traj_1d(
-        slider_initial_pose.theta, slider_target_pose.theta, end_time + dt, end_time, dt
-    )
-    r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
     if use_cos_sin:
         prog.SetInitialGuess(r_WBs, r_WBs_initial_guess)  # type: ignore
     else:
         prog.SetInitialGuess(r_WBs, th_interpolated)  # type: ignore
-
-    p_WBs_initial_guess = _interpolate_traj(
-        slider_initial_pose.pos(), slider_target_pose.pos(), end_time + dt, end_time, dt
-    )
     prog.SetInitialGuess(p_WBs, p_WBs_initial_guess)  # type: ignore
-
-    if initial_guess_type == "touching":
-        closest_point = find_closest_point_on_geometry(
-            pusher_initial_pose.pos(), slider.geometry
-        )
-
-        p_BPs_interpolated_start = _interpolate_traj(
-            pusher_initial_pose.pos(), closest_point, (end_time + dt) / 2, end_time, dt
-        )
-        p_BPs_interpolated_end = _interpolate_traj(
-            closest_point, pusher_target_pose.pos(), (end_time + dt) / 2, end_time, dt
-        )
-        # We make the finger touch the object at the middle point as an initial guess
-        p_BPs_initial_guess = np.vstack(
-            (p_BPs_interpolated_start, p_BPs_interpolated_end)
-        )
-        prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
-    elif initial_guess_type == "polar":
-        # Use polar coordinates to initialize the finger to move around the object in a circle
-        p_BP_initial = pusher_initial_pose.pos()
-        angle_initial = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (
-            np.pi * 2
-        )
-        radius_initial = np.linalg.norm(p_BP_initial)
-
-        p_BP_target = pusher_target_pose.pos()
-        angle_target = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (np.pi * 2)
-        radius_target = np.linalg.norm(p_BP_target)
-
-        angle_interpolated = _interpolate_traj_1d(
-            angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
-        ) % (np.pi * 2)
-        radius_interpolated = _interpolate_traj_1d(
-            radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
-        )
-
-        p_BPs_initial_guess = np.vstack(
-            [
-                np.array([r * np.cos(phi), r * np.sin(phi)])
-                for r, phi in zip(radius_interpolated, angle_interpolated)
-            ]
-        )
-        prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
-    else:  # "straight_line_interpolation"
-        p_BPs_initial_guess = _interpolate_traj(
-            pusher_initial_pose.pos(),
-            pusher_target_pose.pos(),
-            end_time + dt,
-            end_time,
-            dt,
-        )
-        prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
-
-    normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.05
+    prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
     prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
-
-    friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
     prog.SetInitialGuess(friction_forces, friction_forces_initial_guess)  # type: ignore
-
-    # Make quantities so we can plot initial guess
-    R_WBs_initial_guess = [
-        _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
-    ]
-    p_WPs_initial_guess = np.vstack(
-        [
-            _create_p_WP(p_WB, R_WB, p_BP)
-            for p_WB, R_WB, p_BP in zip(
-                p_WBs_initial_guess, R_WBs_initial_guess, p_BPs_initial_guess
-            )
-        ]
-    )
-    force_comps_initial_guess = np.hstack(
-        (normal_forces_initial_guess, friction_forces_initial_guess)
-    )
-    f_c_Ws_initial_guess = np.vstack(
-        [
-            _calc_f_c_W(force_comp, p_BP, R_WB)
-            for force_comp, p_BP, R_WB in zip(
-                force_comps_initial_guess, p_BPs_initial_guess, R_WBs_initial_guess
-            )
-        ]
-    )
 
     # Solve program
     snopt = SnoptSolver()
@@ -824,24 +836,14 @@ def direct_trajopt_through_contact(
                 )
             else:
 
-                if visualize_initial_guess:
-                    traj_old = OldPlanarPushingTrajectory(
-                        dt,
-                        R_WBs_initial_guess,
-                        p_WBs_initial_guess.T,
-                        p_WPs_initial_guess.T,  # type: ignore
-                        np.hstack([f_c_Ws_initial_guess.T, np.zeros((2, 1))]),
-                        p_BPs_initial_guess.T,
-                    )
-                else:
-                    traj_old = OldPlanarPushingTrajectory(
-                        dt,
-                        [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-                        result.GetSolution(p_WBs).T,
-                        evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
-                        np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
-                        result.GetSolution(p_BPs).T,
-                    )
+                traj_old = OldPlanarPushingTrajectory(
+                    dt,
+                    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+                    result.GetSolution(p_WBs).T,
+                    evaluate_np_expressions_array(p_WPs, result).T,  # type: ignore
+                    np.hstack([f_c_Ws_sols.T, np.zeros((2, 1))]),
+                    result.GetSolution(p_BPs).T,
+                )
                 visualize_planar_pushing_trajectory_legacy(
                     traj_old, slider.geometry, pusher_radius=pusher_radius
                 )

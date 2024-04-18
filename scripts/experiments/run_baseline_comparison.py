@@ -60,10 +60,14 @@ def _count_successes(run_dir: str) -> ComparisonRunData:
                 lines = list(f)
                 gcs_result = lines[0]
                 direct_result = lines[1]
-                if not "infeasible" in gcs_result:
+                if "infeasible" in gcs_result or "not_run" in gcs_result:
+                    ...  # nothing to do
+                else:
                     num_gcs_success += 1
 
-                if not "infeasible" in direct_result:
+                if "infeasible" in direct_result or "not_run" in direct_result:
+                    ...  # nothing to do
+                else:
                     num_direct_trajopt_success += 1
 
     return ComparisonRunData(
@@ -127,6 +131,12 @@ def main() -> None:
         type=str,
         default=None,
     )
+    parser.add_argument(
+        "--vis_initial",
+        help="Visualize initial guess",
+        action="store_true",
+        default=False,
+    )
 
     args = parser.parse_args()
     seed = args.seed
@@ -138,6 +148,7 @@ def main() -> None:
     only_direct_trajopt = args.only_direct
     print_stats = args.stats
     run_dir = args.run_dir
+    visualize_initial_guess = args.vis_initial
 
     if print_stats:
         if run_dir is None:
@@ -177,6 +188,7 @@ def main() -> None:
             output_folder=traj_output_folder,
             smoothing=smoothing,
             debug=debug,
+            visualize_initial_guess=visualize_initial_guess,
         )
         if only_direct_trajopt:
             gcs_solve_data = None
