@@ -303,16 +303,17 @@ def get_baseline_comparison_costs() -> Tuple[ContactCost, NonCollisionCost]:
 
 def get_baseline_comparison_configs(
     slider_type: Literal["box", "sugar_box", "tee"] = "sugar_box",
+    only_minimize_arc_lengths: bool = False,
+    use_velocity_limits: bool = True,
 ) -> Tuple[PlanarPlanConfig, PlanarSolverParams]:
     config = get_default_plan_config(slider_type=slider_type)
     # Make the dt's for contact and noncontact the same
     dt = 0.25
     config.num_knot_points_contact = 3
     config.time_in_contact = config.num_knot_points_contact * dt
-    config.num_knot_points_non_collision = 3
+    config.num_knot_points_non_collision = 4
     config.time_non_collision = config.num_knot_points_non_collision * dt
 
-    only_minimize_arc_lengths = True
     if only_minimize_arc_lengths:
         # These parameters seem to give the best posed optimization problem for
         # the direct method, without impacting the cost we are measuring it on
@@ -329,13 +330,15 @@ def get_baseline_comparison_configs(
         config.contact_config.cost.force_regularization = 1000
         config.contact_config.cost.keypoint_velocity_regularization = 10
         config.non_collision_cost.pusher_arc_length = 1
-        config.non_collision_cost.pusher_velocity_regularization = 1
+        config.non_collision_cost.pusher_velocity_regularization = 5
 
-    VEL_LIMIT = 0.3  # m/s
-    ANG_VEL_LIMIT = (2 * np.pi) / 4
-    config.contact_config.slider_velocity_constraint = VEL_LIMIT
-    config.non_collision_cost.pusher_velocity_constraint = VEL_LIMIT
-    config.contact_config.slider_rot_velocity_constraint = ANG_VEL_LIMIT
+    if use_velocity_limits:
+        # The direct method needs velocity limits, otherwise it doesn't work
+        VEL_LIMIT = 0.3  # m/s
+        ANG_VEL_LIMIT = (2 * np.pi) / 4
+        config.contact_config.slider_velocity_constraint = VEL_LIMIT
+        config.non_collision_cost.pusher_velocity_constraint = VEL_LIMIT
+        config.contact_config.slider_rot_velocity_constraint = ANG_VEL_LIMIT
 
     # No force scaling
     # TODO: The force scaling will be removed entirely

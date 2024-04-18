@@ -89,12 +89,12 @@ def test_face_contact_variables(
     for v in face_contact_vars.v_WBs:
         assert v.shape == (2, 1)
 
-    assert len(face_contact_vars.delta_cos_ths) == num_knot_points - 1
-    for c in face_contact_vars.delta_cos_ths:
+    assert len(face_contact_vars.cos_th_vels) == num_knot_points - 1
+    for c in face_contact_vars.cos_th_vels:
         assert isinstance(c, Expression)
 
-    assert len(face_contact_vars.delta_sin_ths) == num_knot_points - 1
-    for s in face_contact_vars.delta_sin_ths:
+    assert len(face_contact_vars.sin_th_vels) == num_knot_points - 1
+    for s in face_contact_vars.sin_th_vels:
         assert isinstance(s, Expression)
 
     assert len(face_contact_vars.v_BPs) == num_knot_points - 1

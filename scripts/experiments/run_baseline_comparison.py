@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import numpy as np
 from tqdm import tqdm
 
 from planning_through_contact.experiments.baseline_comparison.direct_trajectory_optimization import (
@@ -11,6 +12,7 @@ from planning_through_contact.experiments.utils import (
     create_output_folder,
     get_baseline_comparison_configs,
     get_default_experiment_plans,
+    get_default_plan_config,
 )
 from planning_through_contact.planning.planar.utils import create_plan
 
@@ -68,9 +70,10 @@ if __name__ == "__main__":
     use_smoothing = args.smooth
     only_direct_trajopt = args.only_dir
 
-    config, solver_params = get_baseline_comparison_configs(slider_type)
+    direct_trajopt_config, solver_params = get_baseline_comparison_configs(slider_type)
+    gcs_config = direct_trajopt_config
 
-    plans = get_default_experiment_plans(seed, num_trajs, config)
+    plans = get_default_experiment_plans(seed, num_trajs, gcs_config)
     output_folder = "baseline_comparison"
 
     if traj_number is not None:
@@ -80,7 +83,7 @@ if __name__ == "__main__":
 
     traj_output_folder = create_output_folder(output_folder, slider_type, traj_number)
 
-    for idx, plan in enumerate(plans_to_run):
+    for idx, plan in enumerate(tqdm(plans_to_run)):
         output_name = str(idx)
         output_path = f"{traj_output_folder}/{output_name}"
         os.makedirs(output_path, exist_ok=True)
@@ -92,7 +95,7 @@ if __name__ == "__main__":
 
         direct_trajopt_result = direct_trajopt_through_contact(
             plan,
-            config,
+            direct_trajopt_config,
             solver_params,
             output_name=output_name,
             output_folder=traj_output_folder,
@@ -104,7 +107,7 @@ if __name__ == "__main__":
         else:
             gcs_solve_data = create_plan(
                 plan,
-                config,
+                gcs_config,
                 solver_params,
                 output_name=output_name,
                 output_folder=traj_output_folder,
