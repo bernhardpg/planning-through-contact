@@ -6,7 +6,7 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'tee'
+slider_type: 'box'
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:
@@ -79,11 +79,11 @@ robot_station:
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: true
-  render_plans: false
-  convert_to_zarr: false
+  render_plans: true
+  convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'temp/plans'
-  rendered_plans_dir: 'temp/rendered'
+  plans_dir: 'trajectories/dan'
+  rendered_plans_dir: 'trajectories_rendered/dan'
   zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
   policy_freq: 10.0
   state_chunk_length: 1024
@@ -104,12 +104,12 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 163
-    num_plans: 30
+    num_plans: 1
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
     noise_final_pose: false
-    num_unique_plans: 20
+    num_unique_plans: 25
     sort_plans: false
 
   ## Supercloud
