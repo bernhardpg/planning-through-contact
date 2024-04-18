@@ -26,6 +26,6 @@ echo $LLSUB_RANK
 echo $LLSUB_SIZE
 
 # Run Python script with provided configuration name
-python scripts/planar_pushing/diffusion_policy/data_generation.py --config-name "$CONFIG_NAME" \
+python scripts/planar_pushing/diffusion_policy/run_data_generation.py --config-name "$CONFIG_NAME" \
     data_collection_config.LLSUB_RANK=$LLSUB_RANK \
     data_collection_config.LLSUB_SIZE=$LLSUB_SIZE
