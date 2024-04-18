@@ -113,6 +113,8 @@ data_collection_config:
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
     noise_final_pose: false
+    multimodal: false
+    num_multimodal: -1
 
   ## Supercloud
   LLSUB_RANK: null

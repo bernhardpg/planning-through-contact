@@ -83,6 +83,10 @@ class PlanConfig:
     limit_rotations: bool
     noise_final_pose: float
 
+    # Multimodal generation
+    multimodal: bool=False
+    num_multimodal: int=-1
+
 class DataCollectionConfig:
     def __init__(
         self,

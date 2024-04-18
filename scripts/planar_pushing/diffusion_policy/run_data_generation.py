@@ -146,15 +146,28 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     plan_idx = 0
     while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
-        success = create_multimodal_plans(
-            plan_spec = plan,
-            config=config,
-            solver_params=solver_params,
-            output_dir=data_collection_config.plans_dir,
-            traj_name=f"traj_{plan_idx}",
-            do_rounding=True,
-            save_traj=True,
-        )
+
+        if not _plan_config.multimodal:               
+            success = create_plan(
+                plan_spec = plan,
+                config=config,
+                solver_params=solver_params,
+                output_dir=data_collection_config.plans_dir,
+                traj_name=f"traj_{plan_idx}",
+                do_rounding=True,
+                save_traj=True,
+            )
+        else:
+            success = create_multimodal_plans(
+                plan_spec = plan,
+                config=config,
+                solver_params=solver_params,
+                num_multimodal=_plan_config.num_multimodal,
+                output_dir=data_collection_config.plans_dir,
+                traj_name=f"traj_{plan_idx}",
+                do_rounding=True,
+                save_traj=True,
+            )
 
         if success:
             plan_idx += 1
@@ -219,6 +232,7 @@ def create_multimodal_plans(
     plan_spec: PlanarPushingStartAndGoal,
     config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
+    num_multimodal: int,
     output_dir: str = "",
     traj_name: str = "Untitled_traj",
     do_rounding: bool = True,
@@ -237,8 +251,10 @@ def create_multimodal_plans(
 
     if paths is None:
         return False
+    if len(paths) < num_multimodal:
+        return False
     
-    for i in range(5):
+    for i in range(num_multimodal):
         path = paths[i]
 
         # Set up folders
