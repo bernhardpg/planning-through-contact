@@ -147,27 +147,17 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
 
-        if not _plan_config.multimodal:               
-            success = create_plan(
-                plan_spec = plan,
-                config=config,
-                solver_params=solver_params,
-                output_dir=data_collection_config.plans_dir,
-                traj_name=f"traj_{plan_idx}",
-                do_rounding=True,
-                save_traj=True,
-            )
-        else:
-            success = create_multimodal_plans(
-                plan_spec = plan,
-                config=config,
-                solver_params=solver_params,
-                num_multimodal=_plan_config.num_multimodal,
-                output_dir=data_collection_config.plans_dir,
-                traj_name=f"traj_{plan_idx}",
-                do_rounding=True,
-                save_traj=True,
-            )
+        success = create_plan(
+            plan_spec = plan,
+            config=config,
+            solver_params=solver_params,
+            num_unique_plans=_plan_config.num_unique_plans,
+            sort_plans = _plan_config.sort_plans,
+            output_dir=data_collection_config.plans_dir,
+            traj_name=f"traj_{plan_idx}",
+            do_rounding=True,
+            save_traj=True,
+        )
 
         if success:
             plan_idx += 1
@@ -180,59 +170,8 @@ def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
     config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
-    output_dir: str = "",
-    traj_name: str = "Untitled_traj",
-    do_rounding: bool = True,
-    save_traj: bool = False
-) -> bool:
-    """
-    Create plans according to plan_spec and other config params.
-    This function is largely inspired by the 'create_plan' function in
-    'scripts/planar_pushing/create_plan.py'
-    """
-
-    # Set up folders
-    folder_name = f"{output_dir}/{traj_name}"
-    os.makedirs(folder_name, exist_ok=True)
-    trajectory_folder = f"{folder_name}/trajectory"
-    os.makedirs(trajectory_folder, exist_ok=True)
-    analysis_folder = f"{folder_name}/analysis"
-    os.makedirs(analysis_folder, exist_ok=True)
-
-
-    planner = PlanarPushingPlanner(config)
-    planner.config.start_and_goal = plan_spec
-    planner.formulate_problem()
-    path = planner.plan_path(solver_params)
-
-    # We may get infeasible
-    if path is not None:
-        traj_relaxed = path.to_traj()
-        traj_rounded = path.to_traj(rounded=True) if do_rounding else None
-
-        if save_traj:
-            if traj_rounded:
-                traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")
-            else:
-                traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
-
-        slider_color = COLORS["aquamarine4"].diffuse()
-
-        if traj_rounded is not None:
-            make_traj_figure(
-                traj_rounded,
-                filename=f"{analysis_folder}/rounded_traj",
-                slider_color=slider_color,
-                split_on_mode_type=True,
-                show_workspace=False,
-            )
-    return path is not None
-
-def create_multimodal_plans(
-    plan_spec: PlanarPushingStartAndGoal,
-    config: PlanarPlanConfig,
-    solver_params: PlanarSolverParams,
-    num_multimodal: int,
+    num_unique_plans: int = 1,
+    sort_plans: bool = True,
     output_dir: str = "",
     traj_name: str = "Untitled_traj",
     do_rounding: bool = True,
@@ -251,10 +190,16 @@ def create_multimodal_plans(
 
     if paths is None:
         return False
-    if len(paths) < num_multimodal:
+    if len(paths) < num_unique_plans:
         return False
     
-    for i in range(num_multimodal):
+    # Perform top k sorting if required
+    if sort_plans:
+        paths = planner.pick_top_k_paths(paths, num_unique_plans)
+    else:
+        paths = paths[:num_unique_plans]
+    
+    for i in range(num_unique_plans):
         path = paths[i]
 
         # Set up folders

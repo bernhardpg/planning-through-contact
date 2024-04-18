@@ -84,8 +84,8 @@ class PlanConfig:
     noise_final_pose: float
 
     # Multimodal generation
-    multimodal: bool=False
-    num_multimodal: int=-1
+    num_unique_plans: int = 1
+    sort_plans: bool = True
 
 class DataCollectionConfig:
     def __init__(
