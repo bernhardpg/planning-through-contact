@@ -589,6 +589,19 @@ class PlanarPushingPlanner:
             print(f"path: {self.path.get_path_names()}")
 
         return self.path
+    
+    def plan_multiple_paths(
+        self, solver_params: PlanarSolverParams
+    ) -> List[PlanarPushingPath]:
+        paths = self._plan_paths(solver_params)
+        if paths is None:
+            return None
+
+        feasible_paths = self._get_rounded_paths(solver_params, paths)
+        if feasible_paths is None:
+            return None
+
+        return feasible_paths
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """

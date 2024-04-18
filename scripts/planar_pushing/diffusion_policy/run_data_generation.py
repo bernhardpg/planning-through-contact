@@ -146,7 +146,7 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     plan_idx = 0
     while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
-        success = create_plan(
+        success = create_multimodal_plans(
             plan_spec = plan,
             config=config,
             solver_params=solver_params,
@@ -155,7 +155,6 @@ def generate_plans(data_collection_config: DataCollectionConfig):
             do_rounding=True,
             save_traj=True,
         )
-        plt.close() # A plot isn't being closed somewhere...
 
         if success:
             plan_idx += 1
@@ -215,6 +214,62 @@ def create_plan(
                 show_workspace=False,
             )
     return path is not None
+
+def create_multimodal_plans(
+    plan_spec: PlanarPushingStartAndGoal,
+    config: PlanarPlanConfig,
+    solver_params: PlanarSolverParams,
+    output_dir: str = "",
+    traj_name: str = "Untitled_traj",
+    do_rounding: bool = True,
+    save_traj: bool = False
+) -> bool:
+    """
+    Create plans according to plan_spec and other config params.
+    This function is largely inspired by the 'create_plan' function in
+    'scripts/planar_pushing/create_plan.py'
+    """
+
+    planner = PlanarPushingPlanner(config)
+    planner.config.start_and_goal = plan_spec
+    planner.formulate_problem()
+    paths = planner.plan_multiple_paths(solver_params)
+
+    if paths is None:
+        return False
+    
+    for i in range(5):
+        path = paths[i]
+
+        # Set up folders
+        folder_name = f"{output_dir}/{traj_name}_{i}"
+        os.makedirs(folder_name, exist_ok=True)
+        trajectory_folder = f"{folder_name}/trajectory"
+        os.makedirs(trajectory_folder, exist_ok=True)
+        analysis_folder = f"{folder_name}/analysis"
+        os.makedirs(analysis_folder, exist_ok=True)
+
+        traj_relaxed = path.to_traj()
+        traj_rounded = path.to_traj(rounded=True) if do_rounding else None
+
+        if save_traj:
+            if traj_rounded:
+                traj_rounded.save(f"{trajectory_folder}/traj_rounded.pkl")
+            else:
+                traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
+
+        slider_color = COLORS["aquamarine4"].diffuse()
+
+        if traj_rounded is not None:
+            make_traj_figure(
+                traj_rounded,
+                filename=f"{analysis_folder}/rounded_traj",
+                slider_color=slider_color,
+                split_on_mode_type=True,
+                show_workspace=False,
+            )
+
+    return True
 
 def render_plans(
     sim_config: PlanarPushingSimConfig,
