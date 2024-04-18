@@ -104,13 +104,13 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 163
-    num_plans: 1
+    num_plans: 30
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
     noise_final_pose: false
-    num_unique_plans: 10
-    sort_plans: true
+    num_unique_plans: 20
+    sort_plans: false
 
   ## Supercloud
   LLSUB_RANK: null
