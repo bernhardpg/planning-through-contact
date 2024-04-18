@@ -213,8 +213,9 @@ class ContactConfig:
     # Min and max values for the scaled position of the finger on the face of the slider
     lam_min: Optional[float] = 0.0
     lam_max: Optional[float] = 1.0
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
+    slider_rot_velocity_constraint: Optional[float] = None
+    slider_velocity_constraint: Optional[float] = None
+    keypoint_velocity_constraint: Optional[float] = None
 
     def __str__(self) -> str:
         field_strings = [

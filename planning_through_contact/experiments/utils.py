@@ -312,13 +312,33 @@ def get_baseline_comparison_configs(
     config.num_knot_points_non_collision = 3
     config.time_non_collision = config.num_knot_points_non_collision * dt
 
-    config.contact_config.cost.force_regularization = 1000
-    config.contact_config.cost.keypoint_velocity_regularization = 10
-    config.non_collision_cost.pusher_arc_length = 1
-    config.non_collision_cost.pusher_velocity_regularization = 1
+    only_minimize_arc_lengths = True
+    if only_minimize_arc_lengths:
+        # These parameters seem to give the best posed optimization problem for
+        # the direct method, without impacting the cost we are measuring it on
+        # (which is the total arc length of pusher + slider)
+        config.contact_config.cost.force_regularization = 10
+        config.contact_config.cost.keypoint_velocity_regularization = 0.1
+        config.non_collision_cost.pusher_velocity_regularization = 0.1
 
-    config.contact_config.cost.time = None
-    config.non_collision_cost.distance_to_object_socp = None
+        config.contact_config.cost.time = 0.1
+        config.non_collision_cost.distance_to_object_socp = 0.1
+        config.non_collision_cost.pusher_arc_length = 1
+        config.contact_config.cost.keypoint_arc_length = 1
+    else:
+        config.contact_config.cost.force_regularization = 1000
+        config.contact_config.cost.keypoint_velocity_regularization = 10
+        config.non_collision_cost.pusher_arc_length = 1
+        config.non_collision_cost.pusher_velocity_regularization = 1
+
+    VEL_LIMIT = 0.4  # m/s
+    ANG_VEL_LIMIT = (2 * np.pi) / 4
+    # config.contact_config.slider_velocity_constraint = VEL_LIMIT
+    config.contact_config.slider_velocity_constraint = VEL_LIMIT
+    config.contact_config.keypoint_velocity_constraint = None
+    config.non_collision_cost.pusher_velocity_constraint = VEL_LIMIT
+    # config.contact_config.slider_rot_velocity_constraint = None
+    config.contact_config.slider_rot_velocity_constraint = ANG_VEL_LIMIT
 
     # No force scaling
     # TODO: The force scaling will be removed entirely
