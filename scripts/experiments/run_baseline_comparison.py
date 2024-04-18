@@ -1,5 +1,7 @@
 import argparse
 import os
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
@@ -16,7 +18,60 @@ from planning_through_contact.experiments.utils import (
 )
 from planning_through_contact.planning.planar.utils import create_plan
 
-if __name__ == "__main__":
+
+@dataclass
+class ComparisonRunData:
+    num_total_runs: int
+    num_gcs_success: int
+    num_direct_trajopt_success: int
+
+    @property
+    def percentage_gcs_success(self) -> float:
+        return (self.num_gcs_success / self.num_total_runs) * 100
+
+    @property
+    def percentage_direct_success(self) -> float:
+        return (self.num_direct_trajopt_success / self.num_total_runs) * 100
+
+    def print_stats(self) -> None:
+        print(f"Total number of runs: {self.num_total_runs}")
+        print(
+            f"Total number of GCS successes: {self.num_gcs_success} ({self.percentage_gcs_success:.2f} %)"
+        )
+        print(
+            f"Total number of direct trajopt successes: {self.num_direct_trajopt_success} ({self.percentage_direct_success:.2f} %)"
+        )
+
+
+def _count_successes(run_dir: str) -> ComparisonRunData:
+    run_dir_path = Path(run_dir)
+
+    num_gcs_success = 0
+    num_direct_trajopt_success = 0
+    num_total_runs = 0
+    for traj_folder in run_dir_path.iterdir():
+        cost_files = list(traj_folder.glob("costs.txt"))
+        if len(cost_files) == 0:
+            continue  # if there is no cost file then this trajectory was not completed, and we skip this folder
+        else:
+            num_total_runs += 1
+            cost_file = cost_files[0]
+            with open(cost_file) as f:
+                lines = list(f)
+                gcs_result = lines[0]
+                direct_result = lines[1]
+                if not "infeasible" in gcs_result:
+                    num_gcs_success += 1
+
+                if not "infeasible" in direct_result:
+                    num_direct_trajopt_success += 1
+
+    return ComparisonRunData(
+        num_total_runs, num_gcs_success, num_direct_trajopt_success
+    )
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--seed",
@@ -55,10 +110,22 @@ if __name__ == "__main__":
         default=False,
     )
     parser.add_argument(
-        "--only_dir",
+        "--only_direct",
         help="Only run direct trajopt",
         action="store_true",
         default=False,
+    )
+    parser.add_argument(
+        "--stats",
+        help="Print statistics for an existing baseline comparison run.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--run_dir",
+        help="Directory to print statistics for",
+        type=str,
+        default=None,
     )
 
     args = parser.parse_args()
@@ -68,7 +135,16 @@ if __name__ == "__main__":
     slider_type = args.body
     num_trajs = args.num
     use_smoothing = args.smooth
-    only_direct_trajopt = args.only_dir
+    only_direct_trajopt = args.only_direct
+    print_stats = args.stats
+    run_dir = args.run_dir
+
+    if print_stats:
+        if run_dir is None:
+            raise RuntimeError("Must provide a directory to print statistics from.")
+        run_data = _count_successes(run_dir)
+        run_data.print_stats()
+        return
 
     direct_trajopt_config, solver_params = get_baseline_comparison_configs(slider_type)
     gcs_config = direct_trajopt_config
@@ -133,3 +209,7 @@ if __name__ == "__main__":
 
             for l in lines:
                 print(l, file=f)
+
+
+if __name__ == "__main__":
+    main()
