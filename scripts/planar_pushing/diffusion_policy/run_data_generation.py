@@ -345,15 +345,18 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
             traj_dir_list.append(traj_dir)
 
     concatenated_states = []
+    concatenated_slider_states = []
     concatenated_actions = []
     concatenated_images = []
     concatenated_targets = []
     episode_ends = []
     current_end = 0
+    freq = data_collection_config.policy_freq
+    dt = 1 / freq
 
     for traj_dir in tqdm(traj_dir_list):
         image_dir = traj_dir.joinpath("images")
-        traj_log_path = traj_dir.joinpath("planar_position_command.pkl")
+        traj_log_path = traj_dir.joinpath("combined_logs.pkl")
         log_path = traj_dir.joinpath("log.txt")
 
         # If too many IK fails, skip this rollout
@@ -364,10 +367,10 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
                     continue
 
         # load pickle file and timing variables
-        pusher_desired = pickle.load(open(traj_log_path, 'rb'))
-
-        freq = data_collection_config.policy_freq
-        dt = 1 / freq
+        combined_logs = pickle.load(open(traj_log_path, 'rb'))
+        pusher_desired = combined_logs.pusher_desired
+        slider_desired = combined_logs.slider_desired
+        
         t = pusher_desired.t
         total_time = math.floor(t[-1] * freq) / freq
         
@@ -379,15 +382,23 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
         current_time = start_time
         idx = start_idx
         state = []
+        slider_state = []
         images = []
         while current_time < total_time:
             # state and action
             idx = _get_closest_index(t, current_time, idx)
-            current_state = np.array([pusher_desired.x[idx], 
-                                    pusher_desired.y[idx], 
-                                    pusher_desired.theta[idx]
+            current_state = np.array([
+                pusher_desired.x[idx], 
+                pusher_desired.y[idx], 
+                pusher_desired.theta[idx]
+            ])
+            current_slider_state = np.array([
+                slider_desired.x[idx],
+                slider_desired.y[idx],
+                slider_desired.theta[idx]
             ])
             state.append(current_state)
+            slider_state.append(current_slider_state)
         
             # image
             # This line can be simplified but it is clearer this way.
@@ -410,6 +421,7 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
             current_time = round((current_time + dt) * freq) / freq
 
         state = np.array(state) # T x 3
+        slider_state = np.array(slider_state) # T x 3
         action = np.array(state)[:,:2] # T x 2
         action = np.concatenate([action[1:, :], action[-1:, :]], axis=0) # shift action
         images = np.array(images)
@@ -424,6 +436,7 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
 
         # update concatenated arrays
         concatenated_states.append(state)
+        concatenated_slider_states.append(slider_state)
         concatenated_actions.append(action)
         concatenated_images.append(images)
         concatenated_targets.append(target)
@@ -438,18 +451,21 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
 
     # Chunk sizes optimized for read (not for supercloud storage, sorry admins)
     state_chunk_size = (data_collection_config.state_chunk_length, state.shape[1])
+    slider_state_chunk_size = (data_collection_config.state_chunk_length, state.shape[1])
     action_chunk_size = (data_collection_config.action_chunk_length, action.shape[1])
     target_chunk_size = (data_collection_config.target_chunk_length, target.shape[1])
     image_chunk_size = (data_collection_config.image_chunk_length, *images[0].shape)
     
     # convert to numpy
     concatenated_states = np.concatenate(concatenated_states, axis=0)
+    concatenated_slider_states = np.concatenate(concatenated_slider_states, axis=0)
     concatenated_actions = np.concatenate(concatenated_actions, axis=0)
     concatenated_images = np.concatenate(concatenated_images, axis=0)
     concatenated_targets = np.concatenate(concatenated_targets, axis=0)
     episode_ends = np.array(episode_ends)
     
     assert episode_ends[-1] == concatenated_states.shape[0]
+    assert concatenated_states.shape[0] == concatenated_slider_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_actions.shape[0]
     assert concatenated_states.shape[0] == concatenated_images.shape[0]
     assert concatenated_states.shape[0] == concatenated_targets.shape[0]
@@ -458,6 +474,11 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
         'state', 
         data=concatenated_states, 
         chunks=state_chunk_size
+    )
+    data_group.create_dataset(
+        'slider_state',
+        data=concatenated_slider_states,
+        chunks=slider_state_chunk_size
     )
     data_group.create_dataset(
         'action', 

@@ -54,6 +54,7 @@ from planning_through_contact.simulation.controllers.replay_position_source impo
 from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
     CylinderActuatedStation,
 )
+from planning_through_contact.visualize.analysis import CombinedPlanarPushingLogs
 
 logger = logging.getLogger(__name__)
 
@@ -316,9 +317,13 @@ class DataCollectionTableEnvironment:
                 image_writers[-1].get_input_port()
             )
 
-        # Set up desired pusher planar pose loggers
+        # Set up desired planar pose loggers
         self._pusher_pose_desired_logger = LogVectorOutput(
             self._desired_position_source.GetOutputPort("planar_position_command"),
+            builder,
+        )
+        self._slider_pose_desired_logger = LogVectorOutput(
+            self._desired_position_source.GetOutputPort("desired_slider_planar_pose_vector"),
             builder,
         )
 
@@ -389,10 +394,23 @@ class DataCollectionTableEnvironment:
         pusher_desired = PlanarPushingLog.from_pose_vector_log(
             pusher_pose_desired_log
         )
+        slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
+            self.context
+        )
+        slider_desired = PlanarPushingLog.from_pose_vector_log(
+            slider_pose_desired_log
+        )
 
-        log_path = os.path.join(self._data_collection_dir, "planar_position_command.pkl")
+        combined_logs = CombinedPlanarPushingLogs(
+            pusher_desired=pusher_desired,
+            slider_desired=slider_desired,
+            pusher_actual=None,
+            slider_actual=None,
+        )
+
+        log_path = os.path.join(self._data_collection_dir, "combined_logs.pkl")
         with open(log_path, "wb") as f:
-            pickle.dump(pusher_desired, f)
+            pickle.dump(combined_logs, f)
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
