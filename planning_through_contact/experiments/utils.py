@@ -321,7 +321,7 @@ def get_baseline_comparison_configs(
         config.contact_config.cost.keypoint_velocity_regularization = 0.1
         config.non_collision_cost.pusher_velocity_regularization = 0.1
 
-        config.contact_config.cost.time = 0.1
+        config.contact_config.cost.time = 1
         config.non_collision_cost.distance_to_object_socp = 0.1
         config.non_collision_cost.pusher_arc_length = 1
         config.contact_config.cost.keypoint_arc_length = 1
@@ -334,7 +334,6 @@ def get_baseline_comparison_configs(
     VEL_LIMIT = 0.3  # m/s
     ANG_VEL_LIMIT = (2 * np.pi) / 4
     config.contact_config.slider_velocity_constraint = VEL_LIMIT
-    config.contact_config.keypoint_velocity_constraint = None
     config.non_collision_cost.pusher_velocity_constraint = VEL_LIMIT
     config.contact_config.slider_rot_velocity_constraint = ANG_VEL_LIMIT
 
