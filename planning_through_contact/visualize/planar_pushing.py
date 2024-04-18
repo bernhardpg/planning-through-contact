@@ -955,6 +955,7 @@ def make_traj_figure(
     fig.tight_layout()
     if filename:
         fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
+        plt.close()
     else:
         plt.show()
 

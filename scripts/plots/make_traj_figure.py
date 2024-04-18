@@ -1,4 +1,8 @@
+import argparse
 import os
+from pathlib import Path
+
+from tqdm import tqdm
 
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -35,17 +39,74 @@ def plot_traj(traj_path, output_dir, traj_name):
     )
 
 
-main_folder = "trajectories"
-# run_folder = "run_20240202094838_tee_FINAL_higher_acc"
-run_folder = "run_20240202064957_sugar_box_FINAL"
-output_dir = f"trajectory_figures/{run_folder}"
-# plot_traj(0, main_folder, run_folder)
+def main() -> None:
+    """
+    This is a simple script that plots a figure given a trajectory saved as ".pkl". It contains some hardcoded functions
+    for generating some of the plots in the paper.
+    """
 
-# for n in range(50):
-#     plot_traj(get_run_traj_path(n, main_folder, run_folder), output_dir, f"run_{n}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--traj_path",
+        help="Path to trajectory to generate plot for.",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--run_folder",
+        help="Folder for several trajectories",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--traj",
+        help="Specify a specific trajectory from a run to generate a figure for.",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--output_dir",
+        help="Specifies an output dir. If none is provided, the plot is saved to the same location as the trajectory.",
+        type=str,
+        default=None,
+    )
+    args = parser.parse_args()
+    traj_path = args.traj_path
+    run_folder = args.run_folder
+    output_dir = args.output_dir
+    traj = args.traj
 
-get_video_traj_name = lambda n: f"videos/{n}/hw_demo_{n}/trajectory/traj_rounded.pkl"
-output_dir = f"trajectory_figures/videos/"
-video_num = 14
-video_traj_path = get_video_traj_name(video_num)
-plot_traj(video_traj_path, output_dir, f"video_{video_num}")
+    if traj_path is not None:
+        trajs_to_make_figs_for = [traj_path]
+    elif run_folder is not None:
+        run_folder = Path(run_folder)
+        if traj is not None:
+            children_names = [c.name for c in run_folder.iterdir()]
+            if not traj in children_names:
+                raise RuntimeError(f"Could not find folder {traj} in {run_folder}")
+
+            traj_folders = [run_folder / traj]
+        else:
+            traj_folders = list(run_folder.iterdir())
+
+        trajs_to_make_figs_for = []
+        for folder in traj_folders:
+            all_traj_files = list(folder.glob("**/traj_*.pkl"))
+            trajs_to_make_figs_for.extend(all_traj_files)
+
+        trajs_to_make_figs_for = sorted(trajs_to_make_figs_for)
+    else:
+        raise RuntimeError("No path provided.")
+
+    for traj_path in tqdm(trajs_to_make_figs_for):
+        traj_path = Path(traj_path)
+        if output_dir is None:
+            output_dir = str(traj_path.parent)
+        name = traj_path.name.split(".")[0]
+        plot_traj(traj_path, output_dir, name)
+
+    return
+
+
+if __name__ == "__main__":
+    main()
