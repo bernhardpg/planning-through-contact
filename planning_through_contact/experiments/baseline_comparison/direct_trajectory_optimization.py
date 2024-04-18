@@ -362,35 +362,64 @@ def direct_trajopt_through_contact(
 
     # Velocity constraints
     # NOTE: We need to add this, otherwise 90% of the trajectories are garbage
-    VEL_LIMIT = 0.4  # m/s
-    for k in range(num_time_steps - 1):
-        v_BP = v_BPs[k]
-        sq_vel = v_BP.T @ v_BP
-        prog.AddConstraint(sq_vel <= VEL_LIMIT**2)
+    v_BP_max = config.non_collision_cost.pusher_velocity_constraint
+    if v_BP_max is not None:
+        for k in range(num_time_steps - 1):
+            v_BP = v_BPs[k]
+            sq_vel = v_BP.T @ v_BP
+            prog.AddConstraint(sq_vel <= v_BP_max**2)
 
-    for k in range(num_time_steps - 1):
-        v_WB = v_WBs[k]
-        sq_vel = v_WB.T @ v_WB
-        prog.AddConstraint(sq_vel <= VEL_LIMIT**2)
+    v_WB_max = config.contact_config.slider_velocity_constraint
+    if v_WB_max is not None:
+        for k in range(num_time_steps - 1):
+            v_WB = v_WBs[k]
+            sq_vel = v_WB.T @ v_WB
+            prog.AddConstraint(sq_vel <= v_WB_max**2)
+
+    # Keypoint velocity constraints
+    def _get_slider_vertices(slider: CollisionGeometry) -> List[List[npt.NDArray]]:
+        """
+        Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
+        are linear in the decision varibles of the program
+        """
+        p_Wv_is = [
+            [
+                slider.get_p_Wv_i(vertex_idx, R_WB, p_WB.reshape((2, 1)))
+                for vertex_idx in range(len(slider.vertices))
+            ]
+            for p_WB, R_WB in zip(p_WBs, R_WBs)
+        ]
+        return p_Wv_is
+
+    v_keypoint_max = config.contact_config.keypoint_velocity_constraint
+    if v_keypoint_max is not None:
+        p_Wv_is = _get_slider_vertices(slider.geometry)
+        num_keypoints = len(slider.geometry.vertices)
+        for k in range(num_time_steps - 1):
+            for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                vel = (vertex_k_next - vertex_k) / dt
+                sq_vel = (vel.T @ vel).item()
+                cost = prog.AddConstraint(sq_vel, 0, v_keypoint_max**2)  # type: ignore
 
     # Rotation velocity constraints
-    for k in range(num_time_steps - 1):
-        r_WB_curr = r_WBs[k]
-        r_WB_next = r_WBs[k + 1]
-        if use_cos_sin:
-            # NOTE:
-            # We constrain the difference in theta between knot points to be less than pi,
-            # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
-            # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
-            # omega_WB = 0.
-            # Note that in principle this should not be a limiting constraint.
-            raise NotImplementedError(
-                "Not implemented rotation difference constraint for (cos, sin) parametrization yet."
-            )
-        else:  # we still add a maximum rotation per knot point, otherwise the plans are often useless
-            omega_WB_sq = ((r_WB_next - r_WB_curr) / dt) ** 2
-            ANG_VEL_LIMIT = (2 * np.pi) / 2
-            prog.AddConstraint(omega_WB_sq <= ANG_VEL_LIMIT**2)
+    omega_WB_max = config.contact_config.slider_rot_velocity_constraint
+    if omega_WB_max is not None:
+        for k in range(num_time_steps - 1):
+            r_WB_curr = r_WBs[k]
+            r_WB_next = r_WBs[k + 1]
+            if use_cos_sin:
+                # NOTE:
+                # We constrain the difference in theta between knot points to be less than pi,
+                # as we approximately calculate omega_WB from their difference, and at delta_theta = pi
+                # the approximation really breaks down, i.e. if theta_next - theta_curr = pi then
+                # omega_WB = 0.
+                # Note that in principle this should not be a limiting constraint.
+                raise NotImplementedError(
+                    "Not implemented rotation difference constraint for (cos, sin) parametrization yet."
+                )
+            else:  # we still add a maximum rotation per knot point, otherwise the plans are often useless
+                omega_WB_sq = ((r_WB_next - r_WB_curr) / dt) ** 2
+                prog.AddConstraint(omega_WB_sq <= omega_WB_max**2)
 
     # Note: Complementarity constraints are encoded similarly to 3.2 in
     # M. Posa, C. Cantu, and R. Tedrake, “A direct method for trajectory optimization
@@ -455,49 +484,35 @@ def direct_trajopt_through_contact(
 
     cost_config = config.contact_config.cost
 
-    def _get_slider_vertices(slider: CollisionGeometry) -> List[List[npt.NDArray]]:
-        """
-        Returns a list of slider vertices in the world frame for each knot point. Note that these vertices
-        are linear in the decision varibles of the program
-        """
-        p_Wv_is = [
-            [
-                slider.get_p_Wv_i(vertex_idx, R_WB, p_WB.reshape((2, 1)))
-                for vertex_idx in range(len(slider.vertices))
-            ]
-            for p_WB, R_WB in zip(p_WBs, R_WBs)
-        ]
-        return p_Wv_is
-
     p_Wv_is = _get_slider_vertices(slider.geometry)
     num_keypoints = len(slider.geometry.vertices)
 
     # Slider keypoint arc length
     keypoint_costs = []
     EPS = 1e-5
-    assert cost_config.keypoint_arc_length is not None
-    for k in range(num_time_steps - 1):
-        for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-            diff = vertex_k_next - vertex_k
-            dist = sqrt((diff.T @ diff).item() + EPS)
-            cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
-            cost = prog.AddCost(cost_expr)  # type: ignore
-            keypoint_costs.append(cost)
+    if cost_config.keypoint_arc_length is not None:
+        for k in range(num_time_steps - 1):
+            for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                diff = vertex_k_next - vertex_k
+                dist = sqrt((diff.T @ diff).item() + EPS)
+                cost_expr = cost_config.keypoint_arc_length * (1 / num_keypoints) * dist
+                cost = prog.AddCost(cost_expr)  # type: ignore
+                keypoint_costs.append(cost)
 
     # Slider keypoint velocity
     keypoint_velocity_costs = []
-    assert cost_config.keypoint_velocity_regularization is not None
-    for k in range(num_time_steps - 1):
-        for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-            vel = (vertex_k_next - vertex_k) / dt
-            squared_vel = (vel.T @ vel).item()
-            cost_expr = (
-                cost_config.keypoint_velocity_regularization
-                * (1 / num_keypoints)
-                * squared_vel
-            )
-            cost = prog.AddCost(cost_expr)  # type: ignore
-            keypoint_velocity_costs.append(cost)
+    if cost_config.keypoint_velocity_regularization is not None:
+        for k in range(num_time_steps - 1):
+            for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                vel = (vertex_k_next - vertex_k) / dt
+                squared_vel = (vel.T @ vel).item()
+                cost_expr = (
+                    cost_config.keypoint_velocity_regularization
+                    * (1 / num_keypoints)
+                    * squared_vel
+                )
+                cost = prog.AddCost(cost_expr)  # type: ignore
+                keypoint_velocity_costs.append(cost)
 
     cost_config_noncoll = config.non_collision_cost
     # Avoid object
@@ -515,30 +530,32 @@ def direct_trajopt_through_contact(
 
     # Pusher velocity cost
     pusher_vel_costs = []
-    assert cost_config_noncoll.pusher_velocity_regularization is not None
-    for v_BP in v_BPs:
-        squared_vel = v_BP.T @ v_BP
-        cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
-        cost = prog.AddCost(cost)
-        pusher_vel_costs.append(cost)
+    if cost_config_noncoll.pusher_velocity_regularization is not None:
+        for v_BP in v_BPs:
+            squared_vel = v_BP.T @ v_BP
+            cost = cost_config_noncoll.pusher_velocity_regularization * squared_vel
+            cost = prog.AddCost(cost)
+            pusher_vel_costs.append(cost)
 
     # Pusher arc length
     pusher_arc_length_cost = []
-    for k in range(num_time_steps - 1):
-        p_BP_curr = p_BPs[k]
-        p_BP_next = p_BPs[k + 1]
+    if cost_config_noncoll.pusher_arc_length is not None:
+        for k in range(num_time_steps - 1):
+            p_BP_curr = p_BPs[k]
+            p_BP_next = p_BPs[k + 1]
 
-        diff = p_BP_next - p_BP_curr
-        EPS = 1e-5
-        dist = sqrt(diff.T @ diff + EPS)
-        cost = prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
-        pusher_arc_length_cost.append(cost)
+            diff = p_BP_next - p_BP_curr
+            EPS = 1e-5
+            dist = sqrt(diff.T @ diff + EPS)
+            cost = prog.AddCost(cost_config_noncoll.pusher_arc_length * dist)
+            pusher_arc_length_cost.append(cost)
 
     # Squared forces
     sq_forces_cost = []
-    for lambda_n, lambda_f in force_comps:
-        cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
-        sq_forces_cost.append(prog.AddCost(cost))
+    if cost_config.force_regularization is not None:
+        for lambda_n, lambda_f in force_comps:
+            cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
+            sq_forces_cost.append(prog.AddCost(cost))
 
     # Create initial guess as straight line interpolation
 

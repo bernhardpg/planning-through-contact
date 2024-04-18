@@ -155,6 +155,9 @@ class NonCollisionCost:
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
+    pusher_velocity_constraint: Optional[float] = (
+        None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
+    )
     pusher_arc_length: Optional[float] = None
     time: Optional[float] = None
 
