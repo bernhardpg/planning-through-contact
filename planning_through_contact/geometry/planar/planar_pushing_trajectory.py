@@ -329,7 +329,9 @@ class FaceContactTrajSegment(AbstractTrajSegment):
 
     def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
         state = self.eval_state(t)
-        return self.sys._get_p_BP(state)
+        lam = state[3]
+        p_BP = self.sys._get_p_BP(lam)
+        return p_BP
 
     def get_R_WB(self, t: float) -> npt.NDArray[np.float64]:
         return self.R_WB.eval(t)
@@ -338,6 +340,16 @@ class FaceContactTrajSegment(AbstractTrajSegment):
         f_B = self.f_B.eval(t)
         assert isinstance(f_B, type(np.array([])))
         return f_B
+
+    def get_c_n(self, t: float) -> float:
+        c_n = self.c_n.eval(t)
+        assert type(c_n) == float
+        return c_n
+
+    def get_c_f(self, t: float) -> float:
+        c_f = self.c_f.eval(t)
+        assert type(c_f) == float
+        return c_f
 
     def get_f_W(self, t: float) -> npt.NDArray[np.float64]:
         f_B = self.get_f_B(t)
@@ -394,6 +406,8 @@ class NonCollisionTrajSegment(AbstractTrajSegment):
     def get_p_BP(self, t: float) -> npt.NDArray[np.float64]:
         p_BP = self.p_BP.eval(t)
         assert isinstance(p_BP, type(np.array([])))  # get rid of typing errors
+        if not p_BP.shape == (2, 1):
+            breakpoint()
         return p_BP
 
     def get_p_WP(self, t: float) -> npt.NDArray[np.float64]:
@@ -650,7 +664,9 @@ class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
     def get_knot_point_value(
         self,
         t: float,
-        traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W"],
+        traj_to_get: Literal[
+            "p_WB", "R_WB", "p_WP", "f_c_W", "p_BP", "c_n", "c_f", "theta"
+        ],
     ) -> npt.NDArray[np.float64] | float:
         t = self._t_or_end_time(t)
         segment_idx = self._get_curr_segment_idx(t)
@@ -681,6 +697,21 @@ class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
             temp[:2, :2] = R_WB
             return temp
 
+        # This is a hack to make sure we get R_WBs that are potentially not with determinant 1
+        elif traj_to_get == "theta":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                R_WB = self.path_knot_points[segment_idx].R_WB
+            else:  # FaceContactVariables
+                R_WB = self.path_knot_points[segment_idx].R_WBs[t_idx]
+
+            cos = R_WB[0, 0]
+            sin = R_WB[1, 0]
+            theta = np.arctan2(sin, cos)
+
+            return theta
+
         elif traj_to_get == "p_WB":
             knot_points = self.path_knot_points[segment_idx]
 
@@ -705,7 +736,41 @@ class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
             p_WP = p_WB + R_WB @ p_BP
             return p_WP
 
-        return val
+        elif traj_to_get == "p_BP":
+            knot_points = self.path_knot_points[segment_idx]
+
+            p_BP = self.path_knot_points[segment_idx].p_BPs[t_idx]
+            return p_BP
+
+        elif traj_to_get == "c_n":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                return 0.0
+            else:  # FaceContactVariables
+                if t_idx == len(self.path_knot_points[segment_idx].normal_forces):
+                    t_idx -= 1  # forces are inputs so they are zero order hold
+                if t_idx > len(self.path_knot_points[segment_idx].normal_forces):
+                    raise RuntimeError(
+                        "t_idx too high, this should not happen and is likely a bug"
+                    )
+                c_n = self.path_knot_points[segment_idx].normal_forces[t_idx]  # type: ignore
+                return c_n
+
+        elif traj_to_get == "c_f":
+            knot_points = self.path_knot_points[segment_idx]
+
+            if isinstance(knot_points, NonCollisionVariables):
+                return 0.0
+            else:  # FaceContactVariables
+                if t_idx == len(self.path_knot_points[segment_idx].normal_forces):
+                    t_idx -= 1  # forces are inputs so they are zero order hold
+                if t_idx > len(self.path_knot_points[segment_idx].normal_forces):
+                    raise RuntimeError(
+                        "t_idx too high, this should not happen and is likely a bug"
+                    )
+                c_f = self.path_knot_points[segment_idx].friction_forces[t_idx]  # type: ignore
+                return c_f
 
     def get_value(
         self,
@@ -718,6 +783,8 @@ class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
             "p_Wc",
             "f_c_W",
             "f_B",
+            "c_n",
+            "c_f",
             "theta",
             "theta_dot",
             "p_BP",
@@ -761,6 +828,16 @@ class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
                 val = seg.get_f_B(t)
             else:  # NonCollisionTrajSegment
                 val = np.zeros((2, 1))  # return 0 input force if we are not in contact
+        elif traj_to_get == "c_n":
+            if isinstance(seg, FaceContactTrajSegment):
+                val = seg.get_c_n(t)
+            else:  # NonCollisionTrajSegment
+                val = 0
+        elif traj_to_get == "c_f":
+            if isinstance(seg, FaceContactTrajSegment):
+                val = seg.get_c_f(t)
+            else:  # NonCollisionTrajSegment
+                val = 0
         else:
             raise NotImplementedError
 

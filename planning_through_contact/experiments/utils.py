@@ -301,6 +301,14 @@ def get_baseline_comparison_costs() -> Tuple[ContactCost, NonCollisionCost]:
     return contact_cost, non_collision_cost
 
 
+def get_default_baseline_solver_params() -> PlanarSolverParams:
+    solver_params = get_default_solver_params()
+
+    solver_params.nonl_rounding_save_solver_output = False
+    solver_params.print_cost = False
+    return solver_params
+
+
 def get_baseline_comparison_configs(
     slider_type: Literal["box", "sugar_box", "tee"] = "sugar_box",
     only_minimize_arc_lengths: bool = False,
@@ -310,9 +318,9 @@ def get_baseline_comparison_configs(
     # Make the dt's for contact and noncontact the same
     dt = 0.25
     config.num_knot_points_contact = 3
-    config.time_in_contact = config.num_knot_points_contact * dt
+    config.time_in_contact = (config.num_knot_points_contact - 1) * dt
     config.num_knot_points_non_collision = 4
-    config.time_non_collision = config.num_knot_points_non_collision * dt
+    config.time_non_collision = (config.num_knot_points_non_collision - 1) * dt
 
     if only_minimize_arc_lengths:
         # These parameters seem to give the best posed optimization problem for
@@ -349,9 +357,6 @@ def get_baseline_comparison_configs(
 
     assert config.dt_contact == config.dt_non_collision
 
-    solver_params = get_default_solver_params()
-
-    solver_params.nonl_rounding_save_solver_output = False
-    solver_params.print_cost = False
+    solver_params = get_default_baseline_solver_params()
 
     return config, solver_params

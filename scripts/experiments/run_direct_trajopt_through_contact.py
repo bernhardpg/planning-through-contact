@@ -84,7 +84,11 @@ if __name__ == "__main__":
     else:
         found_results = [
             direct_trajopt_through_contact(
-                plan, config, solver_params, output_name=str(idx), smoothing=smoothing
+                plan,
+                config,
+                solver_params,
+                output_name=str(idx),
+                smoothing=smoothing,
             ).is_success()
             for idx, plan in enumerate(tqdm(plans))
         ]

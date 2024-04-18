@@ -150,6 +150,12 @@ def main() -> None:
     run_dir = args.run_dir
     visualize_initial_guess = args.vis_initial
 
+    # This plan works for the Tee
+    # slider_initial_pose = PlanarPose(-0.1, 0, 0.3)
+    # slider_target_pose = PlanarPose(0, 0, 0)
+    # pusher_initial_pose = PlanarPose(-0.5, 0.04, 0)
+    # pusher_target_pose = PlanarPose(-0.5, 0.04, 0)
+
     if print_stats:
         if run_dir is None:
             raise RuntimeError("Must provide a directory to print statistics from.")
@@ -169,6 +175,9 @@ def main() -> None:
         plans_to_run = plans
 
     traj_output_folder = create_output_folder(output_folder, slider_type, traj_number)
+
+    with open(f"{traj_output_folder}/seed.txt", "w") as f:
+        print(f"seed: {seed}", file=f)
 
     for idx, plan in enumerate(tqdm(plans_to_run)):
         output_name = str(idx)

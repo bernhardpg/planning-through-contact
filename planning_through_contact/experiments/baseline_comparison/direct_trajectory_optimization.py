@@ -18,6 +18,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
     SimplePlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.planar.trajectory_builder import (
@@ -106,6 +107,7 @@ class SmoothingSchedule:
         eps_start: float = 1e-1,
         num_steps: int = 5,
         step_type: Literal["linear", "exp"] = "exp",
+        dir: Literal["increasing", "decreasing"] = "decreasing",
     ) -> None:
         self.eps_start = eps_start
         self.num_steps = num_steps
@@ -113,16 +115,25 @@ class SmoothingSchedule:
 
         self.eps = eps_start
         self.step_count = 1
+        self.dir = dir
 
     def step(self) -> None:
-        if self.step_type == "linear":
-            step_size = self.eps_start / (1 + self.num_steps)
-            self.eps -= step_size
-        else:  # exp
-            self.eps /= 10
+        if self.dir == "decreasing":
+            if self.step_type == "linear":
+                step_size = self.eps_start / (1 + self.num_steps)
+                self.eps -= step_size
+            else:  # exp
+                self.eps /= 10
 
-        if self.step_count >= self.num_steps - 1:
-            self.eps = 0
+            if self.step_count >= self.num_steps - 1:
+                self.eps = 0
+
+        else:  # increasing
+            if self.step_type == "linear":
+                step_size = self.eps_start / (1 + self.num_steps)
+                self.eps += step_size
+            else:  # exp
+                self.eps *= 10
 
         self.step_count += 1
 
@@ -145,6 +156,9 @@ def direct_trajopt_through_contact(
     smoothing: Optional[SmoothingSchedule] = None,
     debug: bool = False,
     visualize_initial_guess: bool = False,
+    initial_guess: Optional[PlanarPushingTrajectory] = None,
+    use_same_solver_tolerances: bool = False,
+    penalize_initial_guess_diff: bool = False,
 ) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
@@ -164,10 +178,13 @@ def direct_trajopt_through_contact(
     assert_found_solution = False
 
     if num_time_steps is None:
-        # This is a heuristic number to approximately make the two methods comparable
-        num_time_steps = (
-            config.num_knot_points_contact + config.num_knot_points_non_collision
-        ) * 4
+        if initial_guess:
+            num_time_steps = initial_guess.num_knot_points
+        else:
+            # This is a heuristic number to approximately make the two methods comparable
+            num_time_steps = (
+                config.num_knot_points_contact + config.num_knot_points_non_collision
+            ) * 4
 
     if dt is None:
         assert config.dt_contact == config.dt_non_collision
@@ -183,12 +200,6 @@ def direct_trajopt_through_contact(
     slider_target_pose = start_and_goal.slider_target_pose
     pusher_initial_pose = start_and_goal.pusher_initial_pose
     pusher_target_pose = start_and_goal.pusher_target_pose
-
-    # This plan works for the Tee
-    # slider_initial_pose = PlanarPose(-0.1, 0, 0)
-    # slider_target_pose = PlanarPose(0, 0, 0)
-    # pusher_initial_pose = PlanarPose(-0.5, 0.04, 0)
-    # pusher_target_pose = PlanarPose(-0.5, 0.04, 0)
 
     if debug:
         diff_pos = np.linalg.norm(slider_target_pose.pos() - slider_initial_pose.pos())
@@ -272,68 +283,111 @@ def direct_trajopt_through_contact(
         return omega_WB
 
     # Create initial guess
-    th_interpolated = _interpolate_traj_1d(
-        slider_initial_pose.theta, slider_target_pose.theta, end_time + dt, end_time, dt
-    )
-    r_WBs_initial_guess = [np.array([np.cos(th), np.sin(th)]) for th in th_interpolated]
+    if initial_guess is not None:
+        ts = np.arange(0, num_time_steps * dt, dt)
+        p_WBs_initial_guess = np.hstack(
+            [initial_guess.get_knot_point_value(t, "p_WB") for t in ts]
+        ).T
+        p_BPs_initial_guess = np.hstack(
+            [initial_guess.get_knot_point_value(t, "p_BP") for t in ts]
+        ).T
 
-    p_WBs_initial_guess = _interpolate_traj(
-        slider_initial_pose.pos(), slider_target_pose.pos(), end_time + dt, end_time, dt
-    )
+        normal_forces_initial_guess = np.array(
+            [initial_guess.get_knot_point_value(t, "c_n") for t in ts[:-1]]
+        ).reshape((-1, 1))
+        friction_forces_initial_guess = np.array(
+            [initial_guess.get_knot_point_value(t, "c_f") for t in ts[:-1]]
+        ).reshape((-1, 1))
 
-    if initial_guess_type == "touching":
-        closest_point = find_closest_point_on_geometry(
-            pusher_initial_pose.pos(), slider.geometry
-        )
-
-        p_BPs_interpolated_start = _interpolate_traj(
-            pusher_initial_pose.pos(), closest_point, (end_time + dt) / 2, end_time, dt
-        )
-        p_BPs_interpolated_end = _interpolate_traj(
-            closest_point, pusher_target_pose.pos(), (end_time + dt) / 2, end_time, dt
-        )
-        # We make the finger touch the object at the middle point as an initial guess
-        p_BPs_initial_guess = np.vstack(
-            (p_BPs_interpolated_start, p_BPs_interpolated_end)
-        )
-    elif initial_guess_type == "polar":
-        # Use polar coordinates to initialize the finger to move around the object in a circle
-        p_BP_initial = pusher_initial_pose.pos()
-        angle_initial = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (
-            np.pi * 2
-        )
-        radius_initial = np.linalg.norm(p_BP_initial)
-
-        p_BP_target = pusher_target_pose.pos()
-        angle_target = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (np.pi * 2)
-        radius_target = np.linalg.norm(p_BP_target)
-
-        angle_interpolated = _interpolate_traj_1d(
-            angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
-        ) % (np.pi * 2)
-        radius_interpolated = _interpolate_traj_1d(
-            radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
-        )
-
-        p_BPs_initial_guess = np.vstack(
-            [
-                np.array([r * np.cos(phi), r * np.sin(phi)])
-                for r, phi in zip(radius_interpolated, angle_interpolated)
-            ]
-        )
-    else:  # "straight_line_interpolation"
-        p_BPs_initial_guess = _interpolate_traj(
-            pusher_initial_pose.pos(),
-            pusher_target_pose.pos(),
+        theta_initial_guess = [
+            initial_guess.get_knot_point_value(t, "theta") for t in ts
+        ]
+        R_WBs_initial_guess = [
+            initial_guess.get_knot_point_value(t, "R_WB") for t in ts
+        ]
+    else:
+        theta_initial_guess = _interpolate_traj_1d(
+            slider_initial_pose.theta,
+            slider_target_pose.theta,
             end_time + dt,
             end_time,
             dt,
         )
 
-    normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.05
-    friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
+        p_WBs_initial_guess = _interpolate_traj(
+            slider_initial_pose.pos(),
+            slider_target_pose.pos(),
+            end_time + dt,
+            end_time,
+            dt,
+        )
+
+        if initial_guess_type == "touching":
+            closest_point = find_closest_point_on_geometry(
+                pusher_initial_pose.pos(), slider.geometry
+            )
+
+            p_BPs_interpolated_start = _interpolate_traj(
+                pusher_initial_pose.pos(),
+                closest_point,
+                (end_time + dt) / 2,
+                end_time,
+                dt,
+            )
+            p_BPs_interpolated_end = _interpolate_traj(
+                closest_point,
+                pusher_target_pose.pos(),
+                (end_time + dt) / 2,
+                end_time,
+                dt,
+            )
+            # We make the finger touch the object at the middle point as an initial guess
+            p_BPs_initial_guess = np.vstack(
+                (p_BPs_interpolated_start, p_BPs_interpolated_end)
+            )
+        elif initial_guess_type == "polar":
+            # Use polar coordinates to initialize the finger to move around the object in a circle
+            p_BP_initial = pusher_initial_pose.pos()
+            angle_initial = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (
+                np.pi * 2
+            )
+            radius_initial = np.linalg.norm(p_BP_initial)
+
+            p_BP_target = pusher_target_pose.pos()
+            angle_target = np.arctan2(p_BP_initial[1], p_BP_initial[0]).item() % (
+                np.pi * 2
+            )
+            radius_target = np.linalg.norm(p_BP_target)
+
+            angle_interpolated = _interpolate_traj_1d(
+                angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
+            ) % (np.pi * 2)
+            radius_interpolated = _interpolate_traj_1d(
+                radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
+            )
+
+            p_BPs_initial_guess = np.vstack(
+                [
+                    np.array([r * np.cos(phi), r * np.sin(phi)])
+                    for r, phi in zip(radius_interpolated, angle_interpolated)
+                ]
+            )
+        else:  # "straight_line_interpolation"
+            p_BPs_initial_guess = _interpolate_traj(
+                pusher_initial_pose.pos(),
+                pusher_target_pose.pos(),
+                end_time + dt,
+                end_time,
+                dt,
+            )
+
+        normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.05
+        friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
 
     # Make quantities so we can plot initial guess
+    r_WBs_initial_guess = [
+        np.array([np.cos(th), np.sin(th)]) for th in theta_initial_guess
+    ]
     R_WBs_initial_guess = [
         _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
     ]
@@ -666,11 +720,27 @@ def direct_trajopt_through_contact(
     if use_cos_sin:
         prog.SetInitialGuess(r_WBs, r_WBs_initial_guess)  # type: ignore
     else:
-        prog.SetInitialGuess(r_WBs, th_interpolated)  # type: ignore
+        prog.SetInitialGuess(r_WBs, theta_initial_guess)  # type: ignore
     prog.SetInitialGuess(p_WBs, p_WBs_initial_guess)  # type: ignore
     prog.SetInitialGuess(p_BPs, p_BPs_initial_guess)  # type: ignore
     prog.SetInitialGuess(normal_forces, normal_forces_initial_guess)  # type: ignore
     prog.SetInitialGuess(friction_forces, friction_forces_initial_guess)  # type: ignore
+
+    if penalize_initial_guess_diff:
+
+        def _add_squared_diff_cost(value, ref, weight: float = 10.0):
+            for v, r in zip(value, ref):
+                cost = (v - r) ** 2
+                if type(cost) == type(np.array([])):
+                    prog.AddQuadraticCost(weight * np.sum(cost))
+                else:
+                    prog.AddQuadraticCost(weight * cost)
+
+        _add_squared_diff_cost(r_WBs, theta_initial_guess)
+        _add_squared_diff_cost(p_WBs, p_WBs_initial_guess)
+        _add_squared_diff_cost(p_BPs, p_BPs_initial_guess)
+        _add_squared_diff_cost(normal_forces, normal_forces_initial_guess)
+        _add_squared_diff_cost(friction_forces, friction_forces_initial_guess)
 
     # Solve program
     snopt = SnoptSolver()
@@ -686,16 +756,25 @@ def direct_trajopt_through_contact(
 
         solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
 
-    # solver_options.SetOption(
-    #     snopt.solver_id(),
-    #     "Major Feasibility Tolerance",
-    #     solver_params.nonl_round_major_feas_tol,
-    # )
-    # solver_options.SetOption(
-    #     snopt.solver_id(),
-    #     "Major Optimality Tolerance",
-    #     solver_params.nonl_round_opt_tol,
-    # )
+    # This is what we use with GCS, but for some reason it seems to make the problem harder to
+    # solve when solving the nonconvex problem from scratch. Hence we don't use it by default
+    if use_same_solver_tolerances:
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Feasibility Tolerance",
+            solver_params.nonl_round_major_feas_tol,
+        )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major Optimality Tolerance",
+            solver_params.nonl_round_opt_tol,
+        )
+        solver_options.SetOption(
+            snopt.solver_id(),
+            "Major iterations limit",
+            solver_params.nonl_round_major_iter_limit,
+        )
+
     # The performance seems to be better when these (minor step) parameters are left
     # to their default value
     # solver_options.SetOption(
@@ -723,6 +802,9 @@ def direct_trajopt_through_contact(
         for k in range(num_time_steps):
             s_sdf = sdf_slacks[k]
             s_lambda_n = lambda_n_slacks[k]
+            # s = prog.NewContinuousVariables(1, "s")[0]
+            # prog.AddLinearConstraint(s >= 0)
+            # prog.AddLinearCost(eps * s)
             const = prog.AddConstraint(s_sdf * s_lambda_n <= eps)
             consts.append(const)
 
