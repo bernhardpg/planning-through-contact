@@ -146,16 +146,18 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     plan_idx = 0
     while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
+
         success = create_plan(
             plan_spec = plan,
             config=config,
             solver_params=solver_params,
+            num_unique_plans=_plan_config.num_unique_plans,
+            sort_plans = _plan_config.sort_plans,
             output_dir=data_collection_config.plans_dir,
             traj_name=f"traj_{plan_idx}",
             do_rounding=True,
             save_traj=True,
         )
-        plt.close() # A plot isn't being closed somewhere...
 
         if success:
             plan_idx += 1
@@ -168,6 +170,8 @@ def create_plan(
     plan_spec: PlanarPushingStartAndGoal,
     config: PlanarPlanConfig,
     solver_params: PlanarSolverParams,
+    num_unique_plans: int = 1,
+    sort_plans: bool = True,
     output_dir: str = "",
     traj_name: str = "Untitled_traj",
     do_rounding: bool = True,
@@ -179,22 +183,33 @@ def create_plan(
     'scripts/planar_pushing/create_plan.py'
     """
 
-    # Set up folders
-    folder_name = f"{output_dir}/{traj_name}"
-    os.makedirs(folder_name, exist_ok=True)
-    trajectory_folder = f"{folder_name}/trajectory"
-    os.makedirs(trajectory_folder, exist_ok=True)
-    analysis_folder = f"{folder_name}/analysis"
-    os.makedirs(analysis_folder, exist_ok=True)
-
-
     planner = PlanarPushingPlanner(config)
     planner.config.start_and_goal = plan_spec
     planner.formulate_problem()
-    path = planner.plan_path(solver_params)
+    paths = planner.plan_multiple_paths(solver_params)
 
-    # We may get infeasible
-    if path is not None:
+    if paths is None:
+        return False
+    if len(paths) < num_unique_plans:
+        return False
+    
+    # Perform top k sorting if required
+    if sort_plans:
+        paths = planner.pick_top_k_paths(paths, num_unique_plans)
+    else:
+        paths = paths[:num_unique_plans]
+    
+    for i in range(num_unique_plans):
+        path = paths[i]
+
+        # Set up folders
+        folder_name = f"{output_dir}/{traj_name}_{i}"
+        os.makedirs(folder_name, exist_ok=True)
+        trajectory_folder = f"{folder_name}/trajectory"
+        os.makedirs(trajectory_folder, exist_ok=True)
+        analysis_folder = f"{folder_name}/analysis"
+        os.makedirs(analysis_folder, exist_ok=True)
+
         traj_relaxed = path.to_traj()
         traj_rounded = path.to_traj(rounded=True) if do_rounding else None
 
@@ -214,7 +229,8 @@ def create_plan(
                 split_on_mode_type=True,
                 show_workspace=False,
             )
-    return path is not None
+
+    return True
 
 def render_plans(
     sim_config: PlanarPushingSimConfig,
@@ -345,15 +361,18 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
             traj_dir_list.append(traj_dir)
 
     concatenated_states = []
+    concatenated_slider_states = []
     concatenated_actions = []
     concatenated_images = []
     concatenated_targets = []
     episode_ends = []
     current_end = 0
+    freq = data_collection_config.policy_freq
+    dt = 1 / freq
 
     for traj_dir in tqdm(traj_dir_list):
         image_dir = traj_dir.joinpath("images")
-        traj_log_path = traj_dir.joinpath("planar_position_command.pkl")
+        traj_log_path = traj_dir.joinpath("combined_logs.pkl")
         log_path = traj_dir.joinpath("log.txt")
 
         # If too many IK fails, skip this rollout
@@ -364,10 +383,10 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
                     continue
 
         # load pickle file and timing variables
-        pusher_desired = pickle.load(open(traj_log_path, 'rb'))
-
-        freq = data_collection_config.policy_freq
-        dt = 1 / freq
+        combined_logs = pickle.load(open(traj_log_path, 'rb'))
+        pusher_desired = combined_logs.pusher_desired
+        slider_desired = combined_logs.slider_desired
+        
         t = pusher_desired.t
         total_time = math.floor(t[-1] * freq) / freq
         
@@ -379,15 +398,23 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
         current_time = start_time
         idx = start_idx
         state = []
+        slider_state = []
         images = []
         while current_time < total_time:
             # state and action
             idx = _get_closest_index(t, current_time, idx)
-            current_state = np.array([pusher_desired.x[idx], 
-                                    pusher_desired.y[idx], 
-                                    pusher_desired.theta[idx]
+            current_state = np.array([
+                pusher_desired.x[idx], 
+                pusher_desired.y[idx], 
+                pusher_desired.theta[idx]
+            ])
+            current_slider_state = np.array([
+                slider_desired.x[idx],
+                slider_desired.y[idx],
+                slider_desired.theta[idx]
             ])
             state.append(current_state)
+            slider_state.append(current_slider_state)
         
             # image
             # This line can be simplified but it is clearer this way.
@@ -410,6 +437,7 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
             current_time = round((current_time + dt) * freq) / freq
 
         state = np.array(state) # T x 3
+        slider_state = np.array(slider_state) # T x 3
         action = np.array(state)[:,:2] # T x 2
         action = np.concatenate([action[1:, :], action[-1:, :]], axis=0) # shift action
         images = np.array(images)
@@ -424,6 +452,7 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
 
         # update concatenated arrays
         concatenated_states.append(state)
+        concatenated_slider_states.append(slider_state)
         concatenated_actions.append(action)
         concatenated_images.append(images)
         concatenated_targets.append(target)
@@ -438,18 +467,21 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
 
     # Chunk sizes optimized for read (not for supercloud storage, sorry admins)
     state_chunk_size = (data_collection_config.state_chunk_length, state.shape[1])
+    slider_state_chunk_size = (data_collection_config.state_chunk_length, state.shape[1])
     action_chunk_size = (data_collection_config.action_chunk_length, action.shape[1])
     target_chunk_size = (data_collection_config.target_chunk_length, target.shape[1])
     image_chunk_size = (data_collection_config.image_chunk_length, *images[0].shape)
     
     # convert to numpy
     concatenated_states = np.concatenate(concatenated_states, axis=0)
+    concatenated_slider_states = np.concatenate(concatenated_slider_states, axis=0)
     concatenated_actions = np.concatenate(concatenated_actions, axis=0)
     concatenated_images = np.concatenate(concatenated_images, axis=0)
     concatenated_targets = np.concatenate(concatenated_targets, axis=0)
     episode_ends = np.array(episode_ends)
     
     assert episode_ends[-1] == concatenated_states.shape[0]
+    assert concatenated_states.shape[0] == concatenated_slider_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_actions.shape[0]
     assert concatenated_states.shape[0] == concatenated_images.shape[0]
     assert concatenated_states.shape[0] == concatenated_targets.shape[0]
@@ -458,6 +490,11 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
         'state', 
         data=concatenated_states, 
         chunks=state_chunk_size
+    )
+    data_group.create_dataset(
+        'slider_state',
+        data=concatenated_slider_states,
+        chunks=slider_state_chunk_size
     )
     data_group.create_dataset(
         'action', 

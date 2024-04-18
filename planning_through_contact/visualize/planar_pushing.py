@@ -957,6 +957,7 @@ def make_traj_figure(
         fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
     else:
         plt.show()
+    plt.close()
 
 
 def _add_slider_geometries(

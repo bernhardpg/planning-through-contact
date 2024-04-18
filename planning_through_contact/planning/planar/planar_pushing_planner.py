@@ -572,6 +572,19 @@ class PlanarPushingPlanner:
 
         return path
 
+    def pick_top_k_paths(self, paths: List[PlanarPushingPath], k: int) -> PlanarPushingPath:
+        rounded_costs = [
+            p.rounded_result.get_optimal_cost()
+            for p in paths
+            if p.rounded_result is not None  # type
+        ]
+        # if k is -1, return all paths (sorted), otherwise return min(k, len(paths)) paths
+        k = min(k, len(rounded_costs)) if k > 0 else len(rounded_costs)
+        best_idxs = np.argsort(rounded_costs)[:k]
+        best_paths = [paths[idx] for idx in best_idxs]
+
+        return best_paths
+
     def plan_path(
         self, solver_params: PlanarSolverParams
     ) -> Optional[PlanarPushingPath]:
@@ -589,6 +602,19 @@ class PlanarPushingPlanner:
             print(f"path: {self.path.get_path_names()}")
 
         return self.path
+    
+    def plan_multiple_paths(
+        self, solver_params: PlanarSolverParams
+    ) -> List[PlanarPushingPath]:
+        paths = self._plan_paths(solver_params)
+        if paths is None:
+            return None
+
+        feasible_paths = self._get_rounded_paths(solver_params, paths)
+        if feasible_paths is None:
+            return None
+        
+        return feasible_paths
 
     def _print_edge_flows(self, result: MathematicalProgramResult) -> None:
         """
