@@ -331,13 +331,11 @@ def get_baseline_comparison_configs(
         config.non_collision_cost.pusher_arc_length = 1
         config.non_collision_cost.pusher_velocity_regularization = 1
 
-    VEL_LIMIT = 0.4  # m/s
+    VEL_LIMIT = 0.3  # m/s
     ANG_VEL_LIMIT = (2 * np.pi) / 4
-    # config.contact_config.slider_velocity_constraint = VEL_LIMIT
     config.contact_config.slider_velocity_constraint = VEL_LIMIT
     config.contact_config.keypoint_velocity_constraint = None
     config.non_collision_cost.pusher_velocity_constraint = VEL_LIMIT
-    # config.contact_config.slider_rot_velocity_constraint = None
     config.contact_config.slider_rot_velocity_constraint = ANG_VEL_LIMIT
 
     # No force scaling

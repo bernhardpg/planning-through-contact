@@ -166,9 +166,8 @@ def direct_trajopt_through_contact(
     if num_time_steps is None:
         # This is a heuristic number to approximately make the two methods comparable
         num_time_steps = (
-            config.num_knot_points_contact * 2
-            + config.num_knot_points_non_collision * 3
-        )
+            config.num_knot_points_contact + config.num_knot_points_non_collision
+        ) * 4
 
     if dt is None:
         assert config.dt_contact == config.dt_non_collision
