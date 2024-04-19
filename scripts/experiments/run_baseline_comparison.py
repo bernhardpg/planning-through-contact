@@ -2,6 +2,7 @@ import argparse
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 import numpy as np
 from tqdm import tqdm
@@ -22,8 +23,16 @@ from planning_through_contact.planning.planar.utils import create_plan
 @dataclass
 class ComparisonRunData:
     num_total_runs: int
-    num_gcs_success: int
-    num_direct_trajopt_success: int
+    gcs_successes: List[str]
+    direct_successes: List[str]
+
+    @property
+    def num_gcs_success(self) -> int:
+        return len(self.gcs_successes)
+
+    @property
+    def num_direct_trajopt_success(self) -> int:
+        return len(self.direct_successes)
 
     @property
     def percentage_gcs_success(self) -> float:
@@ -42,12 +51,16 @@ class ComparisonRunData:
             f"Total number of direct trajopt successes: {self.num_direct_trajopt_success} ({self.percentage_direct_success:.2f} %)"
         )
 
+    def print_successes(self) -> None:
+        print("Succesfull gcs: " + ", ".join(self.gcs_successes))
+        print("Succesfull direct trajopt: " + ", ".join(self.direct_successes))
+
 
 def _count_successes(run_dir: str) -> ComparisonRunData:
     run_dir_path = Path(run_dir)
 
-    num_gcs_success = 0
-    num_direct_trajopt_success = 0
+    gcs_successes = []
+    direct_trajopt_successes = []
     num_total_runs = 0
     for traj_folder in run_dir_path.iterdir():
         cost_files = list(traj_folder.glob("costs.txt"))
@@ -63,16 +76,14 @@ def _count_successes(run_dir: str) -> ComparisonRunData:
                 if "infeasible" in gcs_result or "not_run" in gcs_result:
                     ...  # nothing to do
                 else:
-                    num_gcs_success += 1
+                    gcs_successes.append(traj_folder.name)
 
                 if "infeasible" in direct_result or "not_run" in direct_result:
                     ...  # nothing to do
                 else:
-                    num_direct_trajopt_success += 1
+                    direct_trajopt_successes.append(traj_folder.name)
 
-    return ComparisonRunData(
-        num_total_runs, num_gcs_success, num_direct_trajopt_success
-    )
+    return ComparisonRunData(num_total_runs, gcs_successes, direct_trajopt_successes)
 
 
 def main() -> None:
@@ -161,6 +172,7 @@ def main() -> None:
             raise RuntimeError("Must provide a directory to print statistics from.")
         run_data = _count_successes(run_dir)
         run_data.print_stats()
+        run_data.print_successes()
         return
 
     direct_trajopt_config, solver_params = get_baseline_comparison_configs(slider_type)

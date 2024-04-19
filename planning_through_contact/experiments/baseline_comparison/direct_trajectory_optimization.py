@@ -159,6 +159,7 @@ def direct_trajopt_through_contact(
     initial_guess: Optional[PlanarPushingTrajectory] = None,
     use_same_solver_tolerances: bool = False,
     penalize_initial_guess_diff: bool = False,
+    save_cost: bool = False,
 ) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
@@ -935,5 +936,8 @@ def direct_trajopt_through_contact(
                 visualize_planar_pushing_trajectory_legacy(
                     traj_old, slider.geometry, pusher_radius=pusher_radius
                 )
+        if save_cost:
+            with open(f"{output_path}/cost.txt", "w") as f:
+                print(f"Cost: {result.get_optimal_cost()}", file=f)
 
     return result
