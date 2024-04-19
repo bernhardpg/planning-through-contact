@@ -318,9 +318,9 @@ def get_baseline_comparison_configs(
     # Make the dt's for contact and noncontact the same
     dt = 0.25
     config.num_knot_points_contact = 3
-    config.time_in_contact = (config.num_knot_points_contact - 1) * dt
+    config.time_in_contact = config.num_knot_points_contact * dt
     config.num_knot_points_non_collision = 4
-    config.time_non_collision = (config.num_knot_points_non_collision - 1) * dt
+    config.time_non_collision = config.num_knot_points_non_collision * dt
 
     if only_minimize_arc_lengths:
         # These parameters seem to give the best posed optimization problem for

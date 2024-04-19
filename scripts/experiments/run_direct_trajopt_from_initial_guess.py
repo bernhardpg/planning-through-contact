@@ -77,7 +77,7 @@ if __name__ == "__main__":
     else:
         raise RuntimeError("Must provide an initial guess.")
 
-    for initial_guess_path in initial_guess_paths:
+    for initial_guess_path in tqdm(initial_guess_paths):
         traj = PlanarPushingTrajectory.load(initial_guess_path)
         config = traj.config
 
