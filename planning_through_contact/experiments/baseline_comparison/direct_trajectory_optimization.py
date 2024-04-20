@@ -303,6 +303,13 @@ def direct_trajopt_through_contact(
         p_WBs_initial_guess = np.hstack(
             [initial_guess.get_knot_point_value(t, "p_WB") for t in ts]
         ).T
+        theta_initial_guess = [
+            initial_guess.get_knot_point_value(t, "theta") for t in ts
+        ]
+        R_WBs_initial_guess = [
+            initial_guess.get_knot_point_value(t, "R_WB") for t in ts
+        ]
+
         p_BPs_initial_guess = np.hstack(
             [initial_guess.get_knot_point_value(t, "p_BP") for t in ts]
         ).T
@@ -314,12 +321,6 @@ def direct_trajopt_through_contact(
             [initial_guess.get_knot_point_value(t, "c_f") for t in ts[:-1]]
         ).reshape((-1, 1))
 
-        theta_initial_guess = [
-            initial_guess.get_knot_point_value(t, "theta") for t in ts
-        ]
-        R_WBs_initial_guess = [
-            initial_guess.get_knot_point_value(t, "R_WB") for t in ts
-        ]
     else:
         theta_initial_guess = _interpolate_traj_1d(
             slider_initial_pose.theta,
@@ -336,6 +337,13 @@ def direct_trajopt_through_contact(
             end_time,
             dt,
         )
+
+        r_WBs_initial_guess = [
+            np.array([np.cos(th), np.sin(th)]) for th in theta_initial_guess
+        ]
+        R_WBs_initial_guess = [
+            _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
+        ]
 
         if initial_guess_type == "touching":
             closest_point = find_closest_point_on_geometry(
@@ -388,7 +396,7 @@ def direct_trajopt_through_contact(
                 ]
             )
         else:  # "straight_line_interpolation"
-            p_BPs_initial_guess = _interpolate_traj(
+            p_WPs_initial_guess = _interpolate_traj(
                 pusher_initial_pose.pos(),
                 pusher_target_pose.pos(),
                 end_time + dt,
@@ -396,24 +404,21 @@ def direct_trajopt_through_contact(
                 dt,
             )
 
+            # p_WP = p_WB + R_WB p_BP
+            # p_BP = R_WB^T (p_WP - p_WB)
+            p_BPs_initial_guess = np.vstack(
+                [
+                    R_WB.T @ (p_WP - p_WB)
+                    for p_WP, p_WB, R_WB in zip(
+                        p_WPs_initial_guess, p_WBs_initial_guess, R_WBs_initial_guess
+                    )
+                ]
+            )
+
         normal_forces_initial_guess = np.ones(normal_forces.shape) * 0.05
         friction_forces_initial_guess = np.ones(friction_forces.shape) * 0
 
     # Make quantities so we can plot initial guess
-    r_WBs_initial_guess = [
-        np.array([np.cos(th), np.sin(th)]) for th in theta_initial_guess
-    ]
-    R_WBs_initial_guess = [
-        _two_d_rot_matrix_from_cos_sin(cos, sin) for cos, sin in r_WBs_initial_guess
-    ]
-    p_WPs_initial_guess = np.vstack(
-        [
-            _create_p_WP(p_WB, R_WB, p_BP)
-            for p_WB, R_WB, p_BP in zip(
-                p_WBs_initial_guess, R_WBs_initial_guess, p_BPs_initial_guess
-            )
-        ]
-    )
     force_comps_initial_guess = np.hstack(
         (normal_forces_initial_guess, friction_forces_initial_guess)
     )
