@@ -108,10 +108,12 @@ class SmoothingSchedule:
         num_steps: int = 5,
         step_type: Literal["linear", "exp"] = "exp",
         dir: Literal["increasing", "decreasing"] = "decreasing",
+        exp_factor: float = 10,
     ) -> None:
         self.eps_start = eps_start
         self.num_steps = num_steps
         self.step_type = step_type
+        self.exp_factor = exp_factor
 
         self.eps = eps_start
         self.step_count = 1
@@ -123,17 +125,17 @@ class SmoothingSchedule:
                 step_size = self.eps_start / (1 + self.num_steps)
                 self.eps -= step_size
             else:  # exp
-                self.eps /= 10
-
-            if self.step_count >= self.num_steps - 1:
-                self.eps = 0
+                self.eps /= self.exp_factor
 
         else:  # increasing
             if self.step_type == "linear":
                 step_size = self.eps_start / (1 + self.num_steps)
                 self.eps += step_size
             else:  # exp
-                self.eps *= 10
+                self.eps *= self.exp_factor
+
+        if self.step_count >= self.num_steps - 1:
+            self.eps = 0
 
         self.step_count += 1
 
@@ -804,10 +806,31 @@ def direct_trajopt_through_contact(
         for k in range(num_time_steps):
             s_sdf = sdf_slacks[k]
             s_lambda_n = lambda_n_slacks[k]
-            # s = prog.NewContinuousVariables(1, "s")[0]
-            # prog.AddLinearConstraint(s >= 0)
-            # prog.AddLinearCost(eps * s)
             const = prog.AddConstraint(s_sdf * s_lambda_n <= eps)
+            consts.append(const)
+
+        return consts
+
+    def _add_complementarity_constraints_with_penalty(
+        eps: float, slacks: npt.NDArray
+    ) -> List:
+        """
+        Adds the SDF/force complementarity constraints (could in principle also
+        have added the non-sliding complementarity constraints here)
+        """
+        consts = []
+        for k in range(num_time_steps - 1):
+            s_sdf = sdf_slacks[k]
+            s_lambda_n = lambda_n_slacks[k]
+            s = slacks[k]
+
+            if eps == 0:
+                const = prog.AddConstraint(s_sdf * s_lambda_n == 0)
+            else:
+                prog.AddLinearConstraint(s >= 0)
+                prog.AddLinearCost(eps * s)
+                const = prog.AddConstraint(s_sdf * s_lambda_n <= s)
+
             consts.append(const)
 
         return consts
@@ -820,16 +843,34 @@ def direct_trajopt_through_contact(
         _add_complementarity_constraints(eps=0)  # no smoothing
         result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
     else:
+        if smoothing.dir == "decreasing":
+            add_complementarity_constraints = (
+                lambda eps: _add_complementarity_constraints(eps)
+            )
+        else:  # increasing
+            slacks = prog.NewContinuousVariables(num_time_steps, "slacks")
+            add_complementarity_constraints = (
+                lambda eps: _add_complementarity_constraints_with_penalty(eps, slacks)
+            )
+
         initial_guess = None
         for _ in range(smoothing.num_steps):
-            consts = _add_complementarity_constraints(eps=smoothing.eps)
+            consts = add_complementarity_constraints(eps=smoothing.eps)
+
             if initial_guess is None:
                 result = snopt.Solve(prog, solver_options=solver_options)  # type: ignore
             else:
                 result = snopt.Solve(prog, initial_guess=initial_guess, solver_options=solver_options)  # type: ignore
 
             if debug:
-                print(f"smoothing: {smoothing.eps}, is_success: {result.is_success()}")
+                if smoothing.dir == "decreasing":
+                    print(
+                        f"smoothing: {smoothing.eps}, is_success: {result.is_success()}"
+                    )
+                else:  # increasing
+                    print(
+                        f"smoothing_penalty: {smoothing.eps}, is_success: {result.is_success()}"
+                    )
 
             if result.is_success():
                 initial_guess = result.GetSolution(prog.decision_variables())

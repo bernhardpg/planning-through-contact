@@ -118,7 +118,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--smooth",
-        help="Use smoothing",
+        help="Use smoothing with a had constraint on the relaxation level.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--soft_smooth",
+        help="Use smoothing with a penalty on the violation rather than a constraint.",
         action="store_true",
         default=False,
     )
@@ -194,15 +200,18 @@ def main() -> None:
 
     with open(f"{traj_output_folder}/run_specs.txt", "w") as f:
         print(f"seed: {seed}", file=f)
-        print(f"use_smoothing: {use_smoothing}", file=f)
+        print(f"use_hard_smoothing: {use_hard_smoothing}", file=f)
+        print(f"use_soft_smoothing: {use_soft_smoothing}", file=f)
 
     for idx, plan in enumerate(tqdm(plans_to_run)):
         output_name = str(idx)
         output_path = f"{traj_output_folder}/{output_name}"
         os.makedirs(output_path, exist_ok=True)
 
-        if use_smoothing:
-            smoothing = SmoothingSchedule(0.01, 5, "exp")
+        if use_hard_smoothing:
+            smoothing = SmoothingSchedule(0.01, 5, "exp", "decreasing")
+        elif use_soft_smoothing:
+            smoothing = SmoothingSchedule(10, 5, "exp", "increasing")
         else:
             smoothing = None
 
