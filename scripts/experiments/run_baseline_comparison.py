@@ -17,18 +17,32 @@ from planning_through_contact.experiments.utils import (
     get_default_experiment_plans,
     get_default_plan_config,
 )
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    PlanarPushingTrajectory,
+)
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPushingStartAndGoal,
+)
 from planning_through_contact.planning.planar.utils import create_plan
+from planning_through_contact.visualize.planar_pushing import (
+    visualize_initial_conditions,
+)
 
 
 @dataclass
 class ComparisonRunData:
+    run_dir: Path
     num_total_runs: int
     gcs_successes: List[str]
-    direct_successes: List[str]
+    gcs_failures: List[str]
+    direct_trajopt_successes: List[str]
+    direct_trajopt_failures: List[str]
 
     def __post_init__(self) -> None:
         self.gcs_successes = sorted(self.gcs_successes)
-        self.direct_successes = sorted(self.direct_successes)
+        self.direct_trajopt_successes = sorted(self.direct_trajopt_successes)
 
     @property
     def num_gcs_success(self) -> int:
@@ -36,7 +50,7 @@ class ComparisonRunData:
 
     @property
     def num_direct_trajopt_success(self) -> int:
-        return len(self.direct_successes)
+        return len(self.direct_trajopt_successes)
 
     @property
     def percentage_gcs_success(self) -> float:
@@ -57,37 +71,65 @@ class ComparisonRunData:
 
     def print_successes(self) -> None:
         print("Succesfull gcs: " + ", ".join(self.gcs_successes))
-        print("Succesfull direct trajopt: " + ", ".join(self.direct_successes))
+        print("Succesfull direct trajopt: " + ", ".join(self.direct_trajopt_successes))
 
+    def load_traj(self, name: str) -> PlanarPushingTrajectory:
+        traj_folder = self.run_dir / name
+        trajs = list(traj_folder.glob("**/traj_rounded.pkl"))
+        assert len(trajs) == 1
+        traj_path = trajs[0]
+        traj = PlanarPushingTrajectory.load(str(traj_path))
 
-def _count_successes(run_dir: str) -> ComparisonRunData:
-    run_dir_path = Path(run_dir)
+        return traj
 
-    gcs_successes = []
-    direct_trajopt_successes = []
-    num_total_runs = 0
-    for traj_folder in run_dir_path.iterdir():
-        cost_files = list(traj_folder.glob("costs.txt"))
-        if len(cost_files) == 0:
-            continue  # if there is no cost file then this trajectory was not completed, and we skip this folder
-        else:
-            num_total_runs += 1
-            cost_file = cost_files[0]
-            with open(cost_file) as f:
-                lines = list(f)
-                gcs_result = lines[0]
-                direct_result = lines[1]
-                if "infeasible" in gcs_result or "not_run" in gcs_result:
-                    ...  # nothing to do
-                else:
-                    gcs_successes.append(traj_folder.name)
+    def load_initial_conditions(self, name: str) -> PlanarPushingStartAndGoal:
+        traj = self.load_traj(name)
+        assert traj.config.start_and_goal is not None
+        return traj.config.start_and_goal
 
-                if "infeasible" in direct_result or "not_run" in direct_result:
-                    ...  # nothing to do
-                else:
-                    direct_trajopt_successes.append(traj_folder.name)
+    @classmethod
+    def load_from_run(cls, run_dir: str) -> "ComparisonRunData":
+        run_dir_path = Path(run_dir)
 
-    return ComparisonRunData(num_total_runs, gcs_successes, direct_trajopt_successes)
+        gcs_successes = []
+        gcs_failures = []
+        direct_trajopt_successes = []
+        direct_trajopt_failures = []
+
+        num_total_runs = 0
+        for traj_folder in run_dir_path.iterdir():
+            cost_files = list(traj_folder.glob("costs.txt"))
+            if len(cost_files) == 0:
+                continue  # if there is no cost file then this trajectory was not completed, and we skip this folder
+            else:
+                num_total_runs += 1
+                cost_file = cost_files[0]
+                with open(cost_file) as f:
+                    lines = list(f)
+                    gcs_result = lines[0]
+                    direct_trajopt_result = lines[1]
+                    if "infeasible" in gcs_result:
+                        gcs_failures.append(traj_folder.name)
+                    elif "not_run" in gcs_result:
+                        ...  # nothing to do
+                    else:
+                        gcs_successes.append(traj_folder.name)
+
+                    if "infeasible" in direct_trajopt_result:
+                        direct_trajopt_failures.append(traj_folder.name)
+                    elif "not_run" in direct_trajopt_result:
+                        ...  # nothing to do
+                    else:
+                        direct_trajopt_successes.append(traj_folder.name)
+
+        return cls(
+            run_dir_path,
+            num_total_runs,
+            gcs_successes,
+            gcs_failures,
+            direct_trajopt_successes,
+            direct_trajopt_failures,
+        )
 
 
 def main() -> None:
@@ -158,6 +200,16 @@ def main() -> None:
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--vis_failures",
+        help="Gather all the plans in a run and visualize all the initial configurations that failed.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--vis_success",
+        help="Gather all the plans in a run and visualize all the initial configurations that failed.",
+        action="store_true",
+    )
 
     args = parser.parse_args()
     seed = args.seed
@@ -170,19 +222,40 @@ def main() -> None:
     print_stats = args.stats
     run_dir = args.run_dir
     visualize_initial_guess = args.vis_initial
+    visualize_failures = args.vis_failures
+    visualize_success = args.vis_success
 
-    # This plan works for the Tee
-    # slider_initial_pose = PlanarPose(-0.1, 0, 0.3)
-    # slider_target_pose = PlanarPose(0, 0, 0)
-    # pusher_initial_pose = PlanarPose(-0.5, 0.04, 0)
-    # pusher_target_pose = PlanarPose(-0.5, 0.04, 0)
-
-    if print_stats:
+    if print_stats or visualize_success or visualize_failures:
         if run_dir is None:
             raise RuntimeError("Must provide a directory to print statistics from.")
-        run_data = _count_successes(run_dir)
-        run_data.print_stats()
-        run_data.print_successes()
+        run_data = ComparisonRunData.load_from_run(run_dir)
+
+        if print_stats:
+            run_data.print_stats()
+            run_data.print_successes()
+
+        if visualize_success or visualize_failures:
+            if visualize_failures:
+                trajs_to_vis = run_data.direct_trajopt_failures
+                filename = "direct_trajopt_failures"
+            else:  # visualize_success
+                trajs_to_vis = run_data.direct_trajopt_successes
+                filename = "direct_trajopt_successes"
+
+            initial_conds = [
+                run_data.load_initial_conditions(traj) for traj in trajs_to_vis
+            ]
+            # use the config from the first traj
+            config = run_data.load_traj(trajs_to_vis[0]).config
+            visualize_initial_conditions(
+                initial_conds,
+                config,
+                filename=f"{run_dir}/{filename}",
+                plot_orientation_arrow=(
+                    True if type(config.slider_geometry) == Box2d else False
+                ),
+            )
+
         return
 
     direct_trajopt_config, solver_params = get_baseline_comparison_configs(slider_type)

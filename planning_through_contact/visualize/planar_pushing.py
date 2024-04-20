@@ -1800,3 +1800,161 @@ def visualize_planar_pushing_trajectory_legacy(
         target_viz,
         draw_origin=visualize_robot_base,
     )
+
+
+def visualize_initial_conditions(
+    initial_conditions: List[PlanarPushingStartAndGoal],
+    config: PlanarPlanConfig,
+    filename: Optional[str] = None,
+    start_end_legend: bool = False,
+    plot_orientation_arrow: bool = False,
+) -> None:
+    slider_target_pose = initial_conditions[0].slider_target_pose
+    assert all(
+        [conds.slider_target_pose == slider_target_pose for conds in initial_conditions]
+    )
+    pusher_initial_pose = initial_conditions[0].pusher_initial_pose
+    assert all(
+        [
+            conds.pusher_initial_pose == pusher_initial_pose
+            for conds in initial_conditions
+        ]
+    )
+    pusher_target_pose = initial_conditions[0].pusher_target_pose
+    assert all(
+        [conds.pusher_target_pose == pusher_target_pose for conds in initial_conditions]
+    )
+
+    slider_initial_poses = [cond.slider_initial_pose for cond in initial_conditions]
+    slider_geometry = config.slider_geometry
+
+    # Ensure a type 1 font is used
+    plt.rcParams["font.family"] = "Times"
+    plt.rcParams["ps.useafm"] = True
+    plt.rcParams["pdf.use14corefonts"] = True
+    plt.rcParams["text.usetex"] = False
+    # NOTE(bernhardpg): This function is a mess!
+    # We need to add the first vertex again to close the polytope
+    vertices = np.hstack(slider_geometry.vertices + [slider_geometry.vertices[0]])
+
+    get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
+
+    slider_color = COLORS["aquamarine4"].diffuse()
+
+    GOAL_COLOR = EMERALDGREEN.diffuse()
+    GOAL_TRANSPARENCY = 1.0
+
+    START_COLOR = CRIMSON.diffuse()
+    START_TRANSPARENCY = 1.0
+    PUSHER_COLOR = COLORS["firebrick3"].diffuse()
+
+    LINE_COLOR = BLACK.diffuse()
+
+    fig_height = 4
+    fig = plt.figure(figsize=(fig_height, fig_height))
+    ax = fig.add_subplot(111)
+    ax.axis("equal")  # Ensures the x and y axis are scaled equally
+
+    # Hide the axes, including the spines, ticks, labels, and title
+    ax.set_axis_off()
+
+    make_circle = lambda p_WP, fill_transparency: plt.Circle(
+        p_WP.flatten(),
+        traj.config.pusher_radius,  # type: ignore
+        edgecolor=LINE_COLOR,
+        facecolor=PUSHER_COLOR,
+        linewidth=1,
+        alpha=fill_transparency,
+        zorder=99,
+    )
+
+    transparency = 0.7
+
+    def _plot_orientation_arrow(p_WB, R_WB, **kwargs):
+        start_point = p_WB.flatten()
+        u = np.array([0, 1]).reshape((2, 1)) / np.sqrt(2)
+        u_rotated = R_WB @ u
+        end_point = start_point + u_rotated.flatten() * 0.1
+
+        # Plot the arrow
+        ax.arrow(
+            start_point[0],
+            start_point[1],
+            end_point[0] - start_point[0],
+            end_point[1] - start_point[1],
+            # head_width=2.0,
+            # head_length=1.0,
+            # fc="blue",
+            # ec="black",
+            **kwargs,
+        )
+
+    for pose in slider_initial_poses:
+        # Plot polytope
+        p_WB = pose.pos()
+        R_WB = pose.two_d_rot_matrix()
+        vertices_W = get_vertices_W(p_WB, R_WB)
+        ax.plot(
+            vertices_W[0, :],
+            vertices_W[1, :],
+            color=LINE_COLOR,
+            alpha=transparency,
+            linewidth=1,
+        )
+        ax.fill(
+            vertices_W[0, :],
+            vertices_W[1, :],
+            alpha=transparency,
+            color=slider_color,
+        )
+
+        if plot_orientation_arrow:
+            _plot_orientation_arrow(p_WB, R_WB)
+
+    start_goal_width = 1.5
+    p_WP = pusher_initial_pose.pos()  # type: ignore
+    circle = plt.Circle(
+        p_WP.flatten(),
+        config.pusher_radius,  # type: ignore
+        edgecolor=GOAL_COLOR,
+        facecolor="none",
+        linewidth=start_goal_width,
+        alpha=GOAL_TRANSPARENCY,
+        linestyle="--",
+    )
+    ax.add_patch(circle)
+
+    p_WB = slider_target_pose.pos()
+    R_WB = slider_target_pose.two_d_rot_matrix()
+    goal_vertices_W = get_vertices_W(p_WB, R_WB)
+    ax.plot(
+        goal_vertices_W[0, :],
+        goal_vertices_W[1, :],
+        color=GOAL_COLOR,
+        alpha=GOAL_TRANSPARENCY,
+        linewidth=start_goal_width,
+        linestyle="--",
+        zorder=99,
+    )
+
+    if plot_orientation_arrow:
+        _plot_orientation_arrow(p_WB, R_WB, linestyle="--", color=GOAL_COLOR, zorder=99)
+
+    if start_end_legend:
+        # Create a list of patches to use as legend handles
+        custom_patches = [
+            mpatches.Patch(color=color, label=label)
+            for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
+        ]
+        # Creating the custom legend
+        plt.legend(
+            handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+        )
+
+    fig.tight_layout()
+    if filename:
+        print(filename)
+        fig.savefig(filename + ".pdf", format="pdf")  # type: ignore
+        plt.close()
+    else:
+        plt.show()
