@@ -16,6 +16,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
 )
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -181,23 +182,33 @@ def direct_trajopt_through_contact(
 
     assert_found_solution = False
 
+    dynamics_config = config.dynamics_config
+    slider = dynamics_config.slider
+
     if num_time_steps is None:
         if initial_guess:
             num_time_steps = initial_guess.num_knot_points
         else:
+            # The Tee usually requires longer trajectories
+            if type(slider.geometry) == TPusher2d:
+                knot_point_scaling = 1
+            else:
+                knot_point_scaling = 1
+
             # This is a heuristic number to approximately make the two methods comparable
             num_time_steps = (
-                config.num_knot_points_contact + config.num_knot_points_non_collision
-            ) * 4
+                (config.num_knot_points_contact + config.num_knot_points_non_collision)
+                * 4
+                * knot_point_scaling
+            )
+            print(f"num_time_steps: {num_time_steps}")
 
     if dt is None:
         assert config.dt_contact == config.dt_non_collision
         dt = config.dt_contact
     end_time = num_time_steps * dt - dt
 
-    dynamics_config = config.dynamics_config
     mu = dynamics_config.friction_coeff_slider_pusher
-    slider = dynamics_config.slider
     pusher_radius = dynamics_config.pusher_radius
 
     slider_initial_pose = start_and_goal.slider_initial_pose
