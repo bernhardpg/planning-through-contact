@@ -41,6 +41,7 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
     PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.colors import (

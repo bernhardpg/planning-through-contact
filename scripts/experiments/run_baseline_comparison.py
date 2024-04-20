@@ -217,7 +217,8 @@ def main() -> None:
     debug = args.debug
     slider_type = args.body
     num_trajs = args.num
-    use_smoothing = args.smooth
+    use_hard_smoothing = args.smooth
+    use_soft_smoothing = args.soft_smooth
     only_direct_trajopt = args.only_direct
     print_stats = args.stats
     run_dir = args.run_dir
@@ -258,7 +259,9 @@ def main() -> None:
 
         return
 
-    direct_trajopt_config, solver_params = get_baseline_comparison_configs(slider_type)
+    direct_trajopt_config, solver_params = get_baseline_comparison_configs(
+        slider_type, use_velocity_limits=True
+    )
     gcs_config = direct_trajopt_config
 
     plans = get_default_experiment_plans(seed, num_trajs, gcs_config)

@@ -610,7 +610,7 @@ def direct_trajopt_through_contact(
             vars=np.concatenate([p_BPs[k], [sdf_slacks[k]]]),
         )
 
-    lambda_n_slacks = prog.NewContinuousVariables(num_time_steps, "lambda_n_slacks")
+    lambda_n_slacks = prog.NewContinuousVariables(num_time_steps - 1, "lambda_n_slacks")
     prog.AddLinearConstraint(ge(lambda_n_slacks, 0))
 
     # Enforce friction cone
@@ -803,7 +803,7 @@ def direct_trajopt_through_contact(
         have added the non-sliding complementarity constraints here)
         """
         consts = []
-        for k in range(num_time_steps):
+        for k in range(num_time_steps - 1):
             s_sdf = sdf_slacks[k]
             s_lambda_n = lambda_n_slacks[k]
             const = prog.AddConstraint(s_sdf * s_lambda_n <= eps)
