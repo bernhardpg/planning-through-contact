@@ -558,7 +558,29 @@ class SimplePlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
             "control",
         ],
     ) -> npt.NDArray[np.float64]:
-        breakpoint()
+        if traj_to_get == "R_WB":
+            cos_traj = [R[0, 0] for R in self.R_WBs]
+            sin_traj = [R[1, 0] for R in self.R_WBs]
+
+            cos_int, sin_int = np.concatenate(
+                [np.interp([t], self.times, f) for f in [cos_traj, sin_traj]]
+            )
+            R = np.array([[cos_int, -sin_int], [sin_int, cos_int]])
+            return R
+
+        elif traj_to_get == "p_WB":
+            traj = self.p_WBs
+        elif traj_to_get == "p_WP":
+            traj = self.p_WPs
+        else:
+            raise NotImplementedError(
+                f"Traj type {traj_to_get} is not implemented yet."
+            )
+
+        interpolated_values = np.concatenate(
+            [np.interp([t], self.times, f) for f in traj.T]
+        ).reshape((2, 1))
+        return interpolated_values
 
     def get_knot_point_value(
         self, t: float, traj_to_get: Literal["p_WB", "R_WB", "p_WP", "f_c_W"]
@@ -596,6 +618,17 @@ class SimplePlanarPushingTrajectory(AbstractPlanarPushingTrajectory):
     @property
     def end_time(self) -> float:
         return len(self.p_WBs) * self.dt - self.dt
+
+    def save(self, filename: str) -> None:
+        with open(Path(filename), "wb") as file:
+            # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
+            pickle.dump(self, file)
+
+    @classmethod
+    def load(cls, filename: str) -> "SimplePlanarPushingTrajectory":
+        with open(Path(filename), "rb") as file:
+            traj = pickle.load(file)
+            return traj
 
 
 class PlanarPushingTrajectory(AbstractPlanarPushingTrajectory):

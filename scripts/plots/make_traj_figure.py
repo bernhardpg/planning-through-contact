@@ -6,8 +6,12 @@ from tqdm import tqdm
 
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
+    SimplePlanarPushingTrajectory,
 )
-from planning_through_contact.visualize.planar_pushing import make_traj_figure
+from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
+    plot_simple_traj,
+)
 
 
 def get_run_traj_path(traj_number, main_folder, run_folder):
@@ -21,22 +25,40 @@ def get_run_traj_path(traj_number, main_folder, run_folder):
 
 
 def plot_traj(traj_path, output_dir, traj_name):
-    traj = PlanarPushingTrajectory.load(traj_path)
+    try:
+        traj = PlanarPushingTrajectory.load(traj_path)
+    except:
+        try:
+            traj = SimplePlanarPushingTrajectory.load(traj_path)
+        except:
+            raise RuntimeError("Does not recognize trajectory type.")
 
     os.makedirs(output_dir, exist_ok=True)
     output_name = output_dir + f"/{traj_name}"
 
-    make_traj_figure(
-        traj,
-        filename=output_name,
-        split_on_mode_type=True,
-        start_end_legend=False,
-        plot_lims=None,
-        plot_knot_points=False,
-        plot_forces=False,
-        num_contact_frames=4,
-        num_non_collision_frames=8,
-    )
+    if type(traj) == PlanarPushingTrajectory:
+        make_traj_figure(
+            traj,
+            filename=output_name,
+            split_on_mode_type=True,
+            start_end_legend=True,
+            plot_lims=None,
+            plot_knot_points=False,
+            plot_forces=False,
+            num_contact_frames=4,
+            num_non_collision_frames=8,
+        )
+    elif type(traj) == SimplePlanarPushingTrajectory:
+        plot_simple_traj(
+            traj,
+            filename=output_name,
+            start_end_legend=False,
+            plot_lims=None,
+            keyframe_times=[0.0, 0.5, 1.1, 3.5, 3.8, 7.0],
+            times_for_keyframes=[5, 4, 13, 3, 15],
+        )
+    else:
+        raise RuntimeError("Invalid trajectory type")
 
 
 def main() -> None:
@@ -91,7 +113,7 @@ def main() -> None:
 
         trajs_to_make_figs_for = []
         for folder in traj_folders:
-            all_traj_files = list(folder.glob("**/traj_*.pkl"))
+            all_traj_files = list(folder.glob("**/*traj*.pkl"))
             trajs_to_make_figs_for.extend(all_traj_files)
 
         trajs_to_make_figs_for = sorted(trajs_to_make_figs_for)
@@ -100,8 +122,7 @@ def main() -> None:
 
     for traj_path in tqdm(trajs_to_make_figs_for):
         traj_path = Path(traj_path)
-        if output_dir is None:
-            output_dir = str(traj_path.parent)
+        output_dir = str(traj_path.parent)
         name = traj_path.name.split(".")[0]
         plot_traj(traj_path, output_dir, name)
 

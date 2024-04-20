@@ -160,6 +160,7 @@ def direct_trajopt_through_contact(
     use_same_solver_tolerances: bool = False,
     penalize_initial_guess_diff: bool = False,
     save_cost: bool = False,
+    save_traj: bool = True,
 ) -> MathematicalProgramResult:
     """
     Runs the direct transcription method described in
@@ -903,16 +904,23 @@ def direct_trajopt_through_contact(
                 for key, val in cost_term_vals.items():
                     print(f"sum({key}): {np.sum(val)}", file=f)
 
+        traj = SimplePlanarPushingTrajectory(
+            result.GetSolution(p_WBs),
+            [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
+            evaluate_np_expressions_array(p_WPs, result),  # type: ignore
+            f_c_Ws_sols,
+            dt,
+            config,
+        )
+
+        if save_traj:
+            trajectory_folder = f"{output_path}/trajectory"
+            os.makedirs(trajectory_folder, exist_ok=True)
+            filename = f"{trajectory_folder}/direct_traj.pkl"
+            traj.save(filename)
+
         if visualize:
             if visualizer == "new":
-                traj = SimplePlanarPushingTrajectory(
-                    result.GetSolution(p_WBs),
-                    [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],
-                    evaluate_np_expressions_array(p_WPs, result),  # type: ignore
-                    f_c_Ws_sols,
-                    dt,
-                    config,
-                )
                 if output_name is None:
                     output_name = "untitled"
 

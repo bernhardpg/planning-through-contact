@@ -26,6 +26,10 @@ class ComparisonRunData:
     gcs_successes: List[str]
     direct_successes: List[str]
 
+    def __post_init__(self) -> None:
+        self.gcs_successes = sorted(self.gcs_successes)
+        self.direct_successes = sorted(self.direct_successes)
+
     @property
     def num_gcs_success(self) -> int:
         return len(self.gcs_successes)
@@ -188,8 +192,9 @@ def main() -> None:
 
     traj_output_folder = create_output_folder(output_folder, slider_type, traj_number)
 
-    with open(f"{traj_output_folder}/seed.txt", "w") as f:
+    with open(f"{traj_output_folder}/run_specs.txt", "w") as f:
         print(f"seed: {seed}", file=f)
+        print(f"use_smoothing: {use_smoothing}", file=f)
 
     for idx, plan in enumerate(tqdm(plans_to_run)):
         output_name = str(idx)
