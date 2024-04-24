@@ -340,7 +340,6 @@ class HybridMpc:
         control = controls[best_idx]
         result = results[best_idx]
         lowest_cost = costs[best_idx]
-
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]

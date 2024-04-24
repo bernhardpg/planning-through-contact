@@ -1,0 +1,8 @@
+defaults:
+  - realsense_camera_config: realsense_camera_config
+
+should_record: True
+camera1_name: 'camera_top'
+camera1_serial_number: '822512060233'
+camera2_name: 'camera_front'
+camera2_serial_number: '818312071101'

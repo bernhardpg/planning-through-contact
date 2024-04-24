@@ -9,6 +9,8 @@ temp
 *pdf
 diffusion_policy_logs/
 scripts/adam
+outputs/
+multirun/
 
 # Vim
 *.swp
