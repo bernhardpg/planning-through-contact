@@ -330,28 +330,6 @@ class NonCollisionMode(AbstractContactMode):
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
 
-            # TODO: Remove this cost
-            if self.cost_config.distance_to_object_quadratic is not None:
-                c = self.cost_config.distance_to_object_quadratic
-                for k in range(1, self.num_knot_points - 1):
-                    # Divide this value by the number of planes so that the cost has the same magnitude for
-                    # regions, independently on number of faces
-                    p_BP = self.variables.p_BPs[k]
-                    for plane in planes:
-                        dist = plane.dist_to(p_BP)
-                        deviation_from_pref_dist = (
-                            dist
-                            - self.cost_config.distance_to_object_quadratic_preferred_distance
-                        )
-                        normalized_total_deviation = deviation_from_pref_dist / len(
-                            planes
-                        )
-                        self.quadratic_distance_cost = self.prog.AddQuadraticCost(
-                            c * normalized_total_deviation**2, is_convex=True
-                        )
-
-                self.costs["object_avoidance_quad"].append(self.quadratic_distance_cost)
-
             if self.cost_config.distance_to_object_socp is not None:
                 # TODO(bernhardpg): Clean up this part
                 planes = self.slider_geometry.get_contact_planes(
@@ -539,7 +517,7 @@ class NonCollisionMode(AbstractContactMode):
                 self.variables.v_BPs[-1] if self.num_knot_points > 1 else None,
             )
 
-    def _get_cost_terms(self, cost: Binding) -> Tuple[List[int], QuadraticCost]:
+    def _get_cost_terms(self, cost: Binding) -> Tuple[List[int], QuadraticCost]:  # type: ignore
         var_idxs = self.get_variable_indices_in_gcs_vertex(cost.variables())
         return var_idxs, cost.evaluator()
 
@@ -559,12 +537,6 @@ class NonCollisionMode(AbstractContactMode):
                 vars = vertex.x()[var_idxs]
                 binding = Binding[L2NormCost](evaluator, vars)
                 vertex.AddCost(binding)
-
-        if self.cost_config.distance_to_object_quadratic is not None:
-            var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
-            vars = vertex.x()[var_idxs]
-            binding = Binding[QuadraticCost](evaluator, vars)
-            vertex.AddCost(binding)
 
         if self.cost_config.distance_to_object_socp:
             for binding in self.distance_to_object_socp_costs:

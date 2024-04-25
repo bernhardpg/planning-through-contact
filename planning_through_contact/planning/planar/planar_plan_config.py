@@ -148,8 +148,6 @@ class PlanarSolverParams:
 
 @dataclass
 class NonCollisionCost:
-    distance_to_object_quadratic_preferred_distance: float = 0.2  # TODO: Remove
-    distance_to_object_quadratic: Optional[float] = None
     distance_to_object_socp: Optional[float] = None
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
@@ -163,8 +161,7 @@ class NonCollisionCost:
     @property
     def avoid_object(self) -> bool:
         return (
-            self.distance_to_object_quadratic is not None
-            or self.distance_to_object_socp is not None
+            self.distance_to_object_socp is not None
             or self.distance_to_object_socp_single_mode is not None
         )
 

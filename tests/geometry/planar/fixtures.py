@@ -171,10 +171,7 @@ def subgraph(
             pusher_velocity_regularization=1.0
         )
     if request.param.get("avoid_object"):
-        if request.param.get("avoidance_cost_type", "quadratic"):
-            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
-        else:
-            plan_config.non_collision_cost.distance_to_object_socp = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.continuity_on_pusher_velocity = request.param.get(
         "pusher_velocity_continuity", False
@@ -217,10 +214,7 @@ def planner(
 
     if request.param.get("avoid_object"):
         plan_config.num_knot_points_non_collision = 4
-        if request.param.get("avoidance_cost_type", "quadratic"):
-            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
-        else:
-            plan_config.non_collision_cost.distance_to_object_socp = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.dynamics_config.pusher_radius = 0.015
 
