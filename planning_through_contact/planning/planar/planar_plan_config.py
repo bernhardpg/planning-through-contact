@@ -178,12 +178,8 @@ class NonCollisionCost:
 @dataclass
 class ContactCost:
     keypoint_arc_length: Optional[float] = None
-    linear_arc_length: Optional[float] = None
-    angular_arc_length: Optional[float] = None
     force_regularization: Optional[float] = None
     keypoint_velocity_regularization: Optional[float] = None
-    ang_velocity_regularization: Optional[float] = None
-    lin_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
     time: Optional[float] = None

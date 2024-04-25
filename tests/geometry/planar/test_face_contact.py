@@ -160,24 +160,13 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
     assert len(prog.GetAllConstraints()) == tot_num_consts
 
-    assert len(prog.linear_costs()) == 0
+    # Time in contact cost
+    assert len(prog.linear_costs()) == 1
 
-    # lin vels, ang vels, normal forces, friction forces
-    assert len(prog.quadratic_costs()) == 3 * 4
-
-    lin_vel_vars = Variables(
-        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[0:3]])
+    # force regularization (2 per knot point - 1) and keypoint velocity regularization (per vertex per knot point - 1)
+    assert len(prog.quadratic_costs()) == (mode.num_knot_points - 1) * (
+        2 + len(mode.config.slider_geometry.vertices)
     )
-    target_lin_vel_vars = Variables(np.concatenate(mode.variables.p_WBs))
-    assert lin_vel_vars.EqualTo(target_lin_vel_vars)
-
-    ang_vel_vars = Variables(
-        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[3:6]])
-    )
-    target_ang_vel_vars = Variables(
-        np.concatenate((mode.variables.cos_ths, mode.variables.sin_ths))
-    )
-    assert ang_vel_vars.EqualTo(target_ang_vel_vars)
 
 
 @pytest.mark.parametrize(

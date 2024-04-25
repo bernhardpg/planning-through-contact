@@ -573,44 +573,6 @@ class FaceContactMode(AbstractContactMode):
                     self.l2_norm_costs.append(cost)
                     self.costs["keypoint_arc"].append(cost)
 
-        # Linear arc length
-        if cost_config.linear_arc_length is not None:
-            for k in range(self.num_knot_points - 1):
-                vars = np.concatenate(
-                    [
-                        self.variables.p_WBs[k].flatten(),
-                        self.variables.p_WBs[k + 1].flatten(),
-                    ]
-                )
-                distance = self.variables.p_WBs[k + 1] - self.variables.p_WBs[k]
-                cost_expr = cost_config.linear_arc_length * distance
-                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
-
-                self.l2_norm_costs.append(cost)
-
-        # Angular arc length
-        if cost_config.angular_arc_length is not None:
-            for k in range(self.num_knot_points - 1):
-                vars = np.array(
-                    [
-                        self.variables.cos_ths[k],
-                        self.variables.sin_ths[k],
-                        self.variables.cos_ths[k + 1],
-                        self.variables.sin_ths[k + 1],
-                    ]
-                )
-                r_k = np.array([self.variables.cos_ths[k], self.variables.sin_ths[k]])
-                r_k_next = np.array(
-                    [self.variables.cos_ths[k + 1], self.variables.sin_ths[k + 1]]
-                )
-                distance = r_k_next - r_k
-                cost_expr = cost_config.angular_arc_length * distance
-                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
-
-                self.l2_norm_costs.append(cost)
-
         # Contact force regularization
         if cost_config.force_regularization is not None:
             for k, c_n in enumerate(self.variables.normal_forces):
@@ -652,30 +614,6 @@ class FaceContactMode(AbstractContactMode):
                         * sq_vel,
                     )
                     self.costs["keypoint_reg"].append(cost)
-
-        # Linear velocity regularization
-        if cost_config.lin_velocity_regularization is not None:
-            sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
-            for idx, term in enumerate(sq_linear_vels):
-                cost = self.prog_wrapper.add_quadratic_cost(
-                    idx,
-                    idx + 1,
-                    cost_config.lin_velocity_regularization * term,
-                )
-                self.costs["translational_vel_reg"].append(cost)
-
-        # Angular velocity regularization
-        if cost_config.ang_velocity_regularization is not None:
-            for k, (delta_cos_th, delta_sin_th) in enumerate(
-                zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
-            ):
-                cost = self.prog_wrapper.add_quadratic_cost(
-                    k,
-                    k + 1,
-                    cost_config.ang_velocity_regularization
-                    * (delta_sin_th**2 + delta_cos_th**2),
-                )
-                self.costs["angular_vel_reg"].append(cost)
 
     def set_finger_pos(self, lam_target: float) -> None:
         """

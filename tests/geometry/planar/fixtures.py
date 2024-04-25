@@ -12,6 +12,7 @@ from pydrake.solvers import (
 from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
     BandSparseSemidefiniteRelaxation,
 )
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -65,25 +66,7 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 
 @pytest.fixture
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
-    non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
-    contact_cost = ContactCost(
-        keypoint_arc_length=1,
-        linear_arc_length=None,
-        angular_arc_length=None,
-        force_regularization=0.1,
-        keypoint_velocity_regularization=None,
-        ang_velocity_regularization=1.0,
-        lin_velocity_regularization=0.1,
-        trace=None,
-    )
-    contact_config = ContactConfig(contact_cost)
-    cfg = PlanarPlanConfig(
-        dynamics_config=dynamics_config,
-        use_approx_exponential_map=False,
-        use_band_sparsity=True,
-        non_collision_cost=non_collision_cost,
-        contact_config=contact_config,
-    )
+    cfg = get_default_plan_config()
     return cfg
 
 
