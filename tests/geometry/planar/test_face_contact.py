@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
+from pydrake.solvers import MosekSolver
 from pydrake.symbolic import Expression, Variables
 
 from planning_through_contact.convex_relaxation.sdp import (
@@ -11,7 +11,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -25,7 +24,6 @@ from planning_through_contact.geometry.planar.trajectory_builder import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    ContactCostType,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -38,17 +36,13 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     face_contact_mode,
     face_contact_vars,
     plan_config,
     rigid_body_box,
     t_pusher,
 )
-from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
-    assert_initial_and_final_poses_LEGACY,
-)
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 DEBUG = False
 
@@ -165,24 +159,13 @@ def test_face_contact_mode(face_contact_mode: FaceContactMode) -> None:
     tot_num_consts = num_bbox + num_lin_eq + num_lin + num_quad
     assert len(prog.GetAllConstraints()) == tot_num_consts
 
-    assert len(prog.linear_costs()) == 0
+    # Time in contact cost
+    assert len(prog.linear_costs()) == 1
 
-    # lin vels, ang vels, normal forces, friction forces
-    assert len(prog.quadratic_costs()) == 3 * 4
-
-    lin_vel_vars = Variables(
-        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[0:3]])
+    # force regularization (2 per knot point - 1) and keypoint velocity regularization (per vertex per knot point - 1)
+    assert len(prog.quadratic_costs()) == (mode.num_knot_points - 1) * (
+        2 + len(mode.config.slider_geometry.vertices)
     )
-    target_lin_vel_vars = Variables(np.concatenate(mode.variables.p_WBs))
-    assert lin_vel_vars.EqualTo(target_lin_vel_vars)
-
-    ang_vel_vars = Variables(
-        np.concatenate([cost.variables() for cost in prog.quadratic_costs()[3:6]])
-    )
-    target_ang_vel_vars = Variables(
-        np.concatenate((mode.variables.cos_ths, mode.variables.sin_ths))
-    )
-    assert ang_vel_vars.EqualTo(target_ang_vel_vars)
 
 
 @pytest.mark.parametrize(
@@ -228,9 +211,7 @@ def test_one_contact_mode(face_contact_mode: FaceContactMode) -> None:
 
 @pytest.mark.parametrize(
     "face_contact_mode",
-    [
-        {"face_idx": 3, "contact_cost": ContactCostType.KEYPOINT_DISPLACEMENTS},
-    ],
+    [{"face_idx": 3}],
     indirect=["face_contact_mode"],
 )
 def test_one_contact_mode_minimize_keypoints(
@@ -484,7 +465,6 @@ def test_face_contact_optimal_control_cost(plan_config: PlanarPlanConfig) -> Non
 
     plan_config.start_and_goal = PlanarPushingStartAndGoal(initial_pose, final_pose)
 
-    plan_config.contact_config.cost_type = ContactCostType.OPTIMAL_CONTROL
     mode = FaceContactMode.create_from_plan_spec(
         contact_location,
         plan_config,
@@ -517,7 +497,6 @@ def test_face_contact_euclidean_distance_cost(plan_config: PlanarPlanConfig) -> 
     plan_config.num_knot_points_contact = 4
 
     # Do not expect to get tight solutions with this, this is just to test the code
-    plan_config.contact_config.cost.cost_type = ContactCostType.STANDARD
     plan_config.contact_config.cost.angular_arc_length = 0.1
     plan_config.contact_config.cost.linear_arc_length = 0.1
     plan_config.contact_config.cost.keypoint_arc_length = 0.1

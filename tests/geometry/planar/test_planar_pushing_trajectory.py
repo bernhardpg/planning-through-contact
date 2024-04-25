@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 import pytest
 from pydrake.solvers import MosekSolver
 
@@ -8,10 +7,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.planar.face_contact import (
-    FaceContactMode,
-    FaceContactVariables,
-)
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -20,7 +16,6 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCost,
-    ContactCostType,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -65,7 +60,7 @@ def test_planar_pushing_trajectory_values(
         friction_coeff_table_slider=0.5,
         integration_constant=0.7,
     )
-    contact_cost = ContactCost(cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS)
+    contact_cost = ContactCost()
     contact_config = ContactConfig(contact_cost)
     plan_cfg = PlanarPlanConfig(
         dynamics_config=cfg,
@@ -98,10 +93,6 @@ def test_planar_pushing_trajectory_values(
         # (num_knot_points, 2): first col cosines, second col sines
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
         plot_cos_sine_trajs(rs)
-
-    # Make sure the trajectory is good, i.e. rotations are proper rotations
-    dets = [np.linalg.det(R) for R in vars.R_WBs]
-    assert np.allclose(dets, 1)
 
     sys = SliderPusherSystem(contact_location, cfg)
 

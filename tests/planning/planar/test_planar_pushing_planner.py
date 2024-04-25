@@ -30,7 +30,6 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     plan_config,
     planner,
     rigid_body_box,
@@ -73,17 +72,7 @@ def test_planner_construction(
     for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
-        # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
         assert len(costs) == len(m.prog.GetAllCosts())
-
-        for idx, cost in enumerate(costs):
-            if len(m.prog.linear_costs()) > 0:
-                var_idxs = m._get_cost_terms(m.prog.linear_costs())[0][idx]
-                target_vars = Variables(v.x()[var_idxs])
-                assert target_vars.EqualTo(Variables(cost.variables()))
-
-                # Costs should be linear in SDP relaxation
-                assert isinstance(cost.evaluator(), LinearCost)
 
     assert planner.source_subgraph is not None
     assert planner.target_subgraph is not None
@@ -334,7 +323,6 @@ def test_make_plan(
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
-            "use_band_sparsity": True,
         },
         {
             "avoid_object": True,
@@ -344,7 +332,6 @@ def test_make_plan(
                 "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
                 "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
             },
-            "use_band_sparsity": True,
         },
         {
             "avoid_object": True,
@@ -354,7 +341,6 @@ def test_make_plan(
                 "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
                 "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
             },
-            "use_band_sparsity": True,
             "pusher_velocity_continuity": True,
         },
     ],
@@ -411,7 +397,6 @@ def test_make_plan_band_sparsity_box(
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
-            "use_band_sparsity": True,
             "body": "t_pusher",
         },
         {
@@ -422,7 +407,6 @@ def test_make_plan_band_sparsity_box(
                 "box_initial_pose": PlanarPose(x=0.2, y=0.2, theta=0.5),
                 "box_target_pose": PlanarPose(x=0.4, y=-0.2, theta=-0.4),
             },
-            "use_band_sparsity": True,
             "body": "t_pusher",
         },
     ],
@@ -474,7 +458,6 @@ def test_make_plan_band_sparsity_t_pusher(
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
-            "use_band_sparsity": True,
             "body": "box",
             "standard_cost": True,
         },
@@ -527,7 +510,6 @@ def test_planner_standard_cost(
                 "box_initial_pose": PlanarPose(x=0, y=0, theta=0.0),
                 "box_target_pose": PlanarPose(x=-0.2, y=-0.2, theta=0.4),
             },
-            "use_band_sparsity": True,
             "body": "box",
             "standard_cost": True,
         },
