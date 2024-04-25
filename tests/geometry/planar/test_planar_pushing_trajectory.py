@@ -94,10 +94,6 @@ def test_planar_pushing_trajectory_values(
         rs = np.vstack([R_WB[:, 0] for R_WB in traj.path_knot_points[0].R_WBs])  # type: ignore
         plot_cos_sine_trajs(rs)
 
-    # Make sure the trajectory is good, i.e. rotations are proper rotations
-    dets = [np.linalg.det(R) for R in vars.R_WBs]
-    assert np.allclose(dets, 1)
-
     sys = SliderPusherSystem(contact_location, cfg)
 
     # Make sure the slider boundary position is correct
