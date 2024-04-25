@@ -30,7 +30,6 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     plan_config,
     planner,
     rigid_body_box,

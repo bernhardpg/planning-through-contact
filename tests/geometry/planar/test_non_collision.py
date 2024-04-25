@@ -34,7 +34,6 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     non_collision_mode,
     non_collision_vars,
     plan_config,
