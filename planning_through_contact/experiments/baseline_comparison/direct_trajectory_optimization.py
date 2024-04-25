@@ -404,6 +404,17 @@ def direct_trajopt_through_contact(
                 dt,
             )
 
+            # This is the way we were providing the initial guess in the paper
+            # but the frames are technically wrong (the initial and target pos
+            # are specified in the world frame!)
+            # p_BPs_initial_guess = _interpolate_traj(
+            #     pusher_initial_pose.pos(),
+            #     pusher_target_pose.pos(),
+            #     end_time + dt,
+            #     end_time,
+            #     dt,
+            # )
+
             # p_WP = p_WB + R_WB p_BP
             # p_BP = R_WB^T (p_WP - p_WB)
             p_BPs_initial_guess = np.vstack(

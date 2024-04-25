@@ -15,7 +15,6 @@ from planning_through_contact.experiments.utils import (
     create_output_folder,
     get_baseline_comparison_configs,
     get_default_experiment_plans,
-    get_default_plan_config,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
