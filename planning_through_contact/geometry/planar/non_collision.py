@@ -243,15 +243,13 @@ class NonCollisionMode(AbstractContactMode):
 
         self.l2_norm_costs = []
         self.distance_to_object_socp_costs = []
-        self.squared_eucl_dist_cost = None
-        self.quadratic_distance_cost = None
+        self.velocity_reg_cost = None
 
         # We keep these to evaluate cost term contributions later
         self.costs = {
             "pusher_arc_length": [],
             "pusher_vel_reg": [],
             "object_avoidance_socp": [],
-            "object_avoidance_quad": [],
             "non_contact_time": [],
         }
 
@@ -287,6 +285,7 @@ class NonCollisionMode(AbstractContactMode):
 
         self.cost_config = self.config.non_collision_cost
 
+        # TODO(bernhardpg): Deprecate this
         if self.cost_config.time is not None:
             cost = self.prog.AddLinearCost(
                 self.cost_config.time * self.config.time_non_collision  # type: ignore
@@ -307,9 +306,9 @@ class NonCollisionMode(AbstractContactMode):
                 cost.evaluator().UpdateCoefficients(
                     new_Q, cost.evaluator().b(), cost.evaluator().c()
                 )
-                self.squared_eucl_dist_cost = cost
+                self.velocity_reg_cost = cost
 
-                self.costs["pusher_vel_reg"].append(self.squared_eucl_dist_cost)
+                self.costs["pusher_vel_reg"].append(self.velocity_reg_cost)
 
         if self.cost_config.pusher_arc_length is not None:
             for k in range(self.num_knot_points - 1):
@@ -523,7 +522,7 @@ class NonCollisionMode(AbstractContactMode):
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
         if self.cost_config.pusher_velocity_regularization is not None:
-            var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
+            var_idxs, evaluator = self._get_cost_terms(self.velocity_reg_cost)
             vars = vertex.x()[var_idxs]
             binding = Binding[QuadraticCost](evaluator, vars)
             vertex.AddCost(binding)

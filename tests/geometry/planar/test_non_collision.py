@@ -101,10 +101,19 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
 
     assert len(mode.prog.linear_equality_constraints()) == 0
 
+    # No time cost
     assert len(mode.prog.linear_costs()) == 0
 
-    # One quadratic cost for squared eucl distances
+    # One quadratic cost for velocity regularization
     assert len(mode.prog.quadratic_costs()) == 1
+
+    # Pusher arc length
+    assert len(mode.prog.l2norm_costs()) == mode.num_knot_points - 1
+
+    # 1 vel reg, num_knot_points - 1 pusher arc length, num_knot_points perspective quadratic costs
+    assert (
+        len(mode.prog.GetAllCosts()) == 1 + mode.num_knot_points - 1 + num_knot_points
+    )
 
     lin_vel_vars = sym.Variables(mode.prog.quadratic_costs()[0].variables())
     target_lin_vel_vars = sym.Variables(np.concatenate(mode.variables.p_BPs))

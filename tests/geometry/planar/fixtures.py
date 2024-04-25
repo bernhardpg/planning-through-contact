@@ -164,14 +164,10 @@ def subgraph(
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
 
-    if request.param.get("eucl_distance_cost"):
-        plan_config.non_collision_cost = NonCollisionCost(pusher_arc_length=1.0)
-    else:
-        plan_config.non_collision_cost = NonCollisionCost(
-            pusher_velocity_regularization=1.0
-        )
     if request.param.get("avoid_object"):
         plan_config.non_collision_cost.distance_to_object_socp = 1.0
+    else:
+        plan_config.non_collision_cost.distance_to_object_socp = None
 
     plan_config.continuity_on_pusher_velocity = request.param.get(
         "pusher_velocity_continuity", False
