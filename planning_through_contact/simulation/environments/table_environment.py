@@ -53,7 +53,7 @@ class TableEnvironment:
         desired_position_source: DesiredPlanarPositionSourceBase,
         robot_system: RobotSystemBase,
         sim_config: PlanarPushingSimConfig,
-        optitrack_config: OptitrackConfig,
+        optitrack_config: OptitrackConfig = None,
         station_meshcat: Optional[Meshcat] = None,
         state_estimator_meshcat: Optional[Meshcat] = None,
     ):
@@ -94,7 +94,9 @@ class TableEnvironment:
                 OptitrackObjectTransformUpdaterDiagram,
             )
 
-            optitrack_object_transform_updater: OptitrackObjectTransformUpdaterDiagram = builder.AddNamedSystem(
+            optitrack_object_transform_updater: (
+                OptitrackObjectTransformUpdaterDiagram
+            ) = builder.AddNamedSystem(
                 "OptitrackTransformUpdater",
                 OptitrackObjectTransformUpdaterDiagram(
                     state_estimator=self._state_estimator,
