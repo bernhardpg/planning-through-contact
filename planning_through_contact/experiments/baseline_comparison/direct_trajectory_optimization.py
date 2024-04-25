@@ -191,7 +191,7 @@ def direct_trajopt_through_contact(
         else:
             # The Tee usually requires longer trajectories
             if type(slider.geometry) == TPusher2d:
-                knot_point_scaling = 1
+                knot_point_scaling = 2
             else:
                 knot_point_scaling = 1
 

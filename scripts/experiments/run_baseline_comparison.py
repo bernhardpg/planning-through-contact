@@ -21,6 +21,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
+    SimplePlanarPushingTrajectory,
 )
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingStartAndGoal,
@@ -73,19 +74,31 @@ class ComparisonRunData:
         print("Succesfull gcs: " + ", ".join(self.gcs_successes))
         print("Succesfull direct trajopt: " + ", ".join(self.direct_trajopt_successes))
 
-    def load_traj(self, name: str) -> PlanarPushingTrajectory:
+    def load_traj(
+        self, name: str
+    ) -> PlanarPushingTrajectory | SimplePlanarPushingTrajectory | None:
         traj_folder = self.run_dir / name
         trajs = list(traj_folder.glob("**/traj_rounded.pkl"))
-        assert len(trajs) == 1
-        traj_path = trajs[0]
-        traj = PlanarPushingTrajectory.load(str(traj_path))
+        if len(trajs) == 1:
+            traj_path = trajs[0]
+            traj = PlanarPushingTrajectory.load(str(traj_path))
+        else:
+            trajs = list(traj_folder.glob("**/direct_traj.pkl"))
+            if len(trajs) == 1:
+                traj_path = trajs[0]
+                traj = SimplePlanarPushingTrajectory.load(str(traj_path))
+            else:
+                return None
 
         return traj
 
-    def load_initial_conditions(self, name: str) -> PlanarPushingStartAndGoal:
+    def load_initial_conditions(self, name: str) -> PlanarPushingStartAndGoal | None:
         traj = self.load_traj(name)
-        assert traj.config.start_and_goal is not None
-        return traj.config.start_and_goal
+        if traj is not None:
+            assert traj.config.start_and_goal is not None
+            return traj.config.start_and_goal
+        else:
+            return None
 
     @classmethod
     def load_from_run(cls, run_dir: str) -> "ComparisonRunData":
@@ -246,6 +259,7 @@ def main() -> None:
             initial_conds = [
                 run_data.load_initial_conditions(traj) for traj in trajs_to_vis
             ]
+            initial_conds = [c for c in initial_conds if c is not None]
             # use the config from the first traj
             config = run_data.load_traj(trajs_to_vis[0]).config
             visualize_initial_conditions(
