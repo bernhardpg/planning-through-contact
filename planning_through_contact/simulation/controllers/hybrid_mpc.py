@@ -88,10 +88,45 @@ class HybridMpc:
 
         self.A_sym, self.B_sym, self.sym_vars = self._calculate_symbolic_system()
 
+        self._progs = {mode: MathematicalProgram() for mode in HybridModes}
+        # Formulate the problem in the local coordinates around the nominal trajectory
+        self._vars = {
+            mode: {
+                "x_bar": self._progs[mode].NewContinuousVariables(
+                    self.num_states, self.config.horizon, "x_bar"
+                ),
+                "u_bar": self._progs[mode].NewContinuousVariables(
+                    self.num_inputs, self.config.horizon - 1, "u_bar"
+                ),
+            }
+            for mode in HybridModes
+        }
+        self._last_sols = {mode: None for mode in HybridModes}
+
+        Q = self.config.Q
+        R = self.config.R
+        Q_N = self.config.Q_N
+
+        for mode, prog in self._progs.items():
+            x_bar = self._vars[mode]["x_bar"]
+            u_bar = self._vars[mode]["u_bar"]
+            N = self.config.horizon
+
+            # Cost
+            state_running_cost = sum(
+                [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
+            )
+            input_running_cost = sum(
+                [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
+            )
+            terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
+            prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
+
         self.control_log: List[npt.NDArray[np.float64]] = []
         self.cost_log: List[float] = []
         self.desired_velocity_log: List[npt.NDArray[np.float64]] = []
         self.commanded_velocity_log: List[npt.NDArray[np.float64]] = []
+        self._solve_time_log = {mode: [] for mode in HybridModes}
 
     def _calculate_symbolic_system(
         self,
@@ -162,11 +197,35 @@ class HybridMpc:
         h = self.config.step_size
         num_sliding_steps = self.config.num_sliding_steps
 
-        prog = MathematicalProgram()
+        # Reuse mathematical program
+        prog = self._progs[mode]
+        x_bar = self._vars[mode]["x_bar"]
+        u_bar = self._vars[mode]["u_bar"]
 
-        # Formulate the problem in the local coordinates around the nominal trajectory
-        x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
-        u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
+        # Clear all previous constraints
+        all_constraints = prog.GetAllConstraints()
+        for constraint in all_constraints:
+            prog.RemoveConstraint(constraint)
+
+        # # DONT REUSE MATHEMATICAL PROGRAM
+        # prog = MathematicalProgram()
+
+        # # Formulate the problem in the local coordinates around the nominal trajectory
+        # x_bar = prog.NewContinuousVariables(self.num_states, N, "x_bar")
+        # u_bar = prog.NewContinuousVariables(self.num_inputs, N - 1, "u_bar")
+        # Q = self.config.Q
+        # R = self.config.R
+        # Q_N = self.config.Q_N
+        # # Cost
+        # state_running_cost = sum(
+        #     [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
+        # )
+        # input_running_cost = sum(
+        #     [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
+        # )
+        # terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
+        # prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
+        # # DONT REUSE MATHEMATICAL PROGRAM
 
         # Initial value constraint
         x_bar_curr = x_curr - x_traj[0]
@@ -239,18 +298,10 @@ class HybridMpc:
             prog.AddLinearConstraint(lam >= self.config.lam_min)
             prog.AddLinearConstraint(lam <= self.config.lam_max)
 
-        Q = self.config.Q
-        R = self.config.R
-        Q_N = self.config.Q_N
-
-        state_running_cost = sum(
-            [x_bar[:, i].T.dot(Q).dot(x_bar[:, i]) for i in range(N - 1)]
-        )
-        input_running_cost = sum(
-            [u_bar[:, i].T.dot(R).dot(u_bar[:, i]) for i in range(N - 1)]
-        )
-        terminal_cost = x_bar[:, N - 1].T.dot(Q_N).dot(x_bar[:, N - 1])
-        prog.AddCost(terminal_cost + state_running_cost + input_running_cost)
+        if self._last_sols[mode] is not None:
+            # Warm start
+            prog.SetInitialGuess(x_bar, self._last_sols[mode]["x_bar"])
+            prog.SetInitialGuess(u_bar, self._last_sols[mode]["u_bar"])
 
         return prog, x, u  # type: ignore
 
@@ -266,6 +317,20 @@ class HybridMpc:
         )
         results = [Solve(prog) for prog in progs]  # type: ignore
 
+        # Log solve times for debugging
+        # for mode, result in zip(HybridModes, results):
+        #     self._solve_time_log[mode].append(result.get_solver_details().optimizer_time)
+
+        # Save solutions to warmstart the next iteration
+        for mode, result in zip(HybridModes, results):
+            if result.is_success():
+                self._last_sols[mode] = {
+                    "x_bar": result.GetSolution(self._vars[mode]["x_bar"]),
+                    "u_bar": result.GetSolution(self._vars[mode]["u_bar"]),
+                }
+            else:
+                self._last_sols[mode] = None
+
         costs = [
             result.get_optimal_cost() if result.is_success() else np.inf
             for result in results
@@ -275,7 +340,7 @@ class HybridMpc:
         control = controls[best_idx]
         result = results[best_idx]
         lowest_cost = costs[best_idx]
-        self.cost_log.append(lowest_cost)
+
         state_sol = sym.Evaluate(result.GetSolution(state))  # type: ignore
 
         x_next = state_sol[:, 1]
@@ -286,19 +351,13 @@ class HybridMpc:
 
         control_sol = sym.Evaluate(result.GetSolution(control))  # type: ignore
 
-        if len(control_sol.T) == self.config.horizon:
-            self.control_log.append(control_sol.T)
-        else:
-            # Padding because the solution length gets smaller as the prediction horizon decreases
-            # towards the end of the trajectory segment
-            padding = self.config.horizon - control_sol.shape[1]
-            padded_array = np.pad(control_sol, ((0, 0), (0, padding)), mode="constant")
-            self.control_log.append(padded_array.T)
+        # self.cost_log.append(lowest_cost)
+        # self.control_log.append(control_sol.T)
 
-        if lowest_cost == np.inf:
-            logger.debug(
-                f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
-            )
+        # if lowest_cost == np.inf:
+        #     logger.debug(
+        #         f"Infeasible: x_dot_curr:{x_dot_curr}, u_next:{control_sol[:, 0]} "
+        #     )
         u_next = control_sol[:, 0]
 
         # Finite difference method to get velocity of pusher

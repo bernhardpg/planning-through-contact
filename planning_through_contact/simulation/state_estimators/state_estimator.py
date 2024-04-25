@@ -136,35 +136,34 @@ class StateEstimator(Diagram):
                 self._plant_updater.get_state_output_port(model_instance),
                 f"{model_instance_name}_state",
             )
-
-        visualizer = MeshcatVisualizer.AddToBuilder(
-            builder, self._scene_graph.get_query_output_port(), self.meshcat
-        )
-        self.meshcat.SetTransform(
-            path="/Cameras/default",
-            matrix=RigidTransform(
-                RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
-                np.array([1, 0, 0]),
-            ).GetAsMatrix4(),
-        )
-        if sim_config.visualize_desired:
+        if self.meshcat and sim_config.visualize_desired:
+            visualizer = MeshcatVisualizer.AddToBuilder(
+                builder, self._scene_graph.get_query_output_port(), self.meshcat
+            )
+            self.meshcat.SetTransform(
+                path="/Cameras/default",
+                matrix=RigidTransform(
+                    RollPitchYaw([0.0, 0.0, np.pi / 2]),  # type: ignore
+                    np.array([1, 0, 0]),
+                ).GetAsMatrix4(),
+            )
             assert sim_config.slider_goal_pose is not None
             self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
-        if sim_config.draw_frames:
-            print(f"Drawing frames")
-            for frame_name in [
-                # "iiwa_link_7",
-                # "pusher_base",
-                # "t_pusher",
-                "pusher_end",
-            ]:
-                AddMultibodyTriad(
-                    self._plant.GetFrameByName(frame_name),
-                    self._scene_graph,
-                    length=0.1,
-                    radius=0.001,
-                )
+            if sim_config.draw_frames:
+                print(f"Drawing frames")
+                for frame_name in [
+                    # "iiwa_link_7",
+                    # "pusher_base",
+                    # "t_pusher",
+                    "pusher_end",
+                ]:
+                    AddMultibodyTriad(
+                        self._plant.GetFrameByName(frame_name),
+                        self._scene_graph,
+                        length=0.1,
+                        radius=0.001,
+                    )
 
         builder.BuildInto(self)
 

@@ -11,6 +11,7 @@ from omegaconf import OmegaConf, open_dict
 from pydrake.all import (
     StartMeshcat,
 )
+from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -34,6 +35,26 @@ from planning_through_contact.simulation.sensors.realsense_camera_config import 
 )
 
 logger = logging.getLogger(__name__)
+
+state_estimator_meshcat = StartMeshcat()
+# station_meshcat = StartMeshcat()
+# state_estimator_meshcat = None
+station_meshcat = None
+# logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger(
+    "planning_through_contact.simulation.planar_pushing.pusher_pose_controller"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.controllers.hybrid_mpc"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.planar_pushing.iiwa_planner"
+).setLevel(logging.DEBUG)
+logging.getLogger(
+    "planning_through_contact.simulation.environments.table_environment"
+).setLevel(logging.DEBUG)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="basic")
@@ -64,6 +85,19 @@ def main(cfg: OmegaConf) -> None:
     except FileNotFoundError:
         logger.error(f"Trajectory file {traj_file} not found")
         return
+
+    # Non-collision time override
+    # NEW_TIME = 4
+    # new_config = traj.config
+    # new_config.time_non_collision = NEW_TIME
+    # new_knot_points = traj.path_knot_points
+    # for knot_points in new_knot_points:
+    #     if isinstance(knot_points, NonCollisionVariables):
+    #         knot_points.time_in_mode = NEW_TIME
+
+    # new_traj = PlanarPushingTrajectory(new_config, new_knot_points)
+    # traj = new_traj
+
     mpc_config: HybridMpcConfig = instantiate(cfg.mpc_config)
     optitrack_config: OptitrackConfig = instantiate(cfg.optitrack_config)
 
@@ -71,10 +105,8 @@ def main(cfg: OmegaConf) -> None:
         trajectory=traj, mpc_config=mpc_config, **cfg.sim_config
     )
 
-    station_meshcat = StartMeshcat()
-    state_estimator_meshcat = StartMeshcat()
-    logger.info(f"station meshcat url {station_meshcat.web_url()}")
-    logger.info(f"state estimator meshcat url {state_estimator_meshcat.web_url()}")
+    if state_estimator_meshcat is not None:
+        state_estimator_meshcat.Delete()
 
     if sim_config.use_hardware:
         reset_experiment(
@@ -84,9 +116,15 @@ def main(cfg: OmegaConf) -> None:
     # Initialize position source
     position_source = MPCPositionSource(sim_config=sim_config, traj=traj)
 
+    if sim_config.visualize_desired:
+        station_meshcat_temp = station_meshcat
+        state_estimator_meshcat_temp = state_estimator_meshcat
+    else:
+        station_meshcat_temp = None
+        state_estimator_meshcat_temp = None
     # Initialize robot system
     position_controller = IiwaHardwareStation(
-        sim_config=sim_config, meshcat=station_meshcat
+        sim_config=sim_config, meshcat=station_meshcat_temp
     )
 
     # Initialize environment
@@ -95,8 +133,8 @@ def main(cfg: OmegaConf) -> None:
         robot_system=position_controller,
         sim_config=sim_config,
         optitrack_config=optitrack_config,
-        station_meshcat=station_meshcat,
-        state_estimator_meshcat=state_estimator_meshcat,
+        station_meshcat=station_meshcat_temp,
+        state_estimator_meshcat=state_estimator_meshcat_temp,
     )
 
     try:
@@ -120,8 +158,14 @@ def main(cfg: OmegaConf) -> None:
                 serial_number=cfg.realsense_config.camera2_serial_number,
                 config=camera_config,
             )
+            camera3 = RealsenseCamera(
+                name=cfg.realsense_config.camera3_name,
+                serial_number=cfg.realsense_config.camera3_serial_number,
+                config=camera_config,
+            )
             camera1.start_recording()
             camera2.start_recording()
+            camera3.start_recording()
 
         recording_name = os.path.join(
             full_log_dir,
@@ -147,11 +191,13 @@ def main(cfg: OmegaConf) -> None:
         if sim_config.use_hardware and cfg.realsense_config.should_record:
             camera1.stop_recording()
             camera2.stop_recording()
+            camera3.stop_recording()
     except KeyboardInterrupt:
         environment.save_logs(recording_name, full_log_dir)
         if sim_config.use_hardware and cfg.realsense_config.should_record:
             camera1.stop_recording()
             camera2.stop_recording()
+            camera3.stop_recording()
 
 
 def reset_experiment(
@@ -186,7 +232,7 @@ def reset_experiment(
         for_reset=True,
     )
 
-    station_meshcat.Delete()
+    # station_meshcat.Delete()
     state_estimator_meshcat.Delete()
 
 

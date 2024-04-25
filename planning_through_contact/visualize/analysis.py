@@ -1,7 +1,7 @@
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -127,7 +127,9 @@ def plot_planar_pushing_logs(
     plot_planar_pushing_trajectory(actual, desired)
 
 
-def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -> None:
+def plot_control_sols_vs_time(
+    control_log: List[np.ndarray], suffix: str = "", save_dir: Optional[str] = None
+) -> None:
     # Convert the list to a numpy array for easier manipulation
     control_log_array = np.array(control_log)
 
@@ -173,17 +175,24 @@ def plot_control_sols_vs_time(control_log: List[np.ndarray], suffix: str = "") -
 
     # Show plot
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_control_sols{suffix}.png")
+    file_name = f"planar_pushing_control_sols{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
-def plot_cost(cost_log: List[float], suffix: str = "") -> None:
+def plot_cost(
+    cost_log: List[float], suffix: str = "", save_dir: Optional[str] = None
+) -> None:
     plt.figure()
     plt.plot(cost_log)
     plt.title("Cost vs. timestep")
     plt.xlabel("timestep")
     plt.ylabel("Cost")
     plt.tight_layout()
-    plt.savefig(f"planar_pushing_cost{suffix}.png")
+
+    file_name = f"planar_pushing_cost{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
 
 
 def plot_velocities(
@@ -386,6 +395,45 @@ def plot_planar_pushing_trajectory(
     # Adjust layout
     plt.tight_layout()
     file_name = f"planar_pushing_control{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
+
+
+def plot_realtime_rate(
+    real_time_rate_log: List[float],
+    time_step: float,
+    suffix: str = "",
+    save_dir: Optional[str] = None,
+) -> None:
+    plt.figure()
+    plt.plot(real_time_rate_log)
+    plt.title("Realtime rate vs. timestep")
+    plt.xticks(np.arange(0, len(real_time_rate_log), 1 / time_step), rotation=90)
+    plt.xlabel("timestep")
+    plt.ylabel("Realtime rate")
+    # Add grid
+    plt.grid()
+    plt.tight_layout()
+    file_name = f"planar_pushing_realtime_rate{suffix}.pdf"
+    file_path = f"{save_dir}/{file_name}" if save_dir else file_name
+    plt.savefig(file_path)
+
+
+def plot_mpc_solve_times(
+    solve_times_log: Dict[str, List[float]],
+    suffix: str = "",
+    save_dir: Optional[str] = None,
+) -> None:
+    fig, ax = plt.subplots()
+    for key, solve_times in solve_times_log.items():
+        ax.plot(solve_times, label=key)
+    ax.set_title("MPC solve times vs. timestep")
+    ax.set_xlabel("timestep")
+    ax.set_ylabel("Solve times")
+    ax.legend()
+    ax.grid()
+    plt.tight_layout()
+    file_name = f"planar_pushing_mpc_solve_times{suffix}.png"
     file_path = f"{save_dir}/{file_name}" if save_dir else file_name
     plt.savefig(file_path)
 
