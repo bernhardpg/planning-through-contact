@@ -5,7 +5,7 @@ from planning_through_contact.deprecated.geometry.two_d.equilateral_polytope_2d 
     EquilateralPolytope2d,
 )
 from planning_through_contact.deprecated.geometry.two_d.t_pusher import TPusher
-from planning_through_contact.experiments.planar_pushing.old.planar_pushing_gcs import (
+from planning_through_contact.experiments.deprecated.planar_pushing.old.planar_pushing_gcs import (
     DynamicsConfig,
     PlanarPushingContactMode,
 )
