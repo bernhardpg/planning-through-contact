@@ -35,6 +35,7 @@ from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
 )
+from tests.geometry.planar.fixtures import plan_config, planner, t_pusher
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"

@@ -59,13 +59,7 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
 
 
 @pytest.fixture
-def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
-    cfg = SliderPusherSystemConfig(slider=rigid_body_box, pusher_radius=0.0)
-    return cfg
-
-
-@pytest.fixture
-def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
+def plan_config() -> PlanarPlanConfig:
     cfg = get_default_plan_config()
     return cfg
 
@@ -217,7 +211,6 @@ def planner(
     plan_config.contact_config = request.param.get(
         "contact_config", plan_config.contact_config
     )
-    plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
