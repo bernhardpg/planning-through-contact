@@ -428,19 +428,19 @@ if __name__ == "__main__":
         "--traj",
         help="(Optional) specify a specific trajectory number to generate, with the given random seed.",
         type=int,
-        default=None,
+        default=9,
     )
     parser.add_argument(
         "--body",
         help="Which slider body to use.",
         type=str,
-        default="box",
+        default="tee",
     )
     parser.add_argument(
         "--num",
         help="Number of trajectories to generate",
         type=int,
-        default=100,
+        default=11,
     )
     parser.add_argument(
         "--save_relaxed",
