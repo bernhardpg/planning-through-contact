@@ -330,9 +330,10 @@ def find_next_edge(edges, current_edge):
     return None
 
 
-def order_edges_by_connectivity(edges):
+def order_edges_by_connectivity(edges, boxes):
     """
     Order edges by greedy connectivity starting from an arbitrary edge.
+    Ensures that the first vertex of the first edge is not an intersection vertex.
     """
     if not edges:
         return []
@@ -342,6 +343,11 @@ def order_edges_by_connectivity(edges):
         (tuple(edge[0]), tuple(edge[1])) if isinstance(edge[0], np.ndarray) else edge
         for edge in edges
     ]
+
+    intersection_vertices = compute_intersection_points(boxes)
+    if edges[0][0] in intersection_vertices:
+        # Reverse the first edge if the first vertex is an intersection vertex
+        edges[0] = (edges[0][1], edges[0][0])
 
     ordered_edges = [edges[0]]  # Start with the first edge
     remaining_edges = list(edges[1:])
@@ -374,6 +380,80 @@ def extract_ordered_vertices(ordered_edges):
     ordered_vertices.pop()
     return ordered_vertices
 
+
+def compute_union_dimensions(boxes):
+    min_x, min_y = float("inf"), float("inf")
+    max_x, max_y = float("-inf"), float("-inf")
+
+    for box in boxes:
+        # Extract the position from the transformation matrix
+        x_center, y_center, _ = box["transform"][:3, 3]
+
+        # Half-sizes for x and y dimensions
+        half_size_x, half_size_y = box["size"][0] / 2, box["size"][1] / 2
+
+        # Calculate min and max coordinates for this box
+        box_min_x = x_center - half_size_x
+        box_max_x = x_center + half_size_x
+        box_min_y = y_center - half_size_y
+        box_max_y = y_center + half_size_y
+
+        # Update the overall min and max
+        min_x = min(min_x, box_min_x)
+        max_x = max(max_x, box_max_x)
+        min_y = min(min_y, box_min_y)
+        max_y = max(max_y, box_max_y)
+
+    # Compute the width and height of the union of the boxes
+    width = max_x - min_x
+    height = max_y - min_y
+
+    return width, height
+
+
+def compute_collision_free_regions(boxes, faces):
+    # This assumes that the first vertex of the first face is not an intersection vertex
+
+    intersection_vertices = compute_intersection_points(boxes)
+
+    assert faces[0][0] not in intersection_vertices
+
+    UL = np.array([-1, 1])
+    UR = np.array([1, 1])
+    DR = np.array([1, -1])
+    DL = np.array([-1, -1])
+
+    def get_offset(vertex):
+        if is_inside_any_box(boxes, vertex + UL / 10):
+            return DR
+        if is_inside_any_box(boxes, vertex + UR / 10):
+            return DL
+        if is_inside_any_box(boxes, vertex + DR / 10):
+            return UL
+        if is_inside_any_box(boxes, vertex + DL / 10):
+            return UR
+
+    planes_per_region = []
+    faces_per_region = []
+    current_idx = 0
+    while current_idx < len(faces):
+        region_faces = []
+        face = faces[current_idx]
+        region_faces.append(face)
+        incoming_plane = (face[0] + get_offset(face[0]), face[0])
+        if face[1] in intersection_vertices:
+            face = faces[current_idx + 1]
+            region_faces.append(face)
+            current_idx += 1
+        outgoing_plane = (face[1], face[1] + get_offset(face[1]))
+        planes_per_region.append([incoming_plane, outgoing_plane])
+        faces_per_region.append(region_faces)
+        current_idx += 1
+
+    return planes_per_region, faces_per_region
+
+def flatten_nested_list(nested_list):
+    return [item for sublist in nested_list for item in sublist]
 
 def main():
     # T-shape
@@ -460,10 +540,21 @@ def main():
     print("Number of outer edges:", len(outer_edges))
     # plot_lines(ax, outer_edges)
 
-    ordered_edges = order_edges_by_connectivity(outer_edges)
-    plot_lines(ax, ordered_edges)
+    ordered_edges = order_edges_by_connectivity(outer_edges, loaded_boxes)
+    # plot_lines(ax, ordered_edges)
     ordered_vertices = extract_ordered_vertices(ordered_edges)
-    plot_vertices(ax, ordered_vertices)
+    # plot_vertices(ax, ordered_vertices)
+
+    width, height = compute_union_dimensions(loaded_boxes)
+    print(f"Union dimensions: width={width}, height={height}")
+
+    planes_per_region, faces_per_region = compute_collision_free_regions(
+        loaded_boxes, ordered_edges
+    )
+    for planes, faces in zip(planes_per_region, faces_per_region):
+        color = np.random.rand(3)
+        plot_lines(ax, planes, color=color)
+        plot_lines(ax, faces, color=color)
 
     plt.show()
 
