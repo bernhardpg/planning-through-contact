@@ -94,10 +94,11 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
     expected_num_lin_consts = num_knot_points * num_planes
     assert num_linear_constraints == expected_num_lin_consts
 
-    # 2 dimensions, 3 planes, i.e. 6 ineq/bbox constraints (depending on geometry)
+    # Some of these are parsed as boundig box constraints depending on the geometry
+    num_planes_per_knot_point = 3
     assert (
         len(mode.prog.bounding_box_constraints()) + len(mode.prog.linear_constraints())
-        == 6
+        == num_planes_per_knot_point * mode.num_knot_points
     )
 
     assert len(mode.prog.linear_equality_constraints()) == 0

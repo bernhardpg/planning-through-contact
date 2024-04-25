@@ -289,7 +289,7 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.time is not None:
             cost = self.prog.AddLinearCost(
-                self.cost_config.time * self.config.time_non_collision
+                self.cost_config.time * self.config.time_non_collision  # type: ignore
             )
             self.costs["non_contact_time"].append(cost)
 
@@ -297,7 +297,7 @@ class NonCollisionMode(AbstractContactMode):
             if self.num_knot_points > 1:
                 squared_vels = np.sum([v_BP.T @ v_BP for v_BP in self.variables.v_BPs])
                 cost = self.prog.AddQuadraticCost(
-                    self.cost_config.pusher_velocity_regularization * squared_vels,
+                    self.cost_config.pusher_velocity_regularization * squared_vels,  # type: ignore
                     is_convex=True,
                 )
                 Q = cost.evaluator().Q()
@@ -393,25 +393,6 @@ class NonCollisionMode(AbstractContactMode):
                         self.distance_to_object_socp_costs.append(binding)
 
                         self.costs["object_avoidance_socp"].append(binding)
-
-        # TODO: This is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
-        if self.terminal_cost:  # Penalize difference from target position on slider.
-            assert self.config.start_and_goal is not None
-
-            pos_diff = (
-                self.variables.p_WB
-                - self.config.start_and_goal.slider_target_pose.pos()
-            )
-            self.terminal_cost_pos = self.prog.AddQuadraticCost((pos_diff.T @ pos_diff).item())  # type: ignore
-
-            th = self.config.start_and_goal.slider_target_pose.theta
-            cos_th_target = np.cos(th)
-            sin_th_target = np.sin(th)
-
-            rot_diff = (self.variables.cos_th - cos_th_target) ** 2 + (
-                self.variables.sin_th - sin_th_target
-            ) ** 2
-            self.terminal_cost_rot = self.prog.AddQuadraticCost(rot_diff)  # type: ignore
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -563,47 +544,31 @@ class NonCollisionMode(AbstractContactMode):
         return var_idxs, cost.evaluator()
 
     def add_cost_to_vertex(self, vertex: GcsVertex) -> None:
-        is_target_or_source = self.num_knot_points == 1
+        if self.cost_config.pusher_velocity_regularization is not None:
+            var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
+            vars = vertex.x()[var_idxs]
+            binding = Binding[QuadraticCost](evaluator, vars)
+            vertex.AddCost(binding)
 
-        # TODO: This is old code that is only used with ContactCost.OPTIMAL_CONTROL, and can be removed
-        if is_target_or_source:
-            assert (
-                len(self.prog.quadratic_costs()) == 2
-            )  # should be one cost for pos and one for rot
-            assert self.terminal_cost_pos is not None
-            assert self.terminal_cost_rot is not None
+        if self.cost_config.pusher_arc_length is not None:
+            assert len(self.l2_norm_costs) > 0
 
-            for binding in (self.terminal_cost_pos, self.terminal_cost_rot):
-                var_idxs = self.get_variable_indices_in_gcs_vertex(binding.variables())
+            # Add L2 norm cost terms
+            for cost in self.l2_norm_costs:
+                var_idxs, evaluator = self._get_cost_terms(cost)
                 vars = vertex.x()[var_idxs]
-                new_binding = Binding[QuadraticCost](binding.evaluator(), vars)
-                vertex.AddCost(new_binding)
-        else:
-            if self.cost_config.pusher_velocity_regularization is not None:
-                var_idxs, evaluator = self._get_cost_terms(self.squared_eucl_dist_cost)
-                vars = vertex.x()[var_idxs]
-                binding = Binding[QuadraticCost](evaluator, vars)
+                binding = Binding[L2NormCost](evaluator, vars)
                 vertex.AddCost(binding)
 
-            if self.cost_config.pusher_arc_length is not None:
-                assert len(self.l2_norm_costs) > 0
+        if self.cost_config.distance_to_object_quadratic is not None:
+            var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
+            vars = vertex.x()[var_idxs]
+            binding = Binding[QuadraticCost](evaluator, vars)
+            vertex.AddCost(binding)
 
-                # Add L2 norm cost terms
-                for cost in self.l2_norm_costs:
-                    var_idxs, evaluator = self._get_cost_terms(cost)
-                    vars = vertex.x()[var_idxs]
-                    binding = Binding[L2NormCost](evaluator, vars)
-                    vertex.AddCost(binding)
-
-            if self.cost_config.distance_to_object_quadratic is not None:
-                var_idxs, evaluator = self._get_cost_terms(self.quadratic_distance_cost)
+        if self.cost_config.distance_to_object_socp:
+            for binding in self.distance_to_object_socp_costs:
+                var_idxs, evaluator = self._get_cost_terms(binding)
                 vars = vertex.x()[var_idxs]
-                binding = Binding[QuadraticCost](evaluator, vars)
+                binding = Binding[PerspectiveQuadraticCost](evaluator, vars)
                 vertex.AddCost(binding)
-
-            if self.cost_config.distance_to_object_socp:
-                for binding in self.distance_to_object_socp_costs:
-                    var_idxs, evaluator = self._get_cost_terms(binding)
-                    vars = vertex.x()[var_idxs]
-                    binding = Binding[PerspectiveQuadraticCost](evaluator, vars)
-                    vertex.AddCost(binding)
