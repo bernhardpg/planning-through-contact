@@ -80,7 +80,7 @@ def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     cfg = PlanarPlanConfig(
         dynamics_config=dynamics_config,
         use_approx_exponential_map=False,
-        use_band_sparsity=False,
+        use_band_sparsity=True,
         non_collision_cost=non_collision_cost,
         contact_config=contact_config,
     )
