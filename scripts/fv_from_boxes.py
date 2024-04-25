@@ -5,11 +5,9 @@ rectangles along this plane. The edges of the boxe's shouldn't overlap exctly as
 wouldn't occur with a fitting method.
 The idea is to generate files like `t_pusher_2d.py` for any geometry consisting
 of union of boxes.
+NOTE: Much of this code was generated with help of ChatGPT and thus isn't clean or
+consistent. This should be considered as initial prototyping.
 """
-
-import argparse
-from itertools import combinations
-from typing import Tuple
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
