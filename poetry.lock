@@ -860,11 +860,16 @@ six = ">=1.4.0"
 
 [[package]]
 name = "drake"
+<<<<<<< HEAD
 version = "1.29.0"
+=======
+version = "1.28.0"
+>>>>>>> 58b8a45 (Upgrade drake)
 description = "Model-based design and verification for robotics"
 optional = false
 python-versions = ">=3.8"
 files = [
+<<<<<<< HEAD
     {file = "drake-1.29.0-cp310-cp310-manylinux_2_35_x86_64.whl", hash = "sha256:9e7c6330f8110d96763f32876d1283e848aa7ef146990bacca35d5df53cf1e40"},
     {file = "drake-1.29.0-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:7fe400b6552e35133506a2dde03d50436bbdb855209398d8f5662d757a14a609"},
     {file = "drake-1.29.0-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:eaf67f0b13d5a67664e5081fcf64b4d1b9c00f4d567c300df758222b47d1d303"},
@@ -872,6 +877,15 @@ files = [
     {file = "drake-1.29.0-cp312-cp312-macosx_13_0_arm64.whl", hash = "sha256:813f3c65b8402a078883af2f4afcfe0730fd50974a1873f86598a2008c9a1813"},
     {file = "drake-1.29.0-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:63b63f39dcd6b3a0ce15652b90f519be3bcbbccff386fd413468053b279d344d"},
     {file = "drake-1.29.0-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:549e4f674cf2787710d41b7d4d524d76a10716b7e92b4e17cb011d8a5a60af70"},
+=======
+    {file = "drake-1.28.0-cp310-cp310-manylinux_2_35_x86_64.whl", hash = "sha256:52736b7fad15069c5c071a1bdf247c32b813cd73977e8bb690b50b129c230340"},
+    {file = "drake-1.28.0-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:10670b8f63d88e72da19f09598aaa5016e3e6211d186691deaeb8f9f203d32db"},
+    {file = "drake-1.28.0-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:31dc1aead2dbeee06c073164f76fc93b5db11f1a12d4ebaca700e9e2fb3fb319"},
+    {file = "drake-1.28.0-cp311-cp311-manylinux_2_35_x86_64.whl", hash = "sha256:d530cf37055b2058a86798c6ecde8179a3b3e0a9bb36c5703a37233f54bd7d95"},
+    {file = "drake-1.28.0-cp312-cp312-macosx_12_0_x86_64.whl", hash = "sha256:ffcdfb7c957ead6bec43766b101811a9968a44bf8f19cf5044fbe10131092d4a"},
+    {file = "drake-1.28.0-cp312-cp312-macosx_13_0_arm64.whl", hash = "sha256:7bf7ecdc26450177f79f0a3816eb1ce360cffff0a2fcdfb76947a6f9dbed306b"},
+    {file = "drake-1.28.0-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:81dcbf7133029dd5963a4599cfaee88169c3a0941d17e68bb23227ca5cebbea3"},
+>>>>>>> 58b8a45 (Upgrade drake)
 ]
 
 [package.dependencies]
@@ -5167,9 +5181,14 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more
 [metadata]
 lock-version = "2.0"
 <<<<<<< HEAD
+<<<<<<< HEAD
 python-versions = "^3.10, <3.11"
 content-hash = "02f0ac954502cd5e673bf93c67564566712c62be95f4f2b4046697dd4f1237d8"
 =======
 python-versions = "~3.11"
 content-hash = "993f0fde4536c689323c20df37a18a7b44883ff0d95940ee9e648f23de6ad6d1"
 >>>>>>> 81240e7 (Copy from Bernhard)
+=======
+python-versions = "~3.10"
+content-hash = "8fd944896b910c71d846844b0662f643a774d5c9acfda569c1bdf4c2bdec78aa"
+>>>>>>> 58b8a45 (Upgrade drake)
