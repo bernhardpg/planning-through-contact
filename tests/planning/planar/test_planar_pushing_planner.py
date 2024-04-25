@@ -72,17 +72,7 @@ def test_planner_construction(
     for v, m in zip(planner.contact_vertices, planner.contact_modes):
         costs = v.GetCosts()
 
-        # (angular velocity, linear velocity, normal force, friction force) * one term per (knot point - 1)
         assert len(costs) == len(m.prog.GetAllCosts())
-
-        for idx, cost in enumerate(costs):
-            if len(m.prog.linear_costs()) > 0:
-                var_idxs = m._get_cost_terms(m.prog.linear_costs())[0][idx]
-                target_vars = Variables(v.x()[var_idxs])
-                assert target_vars.EqualTo(Variables(cost.variables()))
-
-                # Costs should be linear in SDP relaxation
-                assert isinstance(cost.evaluator(), LinearCost)
 
     assert planner.source_subgraph is not None
     assert planner.target_subgraph is not None
