@@ -134,6 +134,7 @@ class PlanarSolverParams:
         1e-4  # Feasibility treshold for nonlinear rounding
     )
     nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    nonl_rounding_save_solver_output: bool = False
     # nonl_round_major_feas_tol: float = (
     #     1e-6  # Feasibility treshold for nonlinear rounding
     # )
@@ -154,6 +155,9 @@ class NonCollisionCost:
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
+    pusher_velocity_constraint: Optional[float] = (
+        None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
+    )
     pusher_arc_length: Optional[float] = None
     time: Optional[float] = None
 
@@ -209,8 +213,9 @@ class ContactConfig:
     # Min and max values for the scaled position of the finger on the face of the slider
     lam_min: Optional[float] = 0.0
     lam_max: Optional[float] = 1.0
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
+    slider_rot_velocity_constraint: Optional[float] = None
+    slider_velocity_constraint: Optional[float] = None
+    keypoint_velocity_constraint: Optional[float] = None
 
     def __str__(self) -> str:
         field_strings = [
@@ -271,6 +276,14 @@ class PlanarPlanConfig:
     )
     contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
+
+    @property
+    def dt_contact(self) -> float:
+        return self.time_in_contact / self.num_knot_points_contact
+
+    @property
+    def dt_non_collision(self) -> float:
+        return self.time_non_collision / self.num_knot_points_non_collision
 
     @property
     def slider_geometry(self) -> CollisionGeometry:

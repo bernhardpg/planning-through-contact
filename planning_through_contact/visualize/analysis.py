@@ -1,6 +1,6 @@
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
-import pickle
 from typing import List, Optional, Tuple
 
 import matplotlib.patches as mpatches
@@ -11,14 +11,10 @@ import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
 from pydrake.systems.primitives import VectorLog
 
-from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
-    SingleRunResult,
-)
 from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.in_plane.contact_pair import (
     ContactFrameConstraints,
 )
-from planning_through_contact.geometry.planar.abstract_mode import GcsVertex
 from planning_through_contact.geometry.planar.face_contact import (
     FaceContactMode,
     FaceContactVariables,
@@ -28,10 +24,6 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 )
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
-)
-from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarSolverParams,
 )
 
 

@@ -286,18 +286,24 @@ class FaceContactVariables(AbstractModeVariables):
         return calc_displacements(self.p_BPs, self.dt)
 
     @property
-    def delta_cos_ths(self):
+    def cos_th_vels(self):
+        """
+        First order approximation of time derivative of cos(th).
+        """
         return np.array(calc_displacements(self.cos_ths, self.dt))
 
     @property
-    def delta_sin_ths(self):
+    def sin_th_vels(self):
+        """
+        First order approximation of time derivative of sin(th).
+        """
         return np.array(calc_displacements(self.sin_ths, self.dt))
 
     @property
     def delta_omega_WBs(self):
         delta_R_WBs = [
             np.array([[cos_dot, -sin_dot], [sin_dot, cos_dot]])
-            for cos_dot, sin_dot in zip(self.delta_cos_ths, self.delta_sin_ths)
+            for cos_dot, sin_dot in zip(self.cos_th_vels, self.sin_th_vels)
         ]
         # In 2D, omega_z = theta_dot will be at position (1,0) in R_dot * R'
         oms = [R_dot.dot(R.T)[1, 0] for R, R_dot in zip(self.R_WBs, delta_R_WBs)]
@@ -430,23 +436,21 @@ class FaceContactMode(AbstractContactMode):
             self.prog_wrapper.add_bounding_box_constraint(idx, -1, 1, cos_th)
             self.prog_wrapper.add_bounding_box_constraint(idx, -1, 1, sin_th)
 
-        # TODO(bernhardpg): Remove, we don't want to use velocity limits
-        delta_th_max = self.config.contact_config.delta_theta_max
-        if delta_th_max is not None:
-            for k, (delta_cos_th, delta_sin_th) in enumerate(
-                zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
-            ):
-                approx_delta_theta_sq = delta_cos_th**2 + delta_sin_th**2
-                self.prog_wrapper.add_quadratic_constraint(
-                    k, k + 1, approx_delta_theta_sq, 0, delta_th_max**2
-                )
-
-        # TODO(bernhardpg): Remove, we don't want to use velocity limits
-        delta_v_WB_max = self.config.contact_config.delta_vel_max
-        if delta_v_WB_max is not None:
+        v_WB_max = self.config.contact_config.slider_velocity_constraint
+        if v_WB_max is not None:
             for k, v_WB in enumerate(self.variables.v_WBs):
                 self.prog_wrapper.add_quadratic_constraint(
-                    k, k + 1, (v_WB.T @ v_WB).item(), 0, delta_v_WB_max**2
+                    k, k + 1, (v_WB.T @ v_WB).item(), 0, v_WB_max**2
+                )
+
+        omega_WB_max = self.config.contact_config.slider_rot_velocity_constraint
+        if omega_WB_max is not None:
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
+            ):
+                approx_omega_WB_sq = delta_cos_th**2 + delta_sin_th**2
+                self.prog_wrapper.add_quadratic_constraint(
+                    k, k + 1, approx_omega_WB_sq, 0, omega_WB_max**2
                 )
 
         # Quasi-static dynamics
@@ -541,9 +545,9 @@ class FaceContactMode(AbstractContactMode):
             self.costs["mode_cost"].append(cost)
 
         if cost_config.time is not None:
-            cost = self.prog_wrapper.add_independent_cost(
-                cost_config.time * self.config.time_in_contact
-            )
+            c_1 = cost_config.time * self.variables.dt
+            total_contact_cost = c_1 * self.num_knot_points
+            cost = self.prog_wrapper.add_independent_cost(total_contact_cost)
             self.costs["contact_time"].append(cost)
 
         if cost_config.cost_type == ContactCostType.STANDARD:
@@ -624,6 +628,7 @@ class FaceContactMode(AbstractContactMode):
                         k,
                         k,
                         cost_config.force_regularization
+                        * self.variables.dt
                         * c_n**2
                         * self.dynamics_config.force_scale**2,
                     )
@@ -634,6 +639,7 @@ class FaceContactMode(AbstractContactMode):
                         k,
                         k,
                         cost_config.force_regularization
+                        * self.variables.dt
                         * c_f**2
                         * self.dynamics_config.force_scale**2,
                     )
@@ -646,14 +652,14 @@ class FaceContactMode(AbstractContactMode):
                 num_keypoints = len(slider.vertices)
                 for k in range(self.num_knot_points - 1):
                     for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                        disp = vertex_k_next - vertex_k
-                        sq_disp = (disp.T @ disp).item()
+                        vel = (vertex_k_next - vertex_k) / self.variables.dt
+                        sq_vel = (vel.T @ vel).item()
                         cost = self.prog_wrapper.add_quadratic_cost(
                             k,
                             k + 1,
                             cost_config.keypoint_velocity_regularization
                             * (1 / num_keypoints)
-                            * sq_disp,
+                            * sq_vel,
                         )
                         self.costs["keypoint_reg"].append(cost)
 
@@ -673,7 +679,7 @@ class FaceContactMode(AbstractContactMode):
             # Angular velocity regularization
             if cost_config.ang_velocity_regularization is not None:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
-                    zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+                    zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
                 ):
                     cost = self.prog_wrapper.add_quadratic_cost(
                         k,
@@ -701,7 +707,7 @@ class FaceContactMode(AbstractContactMode):
                     )
             else:
                 for k, (delta_cos_th, delta_sin_th) in enumerate(
-                    zip(self.variables.delta_cos_ths, self.variables.delta_sin_ths)
+                    zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
                 ):
                     self.prog_wrapper.add_quadratic_cost(
                         k,
@@ -716,8 +722,8 @@ class FaceContactMode(AbstractContactMode):
             for k in range(self.num_knot_points - 1):
                 for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     disp = vertex_k_next - vertex_k
-                    sq_disp = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_disp)
+                    sq_vel = (disp.T @ disp).item()
+                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_vel)
 
         elif cost_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
             assert self.config.start_and_goal is not None

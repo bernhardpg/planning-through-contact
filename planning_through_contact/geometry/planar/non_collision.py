@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from pydrake.all import DecomposeAffineExpression
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
@@ -294,17 +295,9 @@ class NonCollisionMode(AbstractContactMode):
 
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
-                position_diffs = [
-                    p_next - p_curr
-                    for p_next, p_curr in zip(
-                        self.variables.p_BPs[1:], self.variables.p_BPs[:-1]
-                    )
-                ]
-                position_diffs = np.vstack(position_diffs)
-                # position_diffs is now one long vector with diffs in each entry
-                squared_eucl_dist = position_diffs.T.dot(position_diffs).item()
+                squared_vels = np.sum([v_BP.T @ v_BP for v_BP in self.variables.v_BPs])
                 cost = self.prog.AddQuadraticCost(
-                    self.cost_config.pusher_velocity_regularization * squared_eucl_dist,
+                    self.cost_config.pusher_velocity_regularization * squared_vels,
                     is_convex=True,
                 )
                 Q = cost.evaluator().Q()
@@ -337,6 +330,7 @@ class NonCollisionMode(AbstractContactMode):
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
 
+            # TODO: Remove this cost
             if self.cost_config.distance_to_object_quadratic is not None:
                 c = self.cost_config.distance_to_object_quadratic
                 for k in range(1, self.num_knot_points - 1):
@@ -364,26 +358,36 @@ class NonCollisionMode(AbstractContactMode):
                     self.contact_location.idx
                 )
                 for plane in planes:
-                    for p_BP in self.variables.p_BPs[1:-1]:
+                    for p_BP in self.variables.p_BPs:
                         # A = [a^T; 0]
                         NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
                         NUM_DIMS = 2
                         A = np.zeros((NUM_VARS, NUM_DIMS))
                         # We want:
-                        #   min k * (1 / (a^T x + b))
+                        #   min (c_1 / (1 + c_2 * phi)) where phi = a^T x + b
                         # which we formulate with
                         #   min z_1^2 + ... + z_n^2 / z_0
                         # where
-                        # z = Ax + b = [(1/k) * a^T x + b; 1]
-                        # A = [(1/k) * a^T; 0]
-                        A[0, :] = plane.a.T * (
-                            1 / self.cost_config.distance_to_object_socp
+                        # z = [(1/c_1) + (c_2/c_1) * phi; 1]
+                        assert self.config.contact_config.cost.time is not None
+                        c_1 = self.config.contact_config.cost.time * self.dt
+                        assert (
+                            self.config.non_collision_cost.distance_to_object_socp
+                            is not None
                         )
-                        # b = [(1/k) * b; 1]
-                        b = np.ones((NUM_VARS, 1))
-                        b[0] = plane.b * (1 / self.cost_config.distance_to_object_socp)
 
-                        # z = [a^T x + b; 1]
+                        c_2 = 1 / (
+                            self.config.non_collision_cost.distance_to_object_socp
+                            * self.dt
+                        )
+
+                        phi = (
+                            plane.dist_to(p_BP)
+                            - self.config.dynamics_config.pusher_radius
+                        )
+                        z = np.array([(1 / c_1) + (c_2 / c_1) * phi, 1])
+                        A, b = sym.DecomposeAffineExpressions(z, p_BP.flatten())  # type: ignore
+
                         cost = PerspectiveQuadraticCost(A, b)
                         binding = self.prog.AddCost(cost, p_BP)
                         self.distance_to_object_socp_costs.append(binding)
