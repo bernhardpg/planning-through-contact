@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field, fields
-from enum import Enum
 from functools import cached_property
 from typing import Literal, Optional, Tuple
 
@@ -176,18 +175,8 @@ class NonCollisionCost:
         return "\n".join(field_strings)
 
 
-class ContactCostType(Enum):
-    # TODO(bernhardpg): All these costs are experimental and will probably be removed
-    SQ_VELOCITIES = 0
-    KEYPOINT_DISPLACEMENTS = 1
-    OPTIMAL_CONTROL = 2
-    # TODO: Keep only this cost
-    STANDARD = 3
-
-
 @dataclass
 class ContactCost:
-    cost_type: ContactCostType = ContactCostType.STANDARD
     keypoint_arc_length: Optional[float] = None
     linear_arc_length: Optional[float] = None
     angular_arc_length: Optional[float] = None

@@ -32,13 +32,8 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     ContinuityVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.planning.planar.planar_plan_config import (
-    ContactCostType,
-    PlanarPlanConfig,
-    SliderPusherSystemConfig,
-)
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import (
     approx_exponential_map,
@@ -550,218 +545,137 @@ class FaceContactMode(AbstractContactMode):
             cost = self.prog_wrapper.add_independent_cost(total_contact_cost)
             self.costs["contact_time"].append(cost)
 
-        if cost_config.cost_type == ContactCostType.STANDARD:
-            # Arc length on keypoint trajectories
-            if cost_config.keypoint_arc_length is not None:
-                slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = self._get_slider_vertices(slider)
-                num_keypoints = len(slider.vertices)
-                for k in range(self.num_knot_points - 1):
-                    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                        vars = np.concatenate(
-                            [
-                                self.variables.p_WBs[k].flatten(),
-                                [self.variables.cos_ths[k], self.variables.sin_ths[k]],
-                                self.variables.p_WBs[k + 1].flatten(),
-                                [
-                                    self.variables.cos_ths[k + 1],
-                                    self.variables.sin_ths[k + 1],
-                                ],
-                            ]
-                        )
-                        distance = vertex_k_next - vertex_k
-                        cost_expr = (
-                            cost_config.keypoint_arc_length
-                            * (1 / num_keypoints)
-                            * distance
-                        )
-                        A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                        cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
-
-                        self.l2_norm_costs.append(cost)
-                        self.costs["keypoint_arc"].append(cost)
-
-            # Linear arc length
-            if cost_config.linear_arc_length is not None:
-                for k in range(self.num_knot_points - 1):
+        # Arc length on keypoint trajectories
+        if cost_config.keypoint_arc_length is not None:
+            slider = self.config.dynamics_config.slider.geometry
+            p_Wv_is = self._get_slider_vertices(slider)
+            num_keypoints = len(slider.vertices)
+            for k in range(self.num_knot_points - 1):
+                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
                     vars = np.concatenate(
                         [
                             self.variables.p_WBs[k].flatten(),
+                            [self.variables.cos_ths[k], self.variables.sin_ths[k]],
                             self.variables.p_WBs[k + 1].flatten(),
+                            [
+                                self.variables.cos_ths[k + 1],
+                                self.variables.sin_ths[k + 1],
+                            ],
                         ]
                     )
-                    distance = self.variables.p_WBs[k + 1] - self.variables.p_WBs[k]
-                    cost_expr = cost_config.linear_arc_length * distance
+                    distance = vertex_k_next - vertex_k
+                    cost_expr = (
+                        cost_config.keypoint_arc_length * (1 / num_keypoints) * distance
+                    )
                     A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
                     cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
 
                     self.l2_norm_costs.append(cost)
+                    self.costs["keypoint_arc"].append(cost)
 
-            # Angular arc length
-            if cost_config.angular_arc_length is not None:
-                for k in range(self.num_knot_points - 1):
-                    vars = np.array(
-                        [
-                            self.variables.cos_ths[k],
-                            self.variables.sin_ths[k],
-                            self.variables.cos_ths[k + 1],
-                            self.variables.sin_ths[k + 1],
-                        ]
-                    )
-                    r_k = np.array(
-                        [self.variables.cos_ths[k], self.variables.sin_ths[k]]
-                    )
-                    r_k_next = np.array(
-                        [self.variables.cos_ths[k + 1], self.variables.sin_ths[k + 1]]
-                    )
-                    distance = r_k_next - r_k
-                    cost_expr = cost_config.angular_arc_length * distance
-                    A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
-                    cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
+        # Linear arc length
+        if cost_config.linear_arc_length is not None:
+            for k in range(self.num_knot_points - 1):
+                vars = np.concatenate(
+                    [
+                        self.variables.p_WBs[k].flatten(),
+                        self.variables.p_WBs[k + 1].flatten(),
+                    ]
+                )
+                distance = self.variables.p_WBs[k + 1] - self.variables.p_WBs[k]
+                cost_expr = cost_config.linear_arc_length * distance
+                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
 
-                    self.l2_norm_costs.append(cost)
+                self.l2_norm_costs.append(cost)
 
-            # Contact force regularization
-            if cost_config.force_regularization is not None:
-                for k, c_n in enumerate(self.variables.normal_forces):
-                    cost = self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k,
-                        cost_config.force_regularization
-                        * self.variables.dt
-                        * c_n**2
-                        * self.dynamics_config.force_scale**2,
-                    )
-                    self.costs["force_reg"].append(cost)
+        # Angular arc length
+        if cost_config.angular_arc_length is not None:
+            for k in range(self.num_knot_points - 1):
+                vars = np.array(
+                    [
+                        self.variables.cos_ths[k],
+                        self.variables.sin_ths[k],
+                        self.variables.cos_ths[k + 1],
+                        self.variables.sin_ths[k + 1],
+                    ]
+                )
+                r_k = np.array([self.variables.cos_ths[k], self.variables.sin_ths[k]])
+                r_k_next = np.array(
+                    [self.variables.cos_ths[k + 1], self.variables.sin_ths[k + 1]]
+                )
+                distance = r_k_next - r_k
+                cost_expr = cost_config.angular_arc_length * distance
+                A, b = sym.DecomposeAffineExpressions(cost_expr, vars)
+                cost = self.prog_wrapper.add_l2_norm_cost(A, b, vars)
 
-                for k, c_f in enumerate(self.variables.friction_forces):
-                    cost = self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k,
-                        cost_config.force_regularization
-                        * self.variables.dt
-                        * c_f**2
-                        * self.dynamics_config.force_scale**2,
-                    )
-                    self.costs["force_reg"].append(cost)
+                self.l2_norm_costs.append(cost)
 
-            # Keypoint velocity regularization
-            if cost_config.keypoint_velocity_regularization is not None:
-                slider = self.config.dynamics_config.slider.geometry
-                p_Wv_is = self._get_slider_vertices(slider)
-                num_keypoints = len(slider.vertices)
-                for k in range(self.num_knot_points - 1):
-                    for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                        vel = (vertex_k_next - vertex_k) / self.variables.dt
-                        sq_vel = (vel.T @ vel).item()
-                        cost = self.prog_wrapper.add_quadratic_cost(
-                            k,
-                            k + 1,
-                            cost_config.keypoint_velocity_regularization
-                            * (1 / num_keypoints)
-                            * sq_vel,
-                        )
-                        self.costs["keypoint_reg"].append(cost)
+        # Contact force regularization
+        if cost_config.force_regularization is not None:
+            for k, c_n in enumerate(self.variables.normal_forces):
+                cost = self.prog_wrapper.add_quadratic_cost(
+                    k,
+                    k,
+                    cost_config.force_regularization
+                    * self.variables.dt
+                    * c_n**2
+                    * self.dynamics_config.force_scale**2,
+                )
+                self.costs["force_reg"].append(cost)
 
-            # Linear velocity regularization
-            if cost_config.lin_velocity_regularization is not None:
-                sq_linear_vels = [
-                    v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs
-                ]
-                for idx, term in enumerate(sq_linear_vels):
-                    cost = self.prog_wrapper.add_quadratic_cost(
-                        idx,
-                        idx + 1,
-                        cost_config.lin_velocity_regularization * term,
-                    )
-                    self.costs["translational_vel_reg"].append(cost)
+            for k, c_f in enumerate(self.variables.friction_forces):
+                cost = self.prog_wrapper.add_quadratic_cost(
+                    k,
+                    k,
+                    cost_config.force_regularization
+                    * self.variables.dt
+                    * c_f**2
+                    * self.dynamics_config.force_scale**2,
+                )
+                self.costs["force_reg"].append(cost)
 
-            # Angular velocity regularization
-            if cost_config.ang_velocity_regularization is not None:
-                for k, (delta_cos_th, delta_sin_th) in enumerate(
-                    zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
-                ):
+        # Keypoint velocity regularization
+        if cost_config.keypoint_velocity_regularization is not None:
+            slider = self.config.dynamics_config.slider.geometry
+            p_Wv_is = self._get_slider_vertices(slider)
+            num_keypoints = len(slider.vertices)
+            for k in range(self.num_knot_points - 1):
+                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
+                    vel = (vertex_k_next - vertex_k) / self.variables.dt
+                    sq_vel = (vel.T @ vel).item()
                     cost = self.prog_wrapper.add_quadratic_cost(
                         k,
                         k + 1,
-                        cost_config.ang_velocity_regularization
-                        * (delta_sin_th**2 + delta_cos_th**2),
+                        cost_config.keypoint_velocity_regularization
+                        * (1 / num_keypoints)
+                        * sq_vel,
                     )
-                    self.costs["angular_vel_reg"].append(cost)
+                    self.costs["keypoint_reg"].append(cost)
 
-        elif cost_config.cost_type == ContactCostType.SQ_VELOCITIES:
+        # Linear velocity regularization
+        if cost_config.lin_velocity_regularization is not None:
             sq_linear_vels = [v_WB.T.dot(v_WB).item() for v_WB in self.variables.v_WBs]
             for idx, term in enumerate(sq_linear_vels):
-                self.prog_wrapper.add_quadratic_cost(
+                cost = self.prog_wrapper.add_quadratic_cost(
                     idx,
                     idx + 1,
                     cost_config.lin_velocity_regularization * term,
                 )
-            # TODO(bernhardpg): Remove
-            if self.config.use_approx_exponential_map:
-                for k, th_dot in enumerate(self.variables.theta_dots):
-                    self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k,
-                        cost_config.ang_velocity_regularization * th_dot**2,
-                    )
-            else:
-                for k, (delta_cos_th, delta_sin_th) in enumerate(
-                    zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
-                ):
-                    self.prog_wrapper.add_quadratic_cost(
-                        k,
-                        k + 1,
-                        cost_config.ang_velocity_regularization
-                        * (delta_sin_th**2 + delta_cos_th**2),
-                    )
+                self.costs["translational_vel_reg"].append(cost)
 
-        elif cost_config.cost_type == ContactCostType.KEYPOINT_DISPLACEMENTS:
-            slider = self.config.dynamics_config.slider.geometry
-            p_Wv_is = self._get_slider_vertices(slider)
-            for k in range(self.num_knot_points - 1):
-                for vertex_k, vertex_k_next in zip(p_Wv_is[k], p_Wv_is[k + 1]):
-                    disp = vertex_k_next - vertex_k
-                    sq_vel = (disp.T @ disp).item()
-                    self.prog_wrapper.add_quadratic_cost(k, k + 1, sq_vel)
-
-        elif cost_config.cost_type == ContactCostType.OPTIMAL_CONTROL:
-            assert self.config.start_and_goal is not None
-            target_pose = self.config.start_and_goal.slider_target_pose
-
-            cos_th_target = np.cos(target_pose.theta)
-            sin_th_target = np.sin(target_pose.theta)
-            for k, (cos_th, sin_th) in enumerate(
-                zip(self.variables.cos_ths, self.variables.sin_ths)
+        # Angular velocity regularization
+        if cost_config.ang_velocity_regularization is not None:
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
             ):
-                cost = (cos_th - cos_th_target) ** 2 + (sin_th - sin_th_target) ** 2
-                self.prog_wrapper.add_quadratic_cost(k, k, cost)
-
-            p_WB_target = target_pose.pos()
-            for k, p_WB in enumerate(self.variables.p_WBs):
-                cost = ((p_WB - p_WB_target).T @ (p_WB - p_WB_target)).item()
-                self.prog_wrapper.add_quadratic_cost(k, k, cost)
-
-        # For the other costs we add force regularization here
-        # TODO(bernhardpg): This is messy and only kept this way because the other costs are
-        # experimental and will probably be removed
-        if (
-            not cost_config.cost_type == ContactCostType.STANDARD
-            and cost_config.force_regularization is not None
-        ):
-            for k, c_n in enumerate(self.variables.normal_forces):
-                self.prog_wrapper.add_quadratic_cost(
+                cost = self.prog_wrapper.add_quadratic_cost(
                     k,
-                    k,
-                    cost_config.force_regularization * c_n**2,
+                    k + 1,
+                    cost_config.ang_velocity_regularization
+                    * (delta_sin_th**2 + delta_cos_th**2),
                 )
-
-            for k, c_f in enumerate(self.variables.friction_forces):
-                self.prog_wrapper.add_quadratic_cost(
-                    k,
-                    k,
-                    cost_config.force_regularization * c_f**2,
-                )
+                self.costs["angular_vel_reg"].append(cost)
 
     def set_finger_pos(self, lam_target: float) -> None:
         """

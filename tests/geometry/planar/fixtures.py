@@ -36,7 +36,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
     ContactConfig,
     ContactCost,
-    ContactCostType,
     NonCollisionCost,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -68,7 +67,6 @@ def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
 def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
     non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
     contact_cost = ContactCost(
-        cost_type=ContactCostType.SQ_VELOCITIES,
         keypoint_arc_length=1,
         linear_arc_length=None,
         angular_arc_length=None,
@@ -148,10 +146,6 @@ def face_contact_mode(
 
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
-
-    plan_config.contact_config.cost.cost_type = request.param.get(
-        "contact_cost", ContactCostType.SQ_VELOCITIES
-    )
 
     face_idx = request.param.get("face_idx", 3)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)

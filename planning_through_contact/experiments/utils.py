@@ -14,7 +14,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
     ContactConfig,
     ContactCost,
-    ContactCostType,
     NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
@@ -68,7 +67,6 @@ def get_sugar_box() -> RigidBody:
 
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
-        cost_type=ContactCostType.STANDARD,
         keypoint_arc_length=10.0,
         linear_arc_length=None,
         angular_arc_length=None,
@@ -100,7 +98,6 @@ def get_hardware_contact_cost() -> ContactCost:
     limits etc.
     """
     contact_cost = ContactCost(
-        cost_type=ContactCostType.STANDARD,
         keypoint_arc_length=10.0,
         linear_arc_length=None,
         angular_arc_length=None,

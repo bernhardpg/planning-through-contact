@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 import pytest
 from pydrake.solvers import MosekSolver
 
@@ -8,10 +7,7 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.planar.face_contact import (
-    FaceContactMode,
-    FaceContactVariables,
-)
+from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -20,7 +16,6 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     ContactConfig,
     ContactCost,
-    ContactCostType,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -65,7 +60,7 @@ def test_planar_pushing_trajectory_values(
         friction_coeff_table_slider=0.5,
         integration_constant=0.7,
     )
-    contact_cost = ContactCost(cost_type=ContactCostType.KEYPOINT_DISPLACEMENTS)
+    contact_cost = ContactCost()
     contact_config = ContactConfig(contact_cost)
     plan_cfg = PlanarPlanConfig(
         dynamics_config=cfg,
