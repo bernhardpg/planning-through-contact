@@ -103,6 +103,17 @@ class SliderPusherSystemConfig:
         return (self.max_contact_radius * self.integration_constant) ** -2
 
 
+    def __eq__(self, other: "SliderPusherSystemConfig") -> bool:
+        return (
+            self.slider == other.slider
+            and self.pusher_radius == other.pusher_radius
+            and self.friction_coeff_table_slider == other.friction_coeff_table_slider
+            and self.friction_coeff_slider_pusher == other.friction_coeff_slider_pusher
+            and self.grav_acc == other.grav_acc
+            and self.integration_constant == other.integration_constant
+            and self.force_scale == other.force_scale
+        )
+
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20

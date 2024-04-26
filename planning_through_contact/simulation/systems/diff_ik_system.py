@@ -17,7 +17,8 @@ class DiffIKSystem(LeafSystem):
     """Solves inverse kinematics"""
 
     def __init__(
-            self, plant: MultibodyPlant,
+            self,
+            plant: MultibodyPlant,
             time_step: float,
             default_joint_positions: np.ndarray = None,
             log_path: str = None
@@ -56,7 +57,7 @@ class DiffIKSystem(LeafSystem):
         if diff_ik_result.status == DifferentialInverseKinematicsStatus.kSolutionFound:
             v = diff_ik_result.joint_velocities
             q = state[:self._plant.num_positions()] + v * self._time_step
-            self._consequitive_ik_fails = 0
+            self._consequtive_ik_fails = 0
             output.SetFromVector(q)
             return
         
@@ -64,13 +65,13 @@ class DiffIKSystem(LeafSystem):
         ik_result = self._attempt_to_solve_ik(rigid_transform, disregard_angle=False)
         if ik_result.is_success():
             output.SetFromVector(ik_result.GetSolution())
-            self._consequitive_ik_fails = 0
+            self._consequtive_ik_fails = 0
             return
 
         # Diff IK and optimization-based IK failed
-        self._consequitive_ik_fails += 1
-        if self._consequitive_ik_fails > self._max_consequtive_ik_fails:
-            self._max_consequtive_ik_fails = self._consequitive_ik_fails
+        self._consequtive_ik_fails += 1
+        if self._consequtive_ik_fails > self._max_consequtive_ik_fails:
+            self._max_consequtive_ik_fails = self._consequtive_ik_fails
             if self._log_path is not None:
                 with open(self._log_path, 'w') as f:
                     f.write(f"Max consequtive IK fails: {self._max_consequtive_ik_fails}")

@@ -27,6 +27,19 @@ class DiffusionPolicyConfig:
     device: str = 'cuda:0'
     cfg_overrides: dict = field(default_factory={})
 
+    def __eq__(self, other: "DiffusionPolicyConfig"):
+        return (
+            self.checkpoint == other.checkpoint
+            and self.initial_pusher_pose == other.initial_pusher_pose
+            and self.target_slider_pose == other.target_slider_pose
+            and self.diffusion_policy_path == other.diffusion_policy_path
+            and self.freq == other.freq
+            and self.delay == other.delay
+            and self.debug == other.debug
+            and self.device == other.device
+            and self.cfg_overrides == other.cfg_overrides
+        )
+
 class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
     """Uses the desired trajectory of the entire system and diffusion controller
     to generate desired positions for the robot."""

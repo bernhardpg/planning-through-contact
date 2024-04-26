@@ -8,10 +8,6 @@ data*
 temp
 *pdf
 diffusion_policy_logs/
-iiwa_tee_*
-
-# adam debug scripts
-scripts/adam
 
 # Vim
 *.swp

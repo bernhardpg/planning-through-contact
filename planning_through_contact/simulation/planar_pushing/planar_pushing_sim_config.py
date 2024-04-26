@@ -99,6 +99,25 @@ class MultiRunConfig:
         target_pose_str = f"target_slider_poses: {self.target_slider_poses}"
         return f"{slider_pose_str}\n{target_pose_str}\nmax_attempt_duration: {self.max_attempt_duration}"
 
+    def __eq__(self, other: "MultiRunConfig"):
+        if len(self.initial_slider_poses) != len(other.initial_slider_poses):
+            return False
+        for i in range(len(self.initial_slider_poses)):
+            if not self.initial_slider_poses[i] == other.initial_slider_poses[i]:
+                return False
+        if len(self.target_slider_poses) != len(other.target_slider_poses):
+            return False
+        for i in range(len(self.target_slider_poses)):
+            if not self.target_slider_poses[i] == other.target_slider_poses[i]:
+                return False
+        
+        return self.num_runs == other.num_runs and \
+            self.seed == other.seed and \
+            self.max_attempt_duration == other.max_attempt_duration and \
+            self.trans_tol == other.trans_tol and \
+            self.rot_tol == other.rot_tol and \
+            self.evaluate_final_pusher_position == other.evaluate_final_pusher_position and \
+            self.evaluate_final_slider_rotation == other.evaluate_final_slider_rotation
 
 @dataclass
 class PlanarPushingSimConfig:
@@ -223,3 +242,38 @@ class PlanarPushingSimConfig:
             sim_config.multi_run_config = hydra.utils.instantiate(cfg.multi_run_config)
 
         return sim_config
+    
+    def __eq__(self, other: "PlanarPushingSimConfig"):
+        # Note: this function does not check equality for MPC config
+
+        # Check camera configs
+        if self.camera_configs is None and other.camera_configs is not None:
+            return False
+        if self.camera_configs is not None and other.camera_configs is None:
+            return False
+        if self.camera_configs is not None:
+            for camera_config in self.camera_configs:
+                if camera_config not in other.camera_configs:
+                    return False
+
+        return (
+            self.slider == other.slider and
+            self.dynamics_config == other.dynamics_config and
+            self.contact_model == other.contact_model and
+            self.visualize_desired == other.visualize_desired and
+            self.slider_goal_pose == other.slider_goal_pose and
+            self.pusher_start_pose == other.pusher_start_pose and
+            self.time_step == other.time_step and
+            self.closed_loop == other.closed_loop and
+            self.draw_frames == other.draw_frames and
+            self.use_realtime == other.use_realtime and
+            self.delay_before_execution == other.delay_before_execution and
+            self.save_plots == other.save_plots and
+            self.scene_directive_name == other.scene_directive_name and
+            self.use_hardware == other.use_hardware and
+            self.pusher_z_offset == other.pusher_z_offset and
+            self.log_dir == other.log_dir and
+            np.allclose(self.default_joint_positions, other.default_joint_positions) and
+            self.diffusion_policy_config == other.diffusion_policy_config and
+            self.multi_run_config == other.multi_run_config
+        )
