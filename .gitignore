@@ -8,6 +8,7 @@ data*
 temp
 *pdf
 diffusion_policy_logs/
+scripts/adam
 
 # Vim
 *.swp
