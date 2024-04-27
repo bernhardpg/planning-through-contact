@@ -12,6 +12,7 @@ from pydrake.solvers import (
 from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
     BandSparseSemidefiniteRelaxation,
 )
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -36,7 +37,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
     ContactConfig,
     ContactCost,
-    ContactCostType,
     NonCollisionCost,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
@@ -59,33 +59,8 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
 
 
 @pytest.fixture
-def dynamics_config(rigid_body_box: RigidBody) -> SliderPusherSystemConfig:
-    cfg = SliderPusherSystemConfig(slider=rigid_body_box, pusher_radius=0.0)
-    return cfg
-
-
-@pytest.fixture
-def plan_config(dynamics_config: SliderPusherSystemConfig) -> PlanarPlanConfig:
-    non_collision_cost = NonCollisionCost(pusher_velocity_regularization=1.0)
-    contact_cost = ContactCost(
-        cost_type=ContactCostType.SQ_VELOCITIES,
-        keypoint_arc_length=1,
-        linear_arc_length=None,
-        angular_arc_length=None,
-        force_regularization=0.1,
-        keypoint_velocity_regularization=None,
-        ang_velocity_regularization=1.0,
-        lin_velocity_regularization=0.1,
-        trace=None,
-    )
-    contact_config = ContactConfig(contact_cost)
-    cfg = PlanarPlanConfig(
-        dynamics_config=dynamics_config,
-        use_approx_exponential_map=False,
-        use_band_sparsity=False,
-        non_collision_cost=non_collision_cost,
-        contact_config=contact_config,
-    )
+def plan_config() -> PlanarPlanConfig:
+    cfg = get_default_plan_config()
     return cfg
 
 
@@ -149,10 +124,6 @@ def face_contact_mode(
     if request.param.get("body") == "t_pusher":
         plan_config.dynamics_config.slider = t_pusher
 
-    plan_config.contact_config.cost.cost_type = request.param.get(
-        "contact_cost", ContactCostType.SQ_VELOCITIES
-    )
-
     face_idx = request.param.get("face_idx", 3)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)
 
@@ -187,17 +158,10 @@ def subgraph(
     num_knot_points = 4 if request.param["avoid_object"] else 2
     plan_config.num_knot_points_non_collision = num_knot_points
 
-    if request.param.get("eucl_distance_cost"):
-        plan_config.non_collision_cost = NonCollisionCost(pusher_arc_length=1.0)
-    else:
-        plan_config.non_collision_cost = NonCollisionCost(
-            pusher_velocity_regularization=1.0
-        )
     if request.param.get("avoid_object"):
-        if request.param.get("avoidance_cost_type", "quadratic"):
-            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
-        else:
-            plan_config.non_collision_cost.distance_to_object_socp = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
+    else:
+        plan_config.non_collision_cost.distance_to_object_socp = None
 
     plan_config.continuity_on_pusher_velocity = request.param.get(
         "pusher_velocity_continuity", False
@@ -240,17 +204,13 @@ def planner(
 
     if request.param.get("avoid_object"):
         plan_config.num_knot_points_non_collision = 4
-        if request.param.get("avoidance_cost_type", "quadratic"):
-            plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
-        else:
-            plan_config.non_collision_cost.distance_to_object_socp = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.dynamics_config.pusher_radius = 0.015
 
     plan_config.contact_config = request.param.get(
         "contact_config", plan_config.contact_config
     )
-    plan_config.use_band_sparsity = request.param.get("use_band_sparsity", False)
 
     plan_config.allow_teleportation = request.param.get("allow_teleportation", False)
     plan_config.use_eq_elimination = request.param.get("use_eq_elimination", False)

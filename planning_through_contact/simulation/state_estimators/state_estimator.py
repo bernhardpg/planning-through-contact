@@ -157,34 +157,36 @@ class StateEstimator(Diagram):
                 self._plant_updater.get_state_output_port(model_instance),
                 f"{model_instance_name}_state",
             )
+        if self.meshcat and sim_config.visualize_desired:
+            visualizer = MeshcatVisualizer.AddToBuilder(
+                builder, self._scene_graph.get_query_output_port(), self.meshcat
+            )
 
-        visualizer = MeshcatVisualizer.AddToBuilder(
-            builder, self._scene_graph.get_query_output_port(), self.meshcat
-        )
-        zoom = 1.8
-        camera_in_world = [sim_config.slider_goal_pose.x, 
-                           (sim_config.slider_goal_pose.y-1)/zoom,
-                           1.5/zoom]
-        target_in_world = [sim_config.slider_goal_pose.x, sim_config.slider_goal_pose.x, 0]
-        self.meshcat.SetCameraPose(camera_in_world, target_in_world)
+            # Set up meshcat camera view
+            zoom = 1.8
+            camera_in_world = [sim_config.slider_goal_pose.x, 
+                            (sim_config.slider_goal_pose.y-1)/zoom,
+                            1.5/zoom]
+            target_in_world = [sim_config.slider_goal_pose.x, sim_config.slider_goal_pose.x, 0]
+            self.meshcat.SetCameraPose(camera_in_world, target_in_world)
 
-        if sim_config.visualize_desired:
             assert sim_config.slider_goal_pose is not None
             self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
-        if sim_config.draw_frames:
-            for frame_name in [
-                # "iiwa_link_7",
-                # "pusher_base",
-                # "t_pusher",
-                "pusher_end",
-            ]:
-                AddMultibodyTriad(
-                    self._plant.GetFrameByName(frame_name),
-                    self._scene_graph,
-                    length=0.1,
-                    radius=0.001,
-                )
+            if sim_config.draw_frames:
+                print(f"Drawing frames")
+                for frame_name in [
+                    # "iiwa_link_7",
+                    # "pusher_base",
+                    # "t_pusher",
+                    "pusher_end",
+                ]:
+                    AddMultibodyTriad(
+                        self._plant.GetFrameByName(frame_name),
+                        self._scene_graph,
+                        length=0.1,
+                        radius=0.001,
+                    )
 
         builder.BuildInto(self)
 

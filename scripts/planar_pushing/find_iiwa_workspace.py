@@ -42,12 +42,14 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
     )
     robot_plant = LoadRobotOnly(sim_config, "iiwa_controller_plant.yaml")
     step = 0.05
-    for z in [0.1, 0.2, 0.3, 0.4]:
+    x_lim = [0, 1.2]
+    y_lim = [-1, 1]
+    for z in [0.03]:  # [0.03, 0.1, 0.2, 0.3]
         pass_coords = []
         fail_coords = []
         plt.figure()
-        for x in np.arange(0, 1.3, step):
-            for y in np.arange(-1, 1, step):
+        for x in np.arange(x_lim[0], x_lim[1], step):
+            for y in np.arange(y_lim[0], y_lim[1], step):
                 pusher_start_pose = PlanarPose(x, y, 0)
 
                 try:
@@ -73,8 +75,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
         # Make axes equal length
         plt.axis("scaled")
         # Add grid and labels every 0.1
-        plt.xticks(np.arange(0, 1, 0.1))
-        plt.yticks(np.arange(-1, 1, 0.1))
+        plt.xticks(np.arange(x_lim[0], x_lim[1], 0.1))
+        plt.yticks(np.arange(y_lim[0], y_lim[1], 0.1))
         # Set the figure size
         plt.gcf().set_size_inches(10, 10)
         plt.grid()
@@ -87,4 +89,8 @@ def run_sim(plan: str, save_recording: bool = False, debug: bool = False):
 
 
 if __name__ == "__main__":
-    run_sim(plan="trajectories/box_pushing_513.pkl", save_recording=True, debug=True)
+    run_sim(
+        plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
+        save_recording=True,
+        debug=True,
+    )

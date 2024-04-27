@@ -4,7 +4,6 @@ from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
 import pydot
 import pydrake.geometry.optimization as opt
-from pydrake.geometry.optimization import Point
 from pydrake.solvers import (
     ClarabelSolver,
     CommonSolverOption,
@@ -17,7 +16,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
 from planning_through_contact.geometry.planar.non_collision_subgraph import (
@@ -29,13 +27,7 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    PlanarPushingTrajectory,
-)
-from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
-    ContactCostType,
     PlanarPlanConfig,
     PlanarSolverParams,
 )
@@ -125,21 +117,21 @@ class PlanarPushingPlanner:
         self.edges = {}
         if self.config.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
-                self.edges[
-                    (self.contact_modes[i].name, self.contact_modes[j].name)
-                ] = gcs_add_edge_with_continuity(
-                    self.gcs,
-                    VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
-                    VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
-                    only_continuity_on_slider=True,
+                self.edges[(self.contact_modes[i].name, self.contact_modes[j].name)] = (
+                    gcs_add_edge_with_continuity(
+                        self.gcs,
+                        VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
+                        VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
+                        only_continuity_on_slider=True,
+                    )
                 )
-                self.edges[
-                    (self.contact_modes[j].name, self.contact_modes[i].name)
-                ] = gcs_add_edge_with_continuity(
-                    self.gcs,
-                    VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
-                    VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
-                    only_continuity_on_slider=True,
+                self.edges[(self.contact_modes[j].name, self.contact_modes[i].name)] = (
+                    gcs_add_edge_with_continuity(
+                        self.gcs,
+                        VertexModePair(self.contact_vertices[j], self.contact_modes[j]),
+                        VertexModePair(self.contact_vertices[i], self.contact_modes[i]),
+                        only_continuity_on_slider=True,
+                    )
                 )
         else:
             # connect contact modes through NonCollisionSubGraphs
@@ -298,18 +290,8 @@ class PlanarPushingPlanner:
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
     ) -> VertexModePair:
-        if (
-            initial_or_final == "final"
-            and self.config.contact_config.cost.cost_type
-            == ContactCostType.OPTIMAL_CONTROL
-        ):  # we don't enforce target position for slider with this cost
-            # set_slider_pose = False
-            # terminal_cost = True
-            set_slider_pose = True
-            terminal_cost = False
-        else:
-            set_slider_pose = True
-            terminal_cost = False
+        set_slider_pose = True
+        terminal_cost = False
 
         mode = NonCollisionMode.create_source_or_target_mode(
             self.config,
@@ -331,25 +313,25 @@ class PlanarPushingPlanner:
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                self.edges[
-                    ("source", contact_mode.name)
-                ] = gcs_add_edge_with_continuity(
-                    self.gcs,
-                    pair,
-                    VertexModePair(contact_vertex, contact_mode),
-                    only_continuity_on_slider=True,
+                self.edges[("source", contact_mode.name)] = (
+                    gcs_add_edge_with_continuity(
+                        self.gcs,
+                        pair,
+                        VertexModePair(contact_vertex, contact_mode),
+                        only_continuity_on_slider=True,
+                    )
                 )
         else:  # contact modes to target
             for contact_vertex, contact_mode in zip(
                 self.contact_vertices, self.contact_modes
             ):
-                self.edges[
-                    (contact_mode.name, "target")
-                ] = gcs_add_edge_with_continuity(
-                    self.gcs,
-                    VertexModePair(contact_vertex, contact_mode),
-                    pair,
-                    only_continuity_on_slider=True,
+                self.edges[(contact_mode.name, "target")] = (
+                    gcs_add_edge_with_continuity(
+                        self.gcs,
+                        VertexModePair(contact_vertex, contact_mode),
+                        pair,
+                        only_continuity_on_slider=True,
+                    )
                 )
 
         return pair

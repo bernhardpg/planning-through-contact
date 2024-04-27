@@ -44,7 +44,6 @@ from planning_through_contact.visualize.planar_pushing import (
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     face_contact_mode,
     plan_config,
     rigid_body_box,

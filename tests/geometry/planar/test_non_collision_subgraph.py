@@ -3,7 +3,12 @@ from pathlib import Path
 import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
-from pydrake.solvers import LinearCost, MosekSolver, QuadraticCost
+from pydrake.solvers import (
+    L2NormCost,
+    MosekSolver,
+    PerspectiveQuadraticCost,
+    QuadraticCost,
+)
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -23,28 +28,19 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    PlanarPushingTrajectory,
-)
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
-    PlanarSolverParams,
 )
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
-    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     gcs_options,
     plan_config,
     rigid_body_box,
@@ -52,7 +48,6 @@ from tests.geometry.planar.fixtures import (
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
-    assert_initial_and_final_poses_LEGACY,
     assert_object_is_avoided,
 )
 
@@ -77,40 +72,28 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
     for edge in subgraph.gcs.Edges():
         assert len(edge.GetConstraints()) == num_continuity_variables
 
-    if (
-        subgraph.config.non_collision_cost.avoid_object
-        and subgraph.config.non_collision_cost.distance_to_object_quadratic is not None
-    ):
-        # Check costs are correctly added to GCS instance
-        for v in subgraph.gcs.Vertices():
-            if v.name() in ("source", "target"):
-                continue
+    # Check costs are correctly added to GCS instance
+    for v in subgraph.gcs.Vertices():
+        if v.name() in ("source", "target"):
+            continue
 
-            costs = v.GetCosts()
-            assert len(costs) == 2
+        costs = v.GetCosts()
+        assert len(costs) == len(subgraph.non_collision_modes[0].prog.GetAllCosts())
 
-            # eucl distance cost
-            assert isinstance(costs[0].evaluator(), QuadraticCost)
+        # pusher vel reg
+        assert isinstance(costs[0].evaluator(), QuadraticCost)
 
-            # maximize distance cost
-            assert isinstance(costs[1].evaluator(), QuadraticCost)
+        # pusher arc length
+        for i in range(1, 1 + subgraph.config.num_knot_points_non_collision - 1):
+            assert isinstance(costs[i].evaluator(), L2NormCost)
 
-    else:
-        for vertex in subgraph.gcs.Vertices():
-            # Squared eucl distance
-            costs = vertex.GetCosts()
-            assert len(costs) == 1
-
-            # p_BF for each knot point should be in the cost
-            cost = costs[0]
-            NUM_DIMS = 2
-            assert (
-                len(cost.variables())
-                == subgraph.config.num_knot_points_non_collision * NUM_DIMS
-            )
-
-            # Squared eucl distance
-            assert isinstance(cost.evaluator(), QuadraticCost)
+        # Stay away from object
+        if subgraph.config.non_collision_cost.avoid_object:
+            start_idx = 1 + subgraph.config.num_knot_points_non_collision - 1
+            end_idx = len(costs)
+            for i in range(start_idx, end_idx):
+                # maximize distance cost
+                assert isinstance(costs[i].evaluator(), PerspectiveQuadraticCost)
 
 
 @pytest.mark.parametrize(
@@ -415,7 +398,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
         pusher_velocity_regularization=1.0
     )
     if avoid_object:
-        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
 
     plan_config.num_knot_points_non_collision = 4
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
@@ -510,7 +493,8 @@ def test_subgraph_contact_modes_t_pusher(
         pusher_velocity_regularization=1.0
     )
     if avoid_object:
-        plan_config.non_collision_cost.distance_to_object_quadratic = 1.0
+        plan_config.non_collision_cost.distance_to_object_socp = 1.0
+
     plan_config.num_knot_points_non_collision = 4
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
     plan_config.dynamics_config.pusher_radius = 0.015

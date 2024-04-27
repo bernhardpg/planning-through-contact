@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field, fields
-from enum import Enum
 from functools import cached_property
 from typing import Literal, Optional, Tuple
 
@@ -117,8 +116,12 @@ class SliderPusherSystemConfig:
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20
-    max_rounding_trials: int = 10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
-    gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
+    max_rounding_trials: int = (
+        10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
+    )
+    gcs_convex_relaxation: bool = (
+        True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
+    )
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
@@ -141,6 +144,7 @@ class PlanarSolverParams:
         1e-4  # Feasibility treshold for nonlinear rounding
     )
     nonl_round_opt_tol: float = 1e-4  # Optimality treshold for nonlinear rounding
+    nonl_rounding_save_solver_output: bool = False
     # nonl_round_major_feas_tol: float = (
     #     1e-6  # Feasibility treshold for nonlinear rounding
     # )
@@ -155,20 +159,20 @@ class PlanarSolverParams:
 
 @dataclass
 class NonCollisionCost:
-    distance_to_object_quadratic_preferred_distance: float = 0.2  # TODO: Remove
-    distance_to_object_quadratic: Optional[float] = None
     distance_to_object_socp: Optional[float] = None
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
+    pusher_velocity_constraint: Optional[float] = (
+        None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
+    )
     pusher_arc_length: Optional[float] = None
     time: Optional[float] = None
 
     @property
     def avoid_object(self) -> bool:
         return (
-            self.distance_to_object_quadratic is not None
-            or self.distance_to_object_socp is not None
+            self.distance_to_object_socp is not None
             or self.distance_to_object_socp_single_mode is not None
         )
 
@@ -179,25 +183,11 @@ class NonCollisionCost:
         return "\n".join(field_strings)
 
 
-class ContactCostType(Enum):
-    # TODO(bernhardpg): All these costs are experimental and will probably be removed
-    SQ_VELOCITIES = 0
-    KEYPOINT_DISPLACEMENTS = 1
-    OPTIMAL_CONTROL = 2
-    # TODO: Keep only this cost
-    STANDARD = 3
-
-
 @dataclass
 class ContactCost:
-    cost_type: ContactCostType = ContactCostType.STANDARD
     keypoint_arc_length: Optional[float] = None
-    linear_arc_length: Optional[float] = None
-    angular_arc_length: Optional[float] = None
     force_regularization: Optional[float] = None
     keypoint_velocity_regularization: Optional[float] = None
-    ang_velocity_regularization: Optional[float] = None
-    lin_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
     trace: Optional[float] = None
     time: Optional[float] = None
@@ -216,8 +206,9 @@ class ContactConfig:
     # Min and max values for the scaled position of the finger on the face of the slider
     lam_min: Optional[float] = 0.0
     lam_max: Optional[float] = 1.0
-    delta_theta_max: Optional[float] = None
-    delta_vel_max: Optional[float] = None
+    slider_rot_velocity_constraint: Optional[float] = None
+    slider_velocity_constraint: Optional[float] = None
+    keypoint_velocity_constraint: Optional[float] = None
 
     def __str__(self) -> str:
         field_strings = [
@@ -278,6 +269,14 @@ class PlanarPlanConfig:
     )
     contact_config: ContactConfig = field(default_factory=lambda: ContactConfig())
     use_approx_exponential_map: bool = False
+
+    @property
+    def dt_contact(self) -> float:
+        return self.time_in_contact / self.num_knot_points_contact
+
+    @property
+    def dt_non_collision(self) -> float:
+        return self.time_non_collision / self.num_knot_points_non_collision
 
     @property
     def slider_geometry(self) -> CollisionGeometry:

@@ -72,7 +72,7 @@ def run_sim(
         time_step=1e-3,
         use_realtime=True,
         delay_before_execution=1,
-        closed_loop=True,
+        closed_loop=False,
         mpc_config=mpc_config,
         dynamics_config=traj.config.dynamics_config,
         save_plots=True,
@@ -105,6 +105,7 @@ def run_sim(
         sim_config=sim_config,
         station_meshcat=station_meshcat,
         state_estimator_meshcat=state_estimator_meshcat,
+        optitrack_config=None,
     )
     recording_name = (
         plan.split(".")[0] + f"_actuated_cylinder_cl{sim_config.closed_loop}" + ".html"
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     # run_multiple(0, 9, station_meshcat=station_meshcat, state_estimator_meshcat=state_estimator_meshcat)
     run_sim(
         # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/hw_demos_20240124130732_tee_lam_buff_04/hw_demo_0/trajectory/traj_rounded.pkl",
+        plan="trajectories/hw_demos_20240129115732_tee/hw_demo_0/trajectory/traj_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

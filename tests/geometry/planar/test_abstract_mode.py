@@ -2,9 +2,8 @@ from pathlib import Path
 
 import numpy as np
 import pydrake.geometry.optimization as opt
-import pytest
-from pydrake.solvers import CommonSolverOption, SolverOptions
 
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
@@ -19,45 +18,28 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_path import (
     PlanarPushingPath,
 )
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    PlanarPushingTrajectory,
-)
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     SliderPusherSystemConfig,
 )
-from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
-    visualize_planar_pushing_trajectory_legacy,
 )
 from tests.geometry.planar.fixtures import (
     box_geometry,
-    dynamics_config,
     gcs_options,
     plan_config,
     rigid_body_box,
 )
-from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
-    assert_initial_and_final_poses_LEGACY,
-)
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 DEBUG = False
 
 
-def test_add_continuity_constraints_between_non_collision_modes(
-    dynamics_config: SliderPusherSystemConfig,
-) -> None:
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=2, dynamics_config=dynamics_config
-    )
+def test_add_continuity_constraints_between_non_collision_modes() -> None:
+    config = get_default_plan_config()
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
@@ -126,17 +108,12 @@ def test_add_continuity_constraints_between_non_collision_modes(
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
         visualize_planar_pushing_trajectory(
-            traj, visualize_knot_points=True, save=True, filename="debug_file"
+            traj, visualize_knot_points=True, save=True, filename="debug_file_non_coll"
         )
 
 
-def test_add_velocity_constraints_between_non_collision_modes(
-    dynamics_config: SliderPusherSystemConfig,
-) -> None:
-    # We need at least 3 knot points for this to work
-    config = PlanarPlanConfig(
-        num_knot_points_non_collision=3, dynamics_config=dynamics_config
-    )
+def test_add_velocity_constraints_between_non_collision_modes() -> None:
+    config = get_default_plan_config()
 
     contact_location_start = PolytopeContactLocation(ContactLocation.FACE, 3)
     contact_location_end = PolytopeContactLocation(ContactLocation.FACE, 0)
@@ -207,7 +184,10 @@ def test_add_velocity_constraints_between_non_collision_modes(
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
         visualize_planar_pushing_trajectory(
-            traj, visualize_knot_points=True, save=True, filename="debug_file"
+            traj,
+            visualize_knot_points=True,
+            save=True,
+            filename="debug_file_vel_consts",
         )
 
 
@@ -270,5 +250,8 @@ def test_add_continuity_between_non_coll_and_face_contact(
         save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
         save_gcs_graph_diagram(gcs, Path("test_continuity_result.svg"), result)
         visualize_planar_pushing_trajectory(
-            traj, visualize_knot_points=True, save=True, filename="debug_file"
+            traj,
+            visualize_knot_points=True,
+            save=True,
+            filename="debug_file_non_coll_face",
         )

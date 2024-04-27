@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -17,7 +17,7 @@ from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
 )
-from planning_through_contact.geometry.utilities import normalize_vec
+from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class TPusher2d(CollisionGeometry):
         |    |
         |____|
 
-    Origin is placed at the center of box 1.
+    Origin is placed at com_offset from the origin of box_1.
 
     """
 
@@ -153,25 +153,33 @@ class TPusher2d(CollisionGeometry):
         ]
         return locs
 
+    def get_contact_plane_idxs(self, idx: int) -> List[int]:
+        """
+        Gets the contact face idxs for each collision-free set.
+        This function is hand designed for the object geometry.
+        """
+        if idx == 0:
+            return [0]
+        elif idx == 1:
+            return [1]
+        elif idx == 2:
+            return [2, 3]
+        elif idx == 3:
+            return [4]
+        elif idx == 4:
+            return [5, 6]
+        elif idx == 5:
+            return [7]
+        else:
+            raise ValueError(f"No collision-free region for idx {idx}")
+
     def get_contact_planes(self, idx: int) -> List[Hyperplane]:
         """
         Gets the contact faces for each collision-free set.
         This function is hand designed for the object geometry.
         """
-        if idx == 0:
-            return [self.faces[0]]
-        elif idx == 1:
-            return [self.faces[1]]
-        elif idx == 2:
-            return [self.faces[2], self.faces[3]]
-        elif idx == 3:
-            return [self.faces[4]]
-        elif idx == 4:
-            return [self.faces[5], self.faces[6]]
-        elif idx == 5:
-            return [self.faces[7]]
-        else:
-            raise ValueError(f"No collision-free region for idx {idx}")
+        face_idxs = self.get_contact_plane_idxs(idx)
+        return [self.faces[face_idx] for face_idx in face_idxs]
 
     @property
     def num_collision_free_regions(self) -> int:
@@ -251,7 +259,7 @@ class TPusher2d(CollisionGeometry):
         else:
             raise NotImplementedError(f"Face {idx} not supported")
 
-    # TODO: All of the following code is copied straight from equilateralpolytope and should be unified!
+    # TODO: Much of the following code is copied straight from equilateralpolytope and should be unified!
 
     @property
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
@@ -401,3 +409,97 @@ class TPusher2d(CollisionGeometry):
                 return [self.faces[7]]
             else:
                 raise NotImplementedError("Currently only face 0 is supported")
+
+    def get_contact_jacobian(self, pos: npt.NDArray) -> npt.NDArray[Any]:
+        """
+        Returns the contact jacobian for the point that is closest to the box.
+        If the closest point is on a corner, one of the corner faces is picked
+        arbitrarily (but deterministically).
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        def _make_jacobian(
+            normal_vec: npt.NDArray[np.float64],
+            tangent_vec: npt.NDArray[np.float64],
+            pos: npt.NDArray[Any],
+        ) -> npt.NDArray[Any]:
+            col_1 = np.vstack((normal_vec, cross_2d(pos, normal_vec)))
+            col_2 = np.vstack((tangent_vec, cross_2d(pos, tangent_vec)))
+            J_T = np.hstack([col_1, col_2])
+            return J_T.T
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        for face_idx in range(len(self.faces)):
+            region_idx = self.get_collision_free_region_for_loc_idx(face_idx)
+            planes = self.get_planes_for_collision_free_region(region_idx)
+            planes.extend(self.get_contact_planes(region_idx))
+            if np.all([plane.dist_to(pos) >= 0 for plane in planes]):
+                # Concave corner requires more careful handling, as we don't know which face is
+                # the closest
+                if region_idx in [2, 4]:
+                    face_idxs_for_region = self.get_contact_plane_idxs(region_idx)
+                    faces_for_region = [self.faces[idx] for idx in face_idxs_for_region]
+                    closest_face_idx = face_idxs_for_region[
+                        np.argmin([f.dist_to(pos) for f in faces_for_region])
+                    ]
+                    return _make_jacobian(
+                        self.normal_vecs[closest_face_idx],
+                        self.tangent_vecs[closest_face_idx],
+                        pos,
+                    )
+                else:
+                    return _make_jacobian(
+                        self.normal_vecs[face_idx], self.tangent_vecs[face_idx], pos
+                    )
+
+        # inside box we just return zero
+        return np.zeros((2, 3))
+
+        # raise RuntimeError(f"Position {pos} is not inside any region for the Tee.")
+
+    def get_signed_distance(self, pos: npt.NDArray) -> float:
+        """
+        Returns the signed distance from the pos to the closest point on the box.
+
+        @param pos: position relative to the COM of the box.
+        """
+
+        if len(pos.shape) == 1:
+            pos = pos.reshape((-1, 1))
+
+        for face_idx in range(len(self.faces)):
+            region_idx = self.get_collision_free_region_for_loc_idx(face_idx)
+            planes = self.get_planes_for_collision_free_region(region_idx)
+            planes.extend(self.get_contact_planes(region_idx))
+            if np.all([plane.dist_to(pos) >= 0 for plane in planes]):
+                # Concave corner requires more careful handling, as we don't know which face is
+                # the closest
+                if region_idx in [2, 4]:
+                    face_idxs_for_region = self.get_contact_plane_idxs(region_idx)
+                    faces_for_region = [self.faces[idx] for idx in face_idxs_for_region]
+                    return np.min([f.dist_to(pos) for f in faces_for_region])
+                else:
+                    return self.faces[face_idx].dist_to(pos)
+
+        # we must be inside the box
+        dists = [f.dist_to(pos) for f in self.faces]
+
+        if dists[2] >= 0:  # we are inside box_2
+            box_1_dists = [f.dist_to(pos) for f in self.box_1.faces]
+            if not np.all(box_1_dists):
+                raise RuntimeError(
+                    "Finger is inside of box 1, but not all sdfs are negative. This must be a bug!"
+                )
+            # we return the least penetration
+            return np.max(box_1_dists)
+        else:  # we are inside box_1
+            box_2_dists = [f.dist_to(pos) for f in self.box_2.faces]
+            if not np.all(box_2_dists):
+                raise RuntimeError(
+                    "Finger is inside of box 2, but not all sdfs are negative. This must be a bug!"
+                )
+            # we return the least penetration
+            return np.max(box_2_dists)

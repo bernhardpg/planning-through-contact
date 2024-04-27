@@ -34,12 +34,14 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     FaceContactTrajSegment,
     NonCollisionTrajSegment,
     PlanarPushingTrajectory,
+    SimplePlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.planar.trajectory_builder import (
     OldPlanarPushingTrajectory,
 )
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPlanConfig,
     PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.colors import (
@@ -553,6 +555,208 @@ def plot_forces(
         plt.show()
 
 
+def plot_simple_traj(
+    traj: SimplePlanarPushingTrajectory,
+    filename: Optional[str] = None,
+    plot_lims: Optional[Tuple[float, float, float, float]] = None,
+    start_end_legend: bool = False,
+    slider_color: Optional[Any] = None,
+    keyframe_times: Optional[List[float]] = None,
+    times_for_keyframes: Optional[list[int]] = None,
+    num_keyframes: int = 5,
+    num_times_per_keyframe: int = 5,
+    label: Optional[str] = None,
+) -> None:
+    # Ensure a type 1 font is used
+    plt.rcParams["font.family"] = "Times"
+    plt.rcParams["ps.useafm"] = True
+    plt.rcParams["pdf.use14corefonts"] = True
+    plt.rcParams["text.usetex"] = False
+    # NOTE(bernhardpg): This function is a mess!
+    # We need to add the first vertex again to close the polytope
+    vertices = np.hstack(
+        traj.config.slider_geometry.vertices + [traj.config.slider_geometry.vertices[0]]
+    )
+
+    get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
+
+    if slider_color is None:
+        slider_color = COLORS["aquamarine4"].diffuse()
+
+    PUSHER_COLOR = COLORS["firebrick3"].diffuse()
+    # PUSHER_COLOR = CADMIUMORANGE.diffuse()
+
+    LINE_COLOR = BLACK.diffuse()
+
+    GOAL_COLOR = EMERALDGREEN.diffuse()
+    GOAL_TRANSPARENCY = 1.0
+
+    START_COLOR = CRIMSON.diffuse()
+    START_TRANSPARENCY = 1.0
+
+    if keyframe_times is None:
+        keyframe_times = np.linspace(traj.start_time, traj.end_time, num_keyframes + 1)  # type: ignore
+
+    assert keyframe_times is not None
+
+    fig_height = 4
+    fig, axs = plt.subplots(
+        1, num_keyframes, figsize=(fig_height * num_keyframes, fig_height)
+    )
+
+    if plot_lims is not None:
+        x_min, x_max, y_min, y_max = plot_lims
+    else:
+        x_min, x_max, y_min, y_max = traj.get_pos_limits(buffer=0.12)
+
+    for keyframe_idx, (keyframe_t_curr, keyframe_t_next) in enumerate(
+        zip(keyframe_times[:-1], keyframe_times[1:])
+    ):
+        if times_for_keyframes is not None:
+            num_times_per_keyframe = times_for_keyframes[keyframe_idx]
+
+        times = np.linspace(keyframe_t_curr, keyframe_t_next, num_times_per_keyframe)  # type: ignore
+
+        ax = axs[keyframe_idx]
+
+        ax.axis("equal")  # Ensures the x and y axis are scaled equally
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        # Hide the axes, including the spines, ticks, labels, and title
+        ax.set_axis_off()
+
+        frame_count = 0
+
+        make_circle = lambda p_WP, fill_transparency: plt.Circle(
+            p_WP.flatten(),
+            traj.config.pusher_radius,  # type: ignore
+            edgecolor=LINE_COLOR,
+            facecolor=PUSHER_COLOR,
+            linewidth=1,
+            alpha=fill_transparency,
+            zorder=99,
+        )
+
+        start_transparency = 0.3
+        end_transparency = 1.0
+        get_transp_for_frame = (
+            lambda idx, num_points: (end_transparency - start_transparency)
+            * idx
+            / num_points
+            + start_transparency
+        )
+
+        for t in times:
+            p_WP = traj.get_value(t, "p_WP")
+            num_frames_in_keyframe = len(times)
+            transparency = get_transp_for_frame(frame_count, num_frames_in_keyframe)
+            if transparency > 1:
+                breakpoint()
+            ax.add_patch(make_circle(p_WP, transparency))
+
+            # get the constant slider pose
+            R_WB = traj.get_value(t, "R_WB")[:2, :2]  # 2x2 matrix
+            p_WB = traj.get_value(t, "p_WB")
+
+            # Plot polytope
+            vertices_W = get_vertices_W(p_WB, R_WB)
+            ax.plot(
+                vertices_W[0, :],
+                vertices_W[1, :],
+                color=LINE_COLOR,
+                alpha=transparency,
+                linewidth=1,
+            )
+            ax.fill(
+                vertices_W[0, :],
+                vertices_W[1, :],
+                alpha=transparency,
+                color=slider_color,
+            )
+
+            frame_count += 1
+
+        # Plot start pos
+        slider_initial_pose = traj.config.start_and_goal.slider_initial_pose  # type: ignore
+        p_WB = slider_initial_pose.pos()
+        R_WB = slider_initial_pose.two_d_rot_matrix()
+        goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        start_goal_width = 1.5
+        ax.plot(
+            goal_vertices_W[0, :],
+            goal_vertices_W[1, :],
+            color=START_COLOR,
+            alpha=START_TRANSPARENCY,
+            linewidth=start_goal_width,
+            linestyle="--",
+        )
+        assert traj.config.start_and_goal is not None
+        if traj.config.start_and_goal.pusher_initial_pose is not None:
+            p_WP = traj.config.start_and_goal.pusher_initial_pose.pos()  # type: ignore
+            circle = plt.Circle(
+                p_WP.flatten(),
+                traj.config.pusher_radius,  # type: ignore
+                edgecolor=START_COLOR,
+                facecolor="none",
+                linewidth=start_goal_width,
+                alpha=START_TRANSPARENCY,
+                linestyle="--",
+            )
+            ax.add_patch(circle)
+
+        # Plot target pos
+        slider_target_pose = traj.config.start_and_goal.slider_target_pose  # type: ignore
+        p_WB = slider_target_pose.pos()
+        R_WB = slider_target_pose.two_d_rot_matrix()
+        goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        ax.plot(
+            goal_vertices_W[0, :],
+            goal_vertices_W[1, :],
+            color=GOAL_COLOR,
+            alpha=GOAL_TRANSPARENCY,
+            linewidth=start_goal_width,
+            linestyle="--",
+        )
+        if traj.config.start_and_goal.pusher_initial_pose is not None:
+            p_WP = traj.config.start_and_goal.pusher_target_pose.pos()  # type: ignore
+            circle = plt.Circle(
+                p_WP.flatten(),
+                traj.config.pusher_radius,  # type: ignore
+                edgecolor=GOAL_COLOR,
+                facecolor="none",
+                linewidth=start_goal_width,
+                alpha=GOAL_TRANSPARENCY,
+                linestyle="--",
+            )
+            ax.add_patch(circle)
+
+        if start_end_legend:
+            # Create a list of patches to use as legend handles
+            custom_patches = [
+                mpatches.Patch(color=color, label=label)
+                for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
+            ]
+            # Creating the custom legend
+            plt.legend(
+                handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+            )
+
+        if label:
+            # Create a list of patches to use as legend handles
+            patch = mpatches.Patch(label=label, color="None")
+            # Creating the custom legend
+            plt.legend(handles=[patch], handlelength=2.5, fontsize=22, loc="upper left")
+
+    fig.tight_layout()
+    if filename:
+        print(filename)
+        fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
+        plt.close()
+    else:
+        plt.show()
+
+
 def make_traj_figure(
     traj: PlanarPushingTrajectory,
     filename: Optional[str] = None,
@@ -871,7 +1075,7 @@ def make_traj_figure(
                             if np.linalg.norm(f_W) <= TOL:
                                 # don't plot zero forces
                                 continue
-                            
+
                             p_Wc = traj_segment.get_p_Wc(ts[idx]).flatten()
                             ax.arrow(
                                 p_Wc[0],
@@ -894,12 +1098,13 @@ def make_traj_figure(
         p_WB = slider_initial_pose.pos()
         R_WB = slider_initial_pose.two_d_rot_matrix()
         goal_vertices_W = get_vertices_W(p_WB, R_WB)
+        start_goal_width = 1.5
         ax.plot(
             goal_vertices_W[0, :],
             goal_vertices_W[1, :],
             color=START_COLOR,
             alpha=START_TRANSPARENCY,
-            linewidth=1,
+            linewidth=start_goal_width,
             linestyle="--",
         )
         if traj.config.start_and_goal.pusher_initial_pose is not None:
@@ -909,7 +1114,7 @@ def make_traj_figure(
                 traj.config.pusher_radius,  # type: ignore
                 edgecolor=START_COLOR,
                 facecolor="none",
-                linewidth=1,
+                linewidth=start_goal_width,
                 alpha=START_TRANSPARENCY,
                 linestyle="--",
             )
@@ -925,7 +1130,7 @@ def make_traj_figure(
             goal_vertices_W[1, :],
             color=GOAL_COLOR,
             alpha=GOAL_TRANSPARENCY,
-            linewidth=1,
+            linewidth=start_goal_width,
             linestyle="--",
         )
         if traj.config.start_and_goal.pusher_initial_pose is not None:
@@ -935,7 +1140,7 @@ def make_traj_figure(
                 traj.config.pusher_radius,  # type: ignore
                 edgecolor=GOAL_COLOR,
                 facecolor="none",
-                linewidth=1,
+                linewidth=start_goal_width,
                 alpha=GOAL_TRANSPARENCY,
                 linestyle="--",
             )
@@ -948,13 +1153,18 @@ def make_traj_figure(
                 for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
             ]
             # Creating the custom legend
-            plt.legend(
-                handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+            axs[0].legend(
+                handles=custom_patches,
+                handlelength=2.5,
+                fontsize=22,
+                loc="upper left",
             )
 
     fig.tight_layout()
     if filename:
+        print(filename)
         fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
+        plt.close()
     else:
         plt.show()
     plt.close()
@@ -1592,3 +1802,161 @@ def visualize_planar_pushing_trajectory_legacy(
         target_viz,
         draw_origin=visualize_robot_base,
     )
+
+
+def visualize_initial_conditions(
+    initial_conditions: List[PlanarPushingStartAndGoal],
+    config: PlanarPlanConfig,
+    filename: Optional[str] = None,
+    start_end_legend: bool = False,
+    plot_orientation_arrow: bool = False,
+) -> None:
+    slider_target_pose = initial_conditions[0].slider_target_pose
+    assert all(
+        [conds.slider_target_pose == slider_target_pose for conds in initial_conditions]
+    )
+    pusher_initial_pose = initial_conditions[0].pusher_initial_pose
+    assert all(
+        [
+            conds.pusher_initial_pose == pusher_initial_pose
+            for conds in initial_conditions
+        ]
+    )
+    pusher_target_pose = initial_conditions[0].pusher_target_pose
+    assert all(
+        [conds.pusher_target_pose == pusher_target_pose for conds in initial_conditions]
+    )
+
+    slider_initial_poses = [cond.slider_initial_pose for cond in initial_conditions]
+    slider_geometry = config.slider_geometry
+
+    # Ensure a type 1 font is used
+    plt.rcParams["font.family"] = "Times"
+    plt.rcParams["ps.useafm"] = True
+    plt.rcParams["pdf.use14corefonts"] = True
+    plt.rcParams["text.usetex"] = False
+    # NOTE(bernhardpg): This function is a mess!
+    # We need to add the first vertex again to close the polytope
+    vertices = np.hstack(slider_geometry.vertices + [slider_geometry.vertices[0]])
+
+    get_vertices_W = lambda p_WB, R_WB: p_WB + R_WB.dot(vertices)
+
+    slider_color = COLORS["aquamarine4"].diffuse()
+
+    GOAL_COLOR = EMERALDGREEN.diffuse()
+    GOAL_TRANSPARENCY = 1.0
+
+    START_COLOR = CRIMSON.diffuse()
+    START_TRANSPARENCY = 1.0
+    PUSHER_COLOR = COLORS["firebrick3"].diffuse()
+
+    LINE_COLOR = BLACK.diffuse()
+
+    fig_height = 4
+    fig = plt.figure(figsize=(fig_height, fig_height))
+    ax = fig.add_subplot(111)
+    ax.axis("equal")  # Ensures the x and y axis are scaled equally
+
+    # Hide the axes, including the spines, ticks, labels, and title
+    ax.set_axis_off()
+
+    make_circle = lambda p_WP, fill_transparency: plt.Circle(
+        p_WP.flatten(),
+        traj.config.pusher_radius,  # type: ignore
+        edgecolor=LINE_COLOR,
+        facecolor=PUSHER_COLOR,
+        linewidth=1,
+        alpha=fill_transparency,
+        zorder=99,
+    )
+
+    transparency = 0.7
+
+    def _plot_orientation_arrow(p_WB, R_WB, **kwargs):
+        start_point = p_WB.flatten()
+        u = np.array([0, 1]).reshape((2, 1)) / np.sqrt(2)
+        u_rotated = R_WB @ u
+        end_point = start_point + u_rotated.flatten() * 0.1
+
+        # Plot the arrow
+        ax.arrow(
+            start_point[0],
+            start_point[1],
+            end_point[0] - start_point[0],
+            end_point[1] - start_point[1],
+            # head_width=2.0,
+            # head_length=1.0,
+            # fc="blue",
+            # ec="black",
+            **kwargs,
+        )
+
+    for pose in slider_initial_poses:
+        # Plot polytope
+        p_WB = pose.pos()
+        R_WB = pose.two_d_rot_matrix()
+        vertices_W = get_vertices_W(p_WB, R_WB)
+        ax.plot(
+            vertices_W[0, :],
+            vertices_W[1, :],
+            color=LINE_COLOR,
+            alpha=transparency,
+            linewidth=1,
+        )
+        ax.fill(
+            vertices_W[0, :],
+            vertices_W[1, :],
+            alpha=transparency,
+            color=slider_color,
+        )
+
+        if plot_orientation_arrow:
+            _plot_orientation_arrow(p_WB, R_WB)
+
+    start_goal_width = 1.5
+    p_WP = pusher_initial_pose.pos()  # type: ignore
+    circle = plt.Circle(
+        p_WP.flatten(),
+        config.pusher_radius,  # type: ignore
+        edgecolor=GOAL_COLOR,
+        facecolor="none",
+        linewidth=start_goal_width,
+        alpha=GOAL_TRANSPARENCY,
+        linestyle="--",
+    )
+    ax.add_patch(circle)
+
+    p_WB = slider_target_pose.pos()
+    R_WB = slider_target_pose.two_d_rot_matrix()
+    goal_vertices_W = get_vertices_W(p_WB, R_WB)
+    ax.plot(
+        goal_vertices_W[0, :],
+        goal_vertices_W[1, :],
+        color=GOAL_COLOR,
+        alpha=GOAL_TRANSPARENCY,
+        linewidth=start_goal_width,
+        linestyle="--",
+        zorder=99,
+    )
+
+    if plot_orientation_arrow:
+        _plot_orientation_arrow(p_WB, R_WB, linestyle="--", color=GOAL_COLOR, zorder=99)
+
+    if start_end_legend:
+        # Create a list of patches to use as legend handles
+        custom_patches = [
+            mpatches.Patch(color=color, label=label)
+            for label, color in zip(["Start", "Goal"], [START_COLOR, GOAL_COLOR])
+        ]
+        # Creating the custom legend
+        plt.legend(
+            handles=custom_patches, handlelength=2.5, fontsize=22, loc="upper right"
+        )
+
+    fig.tight_layout()
+    if filename:
+        print(filename)
+        fig.savefig(filename + ".pdf", format="pdf")  # type: ignore
+        plt.close()
+    else:
+        plt.show()

@@ -2,19 +2,11 @@ import os
 
 import numpy as np
 import pytest
-from pydrake.solvers import (
-    CommonSolverOption,
-    IpoptSolver,
-    MosekSolver,
-    SnoptSolver,
-    Solve,
-    SolverOptions,
-)
+from pydrake.solvers import CommonSolverOption, MosekSolver, SnoptSolver, SolverOptions
 
 from planning_through_contact.experiments.utils import (
     get_default_plan_config,
-    get_hardware_contact_cost,
-    get_hardware_non_collision_cost,
+    get_sugar_box,
 )
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -28,19 +20,9 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
-from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.planar.planar_plan_config import (
-    ContactConfig,
-    ContactCost,
-    ContactCostType,
-    NonCollisionCost,
-    PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarSolverParams,
-    SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
@@ -52,22 +34,9 @@ from planning_through_contact.visualize.analysis import (
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
-    visualize_planar_pushing_trajectory_legacy,
 )
-from scripts.planar_pushing.create_plan import get_sugar_box
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    dynamics_config,
-    face_contact_mode,
-    plan_config,
-    planner,
-    rigid_body_box,
-    t_pusher,
-)
-from tests.geometry.planar.tools import (
-    assert_initial_and_final_poses,
-    assert_initial_and_final_poses_LEGACY,
-)
+from tests.geometry.planar.fixtures import plan_config, planner, t_pusher
+from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
