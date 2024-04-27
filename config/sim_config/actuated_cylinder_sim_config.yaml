@@ -6,17 +6,17 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'tee'
+slider_type: 'box'
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose: # Configures the goal pose of the slider
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.5
+  x: 0.575
   y: 0.0
   theta: 0.0
 pusher_start_pose: # Confiures the starting and ending location of the pusher
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.5
+  x: 0.575
   y: 0.25
   theta: 0.0
 time_step: 0.001

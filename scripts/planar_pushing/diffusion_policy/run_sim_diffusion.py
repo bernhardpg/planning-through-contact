@@ -84,6 +84,6 @@ def run_sim(cfg: OmegaConf):
 if __name__ == "__main__":
     """
     Configure sim config through hydra yaml file
-    Ex: python scripts/planar_pushing/run_sim_actuated_cylinder_diffusion.py --config-name=actuated_cylinder_sim_config.yaml
+    Ex: python scripts/diffusion_policy/planar_pushing/run_sim_diffusion.py --config-name=actuated_cylinder_sim_config.yaml
     """
     run_sim()
