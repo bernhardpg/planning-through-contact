@@ -7,7 +7,7 @@ import numpy.typing as npt
 import pydot
 from matplotlib.animation import FuncAnimation
 from matplotlib.artist import Artist
-from matplotlib.patches import Ellipse, Polygon
+from matplotlib.patches import Ellipse, FancyArrowPatch, Polygon
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
     GraphOfConvexSetsOptions,
@@ -238,6 +238,11 @@ class KnotPoint:
         self.prog.AddConstraint(self.p_WF[0] <= stone.x_max)
         self.prog.AddConstraint(self.p_WF[1] == stone.z_pos)
 
+        # Don't move the feet too far from the robot
+        MAX_DIST = 0.4
+        self.prog.AddConstraint(self.p_WB[0] - self.p_WF[0] <= MAX_DIST)
+        self.prog.AddConstraint(self.p_WB[0] - self.p_WF[0] >= -MAX_DIST)
+
         # TODO(bernhardpg): Friction cone must be formulated differently
         # when we have tilted ground
         mu = 0.5
@@ -378,6 +383,8 @@ class FootstepPlanner:
 
         self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
 
+        # TODO: Continuity constraints on subsequent contacts within the same region
+
         self._add_edge_to_source_or_target(pairs[0], "source")
 
         for pair in pairs:  # connect all the vertices to the target
@@ -473,23 +480,19 @@ class FootstepPlanner:
         return plan
 
 
-# helper function that generates an animation of planned footstep positions
 def animate_footstep_plan(
     robot: PotatoRobot,
     terrain: InPlaneTerrain,
     plan: FootstepPlan,
     title=None,
 ) -> None:
-    """
-    @param position_left/right: position for feet, expected in shape (num_steps, 2)
-    """
-    # initialize figure for animation
+    # Initialize figure for animation
     fig, ax = plt.subplots()
 
-    # plot stepping stones
+    # Plot stepping stones
     terrain.plot(title=title, ax=ax, max_height=2.5)
 
-    # plot robot
+    # Plot robot
     robot_body = Ellipse(
         xy=(0, 0),
         width=robot.width,
@@ -500,7 +503,7 @@ def animate_footstep_plan(
     )
     ax.add_patch(robot_body)
 
-    # foot
+    # Foot
     base_foot_vertices = np.array(
         [
             [-robot.foot_length / 2, 0],
@@ -508,30 +511,56 @@ def animate_footstep_plan(
             [0, robot.foot_height],
         ]
     )
-
     foot = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
     ax.add_patch(foot)
 
-    # initial position of the feet
+    # Forces
+    FORCE_SCALE = 0.5
+    force_1 = FancyArrowPatch(
+        posA=(0, 0),
+        posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
+        arrowstyle="->",
+        color="green",
+    )
+    ax.add_patch(force_1)
+    force_2 = FancyArrowPatch(
+        posA=(0, 0),
+        posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
+        arrowstyle="->",
+        color="green",
+    )
+    ax.add_patch(force_2)
+
+    # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
     p_WF = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
 
-    # misc settings
+    # Misc settings
     plt.close()
     ax.legend(loc="upper left", bbox_to_anchor=(0, 1.3), ncol=2)
 
     def animate(n_steps: int) -> None:
-        # robot
+        # Robot
         p_WB.set_offsets(plan.p_WBs[n_steps])
         robot_body.set_center(plan.p_WBs[n_steps])
         robot_body.angle = plan.theta_WBs[n_steps]
 
+        # Foot
         foot.set_xy(base_foot_vertices + plan.p_WFs[n_steps])
 
-        # scatter feet
+        # Scatter feet
         p_WF.set_offsets(plan.p_WFs[n_steps])
 
-    # create ad display animation
+        # Forces
+        f1_pos = plan.p_WFs[n_steps] + base_foot_vertices[0]
+        f1_val = plan.f_F_1Ws[n_steps] * FORCE_SCALE
+        force_1.set_positions(posA=f1_pos, posB=(f1_pos + f1_val))
+
+        f2_pos = plan.p_WFs[n_steps] + base_foot_vertices[1]
+        f2_val = plan.f_F_2Ws[n_steps] * FORCE_SCALE
+        force_2.set_positions(posA=f2_pos, posB=(f2_pos + f2_val))
+
+    # Create and display animation
     n_steps = plan.num_steps
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
     ani.save("footstep_plan.mp4", writer="ffmpeg")
