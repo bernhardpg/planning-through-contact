@@ -644,8 +644,12 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
+    def make_relaxed_prog(self) -> MathematicalProgram:
+        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        return self.relaxed_prog
+
     def get_convex_set(self) -> Spectrahedron:
-        relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        relaxed_prog = self.make_relaxed_prog()
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 
@@ -796,9 +800,8 @@ class FootstepPlanner:
         # Add all knot points as vertices
         pairs = self._add_segments_as_vertices(self.gcs, segments)
 
-        edges_to_add = []
-
-        self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
+        # edges_to_add = []
+        # self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
 
         # TODO: Continuity constraints on subsequent contacts within the same region
 
@@ -905,18 +908,18 @@ class FootstepPlanner:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
         options.solver_options = solver_options
 
-        tolerance = 1e-6
-        mosek = MosekSolver()
-        options.solver = mosek
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
-        )
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
-        )
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
-        )
+        # tolerance = 1e-6
+        # mosek = MosekSolver()
+        # options.solver = mosek
+        # solver_options.SetOption(
+        #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+        # )
+        # solver_options.SetOption(
+        #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+        # )
+        # solver_options.SetOption(
+        #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+        # )
 
         result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
@@ -951,6 +954,7 @@ class FootstepPlanner:
         plan = FootstepTrajectory.from_segments(
             segments, self.config.dt, solution_gait_schedule
         )
+        print(f"Cost: {result.get_optimal_cost()}")
 
         return plan
 
@@ -1154,7 +1158,7 @@ def test_trajectory_segment_one_foot() -> None:
     if debug:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = Solve(segment.prog, solver_options=solver_options)
+    result = Solve(segment.make_relaxed_prog(), solver_options=solver_options)
     assert result.is_success()
 
     segment_value = segment.evaluate_with_result(result)
@@ -1201,8 +1205,8 @@ def test_trajectory_segment_two_feet() -> None:
     assert segment.tau_Fr_2.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
+    initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
 
     segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 1.0)  # type: ignore
@@ -1212,7 +1216,7 @@ def test_trajectory_segment_two_feet() -> None:
     if debug:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = Solve(segment.prog, solver_options=solver_options)
+    result = Solve(segment.make_relaxed_prog(), solver_options=solver_options)
     assert result.is_success()
 
     segment_value = segment.evaluate_with_result(result)
@@ -1232,6 +1236,8 @@ def test_trajectory_segment_two_feet() -> None:
     cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
     for key, val in cost_vals_sums.items():
         print(f"Cost {key}: {val}")
+
+    print(f"Total cost: {result.get_optimal_cost()}")
 
     non_convex_constraint_violation = (
         segment.evaluate_non_convex_constraints_with_result(result)
@@ -1265,7 +1271,7 @@ def test_merging_two_trajectory_segments() -> None:
     segment_first.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
     segment_first.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
     segment_first.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
-    result_first = Solve(segment_first.prog)
+    result_first = Solve(segment_first.make_relaxed_prog())
     assert result_first.is_success()
     segment_val_first = segment_first.evaluate_with_result(result_first)
 
@@ -1274,7 +1280,7 @@ def test_merging_two_trajectory_segments() -> None:
     segment_second.add_pose_constraint(cfg.period_steps - 1, target_pos_2, 0)  # type: ignore
     segment_second.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
     segment_second.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
-    result_second = Solve(segment_second.prog)
+    result_second = Solve(segment_second.make_relaxed_prog())
     assert result_second.is_success()
     segment_val_second = segment_second.evaluate_with_result(result_second)
 
@@ -1298,11 +1304,11 @@ def test_footstep_planning_one_stone() -> None:
     cfg = FootstepPlanningConfig(robot=robot)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
+    initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
 
     initial_pose = np.concatenate([initial_pos, [0]])
-    target_pose = np.concatenate([target_pos, [0]])
+    target_pose = np.concatenate([target_pos, [1.0]])
 
     planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
 
@@ -1323,8 +1329,8 @@ def main():
     # test_single_point()
     # test_trajectory_segment_one_foot()
     # test_merging_two_trajectory_segments()
-    # test_trajectory_segment_two_feet()
-    test_footstep_planning_one_stone()
+    test_trajectory_segment_two_feet()
+    # test_footstep_planning_one_stone()
     # load_traj()
 
 
