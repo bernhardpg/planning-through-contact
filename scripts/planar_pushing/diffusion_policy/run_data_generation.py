@@ -377,8 +377,9 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
 
         # If too many IK fails, skip this rollout
         with open(log_path, "r") as f:
-            if len(f.readlines()) != 0:
-                ik_fails = int(f.readline().rsplit(" ", 1)[-1])
+            line = f.readline()
+            if len(line) != 0:
+                ik_fails = int(line.rsplit(" ", 1)[-1])
                 if ik_fails > 5:
                     continue
 
@@ -458,6 +459,8 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
         concatenated_targets.append(target)
         episode_ends.append(current_end + len(state))
         current_end += len(state)
+    
+    print(f"{len(traj_dir_list)-len(episode_ends)} of {len(traj_dir_list)} rollouts were skipped due to IK fails.")
 
     # save to zarr
     zarr_path = data_collection_config.zarr_path

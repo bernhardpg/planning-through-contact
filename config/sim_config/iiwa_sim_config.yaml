@@ -23,11 +23,11 @@ time_step: 0.001
 closed_loop: false # MPC flag
 draw_frames: true
 use_realtime: false
-delay_before_execution: 5.0
+delay_before_execution: 10.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
-  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/push_box_v2/checkpoints/latest.ckpt'
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
   diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
@@ -55,13 +55,13 @@ camera_configs:
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
-  num_runs: 1
-  max_attempt_duration: 90
+  num_runs: 10
+  max_attempt_duration: 120
   seed: 42
   slider_type: ${slider_type}
   pusher_start_pose: ${pusher_start_pose}
   slider_goal_pose: ${slider_goal_pose}
-  workspace_width: 0.35
+  workspace_width: 0.3
   workspace_height: 0.5
   trans_tol: 0.01
   rot_tol: 1.5 # degrees
@@ -83,9 +83,9 @@ robot_station:
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: false
-  render_plans: true
+  render_plans: false
   convert_to_zarr: false
-  convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
+  convert_to_zarr_reduce: true # Supercloud flag to perform "reduce" step
   plans_dir: 'trajectories/tee_v5'
   rendered_plans_dir: 'trajectories_rendered/tee_1000'
   zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr

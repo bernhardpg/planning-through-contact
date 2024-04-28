@@ -141,10 +141,10 @@ class IiwaPlanner(LeafSystem):
         state.get_mutable_abstract_state(int(self._traj_q_index)).set_value(q_traj)
         times = state.get_mutable_abstract_state(int(self._times_index)).get_value()
 
+        total_delay = q_traj.end_time() + context.get_time() + self._wait_push_delay
         assert (
-            self._sim_config.delay_before_execution
-            >= q_traj.end_time() + context.get_time() + self._wait_push_delay
-        ), "Not enough time to execute plan."
+            self._sim_config.delay_before_execution >= total_delay
+        ), f"Not enough time to execute plan. Required time: {total_delay}s."
         times["go_push_start_initial"] = context.get_time()
         times["go_push_start_final"] = q_traj.end_time() + context.get_time()
         times["wait_push_final"] = times["go_push_start_final"] + self._wait_push_delay
