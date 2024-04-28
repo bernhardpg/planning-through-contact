@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, NamedTuple, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,6 +23,9 @@ from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_r
 
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+
+GcsVertex = GraphOfConvexSets.Vertex
+GcsEdge = GraphOfConvexSets.Edge
 
 
 @dataclass
@@ -86,7 +89,7 @@ class InPlaneTerrain:
 
 
 @dataclass
-class Robot:
+class PotatoRobot:
     # TODO(bernhardpg): set reasonable inertia properties
     # This is from a sphere with mass = 50 kg and all axis = 0.5 meter
     mass: float = 50.0  # kg
@@ -96,9 +99,18 @@ class Robot:
 
 
 @dataclass
+class FootstepPlanningConfig:
+    dt: float = 0.3
+    robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
+
+
+@dataclass
 class KnotPoint:
     def __init__(
-        self, stone: InPlaneSteppingStone, robot: Robot, name: Optional[str] = None
+        self,
+        stone: InPlaneSteppingStone,
+        robot: PotatoRobot,
+        name: Optional[str] = None,
     ) -> None:
         # Assume we always only have one foot in contact
         if name is not None:
@@ -199,39 +211,67 @@ class KnotPoint:
         return spectrahedron
 
 
+class VertexPointPair(NamedTuple):
+    v: GcsVertex
+    p: KnotPoint
+
+
+class FootstepPlanner:
+    def __init__(self, config: FootstepPlanningConfig, terrain: InPlaneTerrain) -> None:
+
+        initial_stone = terrain.stepping_stones[0]
+        target_stone = terrain.stepping_stones[1]
+
+        robot = config.robot
+        dt = config.dt
+
+        point_1 = KnotPoint(initial_stone, robot, name="1")
+        point_2 = KnotPoint(initial_stone, robot, name="2")
+
+        points = [point_1, point_2]
+
+        gcs = GraphOfConvexSets()
+        pairs = self._add_points_as_vertices(gcs, points)
+
+        edges_to_add = [(0, 1)]
+
+        self._add_edges_with_dynamics_constraints(gcs, edges_to_add, pairs, dt)
+
+    def _add_points_as_vertices(
+        self, gcs: GraphOfConvexSets, points: List[KnotPoint]
+    ) -> List[VertexPointPair]:
+        vertices = [gcs.AddVertex(p.get_convex_set(), name=p.name) for p in points]
+        pairs = [VertexPointPair(v, p) for v, p in zip(vertices, points)]
+        return pairs
+
+    def _add_edges_with_dynamics_constraints(
+        self,
+        gcs: GraphOfConvexSets,
+        edges_to_add: List[Tuple[int, int]],
+        pairs: List[VertexPointPair],
+        dt: float,
+    ) -> None:
+        for i, j in edges_to_add:
+            u, p_u = pairs[i]
+            v, p_v = pairs[j]
+
+            e = gcs.AddEdge(u, v)
+            constraint = eq(
+                p_u.get_lhs_in_vertex_vars(u.x()),
+                p_v.get_rhs_in_vertex_vars(v.x(), dt),
+            )
+            for c in constraint:
+                e.AddConstraint(c)
+
+
 def main():
     terrain = InPlaneTerrain()
     initial_stone = terrain.add_stone(x_pos=0.5, width=1.0, z_pos=0.2, name="initial")
     target_stone = terrain.add_stone(x_pos=1.5, width=1.0, z_pos=0.3, name="target")
 
-    dt = 0.3
+    cfg = FootstepPlanningConfig(dt=0.3, robot=PotatoRobot())
 
-    robot = Robot()
-
-    point_1 = KnotPoint(initial_stone, robot, name="1")
-    point_2 = KnotPoint(initial_stone, robot, name="2")
-
-    points = [point_1, point_2]
-
-    gcs = GraphOfConvexSets()
-
-    vertices = [gcs.AddVertex(p.get_convex_set(), name=p.name) for p in points]
-    edges_to_add = [(0, 1)]
-
-    for i, j in edges_to_add:
-        u, v = vertices[i], vertices[j]
-        p_u, p_v = points[i], points[j]
-
-        e = gcs.AddEdge(u, v)
-
-        constraint = eq(
-            p_u.get_lhs_in_vertex_vars(u.x()),
-            p_v.get_rhs_in_vertex_vars(v.x(), dt),
-            # p_v.get_state() + dt * point_1.get_dynamics(),
-        )
-
-        for c in constraint:
-            e.AddConstraint(c)
+    planner = FootstepPlanner(cfg, terrain)
 
     # terrain.plot()
     # plt.show()
