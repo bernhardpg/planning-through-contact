@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
-from typing import List, NamedTuple, Optional, Tuple
+from typing import List, Literal, NamedTuple, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import pydot
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
     HPolyhedron,
@@ -17,6 +18,7 @@ from pydrake.solvers import (
     LinearConstraint,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
+    MathematicalProgramResult,
 )
 from pydrake.symbolic import DecomposeAffineExpressions
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
@@ -38,6 +40,13 @@ class InPlaneSteppingStone:
     @property
     def height(self) -> float:
         return self.z_pos
+
+    @property
+    def center(self) -> npt.NDArray[np.float64]:
+        """
+        Returns the surface center of the stone.
+        """
+        return np.array([self.x_pos, self.z_pos])
 
     def plot(self, **kwargs):
         center = np.array([self.x_pos, self.z_pos / 2])
@@ -164,10 +173,19 @@ class KnotPoint:
     def get_input(self) -> npt.NDArray:
         return np.concatenate([self.f_F_1W, self.f_F_2W, self.p_BF_W])
 
+    def get_robot_pose(self) -> npt.NDArray:
+        return np.concatenate([self.p_WB, [self.theta_WB]])
+
     def get_vars(self) -> npt.NDArray:
         return np.concatenate(
             (self.get_state(), self.get_input(), (self.tau_F_1, self.tau_F_2))
         )
+
+    def get_vars_in_vertex(
+        self, vars: npt.NDArray, vertex_vars: npt.NDArray
+    ) -> npt.NDArray:
+        idxs = self.prog.FindDecisionVariableIndices(vars)
+        return vertex_vars[idxs]
 
     def get_dynamics(self) -> npt.NDArray:
         return np.concatenate(
@@ -215,9 +233,18 @@ class VertexPointPair(NamedTuple):
     v: GcsVertex
     p: KnotPoint
 
+    def get_vars_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
+        return self.p.get_vars_in_vertex(vars, self.v.x())
+
 
 class FootstepPlanner:
-    def __init__(self, config: FootstepPlanningConfig, terrain: InPlaneTerrain) -> None:
+    def __init__(
+        self,
+        config: FootstepPlanningConfig,
+        terrain: InPlaneTerrain,
+        initial_position: npt.NDArray[np.float64],
+        target_position: npt.NDArray[np.float64],
+    ) -> None:
 
         initial_stone = terrain.stepping_stones[0]
         target_stone = terrain.stepping_stones[1]
@@ -227,15 +254,48 @@ class FootstepPlanner:
 
         point_1 = KnotPoint(initial_stone, robot, name="1")
         point_2 = KnotPoint(initial_stone, robot, name="2")
+        point_3 = KnotPoint(target_stone, robot, name="3")
+        point_4 = KnotPoint(target_stone, robot, name="4")
 
-        points = [point_1, point_2]
+        points = [point_1, point_2, point_3, point_4]
 
-        gcs = GraphOfConvexSets()
-        pairs = self._add_points_as_vertices(gcs, points)
+        self.gcs = GraphOfConvexSets()
 
-        edges_to_add = [(0, 1)]
+        # Add initial and target vertices
+        self.source = self.gcs.AddVertex(Point(initial_position), name="source")
+        self.target = self.gcs.AddVertex(Point(initial_position), name="target")
 
-        self._add_edges_with_dynamics_constraints(gcs, edges_to_add, pairs, dt)
+        # Add all knot points as vertices
+        pairs = self._add_points_as_vertices(self.gcs, points)
+
+        edges_to_add = [(0, 1), (1, 2), (1, 2), (2, 3)]
+
+        self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
+
+        self._add_edge_to_source_or_target(pairs[0], "source")
+
+        for pair in pairs:  # connect all the vertices to the target
+            self._add_edge_to_source_or_target(pair, "target")
+
+    def _add_edge_to_source_or_target(
+        self,
+        pair: VertexPointPair,
+        source_or_target: Literal["source", "target"] = "source",
+    ) -> None:
+        if source_or_target == "source":
+            s = self.source
+            # source -> v
+            e = self.gcs.AddEdge(s, pair.v)
+        else:  # target
+            s = self.target
+            # v -> target
+            e = self.gcs.AddEdge(pair.v, s)
+
+        pose = pair.get_vars_in_vertex(pair.p.get_robot_pose())
+        # The only variables in the source/target are the pose variables
+        constraint = eq(pose, s.x())
+        for c in constraint:
+            e.AddConstraint(c)
 
     def _add_points_as_vertices(
         self, gcs: GraphOfConvexSets, points: List[KnotPoint]
@@ -263,6 +323,24 @@ class FootstepPlanner:
             for c in constraint:
                 e.AddConstraint(c)
 
+    def create_graph_diagram(
+        self,
+        filename: Optional[str] = None,
+        result: Optional[MathematicalProgramResult] = None,
+    ) -> pydot.Dot:
+        """
+        Optionally saves the graph to file if a string is given for the 'filepath' argument.
+        """
+        graphviz = self.gcs.GetGraphvizString(
+            precision=2, result=result, show_slacks=False
+        )
+
+        data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
+        if filename is not None:
+            data.write_png(filename + ".png")
+
+        return data
+
 
 def main():
     terrain = InPlaneTerrain()
@@ -271,7 +349,11 @@ def main():
 
     cfg = FootstepPlanningConfig(dt=0.3, robot=PotatoRobot())
 
-    planner = FootstepPlanner(cfg, terrain)
+    initial_pose = np.concatenate((initial_stone.center, [0]))
+    target_pose = np.concatenate((target_stone.center, [0]))
+    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+
+    planner.create_graph_diagram("footstep_planner")
 
     # terrain.plot()
     # plt.show()
