@@ -7,6 +7,7 @@ import numpy.typing as npt
 import pydot
 from matplotlib.animation import FuncAnimation
 from matplotlib.artist import Artist
+from matplotlib.patches import Ellipse, Polygon
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
     GraphOfConvexSetsOptions,
@@ -117,10 +118,25 @@ class PotatoRobot:
     # TODO(bernhardpg): set reasonable inertia properties
     # This is from a sphere with mass = 50 kg and all axis = 0.5 meter
     mass: float = 50.0  # kg
+    # TODO(bernhardpg): compute inertia from dimensions
     inertia: float = 5.0  # kg m**2
     foot_length: float = 0.3  # m
+    foot_height: float = 0.15  # m
     step_span: float = 0.8  # m
     desired_com_height: float = 1.5  # m
+    size: Tuple[float, float, float] = (0.5, 0.5, 1.0)
+
+    @property
+    def width(self) -> float:
+        return self.size[0]
+
+    @property
+    def depth(self) -> float:
+        return self.size[1]
+
+    @property
+    def height(self) -> float:
+        return self.size[2]
 
 
 @dataclass
@@ -459,6 +475,7 @@ class FootstepPlanner:
 
 # helper function that generates an animation of planned footstep positions
 def animate_footstep_plan(
+    robot: PotatoRobot,
     terrain: InPlaneTerrain,
     plan: FootstepPlan,
     title=None,
@@ -470,22 +487,49 @@ def animate_footstep_plan(
     fig, ax = plt.subplots()
 
     # plot stepping stones
-    terrain.plot(title=title, ax=ax, max_height=2.0)
+    terrain.plot(title=title, ax=ax, max_height=2.5)
+
+    # plot robot
+    robot_body = Ellipse(
+        xy=(0, 0),
+        width=robot.width,
+        height=robot.height,
+        angle=0,
+        edgecolor="black",
+        facecolor="none",
+    )
+    ax.add_patch(robot_body)
+
+    # foot
+    base_foot_vertices = np.array(
+        [
+            [-robot.foot_length / 2, 0],
+            [robot.foot_length / 2, 0],
+            [0, robot.foot_height],
+        ]
+    )
+
+    foot = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
+    ax.add_patch(foot)
 
     # initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
     p_WF = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
-    # right_foot = ax.scatter(0, 0, color="b", zorder=3, label="Right foot")
 
     # misc settings
     plt.close()
     ax.legend(loc="upper left", bbox_to_anchor=(0, 1.3), ncol=2)
 
     def animate(n_steps: int) -> None:
-        # scatter feet
+        # robot
         p_WB.set_offsets(plan.p_WBs[n_steps])
+        robot_body.set_center(plan.p_WBs[n_steps])
+        robot_body.angle = plan.theta_WBs[n_steps]
+
+        foot.set_xy(base_foot_vertices + plan.p_WFs[n_steps])
+
+        # scatter feet
         p_WF.set_offsets(plan.p_WFs[n_steps])
-        # right_foot.set_offsets(position_right[n_steps])
 
     # create ad display animation
     n_steps = plan.num_steps
@@ -498,7 +542,8 @@ def main():
     initial_stone = terrain.add_stone(x_pos=0.5, width=1.0, z_pos=0.2, name="initial")
     target_stone = terrain.add_stone(x_pos=1.5, width=1.0, z_pos=0.3, name="target")
 
-    cfg = FootstepPlanningConfig(dt=0.3, robot=PotatoRobot())
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(dt=0.3, robot=robot)
 
     desired_robot_pos = np.array([0, cfg.robot.desired_com_height])
 
@@ -509,7 +554,7 @@ def main():
     planner.create_graph_diagram("footstep_planner")
     plan = planner.plan()
 
-    animate_footstep_plan(terrain, plan)
+    animate_footstep_plan(robot, terrain, plan)
 
     # terrain.plot()
     # plt.show()
