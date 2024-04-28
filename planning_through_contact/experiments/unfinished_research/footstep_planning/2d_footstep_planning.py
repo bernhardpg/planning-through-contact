@@ -623,6 +623,9 @@ class FootstepPlanSegment:
     def get_robot_spatial_vel(self, k: int) -> npt.NDArray:
         return np.concatenate([self.v_WB[k], [self.omega_WB[k]]])
 
+    def get_robot_spatial_acc(self, k: int) -> npt.NDArray:
+        return np.concatenate([self.a_WB[k], [self.omega_dot_WB[k]]])
+
     def get_vars(self, k: int) -> npt.NDArray:
         raise NotImplementedError("This needs to be updated for two feet")
         return np.concatenate(
@@ -737,6 +740,9 @@ class VertexSegmentPair(NamedTuple):
     def get_vars_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_vars_in_vertex(vars, self.v.x())
 
+    def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
+        return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
+
     def get_knot_point_vals(
         self, result: MathematicalProgramResult
     ) -> FootstepPlanKnotPoints:
@@ -847,12 +853,14 @@ class FootstepPlanner:
             e = self.gcs.AddEdge(s, pair.v)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(0))
             spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(0))
+            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(0))
         else:  # target
             s = self.target
             # v -> target
             e = self.gcs.AddEdge(pair.v, s)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(-1))
             spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
+            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-1))
 
         # The only variables in the source/target are the pose variables
         constraint = eq(pose, s.x())
@@ -864,6 +872,11 @@ class FootstepPlanner:
         # constraint = eq(spatial_vel, 0)
         # for c in constraint:
         #     e.AddConstraint(c)
+
+        # Enforce that we start and end in an equilibrium position
+        constraint = eq(spatial_acc, 0)
+        for c in constraint:
+            e.AddConstraint(c)
 
     def create_graph_diagram(
         self,
@@ -1310,8 +1323,8 @@ def main():
     # test_single_point()
     # test_trajectory_segment_one_foot()
     # test_merging_two_trajectory_segments()
-    test_trajectory_segment_two_feet()
-    # test_footstep_planning_one_stone()
+    # test_trajectory_segment_two_feet()
+    test_footstep_planning_one_stone()
     # load_traj()
 
 
