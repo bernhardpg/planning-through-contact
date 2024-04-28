@@ -10,6 +10,7 @@ from pydrake.geometry.optimization import (
     Point,
     Spectrahedron,
 )
+from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
@@ -17,10 +18,11 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
 )
+from pydrake.symbolic import DecomposeAffineExpressions
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
 
 from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.tools.types import NpVariableArray
+from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 
 @dataclass
@@ -51,7 +53,7 @@ class InPlaneTerrain:
         width: float,
         name: Optional[str] = None,
     ) -> InPlaneSteppingStone:
-        stone = InPlaneSteppingStone(x_pos, z_pos, width)
+        stone = InPlaneSteppingStone(x_pos, z_pos, width, name)
         self.stepping_stones.append(stone)
         return stone
 
@@ -130,8 +132,9 @@ class KnotPoint:
         # torque = arm x force
         self.p_BF_1W = self.p_BF_W + np.array([robot.foot_length / 2, 0])
         self.p_BF_2W = self.p_BF_W - np.array([robot.foot_length / 2, 0])
-        self.tau_F_1 = cross_2d(self.p_BF_1W, self.f_F_1W)
-        self.tau_F_2 = cross_2d(self.p_BF_2W, self.f_F_2W)
+
+        self.prog.AddConstraint(self.tau_F_1 == cross_2d(self.p_BF_1W, self.f_F_1W))
+        self.prog.AddConstraint(self.tau_F_2 == cross_2d(self.p_BF_2W, self.f_F_2W))
 
         # TODO(bernhardpg): Friction cone must be formulated differently
         # when we have tilted ground
@@ -149,10 +152,46 @@ class KnotPoint:
     def get_input(self) -> npt.NDArray:
         return np.concatenate([self.f_F_1W, self.f_F_2W, self.p_BF_W])
 
+    def get_vars(self) -> npt.NDArray:
+        return np.concatenate(
+            (self.get_state(), self.get_input(), (self.tau_F_1, self.tau_F_2))
+        )
+
     def get_dynamics(self) -> npt.NDArray:
         return np.concatenate(
             [self.v_WB, [self.omega_WB], self.a_WB, [self.theta_ddot]]
         )
+
+    def get_lhs_in_vertex_vars(self, vertex_vars: npt.NDArray) -> NpVariableArray:
+        """
+        Gets the left-hand-side of the forward euler integration in the variables of the provided vertex
+        s_next = s_curr + dt * f(s_curr, u_curr)
+        """
+        s_next = self.get_state()
+        idxs = self.prog.FindDecisionVariableIndices(s_next)
+        return vertex_vars[idxs]
+
+    def get_rhs_in_vertex_vars(
+        self, vertex_vars: npt.NDArray, dt: float
+    ) -> NpExpressionArray:
+        """
+        Gets the right-hand-side of the forward euler integration in the variables of the provided vertex
+        s_next = s_curr + dt * f(s_curr, u_curr)
+        """
+        s_curr = self.get_state()
+        dynamics = (
+            self.get_dynamics()
+        )  # will be a np.array of variables and expressions
+        s_next = s_curr + dt * dynamics
+        vars = self.get_vars()
+
+        # note: the dynamics are always linear (we introduced some aux vars to achieve this)
+        A, b = DecomposeAffineExpressions(s_next, vars)
+        idxs = self.prog.FindDecisionVariableIndices(vars)
+        x = vertex_vars[idxs]
+
+        rhs = A @ x + b
+        return rhs
 
     def get_convex_set(self) -> Spectrahedron:
         relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
@@ -165,15 +204,34 @@ def main():
     initial_stone = terrain.add_stone(x_pos=0.5, width=1.0, z_pos=0.2, name="initial")
     target_stone = terrain.add_stone(x_pos=1.5, width=1.0, z_pos=0.3, name="target")
 
+    dt = 0.3
+
     robot = Robot()
 
     point_1 = KnotPoint(initial_stone, robot, name="1")
     point_2 = KnotPoint(initial_stone, robot, name="2")
 
+    points = [point_1, point_2]
+
     gcs = GraphOfConvexSets()
 
-    for point in (point_1, point_2):
-        gcs.AddVertex(point.get_convex_set(), name=point.name)
+    vertices = [gcs.AddVertex(p.get_convex_set(), name=p.name) for p in points]
+    edges_to_add = [(0, 1)]
+
+    for i, j in edges_to_add:
+        u, v = vertices[i], vertices[j]
+        p_u, p_v = points[i], points[j]
+
+        e = gcs.AddEdge(u, v)
+
+        constraint = eq(
+            p_u.get_lhs_in_vertex_vars(u.x()),
+            p_v.get_rhs_in_vertex_vars(v.x(), dt),
+            # p_v.get_state() + dt * point_1.get_dynamics(),
+        )
+
+        for c in constraint:
+            e.AddConstraint(c)
 
     # terrain.plot()
     # plt.show()
