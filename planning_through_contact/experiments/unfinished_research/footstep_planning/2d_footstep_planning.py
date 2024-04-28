@@ -227,18 +227,69 @@ class FootstepTrajectory:
 
     @classmethod
     def from_segments(
-        cls, segments: List[FootstepPlanKnotPoints], dt: float
+        cls,
+        segments: List[FootstepPlanKnotPoints],
+        dt: float,
+        active_feet: npt.NDArray[np.bool_],  # (num_steps, 2)
     ) -> "FootstepTrajectory":
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.array([k.theta_WB for k in segments]).reshape((-1, 1))
-        p_BFl_Ws = np.vstack([k.p_BFl_W for k in segments])
-        f_Fl_1Ws = np.vstack([k.f_Fl_1W for k in segments])
-        f_Fl_2Ws = np.vstack([k.f_Fl_2W for k in segments])
 
-        # TODO: must handle this better for multiple knot points in a row
-        p_BFr_Ws = np.vstack([k.p_BFr_W for k in segments])
-        f_Fr_1Ws = np.vstack([k.f_Fr_1W for k in segments])
-        f_Fr_2Ws = np.vstack([k.f_Fr_2W for k in segments])
+        if not active_feet.shape == (len(segments), 2):
+            raise RuntimeError("Gait schedule length must match number of segments")
+
+        p_BFl_Ws = []
+        f_Fl_1Ws = []
+        f_Fl_2Ws = []
+        p_BFr_Ws = []
+        f_Fr_1Ws = []
+        f_Fr_2Ws = []
+
+        # NOTE: This assumes that all the segments have the same lengths!
+        empty_shape = segments[0].p_WB.shape
+
+        for idx, (segment, (left_active, right_active)) in enumerate(
+            zip(segments, active_feet)
+        ):
+            both_active = left_active and right_active
+            if both_active:
+                p_BFl_Ws.append(segment.p_BFl_W)
+                f_Fl_1Ws.append(segment.f_Fl_1W)
+                f_Fl_2Ws.append(segment.f_Fl_2W)
+
+                p_BFr_Ws.append(segment.p_BFr_W)
+                f_Fr_1Ws.append(segment.f_Fr_1W)
+                f_Fr_2Ws.append(segment.f_Fr_2W)
+            else:
+                # NOTE: These next lines look like they have a typo, but they don't.
+                # When there is only one foot active, the values for this foot is
+                # always stored in the "left" foot values (to avoid unecessary optimization
+                # variables)
+                if left_active:
+                    p_BFl_Ws.append(segment.p_BFl_W)
+                    f_Fl_1Ws.append(segment.f_Fl_1W)
+                    f_Fl_2Ws.append(segment.f_Fl_2W)
+
+                    p_BFr_Ws.append(np.full(empty_shape, np.nan))
+                    f_Fr_1Ws.append(np.full(empty_shape, np.nan))
+                    f_Fr_2Ws.append(np.full(empty_shape, np.nan))
+                else:  # right_active
+                    p_BFl_Ws.append(np.full(empty_shape, np.nan))
+                    f_Fl_1Ws.append(np.full(empty_shape, np.nan))
+                    f_Fl_2Ws.append(np.full(empty_shape, np.nan))
+
+                    # Notice that here we pick from the "left" values
+                    p_BFr_Ws.append(segment.p_BFl_W)
+                    f_Fr_1Ws.append(segment.f_Fl_1W)
+                    f_Fr_2Ws.append(segment.f_Fl_2W)
+
+        p_BFl_Ws = np.vstack(p_BFl_Ws)
+        f_Fl_1Ws = np.vstack(f_Fl_1Ws)
+        f_Fl_2Ws = np.vstack(f_Fl_2Ws)
+
+        p_BFr_Ws = np.vstack(p_BFr_Ws)
+        f_Fr_1Ws = np.vstack(f_Fr_1Ws)
+        f_Fr_2Ws = np.vstack(f_Fr_2Ws)
 
         merged_knot_points = FootstepPlanKnotPoints(
             p_WBs, theta_WBs, p_BFl_Ws, f_Fl_1Ws, f_Fl_2Ws, p_BFr_Ws, f_Fr_1Ws, f_Fr_2Ws
@@ -973,7 +1024,7 @@ def test_single_point():
     # plt.show()
 
 
-def test_trajectory_segment() -> None:
+def test_trajectory_segment_one_foot() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
 
@@ -1014,7 +1065,9 @@ def test_trajectory_segment() -> None:
 
     segment_value = segment.evaluate_with_result(result)
 
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+    active_feet = np.array([[True, False]])
+
+    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
     assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
     assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
@@ -1069,7 +1122,9 @@ def test_trajectory_segment_two_feet() -> None:
 
     segment_value = segment.evaluate_with_result(result)
 
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+    active_feet = np.array([[True, True]])
+    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
+
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
     assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
     assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
@@ -1091,8 +1146,8 @@ def test_trajectory_segment_two_feet() -> None:
 
 def main():
     # test_single_point()
-    # test_trajectory_segment()
-    test_trajectory_segment_two_feet()
+    test_trajectory_segment_one_foot()
+    # test_trajectory_segment_two_feet()
 
 
 if __name__ == "__main__":
