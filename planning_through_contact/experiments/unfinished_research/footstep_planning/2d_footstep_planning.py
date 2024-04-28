@@ -453,17 +453,19 @@ class FootstepPlanSegment:
     def __init__(
         self,
         stone: InPlaneSteppingStone,
-        one_or_two_feet: Literal["one_foot", "two_feet"],
+        two_feet: bool,
         robot: PotatoRobot,
         config: FootstepPlanningConfig,
         name: Optional[str] = None,
     ) -> None:
+        """ """
         # Assume we always only have one foot in contact
         if name is not None:
             self.name = f"{stone.name}_{name}"
 
         self.config = config
-        self.one_or_two_feet = one_or_two_feet
+        self.two_feet = two_feet
+
         num_steps = self.config.period_steps
 
         self.prog = MathematicalProgram()
@@ -484,14 +486,14 @@ class FootstepPlanSegment:
         self.p_BFl_W = self.prog.NewContinuousVariables(num_steps, 2, "p_BFl_W")
         self.f_Fl_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_1W")
         self.f_Fl_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_2W")
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.p_BFr_W = self.prog.NewContinuousVariables(num_steps, 2, "p_BFr_W")
             self.f_Fr_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_1W")
             self.f_Fr_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_2W")
 
         # compute the foot position
         self.p_WFl = self.p_WB + self.p_BFl_W
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.p_WFr = self.p_WB + self.p_BFr_W
 
         # auxilliary vars
@@ -499,14 +501,14 @@ class FootstepPlanSegment:
         # have SDP constraints over the edges
         self.tau_Fl_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_1")
         self.tau_Fl_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_2")
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.tau_Fr_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_1")
             self.tau_Fr_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_2")
 
         # linear acceleration
         g = np.array([0, -9.81])
         self.a_WB = (1 / robot.mass) * (self.f_Fl_1W + self.f_Fl_2W) + g
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.a_WB += (1 / robot.mass) * (self.f_Fr_1W + self.f_Fr_2W)
 
         # TODO: remove
@@ -516,13 +518,13 @@ class FootstepPlanSegment:
 
         # angular acceleration
         self.theta_ddot = (1 / robot.inertia) * (self.tau_Fl_1 + self.tau_Fl_2)
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.theta_ddot += (1 / robot.inertia) * (self.tau_Fr_1 + self.tau_Fr_2)
 
         # contact points positions
         self.p_BFl_1W = self.p_BFl_W + np.array([robot.foot_length / 2, 0])
         self.p_BFl_2W = self.p_BFl_W - np.array([robot.foot_length / 2, 0])
-        if one_or_two_feet == "two_feet":  # right foot
+        if self.two_feet:
             self.p_BFr_1W = self.p_BFr_W + np.array([robot.foot_length / 2, 0])
             self.p_BFr_2W = self.p_BFr_W - np.array([robot.foot_length / 2, 0])
 
@@ -538,7 +540,7 @@ class FootstepPlanSegment:
                 self.tau_Fl_2[k] - cross_2d(self.p_BFl_2W[k], self.f_Fl_2W[k]), 0, 0
             )
             cs_for_knot_point.append(c)
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 c = self.prog.AddQuadraticConstraint(
                     self.tau_Fr_1[k] - cross_2d(self.p_BFr_1W[k], self.f_Fr_1W[k]), 0, 0
                 )
@@ -554,7 +556,7 @@ class FootstepPlanSegment:
             self.prog.AddLinearConstraint(stone.x_min <= self.p_WFl[k][0])
             self.prog.AddLinearConstraint(self.p_WFl[k][0] <= stone.x_max)
             self.prog.AddLinearEqualityConstraint(self.p_WFl[k][1] == stone.z_pos)
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 self.prog.AddLinearConstraint(stone.x_min <= self.p_WFr[k][0])
                 self.prog.AddLinearConstraint(self.p_WFr[k][0] <= stone.x_max)
                 self.prog.AddLinearEqualityConstraint(self.p_WFr[k][1] == stone.z_pos)
@@ -568,7 +570,7 @@ class FootstepPlanSegment:
             self.prog.AddLinearConstraint(
                 self.p_WB[k][0] - self.p_WFl[k][0] >= -MAX_DIST
             )
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 self.prog.AddLinearConstraint(
                     self.p_WB[k][0] - self.p_WFr[k][0] <= MAX_DIST
                 )
@@ -583,7 +585,7 @@ class FootstepPlanSegment:
                 self.prog.AddLinearConstraint(f[k][1] >= 0)
                 self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                 self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 for f in (self.f_Fr_1W, self.f_Fr_2W):
                     self.prog.AddLinearConstraint(f[k][1] >= 0)
                     self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
@@ -602,7 +604,7 @@ class FootstepPlanSegment:
             const = eq(self.p_WFl[k], self.p_WFl[k + 1])
             for c in const:
                 self.prog.AddLinearEqualityConstraint(c)
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 const = eq(self.p_WFr[k], self.p_WFr[k + 1])
                 for c in const:
                     self.prog.AddLinearEqualityConstraint(c)
@@ -620,7 +622,7 @@ class FootstepPlanSegment:
             f1 = self.f_Fl_1W[k]
             f2 = self.f_Fl_2W[k]
             sq_forces = f1.T @ f1 + f2.T @ f2
-            if one_or_two_feet == "two_feet":  # right foot
+            if self.two_feet:
                 f1 = self.f_Fr_1W[k]
                 f2 = self.f_Fr_2W[k]
                 sq_forces += f1.T @ f1 + f2.T @ f2
@@ -644,9 +646,7 @@ class FootstepPlanSegment:
         )
 
     def get_input(self, k: int) -> npt.NDArray:
-        if self.one_or_two_feet == "one_foot":
-            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_BFl_W[k]])
-        else:  # two feet
+        if self.two_feet:
             return np.concatenate(
                 [
                     self.f_Fl_1W[k],
@@ -657,6 +657,8 @@ class FootstepPlanSegment:
                     self.p_BFl_W[k],
                 ]
             )
+        else:
+            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_BFl_W[k]])
 
     def get_robot_pose(self, k: int) -> npt.NDArray:
         return np.concatenate([self.p_WB[k], [self.theta_WB[k]]])
@@ -712,9 +714,7 @@ class FootstepPlanSegment:
         f_Fl_1W = result.GetSolution(self.f_Fl_1W)
         f_Fl_2W = result.GetSolution(self.f_Fl_2W)
 
-        if self.one_or_two_feet == "one_foot":
-            return FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W)
-        else:  # two feet
+        if self.two_feet:
             p_BFr_W = result.GetSolution(self.p_BFr_W)
             f_Fr_1W = result.GetSolution(self.f_Fr_1W)
             f_Fr_2W = result.GetSolution(self.f_Fr_2W)
@@ -722,6 +722,8 @@ class FootstepPlanSegment:
             return FootstepPlanKnotPoints(
                 p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W, p_BFr_W, f_Fr_1W, f_Fr_2W
             )
+        else:
+            return FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W)
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult
@@ -1055,7 +1057,7 @@ def test_single_point():
     planner.create_graph_diagram("footstep_planner")
     plan = planner.plan()
 
-    animate_footstep_plan(robot, terrain, plan)
+    # animate_footstep_plan(robot, terrain, plan)
 
     # terrain.plot()
     # plt.show()
@@ -1068,7 +1070,7 @@ def test_trajectory_segment_one_foot() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, "one_foot", robot, cfg, name="First step")
+    segment = FootstepPlanSegment(stone, False, robot, cfg, name="First step")
 
     assert segment.p_WB.shape == (cfg.period_steps, 2)
     assert segment.v_WB.shape == (cfg.period_steps, 2)
@@ -1125,7 +1127,7 @@ def test_trajectory_segment_two_feet() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+    segment = FootstepPlanSegment(stone, True, robot, cfg, name="First step")
 
     assert segment.p_BFl_W.shape == (cfg.period_steps, 2)
     assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
@@ -1199,9 +1201,7 @@ def test_merging_two_trajectory_segments() -> None:
     target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
     target_pos_2 = np.array([stone.x_pos + 0.18, 0.0]) + desired_robot_pos
 
-    segment_first = FootstepPlanSegment(
-        stone, "two_feet", robot, cfg, name="First step"
-    )
+    segment_first = FootstepPlanSegment(stone, True, robot, cfg, name="First step")
     segment_first.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment_first.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
     segment_first.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
@@ -1210,9 +1210,7 @@ def test_merging_two_trajectory_segments() -> None:
     assert result_first.is_success()
     segment_val_first = segment_first.evaluate_with_result(result_first)
 
-    segment_second = FootstepPlanSegment(
-        stone, "one_foot", robot, cfg, name="second step"
-    )
+    segment_second = FootstepPlanSegment(stone, False, robot, cfg, name="second step")
     segment_second.add_pose_constraint(0, target_pos, 0)  # type: ignore
     segment_second.add_pose_constraint(cfg.period_steps - 1, target_pos_2, 0)  # type: ignore
     segment_second.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
@@ -1227,6 +1225,22 @@ def test_merging_two_trajectory_segments() -> None:
     )
 
     animate_footstep_plan(robot, terrain, traj)
+
+
+def test_footstep_planning_one_stone() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
+
+    active_feet = np.array(
+        [[True, True], [True, False], [True, True], [False, True], [True, True]]
+    )
 
 
 def main():
