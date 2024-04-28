@@ -5,8 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydot
+from matplotlib.animation import FuncAnimation
+from matplotlib.artist import Artist
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
+    GraphOfConvexSetsOptions,
     HPolyhedron,
     Point,
     Spectrahedron,
@@ -20,7 +23,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
 )
-from pydrake.symbolic import DecomposeAffineExpressions
+from pydrake.symbolic import DecomposeAffineExpressions, Variable
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
 
 from planning_through_contact.geometry.utilities import cross_2d
@@ -47,6 +50,14 @@ class InPlaneSteppingStone:
         Returns the surface center of the stone.
         """
         return np.array([self.x_pos, self.z_pos])
+
+    @property
+    def x_min(self) -> float:
+        return self.x_pos - self.width / 2
+
+    @property
+    def x_max(self) -> float:
+        return self.x_pos + self.width / 2
 
     def plot(self, **kwargs):
         center = np.array([self.x_pos, self.z_pos / 2])
@@ -114,6 +125,39 @@ class FootstepPlanningConfig:
 
 
 @dataclass
+class KnotPointValue:
+    p_WB: npt.NDArray[np.float64]
+    theta_WB: float
+    # TODO(bernhardpg): Expand to Left and Right foot
+    p_BF_W: npt.NDArray[np.float64]
+    f_F_1W: npt.NDArray[np.float64]
+    f_F_2W: npt.NDArray[np.float64]
+
+
+@dataclass
+class FootstepPlan:
+    p_WBs: npt.NDArray[np.float64]  # (num_steps, 2)
+    theta_WBs: npt.NDArray[np.float64]  # (num_steps, 1)
+    # TODO(bernhardpg): Expand to Left and Right foot
+    p_BF_Ws: npt.NDArray[np.float64]  # (num_steps, 2)
+    f_F_1Ws: npt.NDArray[np.float64]  # (num_steps, 2)
+    f_F_2Ws: npt.NDArray[np.float64]  # (num_steps, 2)
+    dt: float
+
+    @classmethod
+    def from_knot_points(
+        cls, knot_points: List[KnotPointValue], dt: float
+    ) -> "FootstepPlan":
+        p_WBs = np.array([k.p_WB for k in knot_points])
+        theta_WBs = np.array([k.theta_WB for k in knot_points])
+        p_BF_Ws = np.array([k.p_BF_W for k in knot_points])
+        f_F_1Ws = np.array([k.f_F_1W for k in knot_points])
+        f_F_2Ws = np.array([k.f_F_2W for k in knot_points])
+
+        return cls(p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws, dt)
+
+
+@dataclass
 class KnotPoint:
     def __init__(
         self,
@@ -157,6 +201,11 @@ class KnotPoint:
         self.prog.AddConstraint(self.tau_F_1 == cross_2d(self.p_BF_1W, self.f_F_1W))
         self.prog.AddConstraint(self.tau_F_2 == cross_2d(self.p_BF_2W, self.f_F_2W))
 
+        # Stay on the stepping stone
+        self.prog.AddConstraint(stone.x_min <= self.p_WB[0])
+        self.prog.AddConstraint(self.p_WB[0] <= stone.x_max)
+        self.prog.AddConstraint(self.p_WB[1] == stone.z_pos)
+
         # TODO(bernhardpg): Friction cone must be formulated differently
         # when we have tilted ground
         mu = 0.5
@@ -166,6 +215,8 @@ class KnotPoint:
             self.prog.AddLinearConstraint(f[0] >= -mu * f[1])
 
         # TODO(bernhardpg): Step span limit
+
+        # TODO(bernhardpg): Costs
 
     def get_state(self) -> npt.NDArray:
         return np.concatenate([self.p_WB, [self.theta_WB], self.v_WB, [self.omega_WB]])
@@ -180,6 +231,14 @@ class KnotPoint:
         return np.concatenate(
             (self.get_state(), self.get_input(), (self.tau_F_1, self.tau_F_2))
         )
+
+    def get_var_in_vertex(
+        self,
+        var: Variable,
+        vertex_vars: npt.NDArray,
+    ) -> float | Variable:
+        idx = self.prog.FindDecisionVariableIndex(var)
+        return vertex_vars[idx]  # type: ignore
 
     def get_vars_in_vertex(
         self, vars: npt.NDArray, vertex_vars: npt.NDArray
@@ -228,6 +287,17 @@ class KnotPoint:
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 
+    def get_knot_point_val_from_vertex(
+        self, vertex_vars_vals: npt.NDArray[np.float64]
+    ) -> KnotPointValue:
+        p_WB = self.get_vars_in_vertex(self.p_WB, vertex_vars_vals)
+        theta_WB = self.get_var_in_vertex(self.theta_WB, vertex_vars_vals)
+        p_BF_W = self.get_vars_in_vertex(self.p_BF_W, vertex_vars_vals)
+        f_F_1W = self.get_vars_in_vertex(self.f_F_1W, vertex_vars_vals)
+        f_F_2W = self.get_vars_in_vertex(self.f_F_2W, vertex_vars_vals)
+
+        return KnotPointValue(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
+
 
 class VertexPointPair(NamedTuple):
     v: GcsVertex
@@ -235,6 +305,9 @@ class VertexPointPair(NamedTuple):
 
     def get_vars_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.p.get_vars_in_vertex(vars, self.v.x())
+
+    def get_knot_point_val(self, result: MathematicalProgramResult) -> KnotPointValue:
+        return self.p.get_knot_point_val_from_vertex(result.GetSolution(self.v.x()))
 
 
 class FootstepPlanner:
@@ -245,6 +318,7 @@ class FootstepPlanner:
         initial_position: npt.NDArray[np.float64],
         target_position: npt.NDArray[np.float64],
     ) -> None:
+        self.config = config
 
         initial_stone = terrain.stepping_stones[0]
         target_stone = terrain.stepping_stones[1]
@@ -263,7 +337,7 @@ class FootstepPlanner:
 
         # Add initial and target vertices
         self.source = self.gcs.AddVertex(Point(initial_position), name="source")
-        self.target = self.gcs.AddVertex(Point(initial_position), name="target")
+        self.target = self.gcs.AddVertex(Point(target_position), name="target")
 
         # Add all knot points as vertices
         pairs = self._add_points_as_vertices(self.gcs, points)
@@ -276,6 +350,8 @@ class FootstepPlanner:
 
         for pair in pairs:  # connect all the vertices to the target
             self._add_edge_to_source_or_target(pair, "target")
+
+        self.vertex_name_to_pairs = {pair.v.name(): pair for pair in pairs}
 
     def _add_edge_to_source_or_target(
         self,
@@ -341,6 +417,68 @@ class FootstepPlanner:
 
         return data
 
+    def plan(self):
+        options = GraphOfConvexSetsOptions()
+        options.convex_relaxation = True
+        options.max_rounded_paths = 20
+        result = self.gcs.SolveShortestPath(self.source, self.target, options)
+
+        print(f"Found a trajectory: {result.is_success()}")
+
+        edges_on_sol = self.gcs.GetSolutionPath(self.source, self.target, result)
+        names_on_sol = [e.name() for e in edges_on_sol]
+        print(f"Path: {' -> '.join(names_on_sol)}")
+
+        # we disregard source and target vertices when we extract the path
+        pairs_on_sol = [
+            self.vertex_name_to_pairs[e.v().name()] for e in edges_on_sol[:-1]
+        ]
+
+        knot_point_vals = [p.get_knot_point_val(result) for p in pairs_on_sol]
+        plan = FootstepPlan.from_knot_points(knot_point_vals, self.config.dt)
+
+        breakpoint()
+
+
+# helper function that generates an animation of planned footstep positions
+def animate_footstep_plan(
+    terrain: InPlaneTerrain,
+    step_span: float,
+    position_left: npt.NDArray[np.float64],
+    position_right: npt.NDArray[np.float64],
+    title=None,
+) -> None:
+    """
+    @param position_left/right: position for feet, expected in shape (num_steps, 2)
+    """
+    # initialize figure for animation
+    fig, ax = plt.subplots()
+
+    # plot stepping stones
+    terrain.plot(title=title, ax=ax)
+
+    # initial position of the feet
+    left_foot = ax.scatter(0, 0, color="r", zorder=3, label="Left foot")
+    right_foot = ax.scatter(0, 0, color="b", zorder=3, label="Right foot")
+
+    # misc settings
+    plt.close()
+    ax.legend(loc="upper left", bbox_to_anchor=(0, 1.3), ncol=2)
+
+    def animate(n_steps: int) -> None:
+        # scatter feet
+        left_foot.set_offsets(position_left[n_steps])
+        right_foot.set_offsets(position_right[n_steps])
+
+        # limits of reachable set for each foot
+        c2c = np.ones(2) * step_span / 2
+
+    # create ad display animation
+    n_steps = position_left.shape[0]
+    ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
+
+    plt.show()
+
 
 def main():
     terrain = InPlaneTerrain()
@@ -354,6 +492,7 @@ def main():
     planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
 
     planner.create_graph_diagram("footstep_planner")
+    planner.plan()
 
     # terrain.plot()
     # plt.show()
