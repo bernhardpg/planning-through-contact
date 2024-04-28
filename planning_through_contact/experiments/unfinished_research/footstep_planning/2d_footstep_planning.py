@@ -371,13 +371,13 @@ class FootstepPlanSegment:
 
         # TODO: remove
         # enforce no z-acceleration at first and last step
-        self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
-        self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
+        # self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
+        # self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
 
         # angular acceleration
-        self.theta_ddot = (1 / robot.inertia) * (self.tau_Fl_1 + self.tau_Fl_2)
+        self.omega_dot_WB = (1 / robot.inertia) * (self.tau_Fl_1 + self.tau_Fl_2)
         if self.two_feet:
-            self.theta_ddot += (1 / robot.inertia) * (self.tau_Fr_1 + self.tau_Fr_2)
+            self.omega_dot_WB += (1 / robot.inertia) * (self.tau_Fr_1 + self.tau_Fr_2)
 
         # contact points positions
         self.p_BFl_1W = self.p_BFl_W + np.array([robot.foot_length / 2, 0])
@@ -460,13 +460,13 @@ class FootstepPlanSegment:
             self.prog.AddLinearConstraint(eq(dynamics, 0)[:3])
 
             # foot can't move during segment
-            const = eq(self.p_WFl[k], self.p_WFl[k + 1])
-            for c in const:
-                self.prog.AddLinearEqualityConstraint(c)
-            if self.two_feet:
-                const = eq(self.p_WFr[k], self.p_WFr[k + 1])
-                for c in const:
-                    self.prog.AddLinearEqualityConstraint(c)
+            # const = eq(self.p_WFl[k], self.p_WFl[k + 1])
+            # for c in const:
+            #     self.prog.AddLinearEqualityConstraint(c)
+            # if self.two_feet:
+            #     const = eq(self.p_WFr[k], self.p_WFr[k + 1])
+            #     for c in const:
+            #         self.prog.AddLinearEqualityConstraint(c)
 
         # TODO(bernhardpg): Step span limit
 
@@ -478,41 +478,48 @@ class FootstepPlanSegment:
             "sq_nominal_pose": [],
         }
 
-        # cost_force = 1.0
-        # cost_torque = 1.0
-        # cost_lin_vel = 1.0
-        # cost_ang_vel = 1.0
-        # cost_nominal_pose = 1.0
-
-        cost_force = 1e-5
-        cost_torque = 1e-3
-        cost_lin_vel = 10.0
-        cost_ang_vel = 0.1
+        cost_force = 1.0
+        cost_torque = 1.0
+        cost_lin_vel = 1.0
+        cost_ang_vel = 1.0
         cost_nominal_pose = 1.0
 
+        # cost_force = 1e-5
+        # cost_torque = 1e-3
+        # cost_lin_vel = 10.0
+        # cost_ang_vel = 0.1
+        # cost_nominal_pose = 1.0
+
         # squared forces
-        for k in range(num_steps):
-            f1 = self.f_Fl_1W[k]
-            f2 = self.f_Fl_2W[k]
-            sq_forces = f1.T @ f1 + f2.T @ f2
-            if self.two_feet:
-                f1 = self.f_Fr_1W[k]
-                f2 = self.f_Fr_2W[k]
-                sq_forces += f1.T @ f1 + f2.T @ f2
-            c = self.prog.AddQuadraticCost(cost_force * sq_forces)
-            self.costs["sq_forces"].append(c)
+        # for k in range(num_steps):
+        #     f1 = self.f_Fl_1W[k]
+        #     f2 = self.f_Fl_2W[k]
+        #     sq_forces = f1.T @ f1 + f2.T @ f2
+        #     if self.two_feet:
+        #         f1 = self.f_Fr_1W[k]
+        #         f2 = self.f_Fr_2W[k]
+        #         sq_forces += f1.T @ f1 + f2.T @ f2
+        #     c = self.prog.AddQuadraticCost(cost_force * sq_forces)
+        #     self.costs["sq_forces"].append(c)
 
         # squared torques
+        # for k in range(num_steps):
+        #     tau1 = self.tau_Fl_1[k]
+        #     tau2 = self.tau_Fl_2[k]
+        #     sq_torques = tau1**2 + tau2**2
+        #     if self.two_feet:
+        #         tau3 = self.tau_Fr_1[k]
+        #         tau4 = self.tau_Fr_2[k]
+        #         sq_torques += tau3**2 + tau4**2
+        #     c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
+        #     self.costs["sq_torques"].append(c)
+
+        # squared accelerations
         for k in range(num_steps):
-            tau1 = self.tau_Fl_1[k]
-            tau2 = self.tau_Fl_2[k]
-            sq_torques = tau1**2 + tau2**2
-            if self.two_feet:
-                tau3 = self.tau_Fr_1[k]
-                tau4 = self.tau_Fr_2[k]
-                sq_torques += tau3**2 + tau4**2
-            c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
-            self.costs["sq_torques"].append(c)
+            sq_acc = self.a_WB[k].T @ self.a_WB[k]
+            sq_rot_acc = self.omega_dot_WB[k] ** 2
+            c = self.prog.AddQuadraticCost(sq_acc + sq_rot_acc)
+            self.costs["sq_forces"].append(c)
 
         # squared robot velocity
         for k in range(num_steps):
@@ -561,7 +568,7 @@ class FootstepPlanSegment:
         if k == -1:
             k = self.config.period_steps - 1
         return np.concatenate(
-            [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.theta_ddot[k]]]
+            [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.omega_dot_WB[k]]]
         )
 
     def get_var_in_vertex(
@@ -813,9 +820,9 @@ class FootstepPlanner:
             state_next = s_v.get_vars_in_vertex(s_v.get_state(0), v.x())
 
             # forward euler
-            constraint = eq(state_next, state_curr + dt * f_curr)
-            for c in constraint:
-                e.AddConstraint(c)
+            # constraint = eq(state_next, state_curr + dt * f_curr)
+            # for c in constraint:
+            #     e.AddConstraint(c)
 
     def _add_edge_to_source_or_target(
         self,
@@ -840,10 +847,11 @@ class FootstepPlanner:
         for c in constraint:
             e.AddConstraint(c)
 
+        # TODO: I don't think that this makes much sense to have
         # Add zero velocity constraint on the edge connection connected to the source or target
-        constraint = eq(spatial_vel, 0)
-        for c in constraint:
-            e.AddConstraint(c)
+        # constraint = eq(spatial_vel, 0)
+        # for c in constraint:
+        #     e.AddConstraint(c)
 
     def create_graph_diagram(
         self,
@@ -872,8 +880,9 @@ class FootstepPlanner:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
         options.solver_options = solver_options
 
-        tolerance = 1e-4
+        tolerance = 1e-6
         mosek = MosekSolver()
+        options.solver = mosek
         solver_options.SetOption(
             mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
         )
@@ -889,9 +898,18 @@ class FootstepPlanner:
         if not result.is_success():
             # raise RuntimeError("Could not find a solution!")
             print("Could not find a feasible solution!")
+
+        # TODO remove this
         result.set_solution_result(SolutionResult.kSolutionFound)
 
-        edges_on_sol = self.gcs.GetSolutionPath(self.source, self.target, result)
+        flows = {e.name(): result.GetSolution(e.phi()) for e in self.gcs.Edges()}
+        print(flows)
+
+        paths, results = self.gcs.GetRandomizedSolutionPath(
+            self.source, self.target, result, options
+        )
+        edges_on_sol = paths[0]
+        result = results[0]
         names_on_sol = [e.name() for e in edges_on_sol]
         print(f"Path: {' -> '.join(names_on_sol)}")
 
@@ -1244,7 +1262,7 @@ def test_footstep_planning_one_stone() -> None:
     cfg = FootstepPlanningConfig(robot=robot, period_steps=3)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    x_diff = np.array([0.3, 0])
+    x_diff = np.array([0.7, 0])
     # x_diff = np.array([0.1, 0])
     initial_pose = np.concatenate(
         (initial_stone.center + desired_robot_pos - x_diff, [0])
