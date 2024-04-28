@@ -91,7 +91,9 @@ class InPlaneTerrain:
     def max_height(self) -> float:
         return max([s.height for s in self.stepping_stones])
 
-    def plot(self, title: Optional[str] = None, **kwargs):
+    def plot(
+        self, title: Optional[str] = None, max_height: Optional[float] = None, **kwargs
+    ):
         # make light green the default facecolor
         if not "facecolor" in kwargs:
             kwargs["facecolor"] = [0, 1, 0, 0.1]
@@ -105,7 +107,9 @@ class InPlaneTerrain:
             plt.title(title)
             # get current plot axis if one is not given
         ax = plt.gca()
-        ax.set_ylim((0.0, self.max_height * 2.0))
+
+        if max_height:
+            ax.set_ylim((0.0, max_height))
 
 
 @dataclass
@@ -116,6 +120,7 @@ class PotatoRobot:
     inertia: float = 5.0  # kg m**2
     foot_length: float = 0.3  # m
     step_span: float = 0.8  # m
+    desired_com_height: float = 1.5  # m
 
 
 @dataclass
@@ -143,6 +148,14 @@ class FootstepPlan:
     f_F_1Ws: npt.NDArray[np.float64]  # (num_steps, 2)
     f_F_2Ws: npt.NDArray[np.float64]  # (num_steps, 2)
     dt: float
+
+    @property
+    def num_steps(self) -> int:
+        return self.p_WBs.shape[0]
+
+    @property
+    def p_WFs(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
+        return self.p_WBs + self.p_BF_Ws
 
     @classmethod
     def from_knot_points(
@@ -182,6 +195,9 @@ class KnotPoint:
         self.f_F_1W = self.prog.NewContinuousVariables(2, "f_F_1W")
         self.f_F_2W = self.prog.NewContinuousVariables(2, "f_F_2W")
 
+        # compute the foot position
+        self.p_WF = self.p_WB + self.p_BF_W
+
         # auxilliary vars
         # TODO(bernhardpg): we might be able to get around this once we
         # have SDP constraints over the edges
@@ -202,9 +218,9 @@ class KnotPoint:
         self.prog.AddConstraint(self.tau_F_2 == cross_2d(self.p_BF_2W, self.f_F_2W))
 
         # Stay on the stepping stone
-        self.prog.AddConstraint(stone.x_min <= self.p_WB[0])
-        self.prog.AddConstraint(self.p_WB[0] <= stone.x_max)
-        self.prog.AddConstraint(self.p_WB[1] == stone.z_pos)
+        self.prog.AddConstraint(stone.x_min <= self.p_WF[0])
+        self.prog.AddConstraint(self.p_WF[0] <= stone.x_max)
+        self.prog.AddConstraint(self.p_WF[1] == stone.z_pos)
 
         # TODO(bernhardpg): Friction cone must be formulated differently
         # when we have tilted ground
@@ -417,13 +433,14 @@ class FootstepPlanner:
 
         return data
 
-    def plan(self):
+    def plan(self) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.max_rounded_paths = 20
         result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
-        print(f"Found a trajectory: {result.is_success()}")
+        if not result.is_success():
+            raise RuntimeError("Could not find a solution!")
 
         edges_on_sol = self.gcs.GetSolutionPath(self.source, self.target, result)
         names_on_sol = [e.name() for e in edges_on_sol]
@@ -437,15 +454,13 @@ class FootstepPlanner:
         knot_point_vals = [p.get_knot_point_val(result) for p in pairs_on_sol]
         plan = FootstepPlan.from_knot_points(knot_point_vals, self.config.dt)
 
-        breakpoint()
+        return plan
 
 
 # helper function that generates an animation of planned footstep positions
 def animate_footstep_plan(
     terrain: InPlaneTerrain,
-    step_span: float,
-    position_left: npt.NDArray[np.float64],
-    position_right: npt.NDArray[np.float64],
+    plan: FootstepPlan,
     title=None,
 ) -> None:
     """
@@ -455,11 +470,12 @@ def animate_footstep_plan(
     fig, ax = plt.subplots()
 
     # plot stepping stones
-    terrain.plot(title=title, ax=ax)
+    terrain.plot(title=title, ax=ax, max_height=2.0)
 
     # initial position of the feet
-    left_foot = ax.scatter(0, 0, color="r", zorder=3, label="Left foot")
-    right_foot = ax.scatter(0, 0, color="b", zorder=3, label="Right foot")
+    p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
+    p_WF = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
+    # right_foot = ax.scatter(0, 0, color="b", zorder=3, label="Right foot")
 
     # misc settings
     plt.close()
@@ -467,17 +483,14 @@ def animate_footstep_plan(
 
     def animate(n_steps: int) -> None:
         # scatter feet
-        left_foot.set_offsets(position_left[n_steps])
-        right_foot.set_offsets(position_right[n_steps])
-
-        # limits of reachable set for each foot
-        c2c = np.ones(2) * step_span / 2
+        p_WB.set_offsets(plan.p_WBs[n_steps])
+        p_WF.set_offsets(plan.p_WFs[n_steps])
+        # right_foot.set_offsets(position_right[n_steps])
 
     # create ad display animation
-    n_steps = position_left.shape[0]
+    n_steps = plan.num_steps
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
-
-    plt.show()
+    ani.save("footstep_plan.mp4", writer="ffmpeg")
 
 
 def main():
@@ -487,12 +500,16 @@ def main():
 
     cfg = FootstepPlanningConfig(dt=0.3, robot=PotatoRobot())
 
-    initial_pose = np.concatenate((initial_stone.center, [0]))
-    target_pose = np.concatenate((target_stone.center, [0]))
+    desired_robot_pos = np.array([0, cfg.robot.desired_com_height])
+
+    initial_pose = np.concatenate((initial_stone.center + desired_robot_pos, [0]))
+    target_pose = np.concatenate((target_stone.center + desired_robot_pos, [0]))
     planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
 
     planner.create_graph_diagram("footstep_planner")
-    planner.plan()
+    plan = planner.plan()
+
+    animate_footstep_plan(terrain, plan)
 
     # terrain.plot()
     # plt.show()
