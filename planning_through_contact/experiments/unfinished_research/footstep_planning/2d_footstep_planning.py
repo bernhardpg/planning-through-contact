@@ -460,13 +460,13 @@ class FootstepPlanSegment:
             self.prog.AddLinearConstraint(eq(dynamics, 0)[:3])
 
             # foot can't move during segment
-            # const = eq(self.p_WFl[k], self.p_WFl[k + 1])
-            # for c in const:
-            #     self.prog.AddLinearEqualityConstraint(c)
-            # if self.two_feet:
-            #     const = eq(self.p_WFr[k], self.p_WFr[k + 1])
-            #     for c in const:
-            #         self.prog.AddLinearEqualityConstraint(c)
+            const = eq(self.p_WFl[k], self.p_WFl[k + 1])
+            for c in const:
+                self.prog.AddLinearEqualityConstraint(c)
+            if self.two_feet:
+                const = eq(self.p_WFr[k], self.p_WFr[k + 1])
+                for c in const:
+                    self.prog.AddLinearEqualityConstraint(c)
 
         # TODO(bernhardpg): Step span limit
 
@@ -518,7 +518,7 @@ class FootstepPlanSegment:
         for k in range(num_steps):
             sq_acc = self.a_WB[k].T @ self.a_WB[k]
             sq_rot_acc = self.omega_dot_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(sq_acc + sq_rot_acc)
+            c = self.prog.AddQuadraticCost(sq_acc)
             self.costs["sq_forces"].append(c)
 
         # squared robot velocity
@@ -905,11 +905,14 @@ class FootstepPlanner:
         flows = {e.name(): result.GetSolution(e.phi()) for e in self.gcs.Edges()}
         print(flows)
 
-        paths, results = self.gcs.GetRandomizedSolutionPath(
-            self.source, self.target, result, options
-        )
-        edges_on_sol = paths[0]
-        result = results[0]
+        if False:
+            paths, results = self.gcs.GetRandomizedSolutionPath(
+                self.source, self.target, result, options
+            )
+            edges_on_sol = paths[0]
+            result = results[0]
+
+        edges_on_sol = self.gcs.GetSolutionPath(self.source, self.target, result)
         names_on_sol = [e.name() for e in edges_on_sol]
         print(f"Path: {' -> '.join(names_on_sol)}")
 
@@ -1135,7 +1138,7 @@ def test_trajectory_segment_one_foot() -> None:
 
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
+    assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
     assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
@@ -1154,7 +1157,9 @@ def test_trajectory_segment_two_feet() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, True, robot, cfg, name="First step")
+    segment = FootstepPlanSegment(
+        stone, np.array([1, 1]), robot, cfg, name="First step"
+    )
 
     assert segment.p_BFl_W.shape == (cfg.period_steps, 2)
     assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
@@ -1194,7 +1199,7 @@ def test_trajectory_segment_two_feet() -> None:
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
 
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
+    assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
     assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
@@ -1290,8 +1295,8 @@ def main():
     # test_single_point()
     # test_trajectory_segment_one_foot()
     # test_merging_two_trajectory_segments()
-    # test_trajectory_segment_two_feet()
-    test_footstep_planning_one_stone()
+    test_trajectory_segment_two_feet()
+    # test_footstep_planning_one_stone()
     # load_traj()
 
 
