@@ -171,14 +171,21 @@ class KnotPointValue:
 class FootstepPlanKnotPoints:
     p_WB: npt.NDArray[np.float64]
     theta_WB: npt.NDArray[np.float64]
-    # TODO(bernhardpg): Expand to Left and Right foot
-    p_BF_W: npt.NDArray[np.float64]
-    f_F_1W: npt.NDArray[np.float64]
-    f_F_2W: npt.NDArray[np.float64]
+    p_BFl_W: npt.NDArray[np.float64]
+    f_Fl_1W: npt.NDArray[np.float64]
+    f_Fl_2W: npt.NDArray[np.float64]
+    p_BFr_W: Optional[npt.NDArray[np.float64]] = None
+    f_Fr_1W: Optional[npt.NDArray[np.float64]] = None
+    f_Fr_2W: Optional[npt.NDArray[np.float64]] = None
 
     @property
-    def p_WF(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
-        return self.p_WB + self.p_BF_W
+    def p_WFl(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
+        return self.p_WB + self.p_BFl_W
+
+    @property
+    def p_WFr(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
+        assert self.p_BFr_W is not None
+        return self.p_WB + self.p_BFr_W
 
 
 class FootstepTrajectory:
@@ -224,12 +231,17 @@ class FootstepTrajectory:
     ) -> "FootstepTrajectory":
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.array([k.theta_WB for k in segments]).reshape((-1, 1))
-        p_BF_Ws = np.vstack([k.p_BF_W for k in segments])
-        f_F_1Ws = np.vstack([k.f_F_1W for k in segments])
-        f_F_2Ws = np.vstack([k.f_F_2W for k in segments])
+        p_BFl_Ws = np.vstack([k.p_BFl_W for k in segments])
+        f_Fl_1Ws = np.vstack([k.f_Fl_1W for k in segments])
+        f_Fl_2Ws = np.vstack([k.f_Fl_2W for k in segments])
+
+        # TODO: must handle this better for multiple knot points in a row
+        p_BFr_Ws = np.vstack([k.p_BFr_W for k in segments])
+        f_Fr_1Ws = np.vstack([k.f_Fr_1W for k in segments])
+        f_Fr_2Ws = np.vstack([k.f_Fr_2W for k in segments])
 
         merged_knot_points = FootstepPlanKnotPoints(
-            p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws
+            p_WBs, theta_WBs, p_BFl_Ws, f_Fl_1Ws, f_Fl_2Ws, p_BFr_Ws, f_Fr_1Ws, f_Fr_2Ws
         )
 
         return cls(merged_knot_points, dt)
@@ -400,6 +412,7 @@ class FootstepPlanSegment:
             self.name = f"{stone.name}_{name}"
 
         self.config = config
+        self.one_or_two_feet = one_or_two_feet
         num_steps = self.config.period_steps
 
         self.prog = MathematicalProgram()
@@ -411,63 +424,119 @@ class FootstepPlanSegment:
         self.omega_WB = self.prog.NewContinuousVariables(num_steps, "omega_WB")
 
         # declare inputs
-        self.p_BF_W = self.prog.NewContinuousVariables(num_steps, 2, "p_BF_W")
-        self.f_F_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_F_1W")
-        self.f_F_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_F_2W")
+
+        # WLOG. we call the first foot right foot and the second foot left foot.
+        # Planning-wise this does not make a difference, but it makes the naming easier.
+        # When executing the plan, the correct foot must be determined from the gait.
+
+        # left foot
+        self.p_BFl_W = self.prog.NewContinuousVariables(num_steps, 2, "p_BFl_W")
+        self.f_Fl_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_1W")
+        self.f_Fl_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_2W")
+        if one_or_two_feet == "two_feet":  # right foot
+            self.p_BFr_W = self.prog.NewContinuousVariables(num_steps, 2, "p_BFr_W")
+            self.f_Fr_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_1W")
+            self.f_Fr_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_2W")
 
         # compute the foot position
-        self.p_WF = self.p_WB + self.p_BF_W
+        self.p_WFl = self.p_WB + self.p_BFl_W
+        if one_or_two_feet == "two_feet":  # right foot
+            self.p_WFr = self.p_WB + self.p_BFr_W
 
         # auxilliary vars
         # TODO(bernhardpg): we might be able to get around this once we
         # have SDP constraints over the edges
-        self.tau_F_1 = self.prog.NewContinuousVariables(num_steps, "tau_F_1")
-        self.tau_F_2 = self.prog.NewContinuousVariables(num_steps, "tau_F_2")
+        self.tau_Fl_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_1")
+        self.tau_Fl_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_2")
+        if one_or_two_feet == "two_feet":  # right foot
+            self.tau_Fr_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_1")
+            self.tau_Fr_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_2")
 
         # linear acceleration
         g = np.array([0, -9.81])
-        self.a_WB = (1 / robot.mass) * (self.f_F_1W + self.f_F_2W) + g
+        self.a_WB = (1 / robot.mass) * (self.f_Fl_1W + self.f_Fl_2W) + g
+        if one_or_two_feet == "two_feet":  # right foot
+            self.a_WB += (1 / robot.mass) * (self.f_Fr_1W + self.f_Fr_2W)
 
         # TODO: remove
         # enforce no z-acceleration at first and last step
-        self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
-        self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
+        # self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
+        # self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
 
         # angular acceleration
-        self.theta_ddot = (1 / robot.inertia) * (self.tau_F_1 + self.tau_F_2)
+        self.theta_ddot = (1 / robot.inertia) * (self.tau_Fl_1 + self.tau_Fl_2)
+        if one_or_two_feet == "two_feet":  # right foot
+            self.theta_ddot += (1 / robot.inertia) * (self.tau_Fr_1 + self.tau_Fr_2)
 
         # contact points positions
-        self.p_BF_1W = self.p_BF_W + np.array([robot.foot_length / 2, 0])
-        self.p_BF_2W = self.p_BF_W - np.array([robot.foot_length / 2, 0])
+        self.p_BFl_1W = self.p_BFl_W + np.array([robot.foot_length / 2, 0])
+        self.p_BFl_2W = self.p_BFl_W - np.array([robot.foot_length / 2, 0])
+        if one_or_two_feet == "two_feet":  # right foot
+            self.p_BFr_1W = self.p_BFr_W + np.array([robot.foot_length / 2, 0])
+            self.p_BFr_2W = self.p_BFr_W - np.array([robot.foot_length / 2, 0])
 
+        self.non_convex_constraints = []
         for k in range(num_steps):
             # torque = arm x force
-            self.prog.AddQuadraticConstraint(
-                self.tau_F_1[k] - cross_2d(self.p_BF_1W[k], self.f_F_1W[k]), 0, 0
+            cs_for_knot_point = []
+            c = self.prog.AddQuadraticConstraint(
+                self.tau_Fl_1[k] - cross_2d(self.p_BFl_1W[k], self.f_Fl_1W[k]), 0, 0
             )
-            self.prog.AddQuadraticConstraint(
-                self.tau_F_2[k] - cross_2d(self.p_BF_2W[k], self.f_F_2W[k]), 0, 0
+            cs_for_knot_point.append(c)
+            c = self.prog.AddQuadraticConstraint(
+                self.tau_Fl_2[k] - cross_2d(self.p_BFl_2W[k], self.f_Fl_2W[k]), 0, 0
             )
+            cs_for_knot_point.append(c)
+            if one_or_two_feet == "two_feet":  # right foot
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_Fr_1[k] - cross_2d(self.p_BFr_1W[k], self.f_Fr_1W[k]), 0, 0
+                )
+                cs_for_knot_point.append(c)
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_Fr_2[k] - cross_2d(self.p_BFr_2W[k], self.f_Fr_2W[k]), 0, 0
+                )
+                cs_for_knot_point.append(c)
+
+            self.non_convex_constraints.append(cs_for_knot_point)
 
             # Stay on the stepping stone
-            self.prog.AddLinearConstraint(stone.x_min <= self.p_WF[k][0])
-            self.prog.AddLinearConstraint(self.p_WF[k][0] <= stone.x_max)
-            self.prog.AddLinearEqualityConstraint(self.p_WF[k][1] == stone.z_pos)
+            self.prog.AddLinearConstraint(stone.x_min <= self.p_WFl[k][0])
+            self.prog.AddLinearConstraint(self.p_WFl[k][0] <= stone.x_max)
+            self.prog.AddLinearEqualityConstraint(self.p_WFl[k][1] == stone.z_pos)
+            if one_or_two_feet == "two_feet":  # right foot
+                self.prog.AddLinearConstraint(stone.x_min <= self.p_WFr[k][0])
+                self.prog.AddLinearConstraint(self.p_WFr[k][0] <= stone.x_max)
+                self.prog.AddLinearEqualityConstraint(self.p_WFr[k][1] == stone.z_pos)
 
             # Don't move the feet too far from the robot
             MAX_DIST = 0.4
-            self.prog.AddLinearConstraint(self.p_WB[k][0] - self.p_WF[k][0] <= MAX_DIST)
+            # TODO: Add some reasonable bounds here
             self.prog.AddLinearConstraint(
-                self.p_WB[k][0] - self.p_WF[k][0] >= -MAX_DIST
+                self.p_WB[k][0] - self.p_WFl[k][0] <= MAX_DIST
             )
+            self.prog.AddLinearConstraint(
+                self.p_WB[k][0] - self.p_WFl[k][0] >= -MAX_DIST
+            )
+            if one_or_two_feet == "two_feet":  # right foot
+                self.prog.AddLinearConstraint(
+                    self.p_WB[k][0] - self.p_WFr[k][0] <= MAX_DIST
+                )
+                self.prog.AddLinearConstraint(
+                    self.p_WB[k][0] - self.p_WFr[k][0] >= -MAX_DIST
+                )
 
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
-            for f in (self.f_F_1W, self.f_F_2W):
+            for f in (self.f_Fl_1W, self.f_Fl_2W):
                 self.prog.AddLinearConstraint(f[k][1] >= 0)
                 self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                 self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
+            if one_or_two_feet == "two_feet":  # right foot
+                for f in (self.f_Fr_1W, self.f_Fr_2W):
+                    self.prog.AddLinearConstraint(f[k][1] >= 0)
+                    self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
+                    self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
 
         # dynamics
         dt = self.config.dt
@@ -479,9 +548,13 @@ class FootstepPlanSegment:
             self.prog.AddLinearConstraint(eq(s_next, s_curr + dt * f))
 
             # foot can't move during segment
-            const = eq(self.p_WF[k], self.p_WF[k + 1])
+            const = eq(self.p_WFl[k], self.p_WFl[k + 1])
             for c in const:
                 self.prog.AddLinearEqualityConstraint(c)
+            if one_or_two_feet == "two_feet":  # right foot
+                const = eq(self.p_WFr[k], self.p_WFr[k + 1])
+                for c in const:
+                    self.prog.AddLinearEqualityConstraint(c)
 
         # TODO(bernhardpg): Step span limit
 
@@ -493,9 +566,13 @@ class FootstepPlanSegment:
 
         # squared forces
         for k in range(num_steps):
-            f1 = self.f_F_1W[k]
-            f2 = self.f_F_2W[k]
+            f1 = self.f_Fl_1W[k]
+            f2 = self.f_Fl_2W[k]
             sq_forces = f1.T @ f1 + f2.T @ f2
+            if one_or_two_feet == "two_feet":  # right foot
+                f1 = self.f_Fr_1W[k]
+                f2 = self.f_Fr_2W[k]
+                sq_forces += f1.T @ f1 + f2.T @ f2
             c = self.prog.AddQuadraticCost(cost_force * sq_forces)
             self.costs["sq_forces"].append(c)
 
@@ -516,14 +593,27 @@ class FootstepPlanSegment:
         )
 
     def get_input(self, k: int) -> npt.NDArray:
-        return np.concatenate([self.f_F_1W[k], self.f_F_2W[k], self.p_BF_W[k]])
+        if self.one_or_two_feet == "one_foot":
+            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_BFl_W[k]])
+        else:  # two feet
+            return np.concatenate(
+                [
+                    self.f_Fl_1W[k],
+                    self.f_Fl_2W[k],
+                    self.p_BFl_W[k],
+                    self.f_Fr_1W[k],
+                    self.f_Fr_2W[k],
+                    self.p_BFl_W[k],
+                ]
+            )
 
     def get_robot_pose(self, k: int) -> npt.NDArray:
         return np.concatenate([self.p_WB[k], [self.theta_WB[k]]])
 
     def get_vars(self, k: int) -> npt.NDArray:
+        raise NotImplementedError("This needs to be updated for two feet")
         return np.concatenate(
-            (self.get_state(k), self.get_input(k), (self.tau_F_1[k], self.tau_F_2[k]))
+            (self.get_state(k), self.get_input(k), (self.tau_Fl_1[k], self.tau_Fl_2[k]))
         )
 
     def get_dynamics(self, k: int) -> npt.NDArray:
@@ -567,11 +657,20 @@ class FootstepPlanSegment:
     ) -> FootstepPlanKnotPoints:
         p_WB = result.GetSolution(self.p_WB)
         theta_WB = result.GetSolution(self.theta_WB)
-        p_BF_W = result.GetSolution(self.p_BF_W)
-        f_F_1W = result.GetSolution(self.f_F_1W)
-        f_F_2W = result.GetSolution(self.f_F_2W)
+        p_BFl_W = result.GetSolution(self.p_BFl_W)
+        f_Fl_1W = result.GetSolution(self.f_Fl_1W)
+        f_Fl_2W = result.GetSolution(self.f_Fl_2W)
 
-        return FootstepPlanKnotPoints(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
+        if self.one_or_two_feet == "one_foot":
+            return FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W)
+        else:  # two feet
+            p_BFr_W = result.GetSolution(self.p_BFr_W)
+            f_Fr_1W = result.GetSolution(self.f_Fr_1W)
+            f_Fr_2W = result.GetSolution(self.f_Fr_2W)
+
+            return FootstepPlanKnotPoints(
+                p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W, p_BFr_W, f_Fr_1W, f_Fr_2W
+            )
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult
@@ -588,6 +687,20 @@ class FootstepPlanSegment:
             cost_vals[key] = np.array(cost_vals[key])
 
         return cost_vals
+
+    def evaluate_non_convex_constraints_with_result(
+        self, result: MathematicalProgramResult
+    ) -> npt.NDArray[np.float64]:
+        constraint_violations = []
+        for cs in self.non_convex_constraints:
+            violations_for_knot_point = []
+            for c in cs:
+                var_vals = result.GetSolution(c.variables())
+                violation = np.abs(c.evaluator().Eval(var_vals))
+                violations_for_knot_point.append(violation)
+            constraint_violations.append(np.concatenate(violations_for_knot_point))
+
+        return np.vstack(constraint_violations).T  # (num_steps, num_torques)
 
 
 class VertexPointPair(NamedTuple):
@@ -765,29 +878,36 @@ def animate_footstep_plan(
             [0, robot.foot_height],
         ]
     )
-    foot = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
-    ax.add_patch(foot)
+    foot_left = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
+    ax.add_patch(foot_left)
+    foot_right = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
+    ax.add_patch(foot_right)
 
     # Forces
     FORCE_SCALE = 1e-3
-    force_1 = FancyArrowPatch(
-        posA=(0, 0),
-        posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
-        arrowstyle="->",
-        color="green",
-    )
-    ax.add_patch(force_1)
-    force_2 = FancyArrowPatch(
-        posA=(0, 0),
-        posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
-        arrowstyle="->",
-        color="green",
-    )
-    ax.add_patch(force_2)
+
+    def _create_force_patch():
+        force = FancyArrowPatch(
+            posA=(0, 0),
+            posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
+            arrowstyle="->",
+            color="green",
+        )
+        return force
+
+    force_l1 = _create_force_patch()
+    ax.add_patch(force_l1)
+    force_l2 = _create_force_patch()
+    ax.add_patch(force_l2)
+    force_r1 = _create_force_patch()
+    ax.add_patch(force_r1)
+    force_r2 = _create_force_patch()
+    ax.add_patch(force_r2)
 
     # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
-    p_WF = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
+    p_WFl = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
+    p_WFr = ax.scatter(0, 0, color="b", zorder=3, label="foot")
 
     # Misc settings
     plt.close()
@@ -800,19 +920,29 @@ def animate_footstep_plan(
         robot_body.angle = plan.knot_points.theta_WB[n_steps]
 
         # Foot
-        foot.set_xy(base_foot_vertices + plan.knot_points.p_WF[n_steps])
+        foot_left.set_xy(base_foot_vertices + plan.knot_points.p_WFl[n_steps])
+        foot_right.set_xy(base_foot_vertices + plan.knot_points.p_WFr[n_steps])
 
         # Scatter feet
-        p_WF.set_offsets(plan.knot_points.p_WF[n_steps])
+        p_WFl.set_offsets(plan.knot_points.p_WFl[n_steps])
+        p_WFr.set_offsets(plan.knot_points.p_WFr[n_steps])
 
         # Forces
-        f1_pos = plan.knot_points.p_WF[n_steps] + base_foot_vertices[0]
-        f1_val = plan.knot_points.f_F_1W[n_steps] * FORCE_SCALE
-        force_1.set_positions(posA=f1_pos, posB=(f1_pos + f1_val))
+        f_l1_pos = plan.knot_points.p_WFl[n_steps] + base_foot_vertices[0]
+        f_l1_val = plan.knot_points.f_Fl_1W[n_steps] * FORCE_SCALE
+        force_l1.set_positions(posA=f_l1_pos, posB=(f_l1_pos + f_l1_val))
 
-        f2_pos = plan.knot_points.p_WF[n_steps] + base_foot_vertices[1]
-        f2_val = plan.knot_points.f_F_2W[n_steps] * FORCE_SCALE
-        force_2.set_positions(posA=f2_pos, posB=(f2_pos + f2_val))
+        f_l2_pos = plan.knot_points.p_WFl[n_steps] + base_foot_vertices[1]
+        f_l2_val = plan.knot_points.f_Fl_2W[n_steps] * FORCE_SCALE
+        force_l2.set_positions(posA=f_l2_pos, posB=(f_l2_pos + f_l2_val))
+
+        f_r1_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[0]
+        f_r1_val = plan.knot_points.f_Fr_1W[n_steps] * FORCE_SCALE
+        force_r1.set_positions(posA=f_r1_pos, posB=(f_r1_pos + f_r1_val))
+
+        f_r2_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[1]
+        f_r2_val = plan.knot_points.f_Fr_2W[n_steps] * FORCE_SCALE
+        force_r2.set_positions(posA=f_r2_pos, posB=(f_r2_pos + f_r2_val))
 
     # Create and display animation
     n_steps = plan.num_steps
@@ -857,12 +987,12 @@ def test_trajectory_segment() -> None:
     assert segment.theta_WB.shape == (cfg.period_steps,)
     assert segment.omega_WB.shape == (cfg.period_steps,)
 
-    assert segment.p_BF_W.shape == (cfg.period_steps, 2)
-    assert segment.f_F_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_F_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_BFl_W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
 
-    assert segment.tau_F_1.shape == (cfg.period_steps,)
-    assert segment.tau_F_2.shape == (cfg.period_steps,)
+    assert segment.tau_Fl_1.shape == (cfg.period_steps,)
+    assert segment.tau_Fl_2.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.1, 0.0]) + desired_robot_pos
@@ -887,21 +1017,82 @@ def test_trajectory_segment() -> None:
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
     assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
-    assert traj.knot_points.p_BF_W.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_F_1W.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_F_2W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
 
+    # TODO remove these
     a_WB = evaluate_np_expressions_array(segment.a_WB, result)
-
     cost_vals = segment.evaluate_costs_with_result(result)
-    breakpoint()
+
+    animate_footstep_plan(robot, terrain, traj)
+
+
+def test_trajectory_segment_two_feet() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+
+    assert segment.p_WB.shape == (cfg.period_steps, 2)
+    assert segment.v_WB.shape == (cfg.period_steps, 2)
+    assert segment.theta_WB.shape == (cfg.period_steps,)
+    assert segment.omega_WB.shape == (cfg.period_steps,)
+
+    assert segment.p_BFl_W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
+
+    assert segment.tau_Fl_1.shape == (cfg.period_steps,)
+    assert segment.tau_Fl_2.shape == (cfg.period_steps,)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
+
+    segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
+    segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+
+    segment.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
+    segment.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
+
+    debug = True
+    solver_options = SolverOptions()
+    if debug:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    result = Solve(segment.prog, solver_options=solver_options)
+    assert result.is_success()
+
+    segment_value = segment.evaluate_with_result(result)
+
+    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+    assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
+    assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
+
+    # TODO remove these
+    a_WB = evaluate_np_expressions_array(segment.a_WB, result)
+    cost_vals = segment.evaluate_costs_with_result(result)
+    non_convex_constraint_violation = (
+        segment.evaluate_non_convex_constraints_with_result(result)
+    )
+    print(
+        f"Maximum constriant violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+    )
 
     animate_footstep_plan(robot, terrain, traj)
 
 
 def main():
     # test_single_point()
-    test_trajectory_segment()
+    # test_trajectory_segment()
+    test_trajectory_segment_two_feet()
 
 
 if __name__ == "__main__":
