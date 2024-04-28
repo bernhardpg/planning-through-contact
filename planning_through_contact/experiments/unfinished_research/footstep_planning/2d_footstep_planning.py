@@ -929,9 +929,11 @@ def animate_footstep_plan(
             [0, robot.foot_height],
         ]
     )
-    foot_left = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
+    foot_left = Polygon(base_foot_vertices, closed=True, fill="blue", edgecolor="black")
     ax.add_patch(foot_left)
-    foot_right = Polygon(base_foot_vertices, closed=True, fill=None, edgecolor="black")
+    foot_right = Polygon(
+        base_foot_vertices, closed=True, fill="green", edgecolor="black"
+    )
     ax.add_patch(foot_right)
 
     # Forces
@@ -958,7 +960,7 @@ def animate_footstep_plan(
     # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
     p_WFl = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
-    p_WFr = ax.scatter(0, 0, color="b", zorder=3, label="foot")
+    p_WFr = ax.scatter(0, 0, color="g", zorder=3, label="Right foot")
 
     # Misc settings
     plt.close()
@@ -1014,17 +1016,17 @@ def animate_footstep_plan(
             force_l2.set_visible(False)
 
         # Forces for right foot
-        if not np.isnan(plan.knot_points.f_Fr_1W[n_steps]).any():
+        if not np.isnan(plan.knot_points.f_Fr_1W[n_steps]).any():  # type: ignore
             f_r1_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[0]
-            f_r1_val = plan.knot_points.f_Fr_1W[n_steps] * FORCE_SCALE
+            f_r1_val = plan.knot_points.f_Fr_1W[n_steps] * FORCE_SCALE  # type: ignore
             force_r1.set_positions(posA=f_r1_pos, posB=(f_r1_pos + f_r1_val))
             force_r1.set_visible(True)
         else:
             force_r1.set_visible(False)
 
-        if not np.isnan(plan.knot_points.f_Fr_2W[n_steps]).any():
+        if not np.isnan(plan.knot_points.f_Fr_2W[n_steps]).any():  # type: ignore
             f_r2_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[1]
-            f_r2_val = plan.knot_points.f_Fr_2W[n_steps] * FORCE_SCALE
+            f_r2_val = plan.knot_points.f_Fr_2W[n_steps] * FORCE_SCALE  # type: ignore
             force_r2.set_positions(posA=f_r2_pos, posB=(f_r2_pos + f_r2_val))
             force_r2.set_visible(True)
         else:
@@ -1125,17 +1127,19 @@ def test_trajectory_segment_two_feet() -> None:
 
     segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
 
-    assert segment.p_WB.shape == (cfg.period_steps, 2)
-    assert segment.v_WB.shape == (cfg.period_steps, 2)
-    assert segment.theta_WB.shape == (cfg.period_steps,)
-    assert segment.omega_WB.shape == (cfg.period_steps,)
-
     assert segment.p_BFl_W.shape == (cfg.period_steps, 2)
     assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
     assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
 
     assert segment.tau_Fl_1.shape == (cfg.period_steps,)
     assert segment.tau_Fl_2.shape == (cfg.period_steps,)
+
+    assert segment.p_BFr_W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fr_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_Fr_2W.shape == (cfg.period_steps, 2)
+
+    assert segment.tau_Fr_1.shape == (cfg.period_steps,)
+    assert segment.tau_Fr_2.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
@@ -1179,9 +1183,56 @@ def test_trajectory_segment_two_feet() -> None:
     animate_footstep_plan(robot, terrain, traj)
 
 
+def test_merging_two_trajectory_segments() -> None:
+    """
+    This test only tests that the FootstepTrajectory class and the visualizer is able to correctly
+    merge and visualize the feet over multiple segments
+    """
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
+    target_pos_2 = np.array([stone.x_pos + 0.18, 0.0]) + desired_robot_pos
+
+    segment_first = FootstepPlanSegment(
+        stone, "two_feet", robot, cfg, name="First step"
+    )
+    segment_first.add_pose_constraint(0, initial_pos, 0)  # type: ignore
+    segment_first.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+    segment_first.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
+    segment_first.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
+    result_first = Solve(segment_first.prog)
+    assert result_first.is_success()
+    segment_val_first = segment_first.evaluate_with_result(result_first)
+
+    segment_second = FootstepPlanSegment(
+        stone, "one_foot", robot, cfg, name="second step"
+    )
+    segment_second.add_pose_constraint(0, target_pos, 0)  # type: ignore
+    segment_second.add_pose_constraint(cfg.period_steps - 1, target_pos_2, 0)  # type: ignore
+    segment_second.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
+    segment_second.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
+    result_second = Solve(segment_second.prog)
+    assert result_second.is_success()
+    segment_val_second = segment_second.evaluate_with_result(result_second)
+
+    active_feet = np.array([[True, True], [True, False]])
+    traj = FootstepTrajectory.from_segments(
+        [segment_val_first, segment_val_second], cfg.dt, active_feet
+    )
+
+    animate_footstep_plan(robot, terrain, traj)
+
+
 def main():
     # test_single_point()
-    test_trajectory_segment_one_foot()
+    # test_trajectory_segment_one_foot()
+    test_merging_two_trajectory_segments()
     # test_trajectory_segment_two_feet()
 
 
