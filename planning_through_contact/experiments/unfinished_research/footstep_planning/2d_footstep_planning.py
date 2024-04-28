@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Literal, NamedTuple, Optional, Tuple
+from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -410,6 +410,11 @@ class FootstepPlanSegment:
         g = np.array([0, -9.81])
         self.a_WB = (1 / robot.mass) * (self.f_F_1W + self.f_F_2W) + g
 
+        # TODO: remove
+        # enforce no z-acceleration at first and last step
+        self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
+        self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
+
         # angular acceleration
         self.theta_ddot = (1 / robot.inertia) * (self.tau_F_1 + self.tau_F_2)
 
@@ -462,7 +467,30 @@ class FootstepPlanSegment:
 
         # TODO(bernhardpg): Step span limit
 
-        # TODO(bernhardpg): Costs
+        self.costs = {"sq_forces": [], "sq_lin_vel": [], "sq_rot_vel": []}
+
+        cost_force = 1e-5
+        cost_lin_vel = 10
+        cost_ang_vel = 0.1
+
+        # squared forces
+        for k in range(num_steps):
+            f1 = self.f_F_1W[k]
+            f2 = self.f_F_2W[k]
+            sq_forces = f1.T @ f1 + f2.T @ f2
+            c = self.prog.AddQuadraticCost(cost_force * sq_forces)
+            self.costs["sq_forces"].append(c)
+
+        # squared robot velocity
+        for k in range(num_steps):
+            v = self.v_WB[k]
+            sq_lin_vel = v.T @ v
+            c = self.prog.AddQuadraticCost(sq_lin_vel)
+            self.costs["sq_lin_vel"].append(c)
+
+            sq_rot_vel = self.omega_WB[k] ** 2
+            c = self.prog.AddQuadraticCost(sq_rot_vel)
+            self.costs["sq_rot_vel"].append(c)
 
     def get_state(self, k: int) -> npt.NDArray:
         return np.concatenate(
@@ -526,6 +554,22 @@ class FootstepPlanSegment:
         f_F_2W = result.GetSolution(self.f_F_2W)
 
         return FootstepPlanSegmentValue(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
+
+    def evaluate_costs_with_result(
+        self, result: MathematicalProgramResult
+    ) -> Dict[str, List[float]]:
+        cost_vals = {}
+        for key, val in self.costs.items():
+            cost_vals[key] = []
+
+            for binding in val:
+                vars = result.GetSolution(binding.variables())
+                cost_vals[key].append(binding.evaluator().Eval(vars))
+
+        for key in cost_vals:
+            cost_vals[key] = np.array(cost_vals[key])
+
+        return cost_vals
 
 
 class VertexPointPair(NamedTuple):
@@ -707,7 +751,7 @@ def animate_footstep_plan(
     ax.add_patch(foot)
 
     # Forces
-    FORCE_SCALE = 0.5
+    FORCE_SCALE = 1e-3
     force_1 = FancyArrowPatch(
         posA=(0, 0),
         posB=(1 * FORCE_SCALE, 1 * FORCE_SCALE),
@@ -830,8 +874,10 @@ def test_trajectory_segment() -> None:
     assert traj.f_F_2Ws.shape == (cfg.period_steps, 2)
 
     a_WB = evaluate_np_expressions_array(segment.a_WB, result)
-    breakpoint()
 
+    cost_vals = segment.evaluate_costs_with_result(result)
+
+    breakpoint()
     animate_footstep_plan(robot, terrain, traj)
 
 
