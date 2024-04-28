@@ -32,6 +32,7 @@ from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_r
 
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
@@ -146,7 +147,7 @@ class PotatoRobot:
 class FootstepPlanningConfig:
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
-    period_steps: int = 4
+    period_steps: int = 6
 
     @property
     def dt(self) -> float:
@@ -406,7 +407,8 @@ class FootstepPlanSegment:
         self.tau_F_2 = self.prog.NewContinuousVariables(num_steps, "tau_F_2")
 
         # linear acceleration
-        self.a_WB = (1 / robot.mass) * (self.f_F_1W + self.f_F_2W)
+        g = np.array([0, -9.81])
+        self.a_WB = (1 / robot.mass) * (self.f_F_1W + self.f_F_2W) + g
 
         # angular acceleration
         self.theta_ddot = (1 / robot.inertia) * (self.tau_F_1 + self.tau_F_2)
@@ -453,6 +455,11 @@ class FootstepPlanSegment:
             # forward euler
             self.prog.AddLinearConstraint(eq(s_next, s_curr + dt * f))
 
+            # foot can't move during segment
+            const = eq(self.p_WF[k], self.p_WF[k + 1])
+            for c in const:
+                self.prog.AddLinearEqualityConstraint(c)
+
         # TODO(bernhardpg): Step span limit
 
         # TODO(bernhardpg): Costs
@@ -483,6 +490,12 @@ class FootstepPlanSegment:
     ) -> None:
         self.prog.AddLinearConstraint(eq(self.p_WB[k], p_WB))
         self.prog.AddLinearConstraint(self.theta_WB[k] == theta_WB)
+
+    def add_spatial_vel_constraint(
+        self, k: int, v_WB: npt.NDArray[np.float64], omega_WB: float
+    ) -> None:
+        self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
+        self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
     def get_var_in_vertex(
         self,
@@ -790,11 +803,14 @@ def test_trajectory_segment() -> None:
     assert segment.tau_F_2.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_min + 0.1, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_max - 0.1, 0.0]) + desired_robot_pos
+    initial_pos = np.array([stone.x_pos - 0.1, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.1, 0.0]) + desired_robot_pos
 
     segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+
+    segment.add_spatial_vel_constraint(0, np.zeros((2,)), 0)
+    segment.add_spatial_vel_constraint(cfg.period_steps - 1, np.zeros((2,)), 0)
 
     debug = True
     solver_options = SolverOptions()
@@ -813,9 +829,10 @@ def test_trajectory_segment() -> None:
     assert traj.f_F_1Ws.shape == (cfg.period_steps, 2)
     assert traj.f_F_2Ws.shape == (cfg.period_steps, 2)
 
-    animate_footstep_plan(robot, terrain, traj)
-
+    a_WB = evaluate_np_expressions_array(segment.a_WB, result)
     breakpoint()
+
+    animate_footstep_plan(robot, terrain, traj)
 
 
 def main():
