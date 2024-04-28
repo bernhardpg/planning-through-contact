@@ -27,6 +27,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     MosekSolver,
+    SnoptSolver,
     SolutionResult,
     Solve,
     SolverOptions,
@@ -40,6 +41,16 @@ from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
+
+
+def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
+    assert len(relaxation.positive_semidefinite_constraints()) == 1
+    X = relaxation.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+
+    return X
 
 
 @dataclass
@@ -644,8 +655,13 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
-    def make_relaxed_prog(self) -> MathematicalProgram:
+    def make_relaxed_prog(self, trace_cost: bool = False) -> MathematicalProgram:
         self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+        if trace_cost:
+            X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
+            EPS = 1e-6
+            self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
+
         return self.relaxed_prog
 
     def get_convex_set(self) -> Spectrahedron:
@@ -683,6 +699,41 @@ class FootstepPlanSegment:
         else:
             return FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W)
 
+    def round_with_result(
+        self, result: MathematicalProgramResult
+    ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
+        X = result.GetSolution(
+            get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
+        )
+        x = result.GetSolution(self.prog.decision_variables())
+
+        snopt = SnoptSolver()
+        rounded_result = snopt.Solve(self.prog, initial_guess=x)
+        assert rounded_result.is_success()
+
+        p_WB = rounded_result.GetSolution(self.p_WB)
+        theta_WB = rounded_result.GetSolution(self.theta_WB)
+        p_BFl_W = rounded_result.GetSolution(self.p_BFl_W)
+        f_Fl_1W = rounded_result.GetSolution(self.f_Fl_1W)
+        f_Fl_2W = rounded_result.GetSolution(self.f_Fl_2W)
+
+        if self.two_feet:
+            p_BFr_W = rounded_result.GetSolution(self.p_BFr_W)
+            f_Fr_1W = rounded_result.GetSolution(self.f_Fr_1W)
+            f_Fr_2W = rounded_result.GetSolution(self.f_Fr_2W)
+
+            return (
+                FootstepPlanKnotPoints(
+                    p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W, p_BFr_W, f_Fr_1W, f_Fr_2W
+                ),
+                rounded_result,
+            )
+        else:
+            return (
+                FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W),
+                rounded_result,
+            )
+
     def evaluate_with_result(
         self, result: MathematicalProgramResult
     ) -> FootstepPlanKnotPoints:
@@ -691,9 +742,6 @@ class FootstepPlanSegment:
         p_BFl_W = result.GetSolution(self.p_BFl_W)
         f_Fl_1W = result.GetSolution(self.f_Fl_1W)
         f_Fl_2W = result.GetSolution(self.f_Fl_2W)
-
-        rot_acc = evaluate_np_expressions_array(self.omega_dot_WB, result)
-        lin_acc = evaluate_np_expressions_array(self.a_WB, result)
 
         if self.two_feet:
             p_BFr_W = result.GetSolution(self.p_BFr_W)
@@ -1216,10 +1264,34 @@ def test_trajectory_segment_two_feet() -> None:
     if debug:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = Solve(segment.make_relaxed_prog(), solver_options=solver_options)
-    assert result.is_success()
+    relaxed_result = Solve(
+        segment.make_relaxed_prog(trace_cost=False), solver_options=solver_options
+    )
+    assert relaxed_result.is_success()
 
-    segment_value = segment.evaluate_with_result(result)
+    # TODO remove these
+    a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+    cost_vals = segment.evaluate_costs_with_result(relaxed_result)
+    cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
+    for key, val in cost_vals_sums.items():
+        print(f"Cost {key}: {val}")
+
+    print(f"Total cost: {relaxed_result.get_optimal_cost()}")
+
+    non_convex_constraint_violation = (
+        segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+    )
+    print(
+        f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+    )
+
+    segment_value, rounded_result = segment.round_with_result(relaxed_result)
+
+    # segment_value = segment.evaluate_with_result(result)
+    c_round = rounded_result.get_optimal_cost()
+    c_relax = relaxed_result.get_optimal_cost()
+    ub_optimality_gap = (c_round - c_relax) / c_relax
+    print(f"UB optimality gap: {ub_optimality_gap} %")
 
     active_feet = np.array([[True, True]])
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
@@ -1229,23 +1301,6 @@ def test_trajectory_segment_two_feet() -> None:
     assert traj.knot_points.p_BFl_W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
     assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
-
-    # TODO remove these
-    a_WB = evaluate_np_expressions_array(segment.a_WB, result)
-    cost_vals = segment.evaluate_costs_with_result(result)
-    cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
-    for key, val in cost_vals_sums.items():
-        print(f"Cost {key}: {val}")
-
-    print(f"Total cost: {result.get_optimal_cost()}")
-
-    non_convex_constraint_violation = (
-        segment.evaluate_non_convex_constraints_with_result(result)
-    )
-    print(
-        f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
-    )
-    breakpoint()
 
     animate_footstep_plan(robot, terrain, traj)
 
