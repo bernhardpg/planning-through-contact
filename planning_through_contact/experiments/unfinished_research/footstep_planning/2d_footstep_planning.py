@@ -30,6 +30,9 @@ from pydrake.solvers import (
 from pydrake.symbolic import DecomposeAffineExpressions, Variable
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
 
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    LinTrajSegment,
+)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -165,32 +168,40 @@ class KnotPointValue:
 
 
 @dataclass
-class FootstepPlanSegmentValue:
+class FootstepPlanKnotPoints:
     p_WB: npt.NDArray[np.float64]
-    theta_WB: float
+    theta_WB: npt.NDArray[np.float64]
     # TODO(bernhardpg): Expand to Left and Right foot
     p_BF_W: npt.NDArray[np.float64]
     f_F_1W: npt.NDArray[np.float64]
     f_F_2W: npt.NDArray[np.float64]
 
+    @property
+    def p_WF(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
+        return self.p_WB + self.p_BF_W
 
-@dataclass
+
 class FootstepTrajectory:
-    p_WBs: npt.NDArray[np.float64]  # (num_steps, 2)
-    theta_WBs: npt.NDArray[np.float64]  # (num_steps, 1)
-    # TODO(bernhardpg): Expand to Left and Right foot
-    p_BF_Ws: npt.NDArray[np.float64]  # (num_steps, 2)
-    f_F_1Ws: npt.NDArray[np.float64]  # (num_steps, 2)
-    f_F_2Ws: npt.NDArray[np.float64]  # (num_steps, 2)
-    dt: float
+    """
+    state = [p_WB; theta_WB]
+    input = [p_BF_W; f_F_1W; f_F_2W]
+
+    Assuming linear state movement between knot points, and constant inputs.
+
+    Note: If provided, the last knot point of the inputs will not be used.
+    """
+
+    def __init__(self, knot_points: FootstepPlanKnotPoints, dt: float) -> None:
+        self.knot_points = knot_points
+        self.dt = dt
+
+    @property
+    def end_time(self) -> float:
+        return self.num_steps * self.dt
 
     @property
     def num_steps(self) -> int:
-        return self.p_WBs.shape[0]
-
-    @property
-    def p_WFs(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
-        return self.p_WBs + self.p_BF_Ws
+        return self.knot_points.p_WB.shape[0]
 
     @classmethod
     def from_knot_points(
@@ -202,11 +213,14 @@ class FootstepTrajectory:
         f_F_1Ws = np.array([k.f_F_1W for k in knot_points])
         f_F_2Ws = np.array([k.f_F_2W for k in knot_points])
 
-        return cls(p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws, dt)
+        merged_knot_points = FootstepPlanKnotPoints(
+            p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws
+        )
+        return cls(merged_knot_points, dt)
 
     @classmethod
     def from_segments(
-        cls, segments: List[FootstepPlanSegmentValue], dt: float
+        cls, segments: List[FootstepPlanKnotPoints], dt: float
     ) -> "FootstepTrajectory":
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.array([k.theta_WB for k in segments]).reshape((-1, 1))
@@ -214,7 +228,11 @@ class FootstepTrajectory:
         f_F_1Ws = np.vstack([k.f_F_1W for k in segments])
         f_F_2Ws = np.vstack([k.f_F_2W for k in segments])
 
-        return cls(p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws, dt)
+        merged_knot_points = FootstepPlanKnotPoints(
+            p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws
+        )
+
+        return cls(merged_knot_points, dt)
 
 
 @dataclass
@@ -485,11 +503,11 @@ class FootstepPlanSegment:
         for k in range(num_steps):
             v = self.v_WB[k]
             sq_lin_vel = v.T @ v
-            c = self.prog.AddQuadraticCost(sq_lin_vel)
+            c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
             self.costs["sq_lin_vel"].append(c)
 
             sq_rot_vel = self.omega_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(sq_rot_vel)
+            c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
             self.costs["sq_rot_vel"].append(c)
 
     def get_state(self, k: int) -> npt.NDArray:
@@ -546,14 +564,14 @@ class FootstepPlanSegment:
 
     def evaluate_with_result(
         self, result: MathematicalProgramResult
-    ) -> FootstepPlanSegmentValue:
+    ) -> FootstepPlanKnotPoints:
         p_WB = result.GetSolution(self.p_WB)
         theta_WB = result.GetSolution(self.theta_WB)
         p_BF_W = result.GetSolution(self.p_BF_W)
         f_F_1W = result.GetSolution(self.f_F_1W)
         f_F_2W = result.GetSolution(self.f_F_2W)
 
-        return FootstepPlanSegmentValue(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
+        return FootstepPlanKnotPoints(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult
@@ -777,23 +795,23 @@ def animate_footstep_plan(
 
     def animate(n_steps: int) -> None:
         # Robot
-        p_WB.set_offsets(plan.p_WBs[n_steps])
-        robot_body.set_center(plan.p_WBs[n_steps])
-        robot_body.angle = plan.theta_WBs[n_steps]
+        p_WB.set_offsets(plan.knot_points.p_WB[n_steps])
+        robot_body.set_center(plan.knot_points.p_WB[n_steps])
+        robot_body.angle = plan.knot_points.theta_WB[n_steps]
 
         # Foot
-        foot.set_xy(base_foot_vertices + plan.p_WFs[n_steps])
+        foot.set_xy(base_foot_vertices + plan.knot_points.p_WF[n_steps])
 
         # Scatter feet
-        p_WF.set_offsets(plan.p_WFs[n_steps])
+        p_WF.set_offsets(plan.knot_points.p_WF[n_steps])
 
         # Forces
-        f1_pos = plan.p_WFs[n_steps] + base_foot_vertices[0]
-        f1_val = plan.f_F_1Ws[n_steps] * FORCE_SCALE
+        f1_pos = plan.knot_points.p_WF[n_steps] + base_foot_vertices[0]
+        f1_val = plan.knot_points.f_F_1W[n_steps] * FORCE_SCALE
         force_1.set_positions(posA=f1_pos, posB=(f1_pos + f1_val))
 
-        f2_pos = plan.p_WFs[n_steps] + base_foot_vertices[1]
-        f2_val = plan.f_F_2Ws[n_steps] * FORCE_SCALE
+        f2_pos = plan.knot_points.p_WF[n_steps] + base_foot_vertices[1]
+        f2_val = plan.knot_points.f_F_2W[n_steps] * FORCE_SCALE
         force_2.set_positions(posA=f2_pos, posB=(f2_pos + f2_val))
 
     # Create and display animation
@@ -867,17 +885,17 @@ def test_trajectory_segment() -> None:
     segment_value = segment.evaluate_with_result(result)
 
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
-    assert traj.p_WBs.shape == (cfg.period_steps, 2)
-    assert traj.theta_WBs.shape == (cfg.period_steps, 1)
-    assert traj.p_BF_Ws.shape == (cfg.period_steps, 2)
-    assert traj.f_F_1Ws.shape == (cfg.period_steps, 2)
-    assert traj.f_F_2Ws.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.theta_WB.shape == (cfg.period_steps, 1)
+    assert traj.knot_points.p_BF_W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F_1W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F_2W.shape == (cfg.period_steps, 2)
 
     a_WB = evaluate_np_expressions_array(segment.a_WB, result)
 
     cost_vals = segment.evaluate_costs_with_result(result)
-
     breakpoint()
+
     animate_footstep_plan(robot, terrain, traj)
 
 
