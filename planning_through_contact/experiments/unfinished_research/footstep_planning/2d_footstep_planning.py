@@ -1,4 +1,6 @@
+import pickle
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import matplotlib.pyplot as plt
@@ -24,15 +26,14 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
+    MosekSolver,
+    SolutionResult,
     Solve,
     SolverOptions,
 )
-from pydrake.symbolic import DecomposeAffineExpressions, Variable
+from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
 
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    LinTrajSegment,
-)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -145,6 +146,9 @@ class PotatoRobot:
     def height(self) -> float:
         return self.size[2]
 
+    def get_nominal_pose(self) -> npt.NDArray:
+        return np.array([0, self.desired_com_height, 0])
+
 
 @dataclass
 class FootstepPlanningConfig:
@@ -158,16 +162,6 @@ class FootstepPlanningConfig:
 
 
 @dataclass
-class KnotPointValue:
-    p_WB: npt.NDArray[np.float64]
-    theta_WB: float
-    # TODO(bernhardpg): Expand to Left and Right foot
-    p_BF_W: npt.NDArray[np.float64]
-    f_F_1W: npt.NDArray[np.float64]
-    f_F_2W: npt.NDArray[np.float64]
-
-
-@dataclass
 class FootstepPlanKnotPoints:
     p_WB: npt.NDArray[np.float64]
     theta_WB: npt.NDArray[np.float64]
@@ -177,6 +171,25 @@ class FootstepPlanKnotPoints:
     p_BFr_W: Optional[npt.NDArray[np.float64]] = None
     f_Fr_1W: Optional[npt.NDArray[np.float64]] = None
     f_Fr_2W: Optional[npt.NDArray[np.float64]] = None
+
+    def __post_init__(self) -> None:
+        assert self.p_WB.shape == (self.num_points, 2)
+        assert self.theta_WB.shape == (self.num_points,)
+
+        assert self.p_BFl_W.shape == (self.num_points, 2)
+        assert self.f_Fl_1W.shape == (self.num_points, 2)
+        assert self.f_Fl_2W.shape == (self.num_points, 2)
+
+        if self.p_BFr_W is not None:
+            assert self.p_BFr_W.shape == (self.num_points, 2)
+        if self.f_Fr_1W is not None:
+            assert self.f_Fr_1W.shape == (self.num_points, 2)
+        if self.f_Fr_2W is not None:
+            assert self.f_Fr_2W.shape == (self.num_points, 2)
+
+    @property
+    def num_points(self) -> int:
+        return self.p_WB.shape[0]
 
     @property
     def p_WFl(self) -> npt.NDArray[np.float64]:  # (num_steps, 2)
@@ -202,6 +215,17 @@ class FootstepTrajectory:
         self.knot_points = knot_points
         self.dt = dt
 
+    def save(self, filename: str) -> None:
+        with open(Path(filename), "wb") as file:
+            # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
+            pickle.dump(self, file)
+
+    @classmethod
+    def load(cls, filename: str) -> "FootstepTrajectory":
+        with open(Path(filename), "rb") as file:
+            traj = pickle.load(file)
+            return traj
+
     @property
     def end_time(self) -> float:
         return self.num_steps * self.dt
@@ -211,31 +235,16 @@ class FootstepTrajectory:
         return self.knot_points.p_WB.shape[0]
 
     @classmethod
-    def from_knot_points(
-        cls, knot_points: List[KnotPointValue], dt: float
-    ) -> "FootstepTrajectory":
-        p_WBs = np.array([k.p_WB for k in knot_points])
-        theta_WBs = np.array([k.theta_WB for k in knot_points])
-        p_BF_Ws = np.array([k.p_BF_W for k in knot_points])
-        f_F_1Ws = np.array([k.f_F_1W for k in knot_points])
-        f_F_2Ws = np.array([k.f_F_2W for k in knot_points])
-
-        merged_knot_points = FootstepPlanKnotPoints(
-            p_WBs, theta_WBs, p_BF_Ws, f_F_1Ws, f_F_2Ws
-        )
-        return cls(merged_knot_points, dt)
-
-    @classmethod
     def from_segments(
         cls,
         segments: List[FootstepPlanKnotPoints],
         dt: float,
-        active_feet: npt.NDArray[np.bool_],  # (num_steps, 2)
+        gait_schedule: npt.NDArray[np.bool_],  # (num_steps, 2)
     ) -> "FootstepTrajectory":
         p_WBs = np.vstack([k.p_WB for k in segments])
-        theta_WBs = np.array([k.theta_WB for k in segments]).reshape((-1, 1))
+        theta_WBs = np.vstack([k.theta_WB for k in segments]).flatten()
 
-        if not active_feet.shape == (len(segments), 2):
+        if not gait_schedule.shape == (len(segments), 2):
             raise RuntimeError("Gait schedule length must match number of segments")
 
         p_BFl_Ws = []
@@ -248,9 +257,7 @@ class FootstepTrajectory:
         # NOTE: This assumes that all the segments have the same lengths!
         empty_shape = segments[0].p_WB.shape
 
-        for idx, (segment, (left_active, right_active)) in enumerate(
-            zip(segments, active_feet)
-        ):
+        for segment, (left_active, right_active) in zip(segments, gait_schedule):
             both_active = left_active and right_active
             if both_active:
                 p_BFl_Ws.append(segment.p_BFl_W)
@@ -299,161 +306,11 @@ class FootstepTrajectory:
 
 
 @dataclass
-class KnotPoint:
-    def __init__(
-        self,
-        stone: InPlaneSteppingStone,
-        robot: PotatoRobot,
-        name: Optional[str] = None,
-    ) -> None:
-        # Assume we always only have one foot in contact
-        if name is not None:
-            self.name = f"{stone.name}_{name}"
-
-        self.prog = MathematicalProgram()
-
-        # declare states
-        self.p_WB = self.prog.NewContinuousVariables(2, "p_WB")
-        self.v_WB = self.prog.NewContinuousVariables(2, "v_WB")
-        self.theta_WB = self.prog.NewContinuousVariables(1, "theta_WB")[0]
-        self.omega_WB = self.prog.NewContinuousVariables(1, "omega_WB")[0]
-
-        # declare inputs
-        self.p_BF_W = self.prog.NewContinuousVariables(2, "p_BF_W")
-        self.f_F_1W = self.prog.NewContinuousVariables(2, "f_F_1W")
-        self.f_F_2W = self.prog.NewContinuousVariables(2, "f_F_2W")
-
-        # compute the foot position
-        self.p_WF = self.p_WB + self.p_BF_W
-
-        # auxilliary vars
-        # TODO(bernhardpg): we might be able to get around this once we
-        # have SDP constraints over the edges
-        self.tau_F_1 = self.prog.NewContinuousVariables(1, "tau_F_1")[0]
-        self.tau_F_2 = self.prog.NewContinuousVariables(1, "tau_F_2")[0]
-
-        # linear acceleration
-        self.a_WB = (1 / robot.mass) * (self.f_F_1W + self.f_F_2W)
-
-        # angular acceleration
-        self.theta_ddot = (1 / robot.inertia) * (self.tau_F_1 + self.tau_F_2)
-
-        # torque = arm x force
-        self.p_BF_1W = self.p_BF_W + np.array([robot.foot_length / 2, 0])
-        self.p_BF_2W = self.p_BF_W - np.array([robot.foot_length / 2, 0])
-
-        self.prog.AddConstraint(self.tau_F_1 == cross_2d(self.p_BF_1W, self.f_F_1W))
-        self.prog.AddConstraint(self.tau_F_2 == cross_2d(self.p_BF_2W, self.f_F_2W))
-
-        # Stay on the stepping stone
-        self.prog.AddConstraint(stone.x_min <= self.p_WF[0])
-        self.prog.AddConstraint(self.p_WF[0] <= stone.x_max)
-        self.prog.AddConstraint(self.p_WF[1] == stone.z_pos)
-
-        # Don't move the feet too far from the robot
-        MAX_DIST = 0.4
-        self.prog.AddConstraint(self.p_WB[0] - self.p_WF[0] <= MAX_DIST)
-        self.prog.AddConstraint(self.p_WB[0] - self.p_WF[0] <= MAX_DIST)
-
-        # TODO(bernhardpg): Friction cone must be formulated differently
-        # when we have tilted ground
-        mu = 0.5
-        for f in (self.f_F_1W, self.f_F_2W):
-            self.prog.AddLinearConstraint(f[1] >= 0)
-            self.prog.AddLinearConstraint(f[0] <= mu * f[1])
-            self.prog.AddLinearConstraint(f[0] >= -mu * f[1])
-
-        # TODO(bernhardpg): Step span limit
-
-        # TODO(bernhardpg): Costs
-
-    def get_state(self) -> npt.NDArray:
-        return np.concatenate([self.p_WB, [self.theta_WB], self.v_WB, [self.omega_WB]])
-
-    def get_input(self) -> npt.NDArray:
-        return np.concatenate([self.f_F_1W, self.f_F_2W, self.p_BF_W])
-
-    def get_robot_pose(self) -> npt.NDArray:
-        return np.concatenate([self.p_WB, [self.theta_WB]])
-
-    def get_vars(self) -> npt.NDArray:
-        return np.concatenate(
-            (self.get_state(), self.get_input(), (self.tau_F_1, self.tau_F_2))
-        )
-
-    def get_var_in_vertex(
-        self,
-        var: Variable,
-        vertex_vars: npt.NDArray,
-    ) -> float | Variable:
-        idx = self.prog.FindDecisionVariableIndex(var)
-        return vertex_vars[idx]  # type: ignore
-
-    def get_vars_in_vertex(
-        self, vars: npt.NDArray, vertex_vars: npt.NDArray
-    ) -> npt.NDArray:
-        idxs = self.prog.FindDecisionVariableIndices(vars)
-        return vertex_vars[idxs]
-
-    def get_dynamics(self) -> npt.NDArray:
-        return np.concatenate(
-            [self.v_WB, [self.omega_WB], self.a_WB, [self.theta_ddot]]
-        )
-
-    def get_lhs_in_vertex_vars(self, vertex_vars: npt.NDArray) -> NpVariableArray:
-        """
-        Gets the left-hand-side of the forward euler integration in the variables of the provided vertex
-        s_next = s_curr + dt * f(s_curr, u_curr)
-        """
-        s_next = self.get_state()
-        idxs = self.prog.FindDecisionVariableIndices(s_next)
-        return vertex_vars[idxs]
-
-    def get_rhs_in_vertex_vars(
-        self, vertex_vars: npt.NDArray, dt: float
-    ) -> NpExpressionArray:
-        """
-        Gets the right-hand-side of the forward euler integration in the variables of the provided vertex
-        s_next = s_curr + dt * f(s_curr, u_curr)
-        """
-        s_curr = self.get_state()
-        dynamics = (
-            self.get_dynamics()
-        )  # will be a np.array of variables and expressions
-        s_next = s_curr + dt * dynamics
-        vars = self.get_vars()
-
-        # note: the dynamics are always linear (we introduced some aux vars to achieve this)
-        A, b = DecomposeAffineExpressions(s_next, vars)
-        idxs = self.prog.FindDecisionVariableIndices(vars)
-        x = vertex_vars[idxs]
-
-        rhs = A @ x + b
-        return rhs
-
-    def get_convex_set(self) -> Spectrahedron:
-        relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
-        spectrahedron = Spectrahedron(relaxed_prog)
-        return spectrahedron
-
-    def get_knot_point_val_from_vertex(
-        self, vertex_vars_vals: npt.NDArray[np.float64]
-    ) -> KnotPointValue:
-        p_WB = self.get_vars_in_vertex(self.p_WB, vertex_vars_vals)
-        theta_WB = self.get_var_in_vertex(self.theta_WB, vertex_vars_vals)
-        p_BF_W = self.get_vars_in_vertex(self.p_BF_W, vertex_vars_vals)
-        f_F_1W = self.get_vars_in_vertex(self.f_F_1W, vertex_vars_vals)
-        f_F_2W = self.get_vars_in_vertex(self.f_F_2W, vertex_vars_vals)
-
-        return KnotPointValue(p_WB, theta_WB, p_BF_W, f_F_1W, f_F_2W)
-
-
-@dataclass
 class FootstepPlanSegment:
     def __init__(
         self,
         stone: InPlaneSteppingStone,
-        two_feet: bool,
+        active_feet: npt.NDArray[np.bool_],
         robot: PotatoRobot,
         config: FootstepPlanningConfig,
         name: Optional[str] = None,
@@ -464,7 +321,8 @@ class FootstepPlanSegment:
             self.name = f"{stone.name}_{name}"
 
         self.config = config
-        self.two_feet = two_feet
+        self.active_feet = active_feet
+        self.two_feet = all(active_feet)
 
         num_steps = self.config.period_steps
 
@@ -513,8 +371,8 @@ class FootstepPlanSegment:
 
         # TODO: remove
         # enforce no z-acceleration at first and last step
-        # self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
-        # self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
+        self.prog.AddLinearEqualityConstraint(self.a_WB[0][1] == 0)
+        self.prog.AddLinearEqualityConstraint(self.a_WB[num_steps - 1][1] == 0)
 
         # angular acceleration
         self.theta_ddot = (1 / robot.inertia) * (self.tau_Fl_1 + self.tau_Fl_2)
@@ -598,7 +456,8 @@ class FootstepPlanSegment:
             s_curr = self.get_state(k)
             f = self.get_dynamics(k)
             # forward euler
-            self.prog.AddLinearConstraint(eq(s_next, s_curr + dt * f))
+            dynamics = s_next - (s_curr + dt * f)
+            self.prog.AddLinearConstraint(eq(dynamics, 0)[:3])
 
             # foot can't move during segment
             const = eq(self.p_WFl[k], self.p_WFl[k + 1])
@@ -611,11 +470,25 @@ class FootstepPlanSegment:
 
         # TODO(bernhardpg): Step span limit
 
-        self.costs = {"sq_forces": [], "sq_lin_vel": [], "sq_rot_vel": []}
+        self.costs = {
+            "sq_forces": [],
+            "sq_torques": [],
+            "sq_lin_vel": [],
+            "sq_rot_vel": [],
+            "sq_nominal_pose": [],
+        }
+
+        # cost_force = 1.0
+        # cost_torque = 1.0
+        # cost_lin_vel = 1.0
+        # cost_ang_vel = 1.0
+        # cost_nominal_pose = 1.0
 
         cost_force = 1e-5
-        cost_lin_vel = 10
+        cost_torque = 1e-3
+        cost_lin_vel = 10.0
         cost_ang_vel = 0.1
+        cost_nominal_pose = 1.0
 
         # squared forces
         for k in range(num_steps):
@@ -629,6 +502,18 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_force * sq_forces)
             self.costs["sq_forces"].append(c)
 
+        # squared torques
+        for k in range(num_steps):
+            tau1 = self.tau_Fl_1[k]
+            tau2 = self.tau_Fl_2[k]
+            sq_torques = tau1**2 + tau2**2
+            if self.two_feet:
+                tau3 = self.tau_Fr_1[k]
+                tau4 = self.tau_Fr_2[k]
+                sq_torques += tau3**2 + tau4**2
+            c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
+            self.costs["sq_torques"].append(c)
+
         # squared robot velocity
         for k in range(num_steps):
             v = self.v_WB[k]
@@ -640,12 +525,24 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
             self.costs["sq_rot_vel"].append(c)
 
+        # squared distance from nominal pose
+        for k in range(num_steps):
+            pose = self.get_robot_pose(k)
+            diff = pose - robot.get_nominal_pose()
+            sq_diff = diff.T @ diff
+            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)
+            self.costs["sq_nominal_pose"].append(c)
+
     def get_state(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
         return np.concatenate(
             [self.p_WB[k], [self.theta_WB[k]], self.v_WB[k], [self.omega_WB[k]]]
         )
 
     def get_input(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
         if self.two_feet:
             return np.concatenate(
                 [
@@ -660,18 +557,60 @@ class FootstepPlanSegment:
         else:
             return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_BFl_W[k]])
 
+    def get_dynamics(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
+        return np.concatenate(
+            [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.theta_ddot[k]]]
+        )
+
+    def get_var_in_vertex(
+        self,
+        var: Variable,
+        vertex_vars: npt.NDArray,
+    ) -> float | Variable:
+        idx = self.prog.FindDecisionVariableIndex(var)
+        return vertex_vars[idx]  # type: ignore
+
+    def get_vars_in_vertex(
+        self, vars: npt.NDArray, vertex_vars: npt.NDArray
+    ) -> npt.NDArray:
+        shape = vars.shape
+        idxs = self.prog.FindDecisionVariableIndices(vars.flatten())
+        return vertex_vars[idxs].reshape(shape)
+
+    def get_lin_exprs_in_vertex(
+        self, exprs: npt.NDArray, vertex_vars: npt.NDArray
+    ) -> npt.NDArray:
+        # note: the dynamics are always linear (we introduced some aux vars to achieve this)
+        vars = Variables()
+        for e in exprs:
+            if type(e) == Variable:
+                vars.insert(e)
+            elif type(e) == Expression:
+                vars.insert(e.GetVariables())
+            else:
+                raise RuntimeError("Unknown type")
+        vars = list(vars)
+
+        A, b = DecomposeAffineExpressions(exprs, vars)
+        idxs = self.prog.FindDecisionVariableIndices(vars)
+
+        x = vertex_vars[idxs]
+
+        exprs_with_vertex_vars = A @ x + b
+        return exprs_with_vertex_vars
+
     def get_robot_pose(self, k: int) -> npt.NDArray:
         return np.concatenate([self.p_WB[k], [self.theta_WB[k]]])
+
+    def get_robot_spatial_vel(self, k: int) -> npt.NDArray:
+        return np.concatenate([self.v_WB[k], [self.omega_WB[k]]])
 
     def get_vars(self, k: int) -> npt.NDArray:
         raise NotImplementedError("This needs to be updated for two feet")
         return np.concatenate(
             (self.get_state(k), self.get_input(k), (self.tau_Fl_1[k], self.tau_Fl_2[k]))
-        )
-
-    def get_dynamics(self, k: int) -> npt.NDArray:
-        return np.concatenate(
-            [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.theta_ddot[k]]]
         )
 
     def add_pose_constraint(
@@ -686,24 +625,40 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
-    def get_var_in_vertex(
-        self,
-        var: Variable,
-        vertex_vars: npt.NDArray,
-    ) -> float | Variable:
-        idx = self.prog.FindDecisionVariableIndex(var)
-        return vertex_vars[idx]  # type: ignore
-
-    def get_vars_in_vertex(
-        self, vars: npt.NDArray, vertex_vars: npt.NDArray
-    ) -> npt.NDArray:
-        idxs = self.prog.FindDecisionVariableIndices(vars)
-        return vertex_vars[idxs]
-
     def get_convex_set(self) -> Spectrahedron:
         relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
+
+    def evaluate_with_vertex_result(
+        self,
+        result: MathematicalProgramResult,
+        vertex_vars: npt.NDArray,
+    ) -> FootstepPlanKnotPoints:
+        p_WB = result.GetSolution(self.get_vars_in_vertex(self.p_WB, vertex_vars))
+        theta_WB = result.GetSolution(
+            self.get_vars_in_vertex(self.theta_WB, vertex_vars)
+        )
+        p_BFl_W = result.GetSolution(self.get_vars_in_vertex(self.p_BFl_W, vertex_vars))
+        f_Fl_1W = result.GetSolution(self.get_vars_in_vertex(self.f_Fl_1W, vertex_vars))
+        f_Fl_2W = result.GetSolution(self.get_vars_in_vertex(self.f_Fl_2W, vertex_vars))
+
+        if self.two_feet:
+            p_BFr_W = result.GetSolution(
+                self.get_vars_in_vertex(self.p_BFr_W, vertex_vars)
+            )
+            f_Fr_1W = result.GetSolution(
+                self.get_vars_in_vertex(self.f_Fr_1W, vertex_vars)
+            )
+            f_Fr_2W = result.GetSolution(
+                self.get_vars_in_vertex(self.f_Fr_2W, vertex_vars)
+            )
+
+            return FootstepPlanKnotPoints(
+                p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W, p_BFr_W, f_Fr_1W, f_Fr_2W
+            )
+        else:
+            return FootstepPlanKnotPoints(p_WB, theta_WB, p_BFl_W, f_Fl_1W, f_Fl_2W)
 
     def evaluate_with_result(
         self, result: MathematicalProgramResult
@@ -756,15 +711,25 @@ class FootstepPlanSegment:
         return np.vstack(constraint_violations).T  # (num_steps, num_torques)
 
 
-class VertexPointPair(NamedTuple):
+class VertexSegmentPair(NamedTuple):
     v: GcsVertex
-    p: KnotPoint
+    s: FootstepPlanSegment
 
     def get_vars_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
-        return self.p.get_vars_in_vertex(vars, self.v.x())
+        return self.s.get_vars_in_vertex(vars, self.v.x())
 
-    def get_knot_point_val(self, result: MathematicalProgramResult) -> KnotPointValue:
-        return self.p.get_knot_point_val_from_vertex(result.GetSolution(self.v.x()))
+    def get_knot_point_vals(
+        self, result: MathematicalProgramResult
+    ) -> FootstepPlanKnotPoints:
+        return self.s.evaluate_with_vertex_result(result, self.v.x())
+
+    def add_cost_to_vertex(self) -> None:
+        for binding in self.s.prog.GetAllCosts():
+            vertex_vars = self.s.get_vars_in_vertex(binding.variables(), self.v.x())
+            new_binding = Binding[type(binding.evaluator())](
+                binding.evaluator(), vertex_vars
+            )
+            self.v.AddCost(new_binding)
 
 
 class FootstepPlanner:
@@ -778,17 +743,24 @@ class FootstepPlanner:
         self.config = config
 
         initial_stone = terrain.stepping_stones[0]
-        target_stone = terrain.stepping_stones[1]
+        # target_stone = terrain.stepping_stones[1]
 
         robot = config.robot
         dt = config.dt
 
-        point_1 = KnotPoint(initial_stone, robot, name="1")
-        point_2 = KnotPoint(initial_stone, robot, name="2")
-        point_3 = KnotPoint(target_stone, robot, name="3")
-        point_4 = KnotPoint(target_stone, robot, name="4")
+        gait_schedule = np.array([[1, 1], [1, 0], [1, 1]])
+        segments = [
+            FootstepPlanSegment(
+                initial_stone,
+                foot_activation,
+                robot,
+                config,
+                name=str(idx),
+            )
+            for idx, foot_activation in enumerate(gait_schedule)
+        ]
 
-        points = [point_1, point_2, point_3, point_4]
+        self.gait_schedule = gait_schedule
 
         self.gcs = GraphOfConvexSets()
 
@@ -797,9 +769,9 @@ class FootstepPlanner:
         self.target = self.gcs.AddVertex(Point(target_position), name="target")
 
         # Add all knot points as vertices
-        pairs = self._add_points_as_vertices(self.gcs, points)
+        pairs = self._add_segments_as_vertices(self.gcs, segments)
 
-        edges_to_add = [(0, 1), (1, 2), (1, 2), (2, 3)]
+        edges_to_add = [(0, 1), (1, 2)]
 
         self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
 
@@ -812,51 +784,66 @@ class FootstepPlanner:
 
         self.vertex_name_to_pairs = {pair.v.name(): pair for pair in pairs}
 
-    def _add_edge_to_source_or_target(
-        self,
-        pair: VertexPointPair,
-        source_or_target: Literal["source", "target"] = "source",
-    ) -> None:
-        if source_or_target == "source":
-            s = self.source
-            # source -> v
-            e = self.gcs.AddEdge(s, pair.v)
-        else:  # target
-            s = self.target
-            # v -> target
-            e = self.gcs.AddEdge(pair.v, s)
+    def _add_segments_as_vertices(
+        self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]
+    ) -> List[VertexSegmentPair]:
+        vertices = [gcs.AddVertex(s.get_convex_set(), name=s.name) for s in segments]
+        pairs = [VertexSegmentPair(v, s) for v, s in zip(vertices, segments)]
+        for pair in pairs:
+            pair.add_cost_to_vertex()
 
-        pose = pair.get_vars_in_vertex(pair.p.get_robot_pose())
-        # The only variables in the source/target are the pose variables
-        constraint = eq(pose, s.x())
-        for c in constraint:
-            e.AddConstraint(c)
-
-    def _add_points_as_vertices(
-        self, gcs: GraphOfConvexSets, points: List[KnotPoint]
-    ) -> List[VertexPointPair]:
-        vertices = [gcs.AddVertex(p.get_convex_set(), name=p.name) for p in points]
-        pairs = [VertexPointPair(v, p) for v, p in zip(vertices, points)]
         return pairs
 
     def _add_edges_with_dynamics_constraints(
         self,
         gcs: GraphOfConvexSets,
         edges_to_add: List[Tuple[int, int]],
-        pairs: List[VertexPointPair],
+        pairs: List[VertexSegmentPair],
         dt: float,
     ) -> None:
+        # edge from i -> j
         for i, j in edges_to_add:
-            u, p_u = pairs[i]
-            v, p_v = pairs[j]
+            u, s_u = pairs[i]
+            v, s_v = pairs[j]
 
             e = gcs.AddEdge(u, v)
-            constraint = eq(
-                p_u.get_lhs_in_vertex_vars(u.x()),
-                p_v.get_rhs_in_vertex_vars(v.x(), dt),
-            )
+
+            state_curr = s_u.get_vars_in_vertex(s_u.get_state(-1), u.x())
+            f_curr = s_u.get_lin_exprs_in_vertex(s_u.get_dynamics(-1), u.x())
+            state_next = s_v.get_vars_in_vertex(s_v.get_state(0), v.x())
+
+            # forward euler
+            constraint = eq(state_next, state_curr + dt * f_curr)
             for c in constraint:
                 e.AddConstraint(c)
+
+    def _add_edge_to_source_or_target(
+        self,
+        pair: VertexSegmentPair,
+        source_or_target: Literal["source", "target"] = "source",
+    ) -> None:
+        if source_or_target == "source":
+            s = self.source
+            # source -> v
+            e = self.gcs.AddEdge(s, pair.v)
+            pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(0))
+            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(0))
+        else:  # target
+            s = self.target
+            # v -> target
+            e = self.gcs.AddEdge(pair.v, s)
+            pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(-1))
+            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
+
+        # The only variables in the source/target are the pose variables
+        constraint = eq(pose, s.x())
+        for c in constraint:
+            e.AddConstraint(c)
+
+        # Add zero velocity constraint on the edge connection connected to the source or target
+        constraint = eq(spatial_vel, 0)
+        for c in constraint:
+            e.AddConstraint(c)
 
     def create_graph_diagram(
         self,
@@ -880,10 +867,29 @@ class FootstepPlanner:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.max_rounded_paths = 20
+
+        solver_options = SolverOptions()
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        options.solver_options = solver_options
+
+        tolerance = 1e-4
+        mosek = MosekSolver()
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+        )
+
         result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
         if not result.is_success():
-            raise RuntimeError("Could not find a solution!")
+            # raise RuntimeError("Could not find a solution!")
+            print("Could not find a feasible solution!")
+        result.set_solution_result(SolutionResult.kSolutionFound)
 
         edges_on_sol = self.gcs.GetSolutionPath(self.source, self.target, result)
         names_on_sol = [e.name() for e in edges_on_sol]
@@ -894,8 +900,11 @@ class FootstepPlanner:
             self.vertex_name_to_pairs[e.v().name()] for e in edges_on_sol[:-1]
         ]
 
-        knot_point_vals = [p.get_knot_point_val(result) for p in pairs_on_sol]
-        plan = FootstepTrajectory.from_knot_points(knot_point_vals, self.config.dt)
+        solution_gait_schedule = np.vstack([p.s.active_feet for p in pairs_on_sol])
+        segments = [p.get_knot_point_vals(result) for p in pairs_on_sol]
+        plan = FootstepTrajectory.from_segments(
+            segments, self.config.dt, solution_gait_schedule
+        )
 
         return plan
 
@@ -1229,25 +1238,43 @@ def test_merging_two_trajectory_segments() -> None:
 
 def test_footstep_planning_one_stone() -> None:
     terrain = InPlaneTerrain()
-    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
+    initial_stone = terrain.add_stone(x_pos=1.5, width=3.0, z_pos=0.2, name="initial")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot)
+    cfg = FootstepPlanningConfig(robot=robot, period_steps=3)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_pos - 0.15, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
-
-    active_feet = np.array(
-        [[True, True], [True, False], [True, True], [False, True], [True, True]]
+    x_diff = np.array([0.3, 0])
+    # x_diff = np.array([0.1, 0])
+    initial_pose = np.concatenate(
+        (initial_stone.center + desired_robot_pos - x_diff, [0])
     )
+    target_pose = np.concatenate(
+        (initial_stone.center + desired_robot_pos + x_diff, [0])
+    )
+
+    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+
+    planner.create_graph_diagram("footstep_planner")
+    plan = planner.plan()
+
+    plan.save("test_traj.pkl")
+
+    animate_footstep_plan(robot, terrain, plan)
+
+
+def load_traj():
+    plan = FootstepTrajectory.load("test_traj.pkl")
+    breakpoint()
 
 
 def main():
     # test_single_point()
     # test_trajectory_segment_one_foot()
-    test_merging_two_trajectory_segments()
+    # test_merging_two_trajectory_segments()
     # test_trajectory_segment_two_feet()
+    test_footstep_planning_one_stone()
+    # load_traj()
 
 
 if __name__ == "__main__":
