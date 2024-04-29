@@ -447,7 +447,7 @@ class FootstepPlanSegment:
                     self.p_WFl[k],
                     self.f_Fr_1W[k],
                     self.f_Fr_2W[k],
-                    self.p_WFl[k],
+                    self.p_WFr[k],
                 ]
             )
         else:
