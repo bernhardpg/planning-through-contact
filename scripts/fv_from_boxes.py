@@ -411,27 +411,57 @@ def compute_union_dimensions(boxes):
     return width, height
 
 
+def compute_union_bounds_world(boxes):
+    min_x, min_y = float("inf"), float("inf")
+    max_x, max_y = float("-inf"), float("-inf")
+
+    for box in boxes:
+        # Extract the position from the transformation matrix
+        x_center, y_center, _ = box["transform"][:3, 3]
+
+        # Half-sizes for x and y dimensions
+        half_size_x, half_size_y = box["size"][0] / 2, box["size"][1] / 2
+
+        # Calculate min and max coordinates for this box
+        box_min_x = x_center - half_size_x
+        box_max_x = x_center + half_size_x
+        box_min_y = y_center - half_size_y
+        box_max_y = y_center + half_size_y
+
+        # Update the overall min and max
+        min_x = min(min_x, box_min_x)
+        max_x = max(max_x, box_max_x)
+        min_y = min(min_y, box_min_y)
+        max_y = max(max_y, box_max_y)
+
+    return min_x, max_x, min_y, max_y
+
+
 def compute_collision_free_regions(boxes, faces):
     # This assumes that the first vertex of the first face is not an intersection vertex
+
+    width, height = compute_union_dimensions(boxes)
+    scale = min(width, height) / 1000
 
     intersection_vertices = compute_intersection_points(boxes)
 
     assert faces[0][0] not in intersection_vertices
 
-    UL = np.array([-1, 1])
-    UR = np.array([1, 1])
-    DR = np.array([1, -1])
-    DL = np.array([-1, -1])
+    UL = np.array([-1, 1]) * scale
+    UR = np.array([1, 1]) * scale
+    DR = np.array([1, -1]) * scale
+    DL = np.array([-1, -1]) * scale
 
     def get_offset(vertex):
-        if is_inside_any_box(boxes, vertex + UL / 10):
-            return DR
-        if is_inside_any_box(boxes, vertex + UR / 10):
-            return DL
-        if is_inside_any_box(boxes, vertex + DR / 10):
-            return UL
-        if is_inside_any_box(boxes, vertex + DL / 10):
-            return UR
+        if is_inside_any_box(boxes, vertex + UL):
+            return DR * 100
+        if is_inside_any_box(boxes, vertex + UR):
+            return DL * 100
+        if is_inside_any_box(boxes, vertex + DR):
+            return UL * 100
+        if is_inside_any_box(boxes, vertex + DL):
+            return UR * 100
+        raise ValueError("No offset found")
 
     planes_per_region = []
     faces_per_region = []
@@ -452,8 +482,10 @@ def compute_collision_free_regions(boxes, faces):
 
     return planes_per_region, faces_per_region
 
+
 def flatten_nested_list(nested_list):
     return [item for sublist in nested_list for item in sublist]
+
 
 def main():
     # T-shape
@@ -461,16 +493,16 @@ def main():
     loaded_boxes = [
         {
             "name": "box1",
-            "size": [3.0, 1.0, 1.0],
+            "size": [0.2, 0.05, 0.05],
             "transform": np.eye(4),
         },
         {
             "name": "box2",
-            "size": [1.0, 3.0, 1.0],
+            "size": [0.05, 0.15001, 0.05],  # Require a small overlap
             "transform": np.array(
                 [
                     [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, -1.5],
+                    [0.0, 1.0, 0.0, -0.1],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
                 ]
@@ -522,14 +554,21 @@ def main():
     #     },
     # ]
 
+    width, height = compute_union_dimensions(loaded_boxes)
+    print(f"Union dimensions: width={width}, height={height}")
+
     # TODO: Factor plotting logic into class whose constructor creates the figure.
+    plt.ion()
     fig, ax = plt.subplots()
     # Optionally set the aspect ratio to 'equal' to ensure that the unit of x is same as y
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True)
     # Set limits for x and y axis
-    ax.set_xlim(-3, 3)
-    ax.set_ylim(-4, 1)
+    x_min, x_max, y_min, y_max = compute_union_bounds_world(loaded_boxes)
+    x_margin = 0.2 * width
+    y_margin = 0.2 * height
+    ax.set_xlim(x_min - x_margin, x_max + x_margin)
+    ax.set_ylim(y_min - y_margin, y_max + y_margin)
     plot_boxes(ax, loaded_boxes)
 
     outer_vertices = compute_outer_vertices(loaded_boxes)
@@ -545,9 +584,6 @@ def main():
     ordered_vertices = extract_ordered_vertices(ordered_edges)
     # plot_vertices(ax, ordered_vertices)
 
-    width, height = compute_union_dimensions(loaded_boxes)
-    print(f"Union dimensions: width={width}, height={height}")
-
     planes_per_region, faces_per_region = compute_collision_free_regions(
         loaded_boxes, ordered_edges
     )
@@ -555,7 +591,9 @@ def main():
         color = np.random.rand(3)
         plot_lines(ax, planes, color=color)
         plot_lines(ax, faces, color=color)
+        plt.pause(2.0)
 
+    plt.ioff()
     plt.show()
 
 
