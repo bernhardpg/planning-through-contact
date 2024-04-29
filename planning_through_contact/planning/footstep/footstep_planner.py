@@ -76,19 +76,28 @@ class FootstepPlanRounder:
         This object takes the result from a GCS plan and rounds it to obtain a feasible solution.
         It takes in a list of active edges, all pairs of VertexSegmentPairs in the graph, and the result
         from solving the GCS problem.
+
+        NOTE: This class is not really specific for footstep planning and can in principle (and will most likely)
+        be extended to handle any nonconvex gcs trajopt for QCQPs.
         """
         # we disregard source and target vertices when we extract the path
         active_pairs = [vertex_segment_pairs[e.v().name()] for e in active_edges[:-1]]
 
         self.pairs = vertex_segment_pairs
 
-        vertices, segments = zip(*active_pairs)
-        self.segments = segments
-        self.vertices = vertices
+        active_vertices, active_segments = zip(*active_pairs)
+        self.active_segments = active_segments
+        self.active_vertices = active_vertices
+
+        for v in active_vertices:
+            if len(v.GetConstraints()) > 0:
+                raise NotImplementedError(
+                    "We do not currently support vertex constraints"
+                )
 
         # Assemble one big nonlinear program from the small nonlinear programs
         self.prog = MathematicalProgram()
-        for s in segments:
+        for s in active_segments:
             vars = s.prog.decision_variables()
             self.prog.AddDecisionVariables(vars)
 
@@ -134,7 +143,7 @@ class FootstepPlanRounder:
                         "Trying to add a constraint without an upper or lower bound"
                     )
 
-        breakpoint()
+        # Find an initial guess
 
         solution_gait_schedule = np.vstack([p.s.active_feet for p in active_pairs])
 
@@ -169,6 +178,8 @@ class FootstepPlanRounder:
         u_idxs = [_find_idx_in_variables(var, all_u_vars) for var in u_vars]
         v_idxs = [_find_idx_in_variables(var, all_v_vars) for var in v_vars]
 
+        # We need extra logic here to deal with the fact that initial and target constraints
+        # are added as singleton sets (Point class).
         if u.name() == "source":
             u_prog_vars = u.set().x()[u_idxs]
         else:
