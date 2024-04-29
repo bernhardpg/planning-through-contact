@@ -87,11 +87,13 @@ class FootstepPlanRounder:
         active_pairs = [vertex_segment_pairs[e.v().name()] for e in active_edges[:-1]]
         self.active_edges = active_edges
 
-        self.pairs = vertex_segment_pairs
+        self.all_pairs = vertex_segment_pairs
 
         active_vertices, active_segments = zip(*active_pairs)
         self.active_segments = active_segments
         self.active_vertices = active_vertices
+
+        self.active_pairs = [self.all_pairs[v.name()] for v in active_vertices]
 
         for v in active_vertices:
             if len(v.GetConstraints()) > 0:
@@ -186,13 +188,13 @@ class FootstepPlanRounder:
         if u.name() == "source":
             u_prog_vars = u.set().x()[u_idxs]
         else:
-            segment_u = self.pairs[u.name()].s
+            segment_u = self.all_pairs[u.name()].s
             u_prog_vars = segment_u.prog.decision_variables()[u_idxs]
 
         if v.name() == "target":
             v_prog_vars = v.set().x()[v_idxs]
         else:
-            segment_v = self.pairs[v.name()].s
+            segment_v = self.all_pairs[v.name()].s
             v_prog_vars = segment_v.prog.decision_variables()[v_idxs]
 
         # now assemble back the variables in the right order
@@ -211,12 +213,13 @@ class FootstepPlanRounder:
     ) -> npt.NDArray[np.float64]:
         vertex_vars = [
             p.get_vars_in_vertex(p.s.prog.decision_variables())
-            for p in self.pairs.values()
+            for p in self.active_pairs
         ]
         all_vertex_vars_concatenated = np.concatenate(vertex_vars)
         vertex_var_vals = gcs_result.GetSolution(all_vertex_vars_concatenated)
 
         if not len(vertex_var_vals) == len(self.prog.decision_variables()):
+            breakpoint()
             raise RuntimeError(
                 "Number of vertex variables must match number of decision variables when picking initial guess"
             )
@@ -249,9 +252,8 @@ class FootstepPlanner:
         # target_stone = terrain.stepping_stones[1]
 
         robot = config.robot
-        dt = config.dt
 
-        gait_schedule = np.array([[1, 1]])
+        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
         segments = [
             FootstepPlanSegment(
                 initial_stone,
@@ -274,8 +276,10 @@ class FootstepPlanner:
         # Add all knot points as vertices
         pairs = self._add_segments_as_vertices(self.gcs, segments)
 
-        # edges_to_add = []
-        # self._add_edges_with_dynamics_constraints(self.gcs, edges_to_add, pairs, dt)
+        edges_to_add = [(0, 1), (1, 2), (2, 3)]
+        self._add_edges_with_dynamics_constraints(
+            self.gcs, edges_to_add, pairs, self.config.dt
+        )
 
         # TODO: Continuity constraints on subsequent contacts within the same region
 
@@ -379,7 +383,7 @@ class FootstepPlanner:
         options.max_rounded_paths = 20
 
         solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
         options.solver_options = solver_options
 
         # tolerance = 1e-6
@@ -408,7 +412,7 @@ class FootstepPlanner:
             flows = [
                 (e.name(), gcs_result.GetSolution(e.phi())) for e in self.gcs.Edges()
             ]
-            flow_strings = [f"{name}: {val}" for name, val in flows]
+            flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
         paths, relaxed_results = self.gcs.GetRandomizedSolutionPath(
