@@ -1,3 +1,4 @@
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -424,6 +425,10 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)
             self.costs["sq_nominal_pose"].append(c)
 
+    @property
+    def dt(self) -> float:
+        return self.config.dt
+
     def get_state(self, k: int) -> npt.NDArray:
         if k == -1:
             k = self.config.period_steps - 1
@@ -635,12 +640,12 @@ class FootstepPlanSegment:
     ) -> FootstepPlanKnotPoints:
         p_WB = result.GetSolution(self.p_WB)
         theta_WB = result.GetSolution(self.theta_WB)
-        p_WFl = result.GetSolution(self.p_WFl)
+        p_WFl = evaluate_np_expressions_array(self.p_WFl, result)
         f_Fl_1W = result.GetSolution(self.f_Fl_1W)
         f_Fl_2W = result.GetSolution(self.f_Fl_2W)
 
         if self.two_feet:
-            p_WFr = result.GetSolution(self.p_WFr)
+            p_WFr = evaluate_np_expressions_array(self.p_WFr, result)
             f_Fr_1W = result.GetSolution(self.f_Fr_1W)
             f_Fr_2W = result.GetSolution(self.f_Fr_2W)
 

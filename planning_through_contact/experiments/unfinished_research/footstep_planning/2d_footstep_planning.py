@@ -236,7 +236,7 @@ def test_footstep_planning_one_stone() -> None:
     planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
 
     planner.create_graph_diagram("footstep_planner")
-    plan = planner.plan()
+    plan = planner.plan(print_flows=True)
 
     plan.save("test_traj.pkl")
 

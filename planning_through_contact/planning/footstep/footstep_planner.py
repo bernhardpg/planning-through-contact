@@ -14,10 +14,13 @@ from pydrake.solvers import (
     CommonSolverOption,
     MathematicalProgram,
     MathematicalProgramResult,
+    SnoptSolver,
     SolutionResult,
+    Solve,
     SolverOptions,
 )
 from pydrake.symbolic import Variables
+from tqdm import tqdm
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -82,6 +85,7 @@ class FootstepPlanRounder:
         """
         # we disregard source and target vertices when we extract the path
         active_pairs = [vertex_segment_pairs[e.v().name()] for e in active_edges[:-1]]
+        self.active_edges = active_edges
 
         self.pairs = vertex_segment_pairs
 
@@ -143,9 +147,8 @@ class FootstepPlanRounder:
                         "Trying to add a constraint without an upper or lower bound"
                     )
 
-        # Find an initial guess
-
-        solution_gait_schedule = np.vstack([p.s.active_feet for p in active_pairs])
+        # Set the initial guess
+        self.initial_guess = self._get_initial_guess_as_orig_variables(result)
 
     def _from_vertex_vars_to_prog_vars(
         self, vertex_vars: npt.NDArray, u: GcsVertex, v: GcsVertex
@@ -201,6 +204,35 @@ class FootstepPlanRounder:
         ]
         sorted_vars = [var for var, _ in sorted(all_vars_unsorted, key=lambda p: p[1])]
         return np.array(sorted_vars)
+
+    def _get_initial_guess_as_orig_variables(
+        self,
+        gcs_result: MathematicalProgramResult,
+    ) -> npt.NDArray[np.float64]:
+        vertex_vars = [
+            p.get_vars_in_vertex(p.s.prog.decision_variables())
+            for p in self.pairs.values()
+        ]
+        all_vertex_vars_concatenated = np.concatenate(vertex_vars)
+        vertex_var_vals = gcs_result.GetSolution(all_vertex_vars_concatenated)
+
+        if not len(vertex_var_vals) == len(self.prog.decision_variables()):
+            raise RuntimeError(
+                "Number of vertex variables must match number of decision variables when picking initial guess"
+            )
+        return vertex_var_vals
+
+    def round(self) -> MathematicalProgramResult:
+        snopt = SnoptSolver()
+        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)
+        return rounded_result
+
+    def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
+        knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
+        gait_schedule = np.vstack([s.active_feet for s in self.active_segments])
+        dt = self.active_segments[0].dt
+        plan = FootstepTrajectory.from_segments(knot_points, dt, gait_schedule)
+        return plan
 
 
 class FootstepPlanner:
@@ -341,7 +373,7 @@ class FootstepPlanner:
 
         return data
 
-    def plan(self) -> FootstepTrajectory:
+    def plan(self, print_flows: bool = False) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.max_rounded_paths = 20
@@ -363,43 +395,52 @@ class FootstepPlanner:
         #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
         # )
 
-        result = self.gcs.SolveShortestPath(self.source, self.target, options)
+        print("Solving GCS problem")
+        gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
-        if not result.is_success():
-            # raise RuntimeError("Could not find a solution!")
-            print("Could not find a feasible solution!")
-
+        if not gcs_result.is_success():
+            print("GCS problem failed to solve")
+            # TODO
         # TODO remove this
-        result.set_solution_result(SolutionResult.kSolutionFound)
+        gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
-        flows = {e.name(): result.GetSolution(e.phi()) for e in self.gcs.Edges()}
-        print(flows)
+        if print_flows:
+            flows = [
+                (e.name(), gcs_result.GetSolution(e.phi())) for e in self.gcs.Edges()
+            ]
+            flow_strings = [f"{name}: {val}" for name, val in flows]
+            print(f"Graph flows: {', '.join(flow_strings)}")
 
-        if False:
-            paths, results = self.gcs.GetRandomizedSolutionPath(
-                self.source, self.target, result, options
-            )
-            active_edges = paths[0]
-            result = results[0]
-
-        active_edges = self.gcs.GetSolutionPath(self.source, self.target, result)
-        active_edge_names = [e.name() for e in active_edges]
-        print(f"Path: {' -> '.join(active_edge_names)}")
-
-        rounder = FootstepPlanRounder(active_edges, self.vertex_name_to_pairs, result)
-
-        # we disregard source and target vertices when we extract the path
-        pairs_on_sol = [
-            self.vertex_name_to_pairs[e.v().name()] for e in active_edges[:-1]
-        ]
-
-        solution_gait_schedule = np.vstack([p.s.active_feet for p in pairs_on_sol])
-
-        segments = [p.get_knot_point_vals(result, round=True) for p in pairs_on_sol]
-        breakpoint()
-        plan = FootstepTrajectory.from_segments(
-            segments, self.config.dt, solution_gait_schedule
+        paths, relaxed_results = self.gcs.GetRandomizedSolutionPath(
+            self.source, self.target, gcs_result, options
         )
-        print(f"Cost: {result.get_optimal_cost()}")
+        rounders = []
+        rounded_results = []
+        print(f"Rounding {len(paths)} possible GCS paths...")
+        for active_edges, relaxed_result in tqdm(zip(paths, relaxed_results)):
+            rounder = FootstepPlanRounder(
+                active_edges, self.vertex_name_to_pairs, relaxed_result
+            )
+            rounded_result = rounder.round()
+            rounded_results.append(rounded_result)
+            rounders.append(rounder)
+
+        best_idx = np.argmin(
+            [
+                res.get_optimal_cost() if res.is_success() else np.inf
+                for res in rounded_results
+            ]
+        )
+        rounder, rounded_result = rounders[best_idx], rounded_results[best_idx]
+
+        active_edge_names = [e.name() for e in rounder.active_edges]
+        print(f"Best path: {' -> '.join(active_edge_names)}")
+
+        c_round = rounded_result.get_optimal_cost()
+        c_relax = gcs_result.get_optimal_cost()
+        ub_optimality_gap = (c_round - c_relax) / c_relax
+        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+
+        plan = rounder.get_plan(rounded_result)
 
         return plan
