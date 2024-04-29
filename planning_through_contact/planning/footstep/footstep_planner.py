@@ -8,7 +8,7 @@ from pydrake.geometry.optimization import (
     GraphOfConvexSetsOptions,
     Point,
 )
-from pydrake.math import eq
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     Binding,
     CommonSolverOption,
@@ -17,6 +17,7 @@ from pydrake.solvers import (
     SolutionResult,
     SolverOptions,
 )
+from pydrake.symbolic import Variables
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -79,6 +80,8 @@ class FootstepPlanRounder:
         # we disregard source and target vertices when we extract the path
         active_pairs = [vertex_segment_pairs[e.v().name()] for e in active_edges[:-1]]
 
+        self.pairs = vertex_segment_pairs
+
         vertices, segments = zip(*active_pairs)
         self.segments = segments
         self.vertices = vertices
@@ -100,14 +103,93 @@ class FootstepPlanRounder:
         for e in active_edges:
             u, v = e.u(), e.v()
 
-            # TODO: continue here
+            for binding in e.GetConstraints():
+                # Find the corresponding original variables given the edge constraint (which is in the set variables)
+                new_vars = self._from_vertex_vars_to_prog_vars(
+                    binding.variables(), u, v
+                )
+                exprs = binding.evaluator().Eval(binding.variables())
+                new_exprs = []
+                for e in exprs:
+                    new_expr = e.Substitute(
+                        {
+                            old_var: new_var
+                            for old_var, new_var in zip(binding.variables(), new_vars)
+                        }
+                    )
+                    new_exprs.append(new_expr)
 
-            if u.name() == "source":
-                breakpoint()
+                new_exprs = np.array(new_exprs)
 
-            breakpoint()
+                lb = binding.evaluator().lower_bound()
+                ub = binding.evaluator().upper_bound()
+                if lb == ub:  # equality constraint
+                    self.prog.AddConstraint(eq(new_exprs, lb))
+                elif not np.isinf(lb):
+                    self.prog.AddConstraint(ge(new_exprs, lb))
+                elif not np.isinf(ub):
+                    self.prog.AddConstraint(ge(new_exprs, ub))
+                else:
+                    raise RuntimeError(
+                        "Trying to add a constraint without an upper or lower bound"
+                    )
+
+        breakpoint()
 
         solution_gait_schedule = np.vstack([p.s.active_feet for p in active_pairs])
+
+    def _from_vertex_vars_to_prog_vars(
+        self, vertex_vars: npt.NDArray, u: GcsVertex, v: GcsVertex
+    ) -> npt.NDArray:
+        u_vars = []
+        v_vars = []
+        u_vars_idxs = []
+        v_vars_idxs = []
+
+        all_u_vars = Variables(u.x())
+        all_v_vars = Variables(v.x())
+
+        for idx, var in enumerate(vertex_vars):
+            if var in all_u_vars:
+                u_vars.append(var)
+                u_vars_idxs.append(idx)
+            elif var in all_v_vars:
+                v_vars.append(var)
+                v_vars_idxs.append(idx)
+            else:
+                raise RuntimeError(f"Variable {var} not in any of the vertices")
+
+        def _find_idx_in_variables(var, vars) -> int:
+            for idx, var_target in enumerate(vars):
+                if var.EqualTo(var_target):
+                    return idx
+
+            raise RuntimeError("Could not find variable")
+
+        u_idxs = [_find_idx_in_variables(var, all_u_vars) for var in u_vars]
+        v_idxs = [_find_idx_in_variables(var, all_v_vars) for var in v_vars]
+
+        if u.name() == "source":
+            u_prog_vars = u.set().x()[u_idxs]
+        else:
+            segment_u = self.pairs[u.name()].s
+            u_prog_vars = segment_u.prog.decision_variables()[u_idxs]
+
+        if v.name() == "target":
+            v_prog_vars = v.set().x()[v_idxs]
+        else:
+            segment_v = self.pairs[v.name()].s
+            v_prog_vars = segment_v.prog.decision_variables()[v_idxs]
+
+        # now assemble back the variables in the right order
+        all_vars_unsorted = [
+            (var, idx)
+            for var, idx in zip(
+                np.concatenate([u_prog_vars, v_prog_vars]), u_vars_idxs + v_vars_idxs
+            )
+        ]
+        sorted_vars = [var for var, _ in sorted(all_vars_unsorted, key=lambda p: p[1])]
+        return np.array(sorted_vars)
 
 
 class FootstepPlanner:
