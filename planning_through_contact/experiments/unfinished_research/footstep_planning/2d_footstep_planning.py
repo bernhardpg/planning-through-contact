@@ -606,6 +606,10 @@ class FootstepPlanSegment:
     def get_lin_exprs_in_vertex(
         self, exprs: npt.NDArray, vertex_vars: npt.NDArray
     ) -> npt.NDArray:
+        original_shape = exprs.shape
+        if len(exprs.shape) > 1:
+            exprs = exprs.flatten()
+
         # note: the dynamics are always linear (we introduced some aux vars to achieve this)
         vars = Variables()
         for e in exprs:
@@ -613,6 +617,8 @@ class FootstepPlanSegment:
                 vars.insert(e)
             elif type(e) == Expression:
                 vars.insert(e.GetVariables())
+            elif type(e) == float:
+                continue  # no variables to add
             else:
                 raise RuntimeError("Unknown type")
         vars = list(vars)
@@ -623,6 +629,8 @@ class FootstepPlanSegment:
         x = vertex_vars[idxs]
 
         exprs_with_vertex_vars = A @ x + b
+
+        exprs_with_vertex_vars = exprs_with_vertex_vars.reshape(original_shape)
         return exprs_with_vertex_vars
 
     def get_robot_pose(self, k: int) -> npt.NDArray:
@@ -675,12 +683,16 @@ class FootstepPlanSegment:
         theta_WB = result.GetSolution(
             self.get_vars_in_vertex(self.theta_WB, vertex_vars)
         )
-        p_WFl = result.GetSolution(self.get_vars_in_vertex(self.p_WFl, vertex_vars))
+        p_WFl = evaluate_np_expressions_array(
+            self.get_lin_exprs_in_vertex(self.p_WFl, vertex_vars), result
+        )
         f_Fl_1W = result.GetSolution(self.get_vars_in_vertex(self.f_Fl_1W, vertex_vars))
         f_Fl_2W = result.GetSolution(self.get_vars_in_vertex(self.f_Fl_2W, vertex_vars))
 
         if self.two_feet:
-            p_WFr = result.GetSolution(self.get_vars_in_vertex(self.p_WFr, vertex_vars))
+            p_WFr = evaluate_np_expressions_array(
+                self.get_lin_exprs_in_vertex(self.p_WFr, vertex_vars), result
+            )
             f_Fr_1W = result.GetSolution(
                 self.get_vars_in_vertex(self.f_Fr_1W, vertex_vars)
             )
@@ -1379,8 +1391,8 @@ def main():
     # test_single_point()
     # test_trajectory_segment_one_foot()
     # test_merging_two_trajectory_segments()
-    test_trajectory_segment_two_feet()
-    # test_footstep_planning_one_stone()
+    # test_trajectory_segment_two_feet()
+    test_footstep_planning_one_stone()
     # load_traj()
 
 
