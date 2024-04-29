@@ -443,13 +443,21 @@ def compute_collision_free_regions(boxes, faces):
     DL = np.array([-1, -1]) * scale
 
     def get_offset(vertex):
-        if is_inside_any_box(boxes, vertex + UL):
+        if is_inside_any_box(boxes, vertex + UL) and not is_inside_any_box(
+            boxes, vertex + DR
+        ):
             return DR * 100
-        if is_inside_any_box(boxes, vertex + UR):
+        if is_inside_any_box(boxes, vertex + UR) and not is_inside_any_box(
+            boxes, vertex + DL
+        ):
             return DL * 100
-        if is_inside_any_box(boxes, vertex + DR):
+        if is_inside_any_box(boxes, vertex + DR) and not is_inside_any_box(
+            boxes, vertex + UL
+        ):
             return UL * 100
-        if is_inside_any_box(boxes, vertex + DL):
+        if is_inside_any_box(boxes, vertex + DL) and not is_inside_any_box(
+            boxes, vertex + UR
+        ):
             return UR * 100
         raise ValueError("No offset found")
 
