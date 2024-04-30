@@ -9,7 +9,11 @@ def unit_vector(i: int, n: int):
 
 
 def cross_2d(v1, v2):
-    return (v1[0] * v2[1] - v1[1] * v2[0])[0]
+    res = v1[0] * v2[1] - v1[1] * v2[0]
+    if type(res) == type(np.array([])):
+        return res[0]
+    else:
+        return res
 
 
 def normalize_vec(vec: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
