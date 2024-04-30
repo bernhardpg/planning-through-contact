@@ -1,7 +1,7 @@
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -453,12 +453,27 @@ class FootstepPlanSegment:
         else:
             return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_WFl[k]])
 
+    def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
+        if self.two_feet:
+            if foot == "left":  # left
+                return self.p_WFl_x[k]
+            else:  # right
+                return self.p_WFr_x[k]
+        else:  # if only one foot we return that one foot
+            return self.p_WFl_x[k]
+
     def get_dynamics(self, k: int) -> npt.NDArray:
         if k == -1:
             k = self.config.period_steps - 1
         return np.concatenate(
             [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.omega_dot_WB[k]]]
         )
+
+    def get_var_in_vertex(self, var: Variable, vertex_vars: npt.NDArray) -> Variable:
+        idxs = self.relaxed_prog.FindDecisionVariableIndex(var)
+        return vertex_vars[idxs]
 
     def get_vars_in_vertex(
         self, vars: npt.NDArray, vertex_vars: npt.NDArray

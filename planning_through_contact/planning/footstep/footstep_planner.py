@@ -19,7 +19,7 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
-from pydrake.symbolic import Variables
+from pydrake.symbolic import Variable, Variables
 from tqdm import tqdm
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
@@ -39,6 +39,9 @@ GcsEdge = GraphOfConvexSets.Edge
 class VertexSegmentPair(NamedTuple):
     v: GcsVertex
     s: FootstepPlanSegment
+
+    def get_var_in_vertex(self, var: Variable) -> Variable:
+        return self.s.get_var_in_vertex(var, self.v.x())
 
     def get_vars_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_vars_in_vertex(vars, self.v.x())
@@ -253,7 +256,7 @@ class FootstepPlanner:
 
         robot = config.robot
 
-        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1], [1, 1]])
         segments = [
             FootstepPlanSegment(
                 initial_stone,
@@ -274,21 +277,23 @@ class FootstepPlanner:
         self.target = self.gcs.AddVertex(Point(target_pose), name="target")
 
         # Add all knot points as vertices
-        pairs = self._add_segments_as_vertices(self.gcs, segments)
+        self.all_pairs = self._add_segments_as_vertices(self.gcs, segments)
 
         edges_to_add = [(0, 1), (1, 2), (2, 3)]
         self._add_edges_with_dynamics_constraints(
-            self.gcs, edges_to_add, pairs, self.config.dt
+            self.gcs, edges_to_add, self.all_pairs, self.config.dt
         )
 
         # TODO: Continuity constraints on subsequent contacts within the same region
 
-        self._add_edge_to_source_or_target(pairs[0], "source")
+        self._add_edge_to_source_or_target(self.all_pairs[0], "source")
 
-        for pair in pairs:  # connect all the vertices to the target
+        connections_to_target = [0, 2, 4]
+        for pair in [self.all_pairs[idx] for idx in connections_to_target]:
+            # connect all the vertices to the target
             self._add_edge_to_source_or_target(pair, "target")
 
-        self.vertex_name_to_pairs = {pair.v.name(): pair for pair in pairs}
+        self.vertex_name_to_pairs = {pair.v.name(): pair for pair in self.all_pairs}
 
     def _add_segments_as_vertices(
         self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]
@@ -309,8 +314,9 @@ class FootstepPlanner:
     ) -> None:
         # edge from i -> j
         for i, j in edges_to_add:
-            u, s_u = pairs[i]
-            v, s_v = pairs[j]
+            pair_u, pair_v = pairs[i], pairs[j]
+            u, s_u = pair_u
+            v, s_v = pair_v
 
             e = gcs.AddEdge(u, v)
 
@@ -319,9 +325,27 @@ class FootstepPlanner:
             state_next = s_v.get_vars_in_vertex(s_v.get_state(0), v.x())
 
             # forward euler
-            # constraint = eq(state_next, state_curr + dt * f_curr)
-            # for c in constraint:
-            #     e.AddConstraint(c)
+            constraint = eq(state_next, state_curr + dt * f_curr)
+            for c in constraint:
+                e.AddConstraint(c)
+
+            # TODO: Add continuity constraints on foot position
+            u_gait = s_u.active_feet
+            v_gait = s_v.active_feet
+
+            # This is a simple way to determine the foot that can't move
+            constant_foot_idx = np.argmax(u_gait + v_gait)
+            if constant_foot_idx == 0:
+                constant_foot = "left"
+            elif constant_foot_idx == 1:
+                constant_foot = "right"
+            else:
+                raise RuntimeError("No corresponding foot.")
+
+            foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
+            foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
+            e.AddConstraint(foot_u == foot_v)
+            # TODO: Need to also add cost on edge
 
     def _add_edge_to_source_or_target(
         self,

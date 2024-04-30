@@ -221,17 +221,17 @@ def test_footstep_planning_one_stone() -> None:
     test_trajectory_segment_two_feet
     """
     terrain = InPlaneTerrain()
-    stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
+    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
 
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
+    initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.6, 0.0]) + desired_robot_pos
 
     initial_pose = np.concatenate([initial_pos, [0]])
-    target_pose = np.concatenate([target_pos, [1.0]])
+    target_pose = np.concatenate([target_pos, [0]])
 
     planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
 
