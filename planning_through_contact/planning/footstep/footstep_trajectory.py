@@ -530,12 +530,16 @@ class FootstepPlanSegment:
     def add_pose_constraint(
         self, k: int, p_WB: npt.NDArray[np.float64], theta_WB: float
     ) -> None:
+        if k == -1:
+            k = self.config.period_steps - 1
         self.prog.AddLinearConstraint(eq(self.p_WB[k], p_WB))
         self.prog.AddLinearConstraint(self.theta_WB[k] == theta_WB)
 
     def add_spatial_vel_constraint(
         self, k: int, v_WB: npt.NDArray[np.float64], omega_WB: float
     ) -> None:
+        if k == -1:
+            k = self.config.period_steps - 1
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
@@ -14,7 +16,8 @@ def animate_footstep_plan(
     robot: PotatoRobot,
     terrain: InPlaneTerrain,
     plan: FootstepTrajectory,
-    title=None,
+    title: Optional[str] = None,
+    output_file: Optional[str] = None,
 ) -> None:
     # Initialize figure for animation
     fig, ax = plt.subplots()
@@ -147,4 +150,5 @@ def animate_footstep_plan(
     # Create and display animation
     n_steps = plan.num_steps
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
-    ani.save("footstep_plan.mp4", writer="ffmpeg")
+    if output_file is not None:
+        ani.save(f"{output_file}.mp4", writer="ffmpeg")
