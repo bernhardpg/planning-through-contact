@@ -268,7 +268,9 @@ class FootstepPlanner:
         self.segment_vertex_pairs_per_stone = {}
         for stone, segments_for_stone in zip(self.stones, self.segments):
             self.segment_vertex_pairs_per_stone[stone.name] = (
-                self._add_segments_as_vertices(self.gcs, segments_for_stone)
+                self._add_segments_as_vertices(
+                    self.gcs, segments_for_stone, self.config.use_lp_approx
+                )
             )
 
         # Create a list of all edges we should add
@@ -351,9 +353,15 @@ class FootstepPlanner:
         return segments
 
     def _add_segments_as_vertices(
-        self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]
+        self,
+        gcs: GraphOfConvexSets,
+        segments: List[FootstepPlanSegment],
+        use_lp_approx: bool = False,
     ) -> Dict[str, VertexSegmentPair]:
-        vertices = [gcs.AddVertex(s.get_convex_set(), name=s.name) for s in segments]
+        vertices = [
+            gcs.AddVertex(s.get_convex_set(use_lp_approx=use_lp_approx), name=s.name)
+            for s in segments
+        ]
         pairs = {s.name: VertexSegmentPair(v, s) for v, s in zip(vertices, segments)}
         for pair in pairs.values():
             pair.add_cost_to_vertex()
@@ -515,8 +523,16 @@ class FootstepPlanner:
         )
         rounders = []
         rounded_results = []
+
+        MAX_ROUNDINGS = 3
+
         print(f"Rounding {len(paths)} possible GCS paths...")
-        for active_edges, relaxed_result in zip(paths, relaxed_results):
+        for idx, (active_edges, relaxed_result) in enumerate(
+            zip(paths, relaxed_results)
+        ):
+            print(f"Rounding_step: {idx}")
+            if idx >= MAX_ROUNDINGS:
+                break
             rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )

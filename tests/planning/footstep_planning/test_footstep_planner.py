@@ -101,6 +101,79 @@ def test_footstep_planning_two_stones() -> None:
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
 
+def test_footstep_planning_one_long_stone_lp_approx() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.6, 0.0]) + desired_robot_pos
+
+    initial_pose = np.concatenate([initial_pos, [0]])
+    target_pose = np.concatenate([target_pos, [0]])
+
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name=stone.name,
+        target_stone_name=stone.name,
+    )
+
+    if DEBUG:
+        planner.create_graph_diagram("test_one_stone_lp_approx_diagram")
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+
+    if DEBUG:
+        output_file = "debug_plan_one_stone_lp_approx"
+    else:
+        output_file = None
+    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+
+
+def test_footstep_planning_many_stones_lp_approx() -> None:
+    terrain = InPlaneTerrain()
+    initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
+    _ = terrain.add_stone(x_pos=0.75, width=0.5, z_pos=0.5, name="stone_2")
+    _ = terrain.add_stone(x_pos=1.25, width=0.5, z_pos=0.7, name="stone_3")
+    target_stone = terrain.add_stone(x_pos=1.75, width=0.5, z_pos=0.5, name="target")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = initial_stone.com + desired_robot_pos
+    target_pos = target_stone.com + desired_robot_pos
+
+    # no body rotation
+    initial_pose = np.concatenate([initial_pos, [0]])
+    target_pose = np.concatenate([target_pos, [0]])
+
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name=initial_stone.name,
+        target_stone_name=target_stone.name,
+    )
+
+    if DEBUG:
+        planner.create_graph_diagram("test_many_stones_lp_approx_diagram")
+
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+
+    if DEBUG:
+        output_file = "debug_plan_many_stones_lp_approx"
+    else:
+        output_file = None
+    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+
+
 # Unfinished!
 @pytest.mark.skip
 def test_semidefinite_relaxation_lp_approximation() -> None:

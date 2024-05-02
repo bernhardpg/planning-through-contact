@@ -11,6 +11,7 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
+    PositiveSemidefiniteConstraint,
     SnoptSolver,
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
@@ -36,6 +37,16 @@ GcsEdge = GraphOfConvexSets.Edge
 def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
     assert len(relaxation.positive_semidefinite_constraints()) == 1
     X = relaxation.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+
+    return X
+
+
+def get_X_from_psd_constraint(binding) -> npt.NDArray:
+    assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
+    X = binding.variables()
     N = np.sqrt(len(X))
     assert int(N) == N
     X = X.reshape((int(N), int(N)))
@@ -196,6 +207,7 @@ class FootstepPlanSegment:
         self.config = config
         self.active_feet = active_feet
         self.two_feet = all(active_feet)
+        self.stone = stone
 
         self.num_steps = self.config.period_steps
 
@@ -431,11 +443,12 @@ class FootstepPlanSegment:
             self.costs["sq_rot_vel"].append(c)
 
         # squared distance from nominal pose
+        pose_offset = np.array([0, self.stone.height, 0])  # offset the stone height
         for k in range(self.num_steps):
-            pose = self.get_robot_pose(k)
+            pose = self.get_robot_pose(k) - pose_offset
             diff = pose - robot.get_nominal_pose()
             sq_diff = diff.T @ diff
-            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)
+            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
             self.costs["sq_nominal_pose"].append(c)
 
     @property
@@ -611,17 +624,13 @@ class FootstepPlanSegment:
         relaxed_prog = self.make_relaxed_prog()
 
         if use_lp_approx:
-            assert len(relaxed_prog.positive_semidefinite_constraints()) == 1
-            X = get_X_from_semidefinite_relaxation(relaxed_prog)
-
-            sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
-
-            relaxed_prog.RemoveConstraint(sdp_constraint)
-
-            N = X.shape[0]
-            for i in range(N):
-                X_i = X[i, i]
-                relaxed_prog.AddLinearConstraint(X_i >= 0)
+            for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
+                X = get_X_from_psd_constraint(psd_constraint)
+                relaxed_prog.RemoveConstraint(psd_constraint)  # type: ignore
+                N = X.shape[0]
+                for i in range(N):
+                    X_i = X[i, i]
+                    relaxed_prog.AddLinearConstraint(X_i >= 0)
 
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron

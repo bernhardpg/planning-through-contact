@@ -32,7 +32,7 @@ class PotatoRobot:
     def height(self) -> float:
         return self.size[2]
 
-    def get_nominal_pose(self) -> npt.NDArray:
+    def get_nominal_pose(self) -> npt.NDArray:  # (3,)
         return np.array([0, self.desired_com_height, 0])
 
 
@@ -41,6 +41,7 @@ class FootstepPlanningConfig:
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
     period_steps: int = 3
+    use_lp_approx: bool = False
 
     @property
     def dt(self) -> float:
