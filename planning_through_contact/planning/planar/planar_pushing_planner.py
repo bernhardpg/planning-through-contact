@@ -451,6 +451,7 @@ class PlanarPushingPlanner:
         ]
 
         if len(only_successful_res) == 0:
+            print("No GCS trajectories rounded succesfully")
             return None
 
         # if len(only_successful_res) == 0:
@@ -471,6 +472,7 @@ class PlanarPushingPlanner:
             )
             for path, result in zip(paths, results)
         ]
+        print(f"Found {len(paths)} paths after GCS rounding.")
 
         return paths
 
@@ -578,7 +580,9 @@ class PlanarPushingPlanner:
 
         feasible_paths = self._get_rounded_paths(solver_params, paths)
         if feasible_paths is None:
+            print("No feasible path found after nonlinear rounding!")
             return None
+        print(f"num feasible paths: {len(feasible_paths)}")
 
         self.path = self._pick_best_path(feasible_paths)
 
