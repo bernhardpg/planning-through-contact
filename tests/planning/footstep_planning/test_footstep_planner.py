@@ -24,14 +24,10 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = False
+DEBUG = True
 
 
-def test_footstep_planning_one_stone() -> None:
-    """
-    This should give exactly the same result as the test
-    test_trajectory_segment_two_feet
-    """
+def test_footstep_planning_one_long_stone() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
 
@@ -45,7 +41,14 @@ def test_footstep_planning_one_stone() -> None:
     initial_pose = np.concatenate([initial_pos, [0]])
     target_pose = np.concatenate([target_pos, [0]])
 
-    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name=stone.name,
+        target_stone_name=stone.name,
+    )
 
     if DEBUG:
         planner.create_graph_diagram("test_one_stone_diagram")
@@ -56,6 +59,43 @@ def test_footstep_planning_one_stone() -> None:
 
     if DEBUG:
         output_file = "debug_plan_one_stone"
+    else:
+        output_file = None
+    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+
+
+def test_footstep_planning_two_stones() -> None:
+    terrain = InPlaneTerrain()
+    initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
+    target_stone = terrain.add_stone(x_pos=0.75, width=0.5, z_pos=0.5, name="target")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = initial_stone.com + desired_robot_pos
+    target_pos = target_stone.com + desired_robot_pos
+
+    # no body rotation
+    initial_pose = np.concatenate([initial_pos, [0]])
+    target_pose = np.concatenate([target_pos, [0]])
+
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name=initial_stone.name,
+        target_stone_name=target_stone.name,
+    )
+
+    if DEBUG:
+        planner.create_graph_diagram("test_two_stones_diagram")
+
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+
+    if DEBUG:
+        output_file = "debug_plan_two_stones"
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)

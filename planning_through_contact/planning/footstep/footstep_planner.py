@@ -249,20 +249,14 @@ class FootstepPlanner:
         initial_pose: npt.NDArray[np.float64],
         target_pose: npt.NDArray[np.float64],
         initial_stone_name: str = "initial",
-        target_stone_name: str = "initial",
+        target_stone_name: str = "target",
     ) -> None:
         self.config = config
-
-        initial_stone = terrain.stepping_stones[0]
         self.stones = terrain.stepping_stones
-
         self.robot = config.robot
-
-        self.gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])  # (left, right)
+        self.gait_schedule = np.array([[0, 1], [1, 1], [1, 0], [1, 1]])  # (left, right)
 
         self.segments = self._make_segments_for_terrain()
-
-        self.gait_schedule = self.gait_schedule
 
         self.gcs = GraphOfConvexSets()
 
@@ -279,12 +273,25 @@ class FootstepPlanner:
 
         # Create a list of all edges we should add
         edges_to_add = []
+        # Edges within a stone
         for segments_per_stone in self.segments:
             names = [segment.name for segment in segments_per_stone]
             forward_edges = [
                 (name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])
             ]
             edges_to_add.extend(forward_edges)
+
+        # Edges between stones
+        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
+            # Connect all segments from current stone to the first segment of the next stone
+            first_segment_u = list(
+                self.segment_vertex_pairs_per_stone[stone_v.name].values()
+            )[0].s
+            edges_to_next_stone = [
+                (pair.s.name, first_segment_u.name)
+                for pair in self.segment_vertex_pairs_per_stone[stone_u.name].values()
+            ]
+            edges_to_add.extend(edges_to_next_stone)
 
         self.all_segment_vertex_pairs = {
             pair.s.name: pair

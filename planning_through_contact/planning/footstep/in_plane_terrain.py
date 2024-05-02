@@ -13,7 +13,11 @@ class InPlaneSteppingStone:
     x_pos: float
     z_pos: float
     width: float
-    name: Optional[str] = None
+    name: str
+
+    @property
+    def com(self) -> npt.NDArray[np.float64]:  # (2,)
+        return np.array([self.x_pos, self.z_pos])
 
     @property
     def height(self) -> float:
@@ -49,7 +53,7 @@ class InPlaneTerrain:
         x_pos: float,
         z_pos: float,
         width: float,
-        name: Optional[str] = None,
+        name: str,
     ) -> InPlaneSteppingStone:
         stone = InPlaneSteppingStone(x_pos, z_pos, width, name)
         self.stepping_stones.append(stone)
