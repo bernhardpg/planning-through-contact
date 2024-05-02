@@ -320,6 +320,12 @@ class FootstepPlanSegment:
             #         self.p_WB[k][0] - self.p_WFr[k][0] >= -MAX_DIST
             #     )
 
+            # constrain feet to not move too far from each other:
+            if self.two_feet:
+                left_right_distance = self.p_WFl_x[k] - self.p_WFr_x[k]
+                self.prog.AddLinearConstraint(left_right_distance <= robot.step_span)
+                self.prog.AddLinearConstraint(left_right_distance >= -robot.step_span)
+
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
@@ -462,6 +468,10 @@ class FootstepPlanSegment:
             return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], [self.p_WFl_x[k]]])
 
     def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> Variable:
+        """
+        Returns the decision variable for a given foot for a given knot point idx.
+        If the segment has only one foot contact, it returns that one foot always.
+        """
         if k == -1:
             k = self.config.period_steps - 1
         if self.two_feet:
