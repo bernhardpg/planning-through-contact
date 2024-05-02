@@ -256,32 +256,9 @@ class FootstepPlanner:
 
         self.robot = config.robot
 
-        self.gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+        self.gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])  # (left, right)
 
         self.segments = self._make_segments_for_terrain()
-
-        segments = [
-            FootstepPlanSegment(
-                initial_stone,
-                foot_activation,
-                self.robot,
-                config,
-                name=str(idx) + "_" + str(foot_activation),
-            )
-            for idx, foot_activation in enumerate(self.gait_schedule)
-        ]
-
-        # segments_2 = [
-        #     FootstepPlanSegment(
-        #         target_stone,
-        #         foot_activation,
-        #         robot,
-        #         config,
-        #         name=str(idx) + "_" + str(foot_activation),
-        #     )
-        #     for idx, foot_activation in enumerate(gait_schedule)
-        # ]
-        # segments = segments + segments_2
 
         self.gait_schedule = self.gait_schedule
 
@@ -292,7 +269,8 @@ class FootstepPlanner:
         self.target = self.gcs.AddVertex(Point(target_pose), name="target")
 
         # Add all knot points as vertices
-        self.all_pairs = self._add_segments_as_vertices(self.gcs, segments)
+        all_segments = sum(self.segments, [])
+        self.all_pairs = self._add_segments_as_vertices(self.gcs, all_segments)
 
         edges_to_add = [(0, 1), (1, 2), (2, 3)]
         self._add_edges_with_dynamics_constraints(
@@ -325,10 +303,18 @@ class FootstepPlanner:
                 stance_idx = (step * 2) % len(self.gait_schedule)
                 lift_idx = (step * 2 + 1) % len(self.gait_schedule)
                 stance_step = FootstepPlanSegment(
-                    stone, self.gait_schedule[stance_idx], self.robot, self.config
+                    stone,
+                    self.gait_schedule[stance_idx],
+                    self.robot,
+                    self.config,
+                    name=f"step_{step}_{self.gait_schedule[stance_idx]}",
                 )
                 lift_step = FootstepPlanSegment(
-                    stone, self.gait_schedule[lift_idx], self.robot, self.config
+                    stone,
+                    self.gait_schedule[lift_idx],
+                    self.robot,
+                    self.config,
+                    name=f"step_{step}_{self.gait_schedule[lift_idx]}",
                 )
                 segments_for_stone.append(stance_step)
                 segments_for_stone.append(lift_step)
