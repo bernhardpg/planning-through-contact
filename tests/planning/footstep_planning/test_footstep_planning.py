@@ -262,7 +262,7 @@ def test_footstep_planning_one_stone() -> None:
 
     if DEBUG:
         planner.create_graph_diagram("test_one_stone_diagram")
-    plan = planner.plan(print_flows=True)
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
         plan.save("test_one_stone_plan.pkl")
@@ -320,7 +320,7 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
 
     sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
 
-    relaxed_prog.RemoveConstraint(sdp_constraint)
+    relaxed_prog.RemoveConstraint(sdp_constraint)  # type: ignore
 
     N = X.shape[0]
     for i in range(N):

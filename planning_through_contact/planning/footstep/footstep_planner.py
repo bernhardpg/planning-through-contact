@@ -248,6 +248,8 @@ class FootstepPlanner:
         terrain: InPlaneTerrain,
         initial_pose: npt.NDArray[np.float64],
         target_pose: npt.NDArray[np.float64],
+        initial_stone_name: str = "initial",
+        target_stone_name: str = "initial",
     ) -> None:
         self.config = config
 
@@ -269,9 +271,13 @@ class FootstepPlanner:
         self.target = self.gcs.AddVertex(Point(target_pose), name="target")
 
         # Add all knot points as vertices
-        all_segments = sum(self.segments, [])
-        self.all_pairs = self._add_segments_as_vertices(self.gcs, all_segments)
+        self.segment_vertex_pairs_per_stone = {}
+        for stone, segments_for_stone in zip(self.stones, self.segments):
+            self.segment_vertex_pairs_per_stone[stone.name] = (
+                self._add_segments_as_vertices(self.gcs, segments_for_stone)
+            )
 
+        # Create a list of all edges we should add
         edges_to_add = []
         for segments_per_stone in self.segments:
             names = [segment.name for segment in segments_per_stone]
@@ -280,20 +286,26 @@ class FootstepPlanner:
             ]
             edges_to_add.extend(forward_edges)
 
+        self.all_segment_vertex_pairs = {
+            pair.s.name: pair
+            for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
+            for pair in pairs_for_stone.values()
+        }
+
         self._add_edges_with_dynamics_constraints(
-            self.gcs, edges_to_add, self.all_pairs, self.config.dt
+            self.gcs, edges_to_add, self.all_segment_vertex_pairs, self.config.dt
         )
 
-        # TODO: Continuity constraints on subsequent contacts within the same region
+        # Connect the first segment in the initial stone to the source
+        self._add_edge_to_source_or_target(
+            list(self.segment_vertex_pairs_per_stone[initial_stone_name].values())[0],
+            "source",
+        )
 
-        self._add_edge_to_source_or_target(list(self.all_pairs.values())[0], "source")
-
-        connections_to_target = [0, 2]
-        for pair in [
-            list(self.all_pairs.values())[idx] for idx in connections_to_target
-        ]:
-            # connect all the vertices to the target
-            self._add_edge_to_source_or_target(pair, "target")
+        # Connect all segments with two feet on the ground on the source stone to target
+        for pair in self.segment_vertex_pairs_per_stone[target_stone_name].values():
+            if pair.s.two_feet:
+                self._add_edge_to_source_or_target(pair, "target")
 
     @staticmethod
     def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
@@ -498,7 +510,9 @@ class FootstepPlanner:
         rounded_results = []
         print(f"Rounding {len(paths)} possible GCS paths...")
         for active_edges, relaxed_result in tqdm(zip(paths, relaxed_results)):
-            rounder = FootstepPlanRounder(active_edges, self.all_pairs, relaxed_result)
+            rounder = FootstepPlanRounder(
+                active_edges, self.all_segment_vertex_pairs, relaxed_result
+            )
             rounded_result = rounder.round()
             rounded_results.append(rounded_result)
             rounders.append(rounder)
