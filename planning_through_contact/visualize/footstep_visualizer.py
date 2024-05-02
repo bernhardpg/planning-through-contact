@@ -149,6 +149,6 @@ def animate_footstep_plan(
 
     # Create and display animation
     n_steps = plan.num_steps
-    ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
+    ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
     if output_file is not None:
         ani.save(f"{output_file}.mp4", writer="ffmpeg")

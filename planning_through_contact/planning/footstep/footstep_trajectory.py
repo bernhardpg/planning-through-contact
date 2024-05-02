@@ -309,12 +309,19 @@ class FootstepPlanSegment:
             self.non_convex_constraints.append(cs_for_knot_point)
 
             # Stay on the stepping stone
-            self.prog.AddLinearConstraint(stone.x_min <= self.p_WFl[k][0])
-            self.prog.AddLinearConstraint(self.p_WFl[k][0] <= stone.x_max)
+            self.prog.AddLinearConstraint(
+                stone.x_min <= self.p_WFl[k][0] - robot.foot_length / 2
+            )
+            self.prog.AddLinearConstraint(
+                self.p_WFl[k][0] + robot.foot_length / 2 <= stone.x_max
+            )
             if self.two_feet:
-                self.prog.AddLinearConstraint(stone.x_min <= self.p_WFr[k][0])
-                self.prog.AddLinearConstraint(self.p_WFr[k][0] <= stone.x_max)
-
+                self.prog.AddLinearConstraint(
+                    stone.x_min <= self.p_WFr[k][0] - robot.foot_length / 2
+                )
+                self.prog.AddLinearConstraint(
+                    self.p_WFr[k][0] + robot.foot_length / 2 <= stone.x_max
+                )
             # Don't move the feet too far from the robot
             self.prog.AddLinearConstraint(
                 self.p_WB[k][0] - self.p_WFl[k][0] <= robot.max_step_dist_from_robot

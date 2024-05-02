@@ -143,7 +143,7 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     target_stone = terrain.add_stone(x_pos=2.75, width=0.5, z_pos=0.5, name="target")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True)
+    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True, period=0.3)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = initial_stone.com + desired_robot_pos

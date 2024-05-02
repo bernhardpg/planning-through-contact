@@ -273,6 +273,12 @@ class FootstepPlanner:
                 )
             )
 
+        self.all_segment_vertex_pairs = {
+            pair.s.name: pair
+            for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
+            for pair in pairs_for_stone.values()
+        }
+
         # Create a list of all edges we should add
         edges_to_add = []
         # Edges within a stone
@@ -283,7 +289,12 @@ class FootstepPlanner:
             ]
             edges_to_add.extend(forward_edges)
 
+        self._add_edges_with_dynamics_constraints(
+            self.gcs, edges_to_add, self.all_segment_vertex_pairs, self.config.dt
+        )
+
         # Edges between stones
+        edges_between_stones = []
         for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
             # Connect all segments from current stone to the first segment of the next stone
             first_segment_u = list(
@@ -293,16 +304,13 @@ class FootstepPlanner:
                 (pair.s.name, first_segment_u.name)
                 for pair in self.segment_vertex_pairs_per_stone[stone_u.name].values()
             ]
-            edges_to_add.extend(edges_to_next_stone)
+            edges_between_stones.extend(edges_to_next_stone)
 
-        self.all_segment_vertex_pairs = {
-            pair.s.name: pair
-            for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
-            for pair in pairs_for_stone.values()
-        }
-
-        self._add_edges_with_dynamics_constraints(
-            self.gcs, edges_to_add, self.all_segment_vertex_pairs, self.config.dt
+        self._add_edges(
+            self.gcs,
+            edges_between_stones,
+            self.all_segment_vertex_pairs,
+            self.config.dt,
         )
 
         # Connect the first segment in the initial stone to the source
@@ -371,6 +379,30 @@ class FootstepPlanner:
             raise RuntimeError("Names cannot be the same.")
 
         return pairs
+
+    def _add_edges(
+        self,
+        gcs: GraphOfConvexSets,
+        edges_to_add: List[Tuple[str, str]],
+        pairs: Dict[str, VertexSegmentPair],
+        dt: float,
+    ) -> None:
+        # edge from i -> j
+        for i, j in edges_to_add:
+            pair_u, pair_v = pairs[i], pairs[j]
+            u, s_u = pair_u
+            v, s_v = pair_v
+
+            e = gcs.AddEdge(u, v)
+
+            state_curr = s_u.get_vars_in_vertex(s_u.get_state(-1), u.x())
+            f_curr = s_u.get_lin_exprs_in_vertex(s_u.get_dynamics(-1), u.x())
+            state_next = s_v.get_vars_in_vertex(s_v.get_state(0), v.x())
+
+            # forward euler
+            constraint = eq(state_next, state_curr + dt * f_curr)
+            for c in constraint:
+                e.AddConstraint(c)
 
     def _add_edges_with_dynamics_constraints(
         self,
