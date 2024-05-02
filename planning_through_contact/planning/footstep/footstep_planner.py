@@ -358,9 +358,9 @@ class FootstepPlanner:
             constant_foot = _get_foot(constant_foot_idx)
 
             # Foot in contact cant move
-            foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
-            foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
-            e.AddConstraint(foot_u == foot_v)
+            foot_u_x_pos = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
+            foot_v_x_pos = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
+            e.AddConstraint(foot_u_x_pos == foot_v_x_pos)  # type: ignore
 
             # TODO
             # Add constraint that the moving foot can't move more than so much

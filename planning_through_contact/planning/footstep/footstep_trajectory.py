@@ -461,7 +461,7 @@ class FootstepPlanSegment:
         else:
             return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], [self.p_WFl_x[k]]])
 
-    def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> npt.NDArray:
+    def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> Variable:
         if k == -1:
             k = self.config.period_steps - 1
         if self.two_feet:
