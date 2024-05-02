@@ -402,6 +402,7 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
             self.costs["sq_torques"].append(c)
 
+        # TODO: do we need these? Potentially remove
         # # squared accelerations
         # for k in range(self.num_steps):
         #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
@@ -597,19 +598,21 @@ class FootstepPlanSegment:
 
         return self.relaxed_prog
 
-    def get_convex_set(self) -> Spectrahedron:
+    def get_convex_set(self, use_lp_approx: bool = False) -> Spectrahedron:
         relaxed_prog = self.make_relaxed_prog()
-        assert len(relaxed_prog.positive_semidefinite_constraints()) == 1
-        X = get_X_from_semidefinite_relaxation(relaxed_prog)
 
-        sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
+        if use_lp_approx:
+            assert len(relaxed_prog.positive_semidefinite_constraints()) == 1
+            X = get_X_from_semidefinite_relaxation(relaxed_prog)
 
-        relaxed_prog.RemoveConstraint(sdp_constraint)
+            sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
 
-        N = X.shape[0]
-        for i in range(N):
-            X_i = X[i, i]
-            relaxed_prog.AddLinearConstraint(X_i >= 0)
+            relaxed_prog.RemoveConstraint(sdp_constraint)
+
+            N = X.shape[0]
+            for i in range(N):
+                X_i = X[i, i]
+                relaxed_prog.AddLinearConstraint(X_i >= 0)
 
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
