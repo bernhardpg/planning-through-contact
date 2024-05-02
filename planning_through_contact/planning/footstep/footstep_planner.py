@@ -252,20 +252,23 @@ class FootstepPlanner:
         self.config = config
 
         initial_stone = terrain.stepping_stones[0]
-        # target_stone = terrain.stepping_stones[1]
+        self.stones = terrain.stepping_stones
 
-        robot = config.robot
+        self.robot = config.robot
 
-        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+        self.gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+
+        self.segments = self._make_segments_for_terrain()
+
         segments = [
             FootstepPlanSegment(
                 initial_stone,
                 foot_activation,
-                robot,
+                self.robot,
                 config,
                 name=str(idx) + "_" + str(foot_activation),
             )
-            for idx, foot_activation in enumerate(gait_schedule)
+            for idx, foot_activation in enumerate(self.gait_schedule)
         ]
 
         # segments_2 = [
@@ -280,7 +283,7 @@ class FootstepPlanner:
         # ]
         # segments = segments + segments_2
 
-        self.gait_schedule = gait_schedule
+        self.gait_schedule = self.gait_schedule
 
         self.gcs = GraphOfConvexSets()
 
@@ -306,6 +309,32 @@ class FootstepPlanner:
             self._add_edge_to_source_or_target(pair, "target")
 
         self.vertex_name_to_pairs = {pair.v.name(): pair for pair in self.all_pairs}
+
+    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegment]]:
+        def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
+            return int(np.floor(width / step_span) + 2)
+
+        num_steps_required_per_stone = [
+            _calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
+            for stone in self.stones
+        ]
+        segments = []
+        for stone, num_steps_required in zip(self.stones, num_steps_required_per_stone):
+            segments_for_stone = []
+            for step in range(num_steps_required):
+                stance_idx = (step * 2) % len(self.gait_schedule)
+                lift_idx = (step * 2 + 1) % len(self.gait_schedule)
+                stance_step = FootstepPlanSegment(
+                    stone, self.gait_schedule[stance_idx], self.robot, self.config
+                )
+                lift_step = FootstepPlanSegment(
+                    stone, self.gait_schedule[lift_idx], self.robot, self.config
+                )
+                segments_for_stone.append(stance_step)
+                segments_for_stone.append(lift_step)
+            segments.append(segments_for_stone)
+
+        return segments
 
     def _add_segments_as_vertices(
         self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]

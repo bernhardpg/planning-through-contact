@@ -379,3 +379,39 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, traj, output_file=output_file)
+
+
+def test_make_segments_per_terrain() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
+
+    step_span = 0.5
+
+    robot = PotatoRobot(step_span=step_span)
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.6, 0.0]) + desired_robot_pos
+
+    initial_pose = np.concatenate([initial_pos, [0]])
+    target_pose = np.concatenate([target_pos, [0]])
+
+    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+    segments = planner._make_segments_for_terrain()
+
+    # we should have one segment per stone
+    assert len(segments) == len(terrain.stepping_stones)
+    # Make sure we have the correct number of steps given the step length
+    assert len(segments[0]) == int(np.floor(stone.width / step_span) + 2) * 2
+
+    # Add another stone and try again
+
+    stone_2 = terrain.add_stone(x_pos=3.0, width=2.0, z_pos=0.2, name="initial")
+    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+    segments = planner._make_segments_for_terrain()
+
+    assert len(segments) == len(terrain.stepping_stones)
+    # Make sure we have the correct number of steps given the step length
+    assert len(segments[0]) == int(np.floor(stone.width / step_span) + 2) * 2
+    assert len(segments[1]) == int(np.floor(stone.width / step_span) + 2) * 2
