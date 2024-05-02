@@ -140,7 +140,9 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
     _ = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.5, name="stone_2")
     _ = terrain.add_stone(x_pos=2.0, width=1.0, z_pos=0.7, name="stone_3")
-    target_stone = terrain.add_stone(x_pos=2.75, width=0.5, z_pos=0.5, name="target")
+    _ = terrain.add_stone(x_pos=2.75, width=0.5, z_pos=0.9, name="stone_4")
+    _ = terrain.add_stone(x_pos=3.25, width=0.5, z_pos=0.7, name="stone_5")
+    target_stone = terrain.add_stone(x_pos=3.75, width=0.5, z_pos=0.5, name="target")
 
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True, period=0.3)
