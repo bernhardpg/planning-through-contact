@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from pydrake.solvers import (  # CommonSolverOption,
     Binding,
     CommonSolverOption,
@@ -23,7 +24,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
 def test_trajectory_segment_one_foot() -> None:
@@ -274,6 +275,7 @@ def test_footstep_planning_one_stone() -> None:
 
 
 # Unfinished!
+@pytest.mark.skip
 def test_semidefinite_relaxation_lp_approximation() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")

@@ -424,14 +424,17 @@ class FootstepPlanner:
 
         return data
 
-    def plan(self, print_flows: bool = False) -> FootstepTrajectory:
+    def plan(
+        self, print_flows: bool = False, print_solver_output: bool = False
+    ) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.max_rounded_paths = 20
 
         solver_options = SolverOptions()
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        options.solver_options = solver_options
+        if print_solver_output:
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            options.solver_options = solver_options
 
         # tolerance = 1e-6
         # mosek = MosekSolver()
