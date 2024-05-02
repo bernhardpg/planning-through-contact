@@ -1,6 +1,5 @@
 import numpy as np
-from pydrake.solvers import (
-    CommonSolverOption,
+from pydrake.solvers import (  # CommonSolverOption,
     MosekSolver,
     SolutionResult,
     Solve,

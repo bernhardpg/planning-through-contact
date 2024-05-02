@@ -329,22 +329,33 @@ class FootstepPlanner:
             for c in constraint:
                 e.AddConstraint(c)
 
-            # TODO: Add continuity constraints on foot position
             u_gait = s_u.active_feet
             v_gait = s_v.active_feet
 
             # This is a simple way to determine the foot that can't move
             constant_foot_idx = np.argmax(u_gait + v_gait)
-            if constant_foot_idx == 0:
-                constant_foot = "left"
-            elif constant_foot_idx == 1:
-                constant_foot = "right"
-            else:
-                raise RuntimeError("No corresponding foot.")
 
+            def _get_foot(idx):
+                if idx == 0:
+                    return "left"
+                elif idx == 1:
+                    return "right"
+                else:
+                    raise RuntimeError("No corresponding foot.")
+
+            constant_foot = _get_foot(constant_foot_idx)
+
+            # Foot in contact cant move
             foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
             foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
             e.AddConstraint(foot_u == foot_v)
+
+            # TODO
+            # Add constraint that the moving foot can't move more than so much
+            # nonconstant_foot_idx = 1 - constant_foot_idx
+            # foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
+            # foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
+
             # TODO: Need to also add cost on edge
 
     def _add_edge_to_source_or_target(
