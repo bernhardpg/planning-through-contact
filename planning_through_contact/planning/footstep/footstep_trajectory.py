@@ -304,21 +304,20 @@ class FootstepPlanSegment:
                 self.prog.AddLinearConstraint(self.p_WFr[k][0] <= stone.x_max)
 
             # Don't move the feet too far from the robot
-            MAX_DIST = 0.4
-            # TODO: Add some reasonable bounds here
-            # self.prog.AddLinearConstraint(
-            #     self.p_WB[k][0] - self.p_WFl[k][0] <= MAX_DIST
-            # )
-            # self.prog.AddLinearConstraint(
-            #     self.p_WB[k][0] - self.p_WFl[k][0] >= -MAX_DIST
-            # )
-            # if self.two_feet:
-            #     self.prog.AddLinearConstraint(
-            #         self.p_WB[k][0] - self.p_WFr[k][0] <= MAX_DIST
-            #     )
-            #     self.prog.AddLinearConstraint(
-            #         self.p_WB[k][0] - self.p_WFr[k][0] >= -MAX_DIST
-            #     )
+            self.prog.AddLinearConstraint(
+                self.p_WB[k][0] - self.p_WFl[k][0] <= robot.max_step_dist_from_robot
+            )
+            self.prog.AddLinearConstraint(
+                self.p_WB[k][0] - self.p_WFl[k][0] >= -robot.max_step_dist_from_robot
+            )
+            if self.two_feet:
+                self.prog.AddLinearConstraint(
+                    self.p_WB[k][0] - self.p_WFr[k][0] <= robot.max_step_dist_from_robot
+                )
+                self.prog.AddLinearConstraint(
+                    self.p_WB[k][0] - self.p_WFr[k][0]
+                    >= -robot.max_step_dist_from_robot
+                )
 
             # constrain feet to not move too far from each other:
             if self.two_feet:

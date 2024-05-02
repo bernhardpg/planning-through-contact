@@ -230,7 +230,7 @@ class FootstepPlanRounder:
 
     def round(self) -> MathematicalProgramResult:
         snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)
+        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)  # type: ignore
         return rounded_result
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
@@ -509,7 +509,7 @@ class FootstepPlanner:
         rounders = []
         rounded_results = []
         print(f"Rounding {len(paths)} possible GCS paths...")
-        for active_edges, relaxed_result in tqdm(zip(paths, relaxed_results)):
+        for active_edges, relaxed_result in zip(paths, relaxed_results):
             rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
