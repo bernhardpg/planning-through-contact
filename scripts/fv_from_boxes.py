@@ -74,7 +74,7 @@ def main():
             "transform": np.array(
                 [
                     [1.0, 0.0, 0.0, -0.15],
-                    [0.0, 1.0, 0.0, -0.05],
+                    [0.0, 1.0, 0.0, 0.0],  # More challenging: [0.0,0.0,-0.05]
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
                 ]
@@ -111,6 +111,9 @@ def main():
     # plot_lines(ax, ordered_edges)
     ordered_vertices = extract_ordered_vertices(ordered_edges)
     # plot_vertices(ax, ordered_vertices)
+    
+    normal_vecs = compute_normal_vecs_from_edges(ordered_edges, loaded_boxes)
+    # plot_lines(ax, normal_vecs, color="black")
 
     planes_per_region, faces_per_region = compute_collision_free_regions(
         loaded_boxes, ordered_edges

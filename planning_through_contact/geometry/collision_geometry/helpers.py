@@ -93,24 +93,6 @@ def compute_box_vertices(box):
     return vertices_2d
 
 
-def compute_box_bounds(box):
-    # Extract size and transformation matrix
-    size = box["size"]
-    transform = box["transform"]
-
-    # Get the center position
-    center_x = transform[0, 3]
-    center_y = transform[1, 3]
-
-    # Calculate the edges
-    left = center_x - size[0] / 2
-    right = center_x + size[0] / 2
-    bottom = center_y - size[1] / 2
-    top = center_y + size[1] / 2
-
-    return left, right, bottom, top
-
-
 def is_point_on_box_edge(point, box):
     """Check if the point is on the edge of the box."""
     x, y = point
@@ -223,6 +205,20 @@ def compute_box_bounds(box):
     top = center_y + size[1] / 2
 
     return left, right, bottom, top
+
+
+def compute_box_union_bounds(boxes):
+    min_x, min_y = float("inf"), float("inf")
+    max_x, max_y = float("-inf"), float("-inf")
+
+    for box in boxes:
+        left, right, bottom, top = compute_box_bounds(box)
+        min_x = min(min_x, left)
+        max_x = max(max_x, right)
+        min_y = min(min_y, bottom)
+        max_y = max(max_y, top)
+
+    return min_x, max_x, min_y, max_y
 
 
 def compute_outer_vertices(boxes):
@@ -483,3 +479,56 @@ def compute_collision_free_regions(boxes, faces):
 
 def flatten_nested_list(nested_list):
     return [item for sublist in nested_list for item in sublist]
+
+
+def compute_normal_vecs_from_edges(edges, boxes):
+    """
+    Compute normal vectors for edges that start at the edge midpoint and point inside
+    the box.
+    """
+    width, height = compute_union_dimensions(boxes)
+    scale = min(width, height) / 1000
+
+    normal_vecs = []
+    for edge in edges:
+        start, end = edge
+        diff0 = end[0] - start[0]
+        diff1 = end[1] - start[1]
+        normal = np.array([diff1, -diff0])
+        normal /= np.linalg.norm(normal)
+        normal *= scale * 100  # Scale for visualization
+        scaled_normal = normal * scale  # Scale for collision checking
+
+        mid_point = (start[0] + end[0]) / 2, (start[1] + end[1]) / 2
+
+        # Make sure that normal vector points inside the box
+        if is_inside_any_box(
+            boxes, (mid_point[0] + scaled_normal[0], mid_point[1] + scaled_normal[1])
+        ):
+            normal_vec = (
+                (mid_point[0], mid_point[1]),
+                (mid_point[0] + normal[0], mid_point[1] + normal[1]),
+            )
+        else:
+            normal_vec = (
+                (mid_point[0], mid_point[1]),
+                (mid_point[0] - normal[0], mid_point[1] - normal[1]),
+            )
+        normal_vecs.append(normal_vec)
+    return normal_vecs
+
+
+def compute_normalized_normal_vector_points_from_edges(edges, boxes):
+    """
+    Computes a point that defines the normal vector with respect to the world origin.
+    The normal vectors point inside the shape.
+    """
+    normal_vecs = compute_normal_vecs_from_edges(edges, boxes)
+    normal_vec_points = [
+        np.array([np.array(vec[1]) - np.array(vec[0])]).reshape((-1, 1))
+        for vec in normal_vecs
+    ]
+    normalized_normal_vec_points = [
+        vec / np.linalg.norm(vec) for vec in normal_vec_points
+    ]
+    return normalized_normal_vec_points
