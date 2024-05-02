@@ -272,28 +272,36 @@ class FootstepPlanner:
         all_segments = sum(self.segments, [])
         self.all_pairs = self._add_segments_as_vertices(self.gcs, all_segments)
 
-        edges_to_add = [(0, 1), (1, 2), (2, 3)]
+        edges_to_add = []
+        for segments_per_stone in self.segments:
+            names = [segment.name for segment in segments_per_stone]
+            forward_edges = [
+                (name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])
+            ]
+            edges_to_add.extend(forward_edges)
+
         self._add_edges_with_dynamics_constraints(
             self.gcs, edges_to_add, self.all_pairs, self.config.dt
         )
 
         # TODO: Continuity constraints on subsequent contacts within the same region
 
-        self._add_edge_to_source_or_target(self.all_pairs[0], "source")
+        self._add_edge_to_source_or_target(list(self.all_pairs.values())[0], "source")
 
         connections_to_target = [0, 2]
-        for pair in [self.all_pairs[idx] for idx in connections_to_target]:
+        for pair in [
+            list(self.all_pairs.values())[idx] for idx in connections_to_target
+        ]:
             # connect all the vertices to the target
             self._add_edge_to_source_or_target(pair, "target")
 
-        self.vertex_name_to_pairs = {pair.v.name(): pair for pair in self.all_pairs}
+    @staticmethod
+    def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
+        return int(np.floor(width / step_span) + 2)
 
     def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegment]]:
-        def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
-            return int(np.floor(width / step_span) + 2)
-
         num_steps_required_per_stone = [
-            _calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
+            self._calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
             for stone in self.stones
         ]
         segments = []
@@ -318,25 +326,30 @@ class FootstepPlanner:
                 )
                 segments_for_stone.append(stance_step)
                 segments_for_stone.append(lift_step)
+
             segments.append(segments_for_stone)
 
         return segments
 
     def _add_segments_as_vertices(
         self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]
-    ) -> List[VertexSegmentPair]:
+    ) -> Dict[str, VertexSegmentPair]:
         vertices = [gcs.AddVertex(s.get_convex_set(), name=s.name) for s in segments]
-        pairs = [VertexSegmentPair(v, s) for v, s in zip(vertices, segments)]
-        for pair in pairs:
+        pairs = {s.name: VertexSegmentPair(v, s) for v, s in zip(vertices, segments)}
+        for pair in pairs.values():
             pair.add_cost_to_vertex()
+
+        # Make sure there are no naming duplicates
+        if not len(set(pairs.keys())) == len(pairs):
+            raise RuntimeError("Names cannot be the same.")
 
         return pairs
 
     def _add_edges_with_dynamics_constraints(
         self,
         gcs: GraphOfConvexSets,
-        edges_to_add: List[Tuple[int, int]],
-        pairs: List[VertexSegmentPair],
+        edges_to_add: List[Tuple[str, str]],
+        pairs: Dict[str, VertexSegmentPair],
         dt: float,
     ) -> None:
         # edge from i -> j
@@ -485,9 +498,7 @@ class FootstepPlanner:
         rounded_results = []
         print(f"Rounding {len(paths)} possible GCS paths...")
         for active_edges, relaxed_result in tqdm(zip(paths, relaxed_results)):
-            rounder = FootstepPlanRounder(
-                active_edges, self.vertex_name_to_pairs, relaxed_result
-            )
+            rounder = FootstepPlanRounder(active_edges, self.all_pairs, relaxed_result)
             rounded_result = rounder.round()
             rounded_results.append(rounded_result)
             rounders.append(rounder)

@@ -24,7 +24,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = False
+DEBUG = True
 
 
 def test_trajectory_segment_one_foot() -> None:
