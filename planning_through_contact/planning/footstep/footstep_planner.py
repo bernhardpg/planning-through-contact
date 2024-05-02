@@ -256,17 +256,29 @@ class FootstepPlanner:
 
         robot = config.robot
 
-        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1], [1, 1]])
+        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
         segments = [
             FootstepPlanSegment(
                 initial_stone,
                 foot_activation,
                 robot,
                 config,
-                name=str(idx),
+                name=str(idx) + "_" + str(foot_activation),
             )
             for idx, foot_activation in enumerate(gait_schedule)
         ]
+
+        # segments_2 = [
+        #     FootstepPlanSegment(
+        #         target_stone,
+        #         foot_activation,
+        #         robot,
+        #         config,
+        #         name=str(idx) + "_" + str(foot_activation),
+        #     )
+        #     for idx, foot_activation in enumerate(gait_schedule)
+        # ]
+        # segments = segments + segments_2
 
         self.gait_schedule = gait_schedule
 
@@ -288,7 +300,7 @@ class FootstepPlanner:
 
         self._add_edge_to_source_or_target(self.all_pairs[0], "source")
 
-        connections_to_target = [0, 2, 4]
+        connections_to_target = [0, 2]
         for pair in [self.all_pairs[idx] for idx in connections_to_target]:
             # connect all the vertices to the target
             self._add_edge_to_source_or_target(pair, "target")
@@ -329,22 +341,33 @@ class FootstepPlanner:
             for c in constraint:
                 e.AddConstraint(c)
 
-            # TODO: Add continuity constraints on foot position
             u_gait = s_u.active_feet
             v_gait = s_v.active_feet
 
             # This is a simple way to determine the foot that can't move
             constant_foot_idx = np.argmax(u_gait + v_gait)
-            if constant_foot_idx == 0:
-                constant_foot = "left"
-            elif constant_foot_idx == 1:
-                constant_foot = "right"
-            else:
-                raise RuntimeError("No corresponding foot.")
 
+            def _get_foot(idx):
+                if idx == 0:
+                    return "left"
+                elif idx == 1:
+                    return "right"
+                else:
+                    raise RuntimeError("No corresponding foot.")
+
+            constant_foot = _get_foot(constant_foot_idx)
+
+            # Foot in contact cant move
             foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
             foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
             e.AddConstraint(foot_u == foot_v)
+
+            # TODO
+            # Add constraint that the moving foot can't move more than so much
+            # nonconstant_foot_idx = 1 - constant_foot_idx
+            # foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
+            # foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
+
             # TODO: Need to also add cost on edge
 
     def _add_edge_to_source_or_target(
@@ -401,14 +424,17 @@ class FootstepPlanner:
 
         return data
 
-    def plan(self, print_flows: bool = False) -> FootstepTrajectory:
+    def plan(
+        self, print_flows: bool = False, print_solver_output: bool = False
+    ) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         options.max_rounded_paths = 20
 
         solver_options = SolverOptions()
-        # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-        options.solver_options = solver_options
+        if print_solver_output:
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+            options.solver_options = solver_options
 
         # tolerance = 1e-6
         # mosek = MosekSolver()
@@ -460,6 +486,7 @@ class FootstepPlanner:
             ]
         )
         rounder, rounded_result = rounders[best_idx], rounded_results[best_idx]
+        assert rounded_result.is_success()
 
         active_edge_names = [e.name() for e in rounder.active_edges]
         print(f"Best path: {' -> '.join(active_edge_names)}")

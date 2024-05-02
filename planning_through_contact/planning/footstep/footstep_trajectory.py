@@ -15,6 +15,9 @@ from pydrake.solvers import (
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
 
+from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
+    BandSparseSemidefiniteRelaxation,
+)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -194,15 +197,15 @@ class FootstepPlanSegment:
         self.active_feet = active_feet
         self.two_feet = all(active_feet)
 
-        num_steps = self.config.period_steps
+        self.num_steps = self.config.period_steps
 
         self.prog = MathematicalProgram()
 
         # declare states
-        self.p_WB = self.prog.NewContinuousVariables(num_steps, 2, "p_WB")
-        self.v_WB = self.prog.NewContinuousVariables(num_steps, 2, "v_WB")
-        self.theta_WB = self.prog.NewContinuousVariables(num_steps, "theta_WB")
-        self.omega_WB = self.prog.NewContinuousVariables(num_steps, "omega_WB")
+        self.p_WB = self.prog.NewContinuousVariables(self.num_steps, 2, "p_WB")
+        self.v_WB = self.prog.NewContinuousVariables(self.num_steps, 2, "v_WB")
+        self.theta_WB = self.prog.NewContinuousVariables(self.num_steps, "theta_WB")
+        self.omega_WB = self.prog.NewContinuousVariables(self.num_steps, "omega_WB")
 
         # declare inputs
 
@@ -211,13 +214,17 @@ class FootstepPlanSegment:
         # When executing the plan, the correct foot must be determined from the gait.
 
         # left foot
-        self.p_WFl_x = self.prog.NewContinuousVariables(num_steps, "p_BFl_W_x")
-        self.f_Fl_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_1W")
-        self.f_Fl_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fl_2W")
+        self.p_WFl_x = self.prog.NewContinuousVariables(self.num_steps, "p_BFl_W_x")
+        self.f_Fl_1W = self.prog.NewContinuousVariables(self.num_steps, 2, "f_Fl_1W")
+        self.f_Fl_2W = self.prog.NewContinuousVariables(self.num_steps, 2, "f_Fl_2W")
         if self.two_feet:
-            self.p_WFr_x = self.prog.NewContinuousVariables(num_steps, "p_BFr_W_x")
-            self.f_Fr_1W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_1W")
-            self.f_Fr_2W = self.prog.NewContinuousVariables(num_steps, 2, "f_Fr_2W")
+            self.p_WFr_x = self.prog.NewContinuousVariables(self.num_steps, "p_BFr_W_x")
+            self.f_Fr_1W = self.prog.NewContinuousVariables(
+                self.num_steps, 2, "f_Fr_1W"
+            )
+            self.f_Fr_2W = self.prog.NewContinuousVariables(
+                self.num_steps, 2, "f_Fr_2W"
+            )
 
         self.p_WFl = np.vstack(
             [self.p_WFl_x, np.full(self.p_WFl_x.shape, stone.z_pos)]
@@ -235,11 +242,11 @@ class FootstepPlanSegment:
         # auxilliary vars
         # TODO(bernhardpg): we might be able to get around this once we
         # have SDP constraints over the edges
-        self.tau_Fl_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_1")
-        self.tau_Fl_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fl_2")
+        self.tau_Fl_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_Fl_1")
+        self.tau_Fl_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_Fl_2")
         if self.two_feet:
-            self.tau_Fr_1 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_1")
-            self.tau_Fr_2 = self.prog.NewContinuousVariables(num_steps, "tau_Fr_2")
+            self.tau_Fr_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_Fr_1")
+            self.tau_Fr_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_Fr_2")
 
         # linear acceleration
         g = np.array([0, -9.81])
@@ -261,12 +268,12 @@ class FootstepPlanSegment:
 
         # Start and end in an equilibrium position
         self.prog.AddLinearConstraint(eq(self.a_WB[0], 0))
-        self.prog.AddLinearConstraint(eq(self.a_WB[num_steps - 1], 0))
+        self.prog.AddLinearConstraint(eq(self.a_WB[self.num_steps - 1], 0))
         self.prog.AddLinearEqualityConstraint(self.omega_dot_WB[0], 0)
-        self.prog.AddLinearEqualityConstraint(self.omega_dot_WB[num_steps - 1], 0)
+        self.prog.AddLinearEqualityConstraint(self.omega_dot_WB[self.num_steps - 1], 0)
 
         self.non_convex_constraints = []
-        for k in range(num_steps):
+        for k in range(self.num_steps):
             # torque = arm x force
             cs_for_knot_point = []
             c = self.prog.AddQuadraticConstraint(
@@ -328,7 +335,7 @@ class FootstepPlanSegment:
 
         # dynamics
         dt = self.config.dt
-        for k in range(num_steps - 1):
+        for k in range(self.num_steps - 1):
             s_next = self.get_state(k + 1)
             s_curr = self.get_state(k)
             f = self.get_dynamics(k)
@@ -372,7 +379,7 @@ class FootstepPlanSegment:
         # cost_nominal_pose = 1.0
 
         # squared forces
-        for k in range(num_steps):
+        for k in range(self.num_steps):
             f1 = self.f_Fl_1W[k]
             f2 = self.f_Fl_2W[k]
             sq_forces = f1.T @ f1 + f2.T @ f2
@@ -384,7 +391,7 @@ class FootstepPlanSegment:
             self.costs["sq_forces"].append(c)
 
         # squared torques
-        for k in range(num_steps):
+        for k in range(self.num_steps):
             tau1 = self.tau_Fl_1[k]
             tau2 = self.tau_Fl_2[k]
             sq_torques = tau1**2 + tau2**2
@@ -395,19 +402,20 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
             self.costs["sq_torques"].append(c)
 
-        # squared accelerations
-        for k in range(num_steps):
-            sq_acc = self.a_WB[k].T @ self.a_WB[k]
-            c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
-            self.costs["sq_acc_lin"].append(c)
+        # TODO: do we need these? Potentially remove
+        # # squared accelerations
+        # for k in range(self.num_steps):
+        #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
+        #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
+        #     self.costs["sq_acc_lin"].append(c)
 
-        for k in range(num_steps):
-            sq_rot_acc = self.omega_dot_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
-            self.costs["sq_acc_rot"].append(c)
+        # for k in range(self.num_steps):
+        #     sq_rot_acc = self.omega_dot_WB[k] ** 2
+        #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
+        #     self.costs["sq_acc_rot"].append(c)
 
         # squared robot velocity
-        for k in range(num_steps):
+        for k in range(self.num_steps):
             v = self.v_WB[k]
             sq_lin_vel = v.T @ v
             c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
@@ -418,7 +426,7 @@ class FootstepPlanSegment:
             self.costs["sq_rot_vel"].append(c)
 
         # squared distance from nominal pose
-        for k in range(num_steps):
+        for k in range(self.num_steps):
             pose = self.get_robot_pose(k)
             diff = pose - robot.get_nominal_pose()
             sq_diff = diff.T @ diff
@@ -444,14 +452,14 @@ class FootstepPlanSegment:
                 [
                     self.f_Fl_1W[k],
                     self.f_Fl_2W[k],
-                    self.p_WFl[k],
+                    [self.p_WFl_x[k]],
                     self.f_Fr_1W[k],
                     self.f_Fr_2W[k],
-                    self.p_WFr[k],
+                    [self.p_WFr_x[k]],
                 ]
             )
         else:
-            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_WFl[k]])
+            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], [self.p_WFl_x[k]]])
 
     def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> npt.NDArray:
         if k == -1:
@@ -513,19 +521,44 @@ class FootstepPlanSegment:
         return exprs_with_vertex_vars
 
     def get_robot_pose(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
         return np.concatenate([self.p_WB[k], [self.theta_WB[k]]])
 
     def get_robot_spatial_vel(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
         return np.concatenate([self.v_WB[k], [self.omega_WB[k]]])
 
     def get_robot_spatial_acc(self, k: int) -> npt.NDArray:
+        if k == -1:
+            k = self.config.period_steps - 1
         return np.concatenate([self.a_WB[k], [self.omega_dot_WB[k]]])
 
     def get_vars(self, k: int) -> npt.NDArray:
-        raise NotImplementedError("This needs to be updated for two feet")
-        return np.concatenate(
-            (self.get_state(k), self.get_input(k), (self.tau_Fl_1[k], self.tau_Fl_2[k]))
-        )
+        if k == -1:
+            k = self.config.period_steps - 1
+        if self.two_feet:
+            return np.concatenate(
+                (
+                    self.get_state(k),
+                    self.get_input(k),
+                    (
+                        self.tau_Fl_1[k],
+                        self.tau_Fl_2[k],
+                        self.tau_Fr_1[k],
+                        self.tau_Fr_2[k],
+                    ),
+                )
+            )
+        else:
+            return np.concatenate(
+                (
+                    self.get_state(k),
+                    self.get_input(k),
+                    (self.tau_Fl_1[k], self.tau_Fl_2[k]),
+                )
+            )
 
     def add_pose_constraint(
         self, k: int, p_WB: npt.NDArray[np.float64], theta_WB: float
@@ -543,8 +576,21 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
-    def make_relaxed_prog(self, trace_cost: bool = False) -> MathematicalProgram:
-        self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+    def make_relaxed_prog(
+        self,
+        trace_cost: bool = False,
+        use_groups: bool = True,
+    ) -> MathematicalProgram:
+        if use_groups:
+            variable_groups = [
+                Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
+                for k in range(self.num_steps - 1)
+            ]
+            self.relaxed_prog = MakeSemidefiniteRelaxation(
+                self.prog, variable_groups=variable_groups
+            )
+        else:
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         if trace_cost:
             X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
             EPS = 1e-6
@@ -552,8 +598,22 @@ class FootstepPlanSegment:
 
         return self.relaxed_prog
 
-    def get_convex_set(self) -> Spectrahedron:
+    def get_convex_set(self, use_lp_approx: bool = False) -> Spectrahedron:
         relaxed_prog = self.make_relaxed_prog()
+
+        if use_lp_approx:
+            assert len(relaxed_prog.positive_semidefinite_constraints()) == 1
+            X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+            sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
+
+            relaxed_prog.RemoveConstraint(sdp_constraint)
+
+            N = X.shape[0]
+            for i in range(N):
+                X_i = X[i, i]
+                relaxed_prog.AddLinearConstraint(X_i >= 0)
+
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 
@@ -592,9 +652,6 @@ class FootstepPlanSegment:
     def round_with_result(
         self, result: MathematicalProgramResult
     ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
-        X = result.GetSolution(
-            get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
-        )
         x = result.GetSolution(self.prog.decision_variables())
 
         snopt = SnoptSolver()
