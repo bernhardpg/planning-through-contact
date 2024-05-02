@@ -2,7 +2,7 @@
 Automatically generated version of the TPusher2d class.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from typing import List, Tuple
 
@@ -25,6 +25,7 @@ from planning_through_contact.geometry.utilities import normalize_vec
 
 from .helpers import (
     compute_collision_free_regions,
+    compute_normalized_normal_vector_points_from_edges,
     compute_outer_edges,
     compute_outer_vertices,
     compute_union_dimensions,
@@ -49,9 +50,6 @@ class TPusher2dAuto(CollisionGeometry):
     Origin is placed at the center of box 1.
 
     """
-
-    box_1: Box2d = field(default_factory=lambda: Box2d(0.2, 0.05))
-    box_2: Box2d = field(default_factory=lambda: Box2d(0.05, 0.15))
 
     @property
     def collision_geometry_names(self) -> List[str]:
@@ -103,7 +101,7 @@ class TPusher2dAuto(CollisionGeometry):
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
-        """
+        """Numbering might be different. The below is one example.
         v0___________v1
         |              |
         v7___v6___v3___v2
@@ -114,7 +112,7 @@ class TPusher2dAuto(CollisionGeometry):
 
         """
         ordered_vertices = extract_ordered_vertices(self.ordered_edges)
-        vertices_np = [np.array(v).reshape((2,1)) for v in ordered_vertices]
+        vertices_np = [np.array(v).reshape((2, 1)) for v in ordered_vertices]
 
         # Calculated COM for Tee
         vs_offset = [v - self.com_offset for v in vertices_np]
@@ -137,9 +135,7 @@ class TPusher2dAuto(CollisionGeometry):
 
         """
         edges_np = [np.array(edge) for edge in self.ordered_edges]
-        hyperplanes = [
-            construct_2d_plane_from_points(*edge) for edge in edges_np
-        ]
+        hyperplanes = [construct_2d_plane_from_points(*edge) for edge in edges_np]
         return hyperplanes
 
     @property
@@ -279,9 +275,9 @@ class TPusher2dAuto(CollisionGeometry):
 
     @cached_property
     def normal_vecs(self) -> List[npt.NDArray[np.float64]]:
-        normals = [
-            -face.a for face in self.faces
-        ]  # Normal vectors point into the object
+        normals = compute_normalized_normal_vector_points_from_edges(
+            self.ordered_edges, self.primitive_boxes
+        )
         return normals
 
     @staticmethod
@@ -337,14 +333,13 @@ class TPusher2dAuto(CollisionGeometry):
     def get_as_boxes(
         self, z_value: float = 0.0
     ) -> Tuple[List[Box2d], List[RigidTransform]]:
-        # TODO
-        box_1 = self.box_1
-        box_1_center = np.array([0, 0, z_value])
-        box_1_center[:2] -= self.com_offset.flatten()
-        transform_1 = RigidTransform(RotationMatrix.Identity(), box_1_center)  # type: ignore
-        box_2 = self.box_2
-        box_2_center = np.array([0, -self.box_1.height / 2 - self.box_2.height / 2, 0])
-        box_2_center[:2] -= self.com_offset.flatten()
-        transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)
+        boxes_2d = []
+        transforms = []
+        for box in self.primitive_boxes:
+            size = box["size"]
+            transform = box["transform"]
+            transform[2, 3] = z_value
+            boxes_2d.append(Box2d(size[0], size[1]))
+            transforms.append(RigidTransform(transform))
 
-        return [box_1, box_2], [transform_1, transform_2]
+        return boxes_2d, transforms

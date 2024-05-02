@@ -75,10 +75,10 @@ class TPusher2d(CollisionGeometry):
         box_2_center = np.array(
             [0, -self.box_1.height / 2 - self.box_2.height / 2]
         ).reshape((-1, 1))
-        v3 = box_2_center + self.box_2.vertices[1]
-        v4 = box_2_center + self.box_2.vertices[2]
-        v5 = box_2_center + self.box_2.vertices[3]
-        v6 = box_2_center + self.box_2.vertices[0]
+        v3 = box_2_center + self.box_2.vertices[1] + 0.04
+        v4 = box_2_center + self.box_2.vertices[2] + 0.04
+        v5 = box_2_center + self.box_2.vertices[3] + 0.04
+        v6 = box_2_center + self.box_2.vertices[0] + 0.04
 
         v7 = self.box_1.vertices[3]
         vs = [v0, v1, v2, v3, v4, v5, v6, v7]
