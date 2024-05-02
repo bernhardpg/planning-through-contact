@@ -452,14 +452,14 @@ class FootstepPlanSegment:
                 [
                     self.f_Fl_1W[k],
                     self.f_Fl_2W[k],
-                    self.p_WFl[k],
+                    [self.p_WFl_x[k]],
                     self.f_Fr_1W[k],
                     self.f_Fr_2W[k],
-                    self.p_WFr[k],
+                    [self.p_WFr_x[k]],
                 ]
             )
         else:
-            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], self.p_WFl[k]])
+            return np.concatenate([self.f_Fl_1W[k], self.f_Fl_2W[k], [self.p_WFl_x[k]]])
 
     def get_foot_pos(self, foot: Literal["left", "right"], k: int) -> npt.NDArray:
         if k == -1:
@@ -579,11 +579,11 @@ class FootstepPlanSegment:
     def make_relaxed_prog(
         self,
         trace_cost: bool = False,
-        use_groups: bool = False,
+        use_groups: bool = True,
     ) -> MathematicalProgram:
         if use_groups:
             variable_groups = [
-                np.concatenate([self.get_vars(k), self.get_vars(k + 1)])
+                Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
                 for k in range(self.num_steps - 1)
             ]
             self.relaxed_prog = MakeSemidefiniteRelaxation(
@@ -652,9 +652,6 @@ class FootstepPlanSegment:
     def round_with_result(
         self, result: MathematicalProgramResult
     ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
-        X = result.GetSolution(
-            get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
-        )
         x = result.GetSolution(self.prog.decision_variables())
 
         snopt = SnoptSolver()
