@@ -402,16 +402,16 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
             self.costs["sq_torques"].append(c)
 
-        # squared accelerations
-        for k in range(self.num_steps):
-            sq_acc = self.a_WB[k].T @ self.a_WB[k]
-            c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
-            self.costs["sq_acc_lin"].append(c)
+        # # squared accelerations
+        # for k in range(self.num_steps):
+        #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
+        #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
+        #     self.costs["sq_acc_lin"].append(c)
 
-        for k in range(self.num_steps):
-            sq_rot_acc = self.omega_dot_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
-            self.costs["sq_acc_rot"].append(c)
+        # for k in range(self.num_steps):
+        #     sq_rot_acc = self.omega_dot_WB[k] ** 2
+        #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
+        #     self.costs["sq_acc_rot"].append(c)
 
         # squared robot velocity
         for k in range(self.num_steps):
@@ -576,7 +576,9 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
     def make_relaxed_prog(
-        self, trace_cost: bool = False, use_groups: bool = False
+        self,
+        trace_cost: bool = False,
+        use_groups: bool = False,
     ) -> MathematicalProgram:
         if use_groups:
             variable_groups = [
@@ -597,6 +599,18 @@ class FootstepPlanSegment:
 
     def get_convex_set(self) -> Spectrahedron:
         relaxed_prog = self.make_relaxed_prog()
+        assert len(relaxed_prog.positive_semidefinite_constraints()) == 1
+        X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+        sdp_constraint = relaxed_prog.positive_semidefinite_constraints()[0]
+
+        relaxed_prog.RemoveConstraint(sdp_constraint)
+
+        N = X.shape[0]
+        for i in range(N):
+            X_i = X[i, i]
+            relaxed_prog.AddLinearConstraint(X_i >= 0)
+
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 

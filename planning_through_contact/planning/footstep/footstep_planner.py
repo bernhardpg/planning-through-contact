@@ -256,17 +256,29 @@ class FootstepPlanner:
 
         robot = config.robot
 
-        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1], [1, 1]])
+        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
         segments = [
             FootstepPlanSegment(
                 initial_stone,
                 foot_activation,
                 robot,
                 config,
-                name=str(idx),
+                name=str(idx) + "_" + str(foot_activation),
             )
             for idx, foot_activation in enumerate(gait_schedule)
         ]
+
+        # segments_2 = [
+        #     FootstepPlanSegment(
+        #         target_stone,
+        #         foot_activation,
+        #         robot,
+        #         config,
+        #         name=str(idx) + "_" + str(foot_activation),
+        #     )
+        #     for idx, foot_activation in enumerate(gait_schedule)
+        # ]
+        # segments = segments + segments_2
 
         self.gait_schedule = gait_schedule
 
@@ -288,7 +300,7 @@ class FootstepPlanner:
 
         self._add_edge_to_source_or_target(self.all_pairs[0], "source")
 
-        connections_to_target = [0, 2, 4]
+        connections_to_target = [0, 2]
         for pair in [self.all_pairs[idx] for idx in connections_to_target]:
             # connect all the vertices to the target
             self._add_edge_to_source_or_target(pair, "target")
@@ -418,7 +430,7 @@ class FootstepPlanner:
         options.max_rounded_paths = 20
 
         solver_options = SolverOptions()
-        # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
         options.solver_options = solver_options
 
         # tolerance = 1e-6
@@ -471,6 +483,7 @@ class FootstepPlanner:
             ]
         )
         rounder, rounded_result = rounders[best_idx], rounded_results[best_idx]
+        assert rounded_result.is_success()
 
         active_edge_names = [e.name() for e in rounder.active_edges]
         print(f"Best path: {' -> '.join(active_edge_names)}")
