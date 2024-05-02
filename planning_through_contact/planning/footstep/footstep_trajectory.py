@@ -575,15 +575,19 @@ class FootstepPlanSegment:
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
         self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
 
-    def make_relaxed_prog(self, trace_cost: bool = False) -> MathematicalProgram:
-        variable_groups = [
-            np.concatenate([self.get_vars(k), self.get_vars(k + 1)])
-            for k in range(self.num_steps - 1)
-        ]
-
-        self.relaxed_prog = MakeSemidefiniteRelaxation(
-            self.prog, variable_groups=variable_groups
-        )
+    def make_relaxed_prog(
+        self, trace_cost: bool = False, use_groups: bool = False
+    ) -> MathematicalProgram:
+        if use_groups:
+            variable_groups = [
+                np.concatenate([self.get_vars(k), self.get_vars(k + 1)])
+                for k in range(self.num_steps - 1)
+            ]
+            self.relaxed_prog = MakeSemidefiniteRelaxation(
+                self.prog, variable_groups=variable_groups
+            )
+        else:
+            self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         if trace_cost:
             X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
             EPS = 1e-6
