@@ -465,7 +465,7 @@ def compute_collision_free_regions(boxes, faces):
         face = faces[current_idx]
         region_faces.append(face)
         incoming_plane = (face[0] + get_offset(face[0]), face[0])
-        if face[1] in intersection_vertices:
+        while face[1] in intersection_vertices:
             face = faces[current_idx + 1]
             region_faces.append(face)
             current_idx += 1
