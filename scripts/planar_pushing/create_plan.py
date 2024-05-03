@@ -1,6 +1,7 @@
 import argparse
 import os
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -273,6 +274,8 @@ def create_plan(
     hardware: bool = False,
     save_relaxed: bool = False,
 ):
+    start_time = time.time()
+
     # Set up folders
     folder_name = f"{output_dir}/{traj_name}"
     os.makedirs(folder_name, exist_ok=True)
@@ -390,8 +393,9 @@ def create_plan(
                     visualize_knot_points=not interpolate_video,
                     lims=animation_lims,
                 )
-                return ani
 
+    end_time = time.time()
+    print(f"create_plan took {timedelta(seconds=end_time - start_time)}")
 
 def _get_time_as_str() -> str:
     current_time = datetime.now()
