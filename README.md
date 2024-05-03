@@ -61,6 +61,14 @@ make install
 
 See [the docs](https://drake.mit.edu/from_source.html) for more information on building Drake.
 
+### Installing the Matplotlib backend for visualization
+
+This can't be installed with poetry.
+
+```
+pip install PyQt5
+```
+
 #### Activating the environment
 
 To activate the environment, run:
