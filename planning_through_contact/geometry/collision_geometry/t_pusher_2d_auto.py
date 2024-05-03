@@ -338,6 +338,7 @@ class TPusher2dAuto(CollisionGeometry):
         for box in self.primitive_boxes:
             size = box["size"]
             transform = box["transform"]
+            transform[:2, 3] -= self.com_offset.flatten()
             transform[2, 3] = z_value
             boxes_2d.append(Box2d(size[0], size[1]))
             transforms.append(RigidTransform(transform))

@@ -7,9 +7,11 @@ import numpy as np
 from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
     run_ablation,
 )
+from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import (
+    ArbitraryShape2D,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
-from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import ArbitraryShape2D
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -59,8 +61,9 @@ def get_tee() -> RigidBody:
     body = RigidBody("t_pusher", TPusher2d(), mass)
     return body
 
+
 def get_arbitrary() -> RigidBody:
-    mass = 0.1 # TODO: Make customizable
+    mass = 0.1  # TODO: Make customizable
     body = RigidBody("arbitrary_shape", ArbitraryShape2D(), mass)
     return body
 
@@ -216,6 +219,7 @@ def get_default_solver_params(
         nonl_round_major_feas_tol=1e-5,
         nonl_round_minor_feas_tol=1e-5,
         nonl_round_opt_tol=1e-5,
+        max_mosek_solve_time=3000.0,
     )
     return solver_params
 

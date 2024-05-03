@@ -59,7 +59,7 @@ class ArbitraryShape2D(CollisionGeometry):
         # Use the center of the bounding box as the COM offset.
         x_offset = left + width / 2
         y_offset = bottom + height / 2
-        return np.array([x_offset, y_offset]).reshape((-1, 1))
+        return np.array([x_offset, y_offset]).reshape((2, 1))
 
     @cached_property
     def primitive_boxes(self) -> dict:
@@ -116,10 +116,8 @@ class ArbitraryShape2D(CollisionGeometry):
         vertices_np = [np.array(v).reshape((2, 1)) for v in ordered_vertices]
 
         # Calculated COM for Tee
-        # TODO: Generalize. This is important for plans to be found!
         vs_offset = [v - self.com_offset for v in vertices_np]
         print("COM offset:", self.com_offset.flatten())
-        # vs_offset = vertices_np
         return vs_offset
 
     @property
@@ -319,8 +317,8 @@ class ArbitraryShape2D(CollisionGeometry):
         for box in self.primitive_boxes:
             size = box["size"]
             transform = box["transform"]
+            transform[:2, 3] -= self.com_offset.flatten()
             transform[2, 3] = z_value
             boxes_2d.append(Box2d(size[0], size[1]))
             transforms.append(RigidTransform(transform))
-
         return boxes_2d, transforms
