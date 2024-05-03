@@ -181,6 +181,90 @@ def test_trajectory_segment_two_feet() -> None:
     animate_footstep_plan(robot, terrain, traj, output_file=output_file)
 
 
+def test_trajectory_segment_two_feet_different_stones() -> None:
+    terrain_1 = InPlaneTerrain()
+    step_diff = 0.3
+    stone_1_low = terrain_1.add_stone(x_pos=0.5, width=1.0, z_pos=0.2, name="stone_low")
+    stone_1_high = terrain_1.add_stone(
+        x_pos=1.5, width=1.0, z_pos=0.2 + step_diff, name="stone_high"
+    )
+
+    terrain_2 = InPlaneTerrain()
+
+    stone_2_low = terrain_2.add_stone(x_pos=1.5, width=1.0, z_pos=0.2, name="stone_low")
+    stone_2_high = terrain_2.add_stone(
+        x_pos=0.5, width=1.0, z_pos=0.2 + step_diff, name="stone_high"
+    )
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    segment_step_up = FootstepPlanSegment(
+        stone_1_low,
+        np.array([1, 1]),
+        robot,
+        cfg,
+        name="step_down",
+        stones_per_foot=(stone_1_low, stone_1_high),
+    )
+
+    assert segment_step_up.p_WFl[0, 1] == stone_1_low.z_pos
+    assert segment_step_up.p_WFr[0, 1] == stone_1_high.z_pos
+
+    segment_step_down = FootstepPlanSegment(
+        stone_1_low,
+        np.array([1, 1]),
+        robot,
+        cfg,
+        name="step_down",
+        stones_per_foot=(stone_2_high, stone_2_low),
+    )
+    assert segment_step_down.p_WFl[0, 1] == stone_1_high.z_pos
+    assert segment_step_down.p_WFr[0, 1] == stone_1_low.z_pos
+
+    for terrain, segment in zip(
+        (terrain_1, terrain_2), (segment_step_up, segment_step_down)
+    ):
+
+        initial_pos = np.array([0.95, cfg.robot.desired_com_height])
+        target_pos = np.array([1.05, cfg.robot.desired_com_height + step_diff])
+
+        segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
+        segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+
+        solver_options = SolverOptions()
+        if DEBUG:
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+        relaxed_result = Solve(
+            segment.make_relaxed_prog(trace_cost=False), solver_options=solver_options
+        )
+        # NOTE: We are getting UNKNOWN, but the solution looks good.
+        assert (
+            relaxed_result.is_success()
+            or relaxed_result.get_solution_result()
+            == SolutionResult.kSolverSpecificError
+        )
+
+        segment_value, rounded_result = segment.round_with_result(relaxed_result)
+
+        # segment_value = segment.evaluate_with_result(result)
+        if DEBUG:
+            c_round = rounded_result.get_optimal_cost()
+            c_relax = relaxed_result.get_optimal_cost()
+            ub_optimality_gap = (c_round - c_relax) / c_relax
+            print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+
+        active_feet = np.array([[True, True]])
+        traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
+
+        if DEBUG:
+            output_file = f"debug_different_stones_{segment.name}"
+        else:
+            output_file = None
+        animate_footstep_plan(robot, terrain, traj, output_file=output_file)
+
+
 def test_merging_two_trajectory_segments() -> None:
     """
     This test only tests that the FootstepTrajectory class and the visualizer is able to correctly

@@ -198,16 +198,32 @@ class FootstepPlanSegment:
         robot: PotatoRobot,
         config: FootstepPlanningConfig,
         name: Optional[str] = None,
+        stones_per_foot: Optional[
+            Tuple[InPlaneSteppingStone, InPlaneSteppingStone]
+        ] = None,
     ) -> None:
-        """ """
+        """
+        A wrapper class for constructing a nonlinear optimization program for the
+        motion within a specified mode.
+
+        @param stones_per_foot: If passed, each foot is restriced to be in contact with their
+        respective stone, in the order (L,R). If passed, stone is disregarded.
+        """
         # Assume we always only have one foot in contact
         if name is not None:
-            self.name = f"{stone.name}_{name}"
+            if stones_per_foot:
+                stone_l, stone_r = stones_per_foot
+                self.name = f"{stone_l.name}_{stone_r.name}_{name}"
+            else:
+                self.name = f"{stone.name}_{name}"
 
         self.config = config
         self.active_feet = active_feet
         self.two_feet = all(active_feet)
-        self.stone = stone
+        if stones_per_foot:
+            self.stone_l, self.stone_r = stones_per_foot
+        else:
+            self.stone_l = self.stone_r = stone
 
         self.num_steps = self.config.period_steps
 
@@ -239,11 +255,11 @@ class FootstepPlanSegment:
             )
 
         self.p_WFl = np.vstack(
-            [self.p_WFl_x, np.full(self.p_WFl_x.shape, stone.z_pos)]
+            [self.p_WFl_x, np.full(self.p_WFl_x.shape, self.stone_l.z_pos)]
         ).T  # (num_steps, 2)
         if self.two_feet:
             self.p_WFr = np.vstack(
-                [self.p_WFr_x, np.full(self.p_WFr_x.shape, stone.z_pos)]
+                [self.p_WFr_x, np.full(self.p_WFr_x.shape, self.stone_r.z_pos)]
             ).T  # (num_steps, 2)
 
         # compute the foot position
@@ -278,6 +294,7 @@ class FootstepPlanSegment:
             self.p_BFr_1W = self.p_BFr_W + np.array([robot.foot_length / 2, 0])
             self.p_BFr_2W = self.p_BFr_W - np.array([robot.foot_length / 2, 0])
 
+        # TODO: remove these!
         # Start and end in an equilibrium position
         self.prog.AddLinearConstraint(eq(self.a_WB[0], 0))
         self.prog.AddLinearConstraint(eq(self.a_WB[self.num_steps - 1], 0))
@@ -310,18 +327,19 @@ class FootstepPlanSegment:
 
             # Stay on the stepping stone
             self.prog.AddLinearConstraint(
-                stone.x_min <= self.p_WFl[k][0] - robot.foot_length / 2
+                self.stone_l.x_min <= self.p_WFl[k][0] - robot.foot_length / 2
             )
             self.prog.AddLinearConstraint(
-                self.p_WFl[k][0] + robot.foot_length / 2 <= stone.x_max
+                self.p_WFl[k][0] + robot.foot_length / 2 <= self.stone_l.x_max
             )
             if self.two_feet:
                 self.prog.AddLinearConstraint(
-                    stone.x_min <= self.p_WFr[k][0] - robot.foot_length / 2
+                    self.stone_r.x_min <= self.p_WFr[k][0] - robot.foot_length / 2
                 )
                 self.prog.AddLinearConstraint(
-                    self.p_WFr[k][0] + robot.foot_length / 2 <= stone.x_max
+                    self.p_WFr[k][0] + robot.foot_length / 2 <= self.stone_r.x_max
                 )
+
             # Don't move the feet too far from the robot
             self.prog.AddLinearConstraint(
                 self.p_WB[k][0] - self.p_WFl[k][0] <= robot.max_step_dist_from_robot
@@ -450,7 +468,8 @@ class FootstepPlanSegment:
             self.costs["sq_rot_vel"].append(c)
 
         # squared distance from nominal pose
-        pose_offset = np.array([0, self.stone.height, 0])  # offset the stone height
+        # TODO: Use the mean stone height?
+        pose_offset = np.array([0, self.stone_l.height, 0])  # offset the stone height
         for k in range(self.num_steps):
             pose = self.get_robot_pose(k) - pose_offset
             diff = pose - robot.get_nominal_pose()
