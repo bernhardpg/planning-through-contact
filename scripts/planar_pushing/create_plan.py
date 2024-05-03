@@ -9,44 +9,28 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
     do_one_run_get_path,
 )
 from planning_through_contact.experiments.utils import (
-    get_box,
     get_default_plan_config,
     get_default_solver_params,
-    get_sugar_box,
-    get_tee,
 )
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.non_collision import (
     check_finger_pose_in_contact_location,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
-    ContactConfig,
-    ContactCost,
-    ContactCostType,
-    NonCollisionCost,
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
     PlanarPushingWorkspace,
-    PlanarSolverParams,
-    SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
-from planning_through_contact.visualize.analysis import (
-    analyze_mode_result,
-    analyze_plan,
-)
+from planning_through_contact.visualize.analysis import analyze_plan
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar_pushing import (
     compare_trajs,
@@ -435,6 +419,7 @@ if __name__ == "__main__":
         help="Which slider body to use.",
         type=str,
         default="tee",
+        choices=["box", "sugar_box", "tee", "arbitrary"],
     )
     parser.add_argument(
         "--num",

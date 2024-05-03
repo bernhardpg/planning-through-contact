@@ -38,12 +38,12 @@ from .helpers import (
 @dataclass(frozen=True)
 class ArbitraryShape2D(CollisionGeometry):
 
-    # TODO: Purge
+    # TODO: This needs to match the sdf file for simulation to work...
     @property
     def collision_geometry_names(self) -> List[str]:
         return [
-            "t_pusher::t_pusher_bottom_collision",
-            "t_pusher::t_pusher_top_collision",
+            "arbitrary_shape::arbitrary_shape_bottom_collision",
+            "arbitrary_shape::arbitrary_shape_top_collision",
         ]
 
     @classmethod

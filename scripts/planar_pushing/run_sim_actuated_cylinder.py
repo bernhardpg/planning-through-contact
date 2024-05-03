@@ -162,8 +162,8 @@ if __name__ == "__main__":
     state_estimator_meshcat = StartMeshcat()
     # run_multiple(0, 9, station_meshcat=station_meshcat, state_estimator_meshcat=state_estimator_meshcat)
     run_sim(
-        # plan="trajectories/t_pusher_pushing_demos/hw_demo_C_1_rounded.pkl",
-        plan="trajectories/run_20240425175539_tee_traj_9/run_9/trajectory/traj_rounded.pkl",
+        # plan="hardware_demos/hw_demos_20240429123526_tee_traj_9/hw_demo_9/trajectory/traj_rounded.pkl",
+        plan="trajectories/run_20240503045155_arbitrary_traj_9/run_9/trajectory/traj_rounded.pkl",
         save_recording=True,
         debug=True,
         station_meshcat=station_meshcat,

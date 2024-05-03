@@ -5,6 +5,9 @@ from typing import Literal, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 
+from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import (
+    ArbitraryShape2D,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -81,7 +84,11 @@ class SliderPusherSystemConfig:
     @cached_property
     def max_contact_radius(self) -> float:
         geometry = self.slider.geometry
-        if isinstance(geometry, Box2d) or isinstance(geometry, TPusher2d):
+        if (
+            isinstance(geometry, Box2d)
+            or isinstance(geometry, TPusher2d)
+            or isinstance(geometry, ArbitraryShape2D)
+        ):
             return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
         else:
             raise NotImplementedError(

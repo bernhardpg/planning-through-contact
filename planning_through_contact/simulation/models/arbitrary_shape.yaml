@@ -1,0 +1,4 @@
+directives:
+- add_model:
+    name: arbitrary_shape
+    file: package://planning_through_contact/arbitrary_shape.sdf

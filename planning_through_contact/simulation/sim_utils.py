@@ -8,6 +8,10 @@ from pydrake.all import Box as DrakeBox
 from pydrake.all import (
     ContactModel,
     DiscreteContactApproximation,
+    LoadModelDirectives,
+    ModelInstanceIndex,
+    Box as DrakeBox,
+    RigidBody as DrakeRigidBody,
     GeometryInstance,
     LoadModelDirectives,
     MakePhongIllustrationProperties,
@@ -16,10 +20,19 @@ from pydrake.all import (
     Parser,
     ProcessModelDirectives,
     Rgba,
+    RigidTransform,
+    Transform,
+    RollPitchYaw,
+    MultibodyPlant,
+    Parser,
+    ProcessModelDirectives,
 )
 from pydrake.all import RigidBody as DrakeRigidBody
 from pydrake.all import RigidTransform, RollPitchYaw, Transform
 
+from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import (
+    ArbitraryShape2D,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -102,6 +115,8 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
         slider_sdf_url = f"package://planning_through_contact/box_hydroelastic.{format}"
     elif isinstance(sim_config.slider.geometry, TPusher2d):
         slider_sdf_url = f"package://planning_through_contact/t_pusher.{format}"
+    elif isinstance(sim_config.slider.geometry, ArbitraryShape2D):
+        slider_sdf_url = f"package://planning_through_contact/arbitrary_shape.{format}"
     else:
         raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
     return slider_sdf_url

@@ -9,6 +9,8 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import ArbitraryShape2D
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
@@ -55,6 +57,11 @@ def get_box() -> RigidBody:
 def get_tee() -> RigidBody:
     mass = 0.1
     body = RigidBody("t_pusher", TPusher2d(), mass)
+    return body
+
+def get_arbitrary() -> RigidBody:
+    mass = 0.1 # TODO: Make customizable
+    body = RigidBody("arbitrary_shape", ArbitraryShape2D(), mass)
     return body
 
 
@@ -115,7 +122,7 @@ def get_hardware_non_collision_cost() -> NonCollisionCost:
 
 
 def get_default_plan_config(
-    slider_type: Literal["box", "sugar_box", "tee"] = "box",
+    slider_type: Literal["box", "sugar_box", "tee", "arbitrary"] = "box",
     pusher_radius: float = 0.015,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
@@ -128,6 +135,8 @@ def get_default_plan_config(
         slider = get_sugar_box()
     elif slider_type == "tee":
         slider = get_tee()
+    elif slider_type == "arbitrary":
+        slider = get_arbitrary()
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 

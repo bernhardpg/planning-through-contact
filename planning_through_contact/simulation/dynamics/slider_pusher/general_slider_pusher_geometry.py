@@ -14,6 +14,9 @@ from pydrake.geometry import (
 from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix
 from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem, OutputPort
 
+from planning_through_contact.geometry.collision_geometry.arbitrary_shape_2d import (
+    ArbitraryShape2D,
+)
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -69,7 +72,9 @@ class GeneralSliderPusherGeometry(LeafSystem):
                 box_geometry_id,
                 MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
             )
-        elif isinstance(slider_geometry, TPusher2d):
+        elif isinstance(slider_geometry, TPusher2d) or isinstance(
+            slider_geometry, ArbitraryShape2D
+        ):
             DEFAULT_HEIGHT = 0.1
             boxes, transforms = slider_geometry.get_as_boxes(DEFAULT_HEIGHT / 2)
             box_geometry_ids = [
