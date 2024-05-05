@@ -256,9 +256,6 @@ class FootstepPlanner:
 
         self.segments_per_stone = self._make_segments_for_terrain()
 
-        # TODO: add (1,1) segment to start of first stone and end of second stone
-        # TODO: Add "connecting segment" between stones
-
         self.gcs = GraphOfConvexSets()
 
         # Add initial and target vertices
@@ -395,7 +392,7 @@ class FootstepPlanner:
 
             segments.append(segments_for_stone)
 
-        # Append one stance segment to the start of the first segment
+        # Append one stance segment to the start of the first segment on the first stone
         stance_step = FootstepPlanSegment(
             self.stones[0],
             "two_feet",
@@ -404,6 +401,16 @@ class FootstepPlanner:
             name=f"start_stance",
         )
         segments[0].insert(0, stance_step)
+
+        # Append one stance segment to the end of the last segment on the last stone
+        stance_step = FootstepPlanSegment(
+            self.stones[-1],
+            "two_feet",
+            self.robot,
+            self.config,
+            name=f"final_stance",
+        )
+        segments[-1].append(stance_step)
 
         return segments
 
