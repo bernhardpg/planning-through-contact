@@ -234,13 +234,14 @@ class FootstepPlanSegment:
         @param stones_per_foot: If passed, each foot is restriced to be in contact with their
         respective stone, in the order (L,R). If passed, stone is disregarded.
         """
-        # Assume we always only have one foot in contact
+        if stone_for_last_foot:
+            stone_first, stone_last = stone, stone_for_last_foot
+            self.name = f"{stone_first.name}_and_{stone_last.name}"
+        else:
+            self.name = f"{stone.name}"
+
         if name is not None:
-            if stone_for_last_foot:
-                stone_first, stone_last = stone, stone_for_last_foot
-                self.name = f"{stone_first.name}_{stone_last.name}_{name}"
-            else:
-                self.name = f"{stone.name}_{name}"
+            self.name = f"{self.name}_{name}"
 
         self.config = config
         self.two_feet = one_or_two_feet == "two_feet"

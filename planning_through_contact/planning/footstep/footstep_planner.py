@@ -265,7 +265,7 @@ class FootstepPlanner:
         self.source = self.gcs.AddVertex(Point(initial_pose), name="source")
         self.target = self.gcs.AddVertex(Point(target_pose), name="target")
 
-        # Add all knot points as vertices
+        # Add all segments as vertices
         self.segment_vertex_pairs_per_stone = {}
         for stone, segments_for_stone in zip(self.stones, self.segments_per_stone):
             self.segment_vertex_pairs_per_stone[stone.name] = (
@@ -274,46 +274,74 @@ class FootstepPlanner:
                 )
             )
 
+        # Create a list of all edges we should add
+        forward_edges = []
+        # Edges between segments within a stone
+        for segments_for_stone in self.segments_per_stone:
+            names = [segment.name for segment in segments_for_stone]
+            edges = [(name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])]
+            forward_edges.extend(edges)
+
+        # Edges and transitions between stones
+        transition_segments = []
+        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
+            transition_step = FootstepPlanSegment(
+                stone_u,
+                "two_feet",
+                self.robot,
+                self.config,
+                name=f"transition",
+                stone_for_last_foot=stone_v,
+            )
+            transition_segments.append(transition_step)
+
+        transition_vertices = [
+            self.gcs.AddVertex(s.get_convex_set(use_lp_approx=False), name=s.name)
+            for s in transition_segments
+        ]
+        transition_pairs = {
+            (s.stone_first.name, s.stone_last.name): VertexSegmentPair(v, s)
+            for v, s in zip(transition_vertices, transition_segments)
+        }
+
+        transition_edges = []
+        for (stone_u_name, stone_v_name), transition_pair in transition_pairs.items():
+            # connect all the incoming segments with only one foot in contact to the transition segment
+            incoming_edges = [
+                (incoming_pair.s.name, transition_pair.s.name)
+                for incoming_pair in self.segment_vertex_pairs_per_stone[
+                    stone_u_name
+                ].values()
+                if not incoming_pair.s.two_feet
+            ]
+            transition_edges.extend(incoming_edges)
+
+            # connect the transition segment to the first segment of the next stone
+            outgoing_edge = (
+                transition_pair.s.name,
+                list(self.segment_vertex_pairs_per_stone[stone_v_name].values())[
+                    0
+                ].s.name,
+            )
+            transition_edges.append(outgoing_edge)
+
+        # Collect all pairs in a flat dictionary that maps from segment name to segment
         self.all_segment_vertex_pairs = {
             pair.s.name: pair
             for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
             for pair in pairs_for_stone.values()
         }
+        for transition_pair in transition_pairs.values():
+            self.all_segment_vertex_pairs[transition_pair.s.name] = transition_pair
 
-        # Create a list of all edges we should add
-        edges_to_add = []
-        # Edges between segments within a stone
-        for segments_for_stone in self.segments_per_stone:
-            names = [segment.name for segment in segments_for_stone]
-            forward_edges = [
-                (name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])
-            ]
-            edges_to_add.extend(forward_edges)
+        edges_to_add = forward_edges + transition_edges
 
         self._add_edges_with_dynamics_constraints(
-            self.gcs, edges_to_add, self.all_segment_vertex_pairs, self.config.dt
-        )
-
-        # Edges between stones
-        edges_between_stones = []
-        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
-            # Connect all segments from current stone to the first segment of the next stone
-            first_segment_u = list(
-                self.segment_vertex_pairs_per_stone[stone_v.name].values()
-            )[0].s
-            edges_to_next_stone = [
-                (pair.s.name, first_segment_u.name)
-                for pair in self.segment_vertex_pairs_per_stone[stone_u.name].values()
-            ]
-            edges_between_stones.extend(edges_to_next_stone)
-
-        self._add_edges_between_stones(
             self.gcs,
-            edges_between_stones,
+            edges_to_add,
             self.all_segment_vertex_pairs,
             self.config.dt,
         )
-
         # Connect the first segment in the initial stone to the source
         self._add_edge_to_source_or_target(
             list(self.segment_vertex_pairs_per_stone[initial_stone_name].values())[0],
@@ -321,9 +349,11 @@ class FootstepPlanner:
         )
 
         # Connect all segments with two feet on the ground on the source stone to target
-        for pair in self.segment_vertex_pairs_per_stone[target_stone_name].values():
-            if pair.s.two_feet:
-                self._add_edge_to_source_or_target(pair, "target")
+        for transition_pair in self.segment_vertex_pairs_per_stone[
+            target_stone_name
+        ].values():
+            if transition_pair.s.two_feet:
+                self._add_edge_to_source_or_target(transition_pair, "target")
 
     @staticmethod
     def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
@@ -444,6 +474,13 @@ class FootstepPlanner:
             constraint = eq(state_next, state_curr + dt * f_curr)
             for c in constraint:
                 e.AddConstraint(c)
+
+            if (s_u.two_feet and s_v.two_feet) or (
+                not s_u.two_feet and not s_v.two_feet
+            ):
+                raise RuntimeError(
+                    "Must transition from stance -> lift or lift -> stance between two segments"
+                )
 
             # If the segment we are transitining from has both feet in contact,
             # we constrain the last foot to be constant. Otherwise, we are
