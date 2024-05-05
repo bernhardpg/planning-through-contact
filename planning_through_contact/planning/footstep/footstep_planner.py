@@ -337,26 +337,43 @@ class FootstepPlanner:
         segments = []
         for stone, num_steps_required in zip(self.stones, num_steps_required_per_stone):
             segments_for_stone = []
-            for step in range(num_steps_required):
-                # Add two segmens, one with one foot and one with two feet
-                stance_step = FootstepPlanSegment(
-                    stone,
-                    "one_foot",
-                    self.robot,
-                    self.config,
-                    name=f"step_{step}_one_foot",
-                )
-                lift_step = FootstepPlanSegment(
-                    stone,
-                    "two_feet",
-                    self.robot,
-                    self.config,
-                    name=f"step_{step}_two_feet",
-                )
-                segments_for_stone.append(stance_step)
-                segments_for_stone.append(lift_step)
+            # This makes sure that we add num_steps_required steps,
+            # where we start with a lift step, and end with a lift step
+            for gait_idx in range(num_steps_required * 2 - 1):
+                # This makes the first segment start with one foot, then alternate
+                # from there
+                step_idx = int(gait_idx / 2)
+                one_foot_segment = (gait_idx + 1) % 2 == 1
+                if one_foot_segment:
+                    lift_step = FootstepPlanSegment(
+                        stone,
+                        "one_foot",
+                        self.robot,
+                        self.config,
+                        name=f"step_{step_idx}_one_foot",
+                    )
+                    segments_for_stone.append(lift_step)
+                else:
+                    stance_step = FootstepPlanSegment(
+                        stone,
+                        "two_feet",
+                        self.robot,
+                        self.config,
+                        name=f"step_{step_idx}_two_feet",
+                    )
+                    segments_for_stone.append(stance_step)
 
             segments.append(segments_for_stone)
+
+        # Append one stance segment to the start of the first segment
+        stance_step = FootstepPlanSegment(
+            self.stones[0],
+            "two_feet",
+            self.robot,
+            self.config,
+            name=f"start_stance",
+        )
+        segments[0].insert(0, stance_step)
 
         return segments
 
