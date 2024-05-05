@@ -60,7 +60,7 @@ class FootstepPlanKnotPoints:
     theta_WB: npt.NDArray[np.float64]
     p_WF1: npt.NDArray[np.float64]
     f_F1_1W: npt.NDArray[np.float64]
-    f_F1_1W: npt.NDArray[np.float64]
+    f_F1_2W: npt.NDArray[np.float64]
     p_WF2: Optional[npt.NDArray[np.float64]] = None
     f_F2_1W: Optional[npt.NDArray[np.float64]] = None
     f_F2_2W: Optional[npt.NDArray[np.float64]] = None
@@ -71,7 +71,7 @@ class FootstepPlanKnotPoints:
 
         assert self.p_WF1.shape == (self.num_points, 2)
         assert self.f_F1_1W.shape == (self.num_points, 2)
-        assert self.f_F1_1W.shape == (self.num_points, 2)
+        assert self.f_F1_2W.shape == (self.num_points, 2)
 
         if self.p_WF2 is not None:
             assert self.p_WF2.shape == (self.num_points, 2)
@@ -168,12 +168,12 @@ class FootstepTrajectory:
         # NOTE: This assumes that all the segments have the same lengths!
         empty_shape = segments[0].p_WB.shape
 
-        for segment, (left_active, right_active) in zip(segments, gait_schedule):
-            both_active = left_active and right_active
+        for segment, (first_active, last_active) in zip(segments, gait_schedule):
+            both_active = first_active and last_active
             if both_active:
                 p_WF1s.append(segment.p_WF1)
                 f_F1_1Ws.append(segment.f_F1_1W)
-                f_F1_2Ws.append(segment.f_F1_1W)
+                f_F1_2Ws.append(segment.f_F1_2W)
 
                 p_WF2s.append(segment.p_WF2)
                 f_F2_1Ws.append(segment.f_F2_1W)
@@ -181,12 +181,12 @@ class FootstepTrajectory:
             else:
                 # NOTE: These next lines look like they have a typo, but they don't.
                 # When there is only one foot active, the values for this foot is
-                # always stored in the "left" foot values (to avoid unecessary optimization
+                # always stored in the "first" foot values (to avoid unecessary optimization
                 # variables)
-                if left_active:
+                if first_active:
                     p_WF1s.append(segment.p_WF1)
                     f_F1_1Ws.append(segment.f_F1_1W)
-                    f_F1_2Ws.append(segment.f_F1_1W)
+                    f_F1_2Ws.append(segment.f_F1_2W)
 
                     p_WF2s.append(np.full(empty_shape, np.nan))
                     f_F2_1Ws.append(np.full(empty_shape, np.nan))
@@ -196,10 +196,10 @@ class FootstepTrajectory:
                     f_F1_1Ws.append(np.full(empty_shape, np.nan))
                     f_F1_2Ws.append(np.full(empty_shape, np.nan))
 
-                    # Notice that here we pick from the "left" values
+                    # Notice that here we pick from the "first" values
                     p_WF2s.append(segment.p_WF1)
                     f_F2_1Ws.append(segment.f_F1_1W)
-                    f_F2_2Ws.append(segment.f_F1_1W)
+                    f_F2_2Ws.append(segment.f_F1_2W)
 
         p_WF1s = np.vstack(p_WF1s)
         f_F1_1Ws = np.vstack(f_F1_1Ws)

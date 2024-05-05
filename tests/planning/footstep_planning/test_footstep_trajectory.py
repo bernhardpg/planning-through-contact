@@ -69,14 +69,12 @@ def test_trajectory_segment_one_foot() -> None:
 
     segment_value = segment.evaluate_with_result(result)
 
-    active_feet = np.array([[True, False]])
-
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
+    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
     assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
-    assert traj.knot_points.p_WFl.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.p_WF1.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps, 2)
 
     if DEBUG:
         a_WB = evaluate_np_expressions_array(segment.a_WB, result)
@@ -161,14 +159,13 @@ def test_trajectory_segment_two_feet() -> None:
         ub_optimality_gap = (c_round - c_relax) / c_relax
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-    active_feet = np.array([[True, True]])
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
+    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
 
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
     assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
-    assert traj.knot_points.p_WFl.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_Fl_1W.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_Fl_2W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.p_WF1.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps, 2)
 
     if DEBUG:
         output_file = "debug_two_feet"
@@ -251,8 +248,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
             ub_optimality_gap = (c_round - c_relax) / c_relax
             print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-        active_feet = np.array([[True, True]])
-        traj = FootstepTrajectory.from_segments([segment_value], cfg.dt, active_feet)
+        traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
 
         if DEBUG:
             output_file = f"debug_different_stones_{segment.name}"
@@ -308,9 +304,8 @@ def test_merging_two_trajectory_segments() -> None:
     )
     segment_val_second = segment_second.evaluate_with_result(result_second)
 
-    active_feet = np.array([[True, True], [True, False]])
     traj = FootstepTrajectory.from_segments(
-        [segment_val_first, segment_val_second], cfg.dt, active_feet
+        [segment_val_first, segment_val_second], cfg.dt
     )
 
     if DEBUG:
