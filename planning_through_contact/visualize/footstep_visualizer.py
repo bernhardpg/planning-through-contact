@@ -74,8 +74,6 @@ def animate_footstep_plan(
 
     # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
-    p_WFl = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
-    p_WFr = ax.scatter(0, 0, color="g", zorder=3, label="Right foot")
 
     # Misc settings
     plt.close()
@@ -96,22 +94,16 @@ def animate_footstep_plan(
         # Left foot
         if not np.isnan(plan.knot_points.p_WF1[n_steps]).any():
             foot_left.set_xy(base_foot_vertices + plan.knot_points.p_WF1[n_steps])
-            p_WFl.set_offsets(plan.knot_points.p_WF1[n_steps])
             foot_left.set_visible(True)
-            p_WFl.set_visible(True)
         else:
             foot_left.set_visible(False)
-            p_WFl.set_visible(False)
 
         # Right foot
         if not np.isnan(plan.knot_points.p_WF2[n_steps]).any():  # type: ignore
             foot_right.set_xy(base_foot_vertices + plan.knot_points.p_WF2[n_steps])  # type: ignore
-            p_WFr.set_offsets(plan.knot_points.p_WF2[n_steps])  # type: ignore
             foot_right.set_visible(True)
-            p_WFr.set_visible(True)
         else:
             foot_right.set_visible(False)
-            p_WFr.set_visible(False)
 
         # Forces for left foot
         if not np.isnan(plan.knot_points.f_F1_1W[n_steps]).any():

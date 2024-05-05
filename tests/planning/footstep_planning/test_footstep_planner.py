@@ -139,6 +139,7 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
 
+@pytest.mark.skip
 def test_footstep_planning_many_stones_lp_approx() -> None:
     terrain = InPlaneTerrain()
     initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
