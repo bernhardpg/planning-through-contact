@@ -256,7 +256,11 @@ class FootstepPlanner:
         self.robot = config.robot
         self.gait_schedule = np.array([[0, 1], [1, 1], [1, 0], [1, 1]])  # (left, right)
 
-        self.segments = self._make_segments_for_terrain()
+        self.segments_per_stone = self._make_segments_for_terrain()
+        breakpoint()
+
+        # TODO: add (1,1) segment to start of first stone and end of second stone
+        # TODO: Add "connecting segment" between stones
 
         self.gcs = GraphOfConvexSets()
 
@@ -266,7 +270,7 @@ class FootstepPlanner:
 
         # Add all knot points as vertices
         self.segment_vertex_pairs_per_stone = {}
-        for stone, segments_for_stone in zip(self.stones, self.segments):
+        for stone, segments_for_stone in zip(self.stones, self.segments_per_stone):
             self.segment_vertex_pairs_per_stone[stone.name] = (
                 self._add_segments_as_vertices(
                     self.gcs, segments_for_stone, self.config.use_lp_approx
@@ -281,9 +285,9 @@ class FootstepPlanner:
 
         # Create a list of all edges we should add
         edges_to_add = []
-        # Edges within a stone
-        for segments_per_stone in self.segments:
-            names = [segment.name for segment in segments_per_stone]
+        # Edges between segments within a stone
+        for segments_for_stone in self.segments_per_stone:
+            names = [segment.name for segment in segments_for_stone]
             forward_edges = [
                 (name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])
             ]
@@ -306,7 +310,7 @@ class FootstepPlanner:
             ]
             edges_between_stones.extend(edges_to_next_stone)
 
-        self._add_edges(
+        self._add_edges_between_stones(
             self.gcs,
             edges_between_stones,
             self.all_segment_vertex_pairs,
@@ -380,7 +384,7 @@ class FootstepPlanner:
 
         return pairs
 
-    def _add_edges(
+    def _add_edges_between_stones(
         self,
         gcs: GraphOfConvexSets,
         edges_to_add: List[Tuple[str, str]],
