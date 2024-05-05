@@ -230,14 +230,13 @@ class FootstepPlanRounder:
 
     def round(self) -> MathematicalProgramResult:
         snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)
+        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)  # type: ignore
         return rounded_result
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
         knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
-        gait_schedule = np.vstack([s.active_feet for s in self.active_segments])
         dt = self.active_segments[0].dt
-        plan = FootstepTrajectory.from_segments(knot_points, dt, gait_schedule)
+        plan = FootstepTrajectory.from_segments(knot_points, dt)
         return plan
 
 
@@ -248,39 +247,17 @@ class FootstepPlanner:
         terrain: InPlaneTerrain,
         initial_pose: npt.NDArray[np.float64],
         target_pose: npt.NDArray[np.float64],
+        initial_stone_name: str = "initial",
+        target_stone_name: str = "target",
     ) -> None:
         self.config = config
+        self.stones = terrain.stepping_stones
+        self.robot = config.robot
 
-        initial_stone = terrain.stepping_stones[0]
-        # target_stone = terrain.stepping_stones[1]
+        self.segments_per_stone = self._make_segments_for_terrain()
 
-        robot = config.robot
-
-        gait_schedule = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
-        segments = [
-            FootstepPlanSegment(
-                initial_stone,
-                foot_activation,
-                robot,
-                config,
-                name=str(idx) + "_" + str(foot_activation),
-            )
-            for idx, foot_activation in enumerate(gait_schedule)
-        ]
-
-        # segments_2 = [
-        #     FootstepPlanSegment(
-        #         target_stone,
-        #         foot_activation,
-        #         robot,
-        #         config,
-        #         name=str(idx) + "_" + str(foot_activation),
-        #     )
-        #     for idx, foot_activation in enumerate(gait_schedule)
-        # ]
-        # segments = segments + segments_2
-
-        self.gait_schedule = gait_schedule
+        # TODO: add (1,1) segment to start of first stone and end of second stone
+        # TODO: Add "connecting segment" between stones
 
         self.gcs = GraphOfConvexSets()
 
@@ -288,40 +265,173 @@ class FootstepPlanner:
         self.source = self.gcs.AddVertex(Point(initial_pose), name="source")
         self.target = self.gcs.AddVertex(Point(target_pose), name="target")
 
-        # Add all knot points as vertices
-        self.all_pairs = self._add_segments_as_vertices(self.gcs, segments)
+        # Add all segments as vertices
+        self.segment_vertex_pairs_per_stone = {}
+        for stone, segments_for_stone in zip(self.stones, self.segments_per_stone):
+            self.segment_vertex_pairs_per_stone[stone.name] = (
+                self._add_segments_as_vertices(
+                    self.gcs, segments_for_stone, self.config.use_lp_approx
+                )
+            )
 
-        edges_to_add = [(0, 1), (1, 2), (2, 3)]
+        # Create a list of all edges we should add
+        forward_edges = []
+        # Edges between segments within a stone
+        for segments_for_stone in self.segments_per_stone:
+            names = [segment.name for segment in segments_for_stone]
+            edges = [(name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])]
+            forward_edges.extend(edges)
+
+        # Edges and transitions between stones
+        transition_segments = []
+        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
+            transition_step = FootstepPlanSegment(
+                stone_u,
+                "two_feet",
+                self.robot,
+                self.config,
+                name=f"transition",
+                stone_for_last_foot=stone_v,
+            )
+            transition_segments.append(transition_step)
+
+        transition_vertices = [
+            self.gcs.AddVertex(s.get_convex_set(use_lp_approx=False), name=s.name)
+            for s in transition_segments
+        ]
+        transition_pairs = {
+            (s.stone_first.name, s.stone_last.name): VertexSegmentPair(v, s)
+            for v, s in zip(transition_vertices, transition_segments)
+        }
+
+        transition_edges = []
+        for (stone_u_name, stone_v_name), transition_pair in transition_pairs.items():
+            # connect all the incoming segments with only one foot in contact to the transition segment
+            incoming_edges = [
+                (incoming_pair.s.name, transition_pair.s.name)
+                for incoming_pair in self.segment_vertex_pairs_per_stone[
+                    stone_u_name
+                ].values()
+                if not incoming_pair.s.two_feet
+            ]
+            transition_edges.extend(incoming_edges)
+
+            # connect the transition segment to the first segment of the next stone
+            outgoing_edge = (
+                transition_pair.s.name,
+                list(self.segment_vertex_pairs_per_stone[stone_v_name].values())[
+                    0
+                ].s.name,
+            )
+            transition_edges.append(outgoing_edge)
+
+        # Collect all pairs in a flat dictionary that maps from segment name to segment
+        self.all_segment_vertex_pairs = {
+            pair.s.name: pair
+            for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
+            for pair in pairs_for_stone.values()
+        }
+        for transition_pair in transition_pairs.values():
+            self.all_segment_vertex_pairs[transition_pair.s.name] = transition_pair
+
+        edges_to_add = forward_edges + transition_edges
+
         self._add_edges_with_dynamics_constraints(
-            self.gcs, edges_to_add, self.all_pairs, self.config.dt
+            self.gcs,
+            edges_to_add,
+            self.all_segment_vertex_pairs,
+            self.config.dt,
+        )
+        # Connect the first segment in the initial stone to the source
+        self._add_edge_to_source_or_target(
+            list(self.segment_vertex_pairs_per_stone[initial_stone_name].values())[0],
+            "source",
         )
 
-        # TODO: Continuity constraints on subsequent contacts within the same region
+        # Connect all segments with two feet on the ground on the source stone to target
+        for transition_pair in self.segment_vertex_pairs_per_stone[
+            target_stone_name
+        ].values():
+            if transition_pair.s.two_feet:
+                self._add_edge_to_source_or_target(transition_pair, "target")
 
-        self._add_edge_to_source_or_target(self.all_pairs[0], "source")
+    @staticmethod
+    def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
+        return int(np.floor(width / step_span) + 2)
 
-        connections_to_target = [0, 2]
-        for pair in [self.all_pairs[idx] for idx in connections_to_target]:
-            # connect all the vertices to the target
-            self._add_edge_to_source_or_target(pair, "target")
+    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegment]]:
+        num_steps_required_per_stone = [
+            self._calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
+            for stone in self.stones
+        ]
+        segments = []
+        for stone, num_steps_required in zip(self.stones, num_steps_required_per_stone):
+            segments_for_stone = []
+            # This makes sure that we add num_steps_required steps,
+            # where we start with a lift step, and end with a lift step
+            for gait_idx in range(num_steps_required * 2 - 1):
+                # This makes the first segment start with one foot, then alternate
+                # from there
+                step_idx = int(gait_idx / 2)
+                one_foot_segment = (gait_idx + 1) % 2 == 1
+                if one_foot_segment:
+                    lift_step = FootstepPlanSegment(
+                        stone,
+                        "one_foot",
+                        self.robot,
+                        self.config,
+                        name=f"step_{step_idx}_one_foot",
+                    )
+                    segments_for_stone.append(lift_step)
+                else:
+                    stance_step = FootstepPlanSegment(
+                        stone,
+                        "two_feet",
+                        self.robot,
+                        self.config,
+                        name=f"step_{step_idx}_two_feet",
+                    )
+                    segments_for_stone.append(stance_step)
 
-        self.vertex_name_to_pairs = {pair.v.name(): pair for pair in self.all_pairs}
+            segments.append(segments_for_stone)
+
+        # Append one stance segment to the start of the first segment
+        stance_step = FootstepPlanSegment(
+            self.stones[0],
+            "two_feet",
+            self.robot,
+            self.config,
+            name=f"start_stance",
+        )
+        segments[0].insert(0, stance_step)
+
+        return segments
 
     def _add_segments_as_vertices(
-        self, gcs: GraphOfConvexSets, segments: List[FootstepPlanSegment]
-    ) -> List[VertexSegmentPair]:
-        vertices = [gcs.AddVertex(s.get_convex_set(), name=s.name) for s in segments]
-        pairs = [VertexSegmentPair(v, s) for v, s in zip(vertices, segments)]
-        for pair in pairs:
+        self,
+        gcs: GraphOfConvexSets,
+        segments: List[FootstepPlanSegment],
+        use_lp_approx: bool = False,
+    ) -> Dict[str, VertexSegmentPair]:
+        vertices = [
+            gcs.AddVertex(s.get_convex_set(use_lp_approx=use_lp_approx), name=s.name)
+            for s in segments
+        ]
+        pairs = {s.name: VertexSegmentPair(v, s) for v, s in zip(vertices, segments)}
+        for pair in pairs.values():
             pair.add_cost_to_vertex()
+
+        # Make sure there are no naming duplicates
+        if not len(set(pairs.keys())) == len(pairs):
+            raise RuntimeError("Names cannot be the same.")
 
         return pairs
 
-    def _add_edges_with_dynamics_constraints(
+    def _add_edges_between_stones(
         self,
         gcs: GraphOfConvexSets,
-        edges_to_add: List[Tuple[int, int]],
-        pairs: List[VertexSegmentPair],
+        edges_to_add: List[Tuple[str, str]],
+        pairs: Dict[str, VertexSegmentPair],
         dt: float,
     ) -> None:
         # edge from i -> j
@@ -341,34 +451,56 @@ class FootstepPlanner:
             for c in constraint:
                 e.AddConstraint(c)
 
-            u_gait = s_u.active_feet
-            v_gait = s_v.active_feet
+    def _add_edges_with_dynamics_constraints(
+        self,
+        gcs: GraphOfConvexSets,
+        edges_to_add: List[Tuple[str, str]],
+        pairs: Dict[str, VertexSegmentPair],
+        dt: float,
+    ) -> None:
+        # edge from i -> j
+        for i, j in edges_to_add:
+            pair_u, pair_v = pairs[i], pairs[j]
+            u, s_u = pair_u
+            v, s_v = pair_v
 
-            # This is a simple way to determine the foot that can't move
-            constant_foot_idx = np.argmax(u_gait + v_gait)
+            e = gcs.AddEdge(u, v)
 
-            def _get_foot(idx):
-                if idx == 0:
-                    return "left"
-                elif idx == 1:
-                    return "right"
-                else:
-                    raise RuntimeError("No corresponding foot.")
+            state_curr = s_u.get_vars_in_vertex(s_u.get_state(-1), u.x())
+            f_curr = s_u.get_lin_exprs_in_vertex(s_u.get_dynamics(-1), u.x())
+            state_next = s_v.get_vars_in_vertex(s_v.get_state(0), v.x())
 
-            constant_foot = _get_foot(constant_foot_idx)
+            # forward euler
+            constraint = eq(state_next, state_curr + dt * f_curr)
+            for c in constraint:
+                e.AddConstraint(c)
+
+            if (s_u.two_feet and s_v.two_feet) or (
+                not s_u.two_feet and not s_v.two_feet
+            ):
+                raise RuntimeError(
+                    "Must transition from stance -> lift or lift -> stance between two segments"
+                )
+
+            # If the segment we are transitining from has both feet in contact,
+            # we constrain the last foot to be constant. Otherwise, we are
+            # transitioning to a mode with both feet, and constrain the first
+            # to be constant
+            if s_u.two_feet:
+                constant_foot = "last"
+            else:
+                constant_foot = "first"
 
             # Foot in contact cant move
-            foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
-            foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
-            e.AddConstraint(foot_u == foot_v)
+            constant_foot_u_x_pos = pair_u.get_var_in_vertex(
+                s_u.get_foot_pos(constant_foot, -1)
+            )
+            constant_foot_v_x_pos = pair_v.get_var_in_vertex(
+                s_v.get_foot_pos(constant_foot, 0)
+            )
+            e.AddConstraint(constant_foot_u_x_pos == constant_foot_v_x_pos)  # type: ignore
 
-            # TODO
-            # Add constraint that the moving foot can't move more than so much
-            # nonconstant_foot_idx = 1 - constant_foot_idx
-            # foot_u = pair_u.get_var_in_vertex(s_u.get_foot_pos(constant_foot, -1))
-            # foot_v = pair_v.get_var_in_vertex(s_v.get_foot_pos(constant_foot, 0))
-
-            # TODO: Need to also add cost on edge
+            # TODO: Need to also add cost on edge (right now the dynamics step between two contacts is "free")
 
     def _add_edge_to_source_or_target(
         self,
@@ -470,10 +602,18 @@ class FootstepPlanner:
         )
         rounders = []
         rounded_results = []
+
+        MAX_ROUNDINGS = 3
+
         print(f"Rounding {len(paths)} possible GCS paths...")
-        for active_edges, relaxed_result in tqdm(zip(paths, relaxed_results)):
+        for idx, (active_edges, relaxed_result) in enumerate(
+            zip(paths, relaxed_results)
+        ):
+            print(f"Rounding_step: {idx}")
+            if idx >= MAX_ROUNDINGS:
+                break
             rounder = FootstepPlanRounder(
-                active_edges, self.vertex_name_to_pairs, relaxed_result
+                active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
             rounded_result = rounder.round()
             rounded_results.append(rounded_result)

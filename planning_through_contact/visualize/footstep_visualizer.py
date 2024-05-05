@@ -74,8 +74,6 @@ def animate_footstep_plan(
 
     # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
-    p_WFl = ax.scatter(0, 0, color="b", zorder=3, label="Left foot")
-    p_WFr = ax.scatter(0, 0, color="g", zorder=3, label="Right foot")
 
     # Misc settings
     plt.close()
@@ -94,54 +92,48 @@ def animate_footstep_plan(
             robot_body.set_visible(False)
 
         # Left foot
-        if not np.isnan(plan.knot_points.p_WFl[n_steps]).any():
-            foot_left.set_xy(base_foot_vertices + plan.knot_points.p_WFl[n_steps])
-            p_WFl.set_offsets(plan.knot_points.p_WFl[n_steps])
+        if not np.isnan(plan.knot_points.p_WF1[n_steps]).any():
+            foot_left.set_xy(base_foot_vertices + plan.knot_points.p_WF1[n_steps])
             foot_left.set_visible(True)
-            p_WFl.set_visible(True)
         else:
             foot_left.set_visible(False)
-            p_WFl.set_visible(False)
 
         # Right foot
-        if not np.isnan(plan.knot_points.p_WFr[n_steps]).any():
-            foot_right.set_xy(base_foot_vertices + plan.knot_points.p_WFr[n_steps])
-            p_WFr.set_offsets(plan.knot_points.p_WFr[n_steps])
+        if not np.isnan(plan.knot_points.p_WF2[n_steps]).any():  # type: ignore
+            foot_right.set_xy(base_foot_vertices + plan.knot_points.p_WF2[n_steps])  # type: ignore
             foot_right.set_visible(True)
-            p_WFr.set_visible(True)
         else:
             foot_right.set_visible(False)
-            p_WFr.set_visible(False)
 
         # Forces for left foot
-        if not np.isnan(plan.knot_points.f_Fl_1W[n_steps]).any():
-            f_l1_pos = plan.knot_points.p_WFl[n_steps] + base_foot_vertices[0]
-            f_l1_val = plan.knot_points.f_Fl_1W[n_steps] * FORCE_SCALE
+        if not np.isnan(plan.knot_points.f_F1_1W[n_steps]).any():
+            f_l1_pos = plan.knot_points.p_WF1[n_steps] + base_foot_vertices[0]
+            f_l1_val = plan.knot_points.f_F1_1W[n_steps] * FORCE_SCALE
             force_l1.set_positions(posA=f_l1_pos, posB=(f_l1_pos + f_l1_val))
             force_l1.set_visible(True)
         else:
             force_l1.set_visible(False)
 
-        if not np.isnan(plan.knot_points.f_Fl_2W[n_steps]).any():
-            f_l2_pos = plan.knot_points.p_WFl[n_steps] + base_foot_vertices[1]
-            f_l2_val = plan.knot_points.f_Fl_2W[n_steps] * FORCE_SCALE
+        if not np.isnan(plan.knot_points.f_F1_1W[n_steps]).any():
+            f_l2_pos = plan.knot_points.p_WF1[n_steps] + base_foot_vertices[1]
+            f_l2_val = plan.knot_points.f_F1_2W[n_steps] * FORCE_SCALE
             force_l2.set_positions(posA=f_l2_pos, posB=(f_l2_pos + f_l2_val))
             force_l2.set_visible(True)
         else:
             force_l2.set_visible(False)
 
         # Forces for right foot
-        if not np.isnan(plan.knot_points.f_Fr_1W[n_steps]).any():  # type: ignore
-            f_r1_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[0]
-            f_r1_val = plan.knot_points.f_Fr_1W[n_steps] * FORCE_SCALE  # type: ignore
+        if not np.isnan(plan.knot_points.f_F2_1W[n_steps]).any():  # type: ignore
+            f_r1_pos = plan.knot_points.p_WF2[n_steps] + base_foot_vertices[0]  # type: ignore
+            f_r1_val = plan.knot_points.f_F2_1W[n_steps] * FORCE_SCALE  # type: ignore
             force_r1.set_positions(posA=f_r1_pos, posB=(f_r1_pos + f_r1_val))
             force_r1.set_visible(True)
         else:
             force_r1.set_visible(False)
 
-        if not np.isnan(plan.knot_points.f_Fr_2W[n_steps]).any():  # type: ignore
-            f_r2_pos = plan.knot_points.p_WFr[n_steps] + base_foot_vertices[1]
-            f_r2_val = plan.knot_points.f_Fr_2W[n_steps] * FORCE_SCALE  # type: ignore
+        if not np.isnan(plan.knot_points.f_F2_2W[n_steps]).any():  # type: ignore
+            f_r2_pos = plan.knot_points.p_WF2[n_steps] + base_foot_vertices[1]  # type: ignore
+            f_r2_val = plan.knot_points.f_F2_2W[n_steps] * FORCE_SCALE  # type: ignore
             force_r2.set_positions(posA=f_r2_pos, posB=(f_r2_pos + f_r2_val))
             force_r2.set_visible(True)
         else:
@@ -149,6 +141,6 @@ def animate_footstep_plan(
 
     # Create and display animation
     n_steps = plan.num_steps
-    ani = FuncAnimation(fig, animate, frames=n_steps, interval=1e3)  # type: ignore
+    ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
     if output_file is not None:
         ani.save(f"{output_file}.mp4", writer="ffmpeg")
