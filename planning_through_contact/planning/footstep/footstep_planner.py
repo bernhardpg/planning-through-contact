@@ -271,56 +271,7 @@ class FootstepPlanner:
                 )
             )
 
-        # Create a list of all edges we should add
-        forward_edges = []
-        # Edges between segments within a stone
-        for segments_for_stone in self.segments_per_stone:
-            names = [segment.name for segment in segments_for_stone]
-            edges = [(name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])]
-            forward_edges.extend(edges)
-
-        # Edges and transitions between stones
-        transition_segments = []
-        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
-            transition_step = FootstepPlanSegment(
-                stone_u,
-                "two_feet",
-                self.robot,
-                self.config,
-                name=f"transition",
-                stone_for_last_foot=stone_v,
-            )
-            transition_segments.append(transition_step)
-
-        transition_vertices = [
-            self.gcs.AddVertex(s.get_convex_set(use_lp_approx=False), name=s.name)
-            for s in transition_segments
-        ]
-        transition_pairs = {
-            (s.stone_first.name, s.stone_last.name): VertexSegmentPair(v, s)
-            for v, s in zip(transition_vertices, transition_segments)
-        }
-
-        transition_edges = []
-        for (stone_u_name, stone_v_name), transition_pair in transition_pairs.items():
-            # connect all the incoming segments with only one foot in contact to the transition segment
-            incoming_edges = [
-                (incoming_pair.s.name, transition_pair.s.name)
-                for incoming_pair in self.segment_vertex_pairs_per_stone[
-                    stone_u_name
-                ].values()
-                if not incoming_pair.s.two_feet
-            ]
-            transition_edges.extend(incoming_edges)
-
-            # connect the transition segment to the first segment of the next stone
-            outgoing_edge = (
-                transition_pair.s.name,
-                list(self.segment_vertex_pairs_per_stone[stone_v_name].values())[
-                    0
-                ].s.name,
-            )
-            transition_edges.append(outgoing_edge)
+        self.transition_pairs = self._make_transition_segments()
 
         # Collect all pairs in a flat dictionary that maps from segment name to segment
         self.all_segment_vertex_pairs = {
@@ -328,10 +279,10 @@ class FootstepPlanner:
             for pairs_for_stone in self.segment_vertex_pairs_per_stone.values()
             for pair in pairs_for_stone.values()
         }
-        for transition_pair in transition_pairs.values():
+        for transition_pair in self.transition_pairs.values():
             self.all_segment_vertex_pairs[transition_pair.s.name] = transition_pair
 
-        edges_to_add = forward_edges + transition_edges
+        edges_to_add = self._collect_all_graph_edges()
 
         self._add_edges_with_dynamics_constraints(
             self.gcs,
@@ -433,6 +384,66 @@ class FootstepPlanner:
             raise RuntimeError("Names cannot be the same.")
 
         return pairs
+
+    def _make_transition_segments(self) -> Dict[Tuple[str, str], VertexSegmentPair]:
+        # Edges and transitions between stones
+        transition_segments = []
+        for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
+            transition_step = FootstepPlanSegment(
+                stone_u,
+                "two_feet",
+                self.robot,
+                self.config,
+                name=f"transition",
+                stone_for_last_foot=stone_v,
+            )
+            transition_segments.append(transition_step)
+
+        transition_vertices = [
+            self.gcs.AddVertex(s.get_convex_set(use_lp_approx=False), name=s.name)
+            for s in transition_segments
+        ]
+        transition_pairs = {
+            (s.stone_first.name, s.stone_last.name): VertexSegmentPair(v, s)
+            for v, s in zip(transition_vertices, transition_segments)
+        }
+        return transition_pairs
+
+    def _collect_all_graph_edges(self) -> List[Tuple[str, str]]:
+        # Create a list of all edges we should add
+        forward_edges = []
+        # Edges between segments within a stone
+        for segments_for_stone in self.segments_per_stone:
+            names = [segment.name for segment in segments_for_stone]
+            edges = [(name_i, name_j) for name_i, name_j in zip(names[:-1], names[1:])]
+            forward_edges.extend(edges)
+
+        transition_edges = []
+        for (
+            stone_u_name,
+            stone_v_name,
+        ), transition_pair in self.transition_pairs.items():
+            # connect all the incoming segments with only one foot in contact to the transition segment
+            incoming_edges = [
+                (incoming_pair.s.name, transition_pair.s.name)
+                for incoming_pair in self.segment_vertex_pairs_per_stone[
+                    stone_u_name
+                ].values()
+                if not incoming_pair.s.two_feet
+            ]
+            transition_edges.extend(incoming_edges)
+
+            # connect the transition segment to the first segment of the next stone
+            outgoing_edge = (
+                transition_pair.s.name,
+                list(self.segment_vertex_pairs_per_stone[stone_v_name].values())[
+                    0
+                ].s.name,
+            )
+            transition_edges.append(outgoing_edge)
+
+        edges_to_add = forward_edges + transition_edges
+        return edges_to_add
 
     def _add_edges_between_stones(
         self,
