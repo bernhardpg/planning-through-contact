@@ -235,9 +235,8 @@ class FootstepPlanRounder:
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
         knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
-        gait_schedule = np.vstack([s.active_feet for s in self.active_segments])
         dt = self.active_segments[0].dt
-        plan = FootstepTrajectory.from_segments(knot_points, dt, gait_schedule)
+        plan = FootstepTrajectory.from_segments(knot_points, dt)
         return plan
 
 
@@ -254,7 +253,6 @@ class FootstepPlanner:
         self.config = config
         self.stones = terrain.stepping_stones
         self.robot = config.robot
-        self.gait_schedule = np.array([[0, 1], [1, 1], [1, 0], [1, 1]])  # (left, right)
 
         self.segments_per_stone = self._make_segments_for_terrain()
 
@@ -340,21 +338,20 @@ class FootstepPlanner:
         for stone, num_steps_required in zip(self.stones, num_steps_required_per_stone):
             segments_for_stone = []
             for step in range(num_steps_required):
-                stance_idx = (step * 2) % len(self.gait_schedule)
-                lift_idx = (step * 2 + 1) % len(self.gait_schedule)
+                # Add two segmens, one with one foot and one with two feet
                 stance_step = FootstepPlanSegment(
                     stone,
-                    self.gait_schedule[stance_idx],
+                    "one_foot",
                     self.robot,
                     self.config,
-                    name=f"step_{step}_{self.gait_schedule[stance_idx]}",
+                    name=f"step_{step}_one_foot",
                 )
                 lift_step = FootstepPlanSegment(
                     stone,
-                    self.gait_schedule[lift_idx],
+                    "two_feet",
                     self.robot,
                     self.config,
-                    name=f"step_{step}_{self.gait_schedule[lift_idx]}",
+                    name=f"step_{step}_two_feet",
                 )
                 segments_for_stone.append(stance_step)
                 segments_for_stone.append(lift_step)
@@ -431,21 +428,14 @@ class FootstepPlanner:
             for c in constraint:
                 e.AddConstraint(c)
 
-            u_gait = s_u.active_feet
-            v_gait = s_v.active_feet
-
-            # This is a simple way to determine the foot that can't move
-            constant_foot_idx = np.argmax(u_gait + v_gait)
-
-            def _get_foot(idx):
-                if idx == 0:
-                    return "left"
-                elif idx == 1:
-                    return "right"
-                else:
-                    raise RuntimeError("No corresponding foot.")
-
-            constant_foot = _get_foot(constant_foot_idx)
+            # If the segment we are transitining from has both feet in contact,
+            # we constrain the last foot to be constant. Otherwise, we are
+            # transitioning to a mode with both feet, and constrain the first
+            # to be constant
+            if s_u.two_feet:
+                constant_foot = "last"
+            else:
+                constant_foot = "first"
 
             # Foot in contact cant move
             constant_foot_u_x_pos = pair_u.get_var_in_vertex(

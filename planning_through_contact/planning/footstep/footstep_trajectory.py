@@ -80,6 +80,14 @@ class FootstepPlanKnotPoints:
         if self.f_Fr_2W is not None:
             assert self.f_Fr_2W.shape == (self.num_points, 2)
 
+        if self.both_feet:
+            assert self.f_Fr_1W is not None
+            assert self.f_Fr_2W is not None
+
+    @property
+    def both_feet(self) -> bool:
+        return self.p_WFr is not None
+
     @property
     def num_points(self) -> int:
         return self.p_WB.shape[0]
@@ -123,13 +131,32 @@ class FootstepTrajectory:
         cls,
         segments: List[FootstepPlanKnotPoints],
         dt: float,
-        gait_schedule: npt.NDArray[np.bool_],  # (num_steps, 2)
     ) -> "FootstepTrajectory":
+        both_feet = np.vstack([s.both_feet for s in segments])
+        # This is a quick way to check that the bool value changes for each element in the array
+        modes_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
+        if not modes_are_alternating:
+            raise RuntimeError(
+                "The provided segments do not have alternating modes and do not form a coherent footstep plan."
+            )
+
+        # NOTE: Here we just pick that we start with the left foot. Could just as well have picked the other foot
+        gait_pattern = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+        gait_schedule = []
+        if segments[0].both_feet:
+            start_idx = 0
+        else:
+            start_idx = 1
+
+        gait_idx = start_idx
+        for _ in segments:
+            gait_schedule.append(gait_pattern[gait_idx % len(gait_pattern)])
+            gait_idx += 1
+
+        gait_schedule = np.array(gait_schedule)
+
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.vstack([k.theta_WB for k in segments]).flatten()
-
-        if not gait_schedule.shape == (len(segments), 2):
-            raise RuntimeError("Gait schedule length must match number of segments")
 
         p_WFls = []
         f_Fl_1Ws = []
@@ -194,7 +221,7 @@ class FootstepPlanSegment:
     def __init__(
         self,
         stone: InPlaneSteppingStone,
-        active_feet: npt.NDArray[np.bool_],
+        one_or_two_feet: Literal["one_foot", "two_feet"],
         robot: PotatoRobot,
         config: FootstepPlanningConfig,
         name: Optional[str] = None,
@@ -218,8 +245,7 @@ class FootstepPlanSegment:
                 self.name = f"{stone.name}_{name}"
 
         self.config = config
-        self.active_feet = active_feet
-        self.two_feet = all(active_feet)
+        self.two_feet = one_or_two_feet == "two_feet"
         if stones_per_foot:
             self.stone_l, self.stone_r = stones_per_foot
         else:

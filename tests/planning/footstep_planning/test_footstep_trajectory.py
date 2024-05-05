@@ -34,9 +34,7 @@ def test_trajectory_segment_one_foot() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(
-        stone, np.array([1, 0]), robot, cfg, name="First step"
-    )
+    segment = FootstepPlanSegment(stone, "one_foot", robot, cfg, name="First step")
 
     assert segment.p_WB.shape == (cfg.period_steps, 2)
     assert segment.v_WB.shape == (cfg.period_steps, 2)
@@ -102,9 +100,7 @@ def test_trajectory_segment_two_feet() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(
-        stone, np.array([1, 1]), robot, cfg, name="First step"
-    )
+    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
 
     assert segment.p_WF1.shape == (cfg.period_steps, 2)
     assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
@@ -201,7 +197,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
 
     segment_step_up = FootstepPlanSegment(
         stone_1_low,
-        np.array([1, 1]),
+        "two_feet",
         robot,
         cfg,
         name="step_down",
@@ -213,7 +209,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
 
     segment_step_down = FootstepPlanSegment(
         stone_1_low,
-        np.array([1, 1]),
+        "two_feet",
         robot,
         cfg,
         name="step_down",
@@ -282,7 +278,7 @@ def test_merging_two_trajectory_segments() -> None:
     target_pos_2 = np.array([stone.x_pos + 0.18, 0.0]) + desired_robot_pos
 
     segment_first = FootstepPlanSegment(
-        stone, np.array([1, 1]), robot, cfg, name="First step"
+        stone, "two_feet", robot, cfg, name="First step"
     )
     segment_first.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment_first.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
@@ -298,7 +294,7 @@ def test_merging_two_trajectory_segments() -> None:
     segment_val_first = segment_first.evaluate_with_result(result_first)
 
     segment_second = FootstepPlanSegment(
-        stone, np.array([1, 0]), robot, cfg, name="second step"
+        stone, "two_feet", robot, cfg, name="second step"
     )
     segment_second.add_pose_constraint(0, target_pos, 0)  # type: ignore
     segment_second.add_pose_constraint(cfg.period_steps - 1, target_pos_2, 0)  # type: ignore

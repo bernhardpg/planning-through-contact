@@ -29,14 +29,17 @@ DEBUG = True
 
 def test_footstep_planning_one_long_stone() -> None:
     terrain = InPlaneTerrain()
-    stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
+    stone = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.2, name="initial")
 
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
-    initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
-    target_pos = np.array([stone.x_pos + 0.6, 0.0]) + desired_robot_pos
+    desired_displacement = 0.2
+    initial_pos = (
+        np.array([stone.x_pos - desired_displacement, 0.0]) + desired_robot_pos
+    )
+    target_pos = np.array([stone.x_pos + desired_displacement, 0.0]) + desired_robot_pos
 
     initial_pose = np.concatenate([initial_pos, [0]])
     target_pose = np.concatenate([target_pos, [0]])
@@ -185,9 +188,7 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(
-        stone, np.array([1, 1]), robot, cfg, name="First step"
-    )
+    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
 
     assert segment.p_WF1.shape == (cfg.period_steps, 2)
     assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
