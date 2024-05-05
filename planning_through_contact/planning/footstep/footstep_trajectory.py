@@ -58,35 +58,35 @@ def get_X_from_psd_constraint(binding) -> npt.NDArray:
 class FootstepPlanKnotPoints:
     p_WB: npt.NDArray[np.float64]
     theta_WB: npt.NDArray[np.float64]
-    p_WFl: npt.NDArray[np.float64]
-    f_Fl_1W: npt.NDArray[np.float64]
-    f_Fl_2W: npt.NDArray[np.float64]
-    p_WFr: Optional[npt.NDArray[np.float64]] = None
-    f_Fr_1W: Optional[npt.NDArray[np.float64]] = None
-    f_Fr_2W: Optional[npt.NDArray[np.float64]] = None
+    p_WF1: npt.NDArray[np.float64]
+    f_F1_1W: npt.NDArray[np.float64]
+    f_F1_1W: npt.NDArray[np.float64]
+    p_WF2: Optional[npt.NDArray[np.float64]] = None
+    f_F2_1W: Optional[npt.NDArray[np.float64]] = None
+    f_F2_2W: Optional[npt.NDArray[np.float64]] = None
 
     def __post_init__(self) -> None:
         assert self.p_WB.shape == (self.num_points, 2)
         assert self.theta_WB.shape == (self.num_points,)
 
-        assert self.p_WFl.shape == (self.num_points, 2)
-        assert self.f_Fl_1W.shape == (self.num_points, 2)
-        assert self.f_Fl_2W.shape == (self.num_points, 2)
+        assert self.p_WF1.shape == (self.num_points, 2)
+        assert self.f_F1_1W.shape == (self.num_points, 2)
+        assert self.f_F1_1W.shape == (self.num_points, 2)
 
-        if self.p_WFr is not None:
-            assert self.p_WFr.shape == (self.num_points, 2)
-        if self.f_Fr_1W is not None:
-            assert self.f_Fr_1W.shape == (self.num_points, 2)
-        if self.f_Fr_2W is not None:
-            assert self.f_Fr_2W.shape == (self.num_points, 2)
+        if self.p_WF2 is not None:
+            assert self.p_WF2.shape == (self.num_points, 2)
+        if self.f_F2_1W is not None:
+            assert self.f_F2_1W.shape == (self.num_points, 2)
+        if self.f_F2_2W is not None:
+            assert self.f_F2_2W.shape == (self.num_points, 2)
 
         if self.both_feet:
-            assert self.f_Fr_1W is not None
-            assert self.f_Fr_2W is not None
+            assert self.f_F2_1W is not None
+            assert self.f_F2_2W is not None
 
     @property
     def both_feet(self) -> bool:
-        return self.p_WFr is not None
+        return self.p_WF2 is not None
 
     @property
     def num_points(self) -> int:
@@ -158,12 +158,12 @@ class FootstepTrajectory:
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.vstack([k.theta_WB for k in segments]).flatten()
 
-        p_WFls = []
-        f_Fl_1Ws = []
-        f_Fl_2Ws = []
-        p_WFrs = []
-        f_Fr_1Ws = []
-        f_Fr_2Ws = []
+        p_WF1s = []
+        f_F1_1Ws = []
+        f_F1_2Ws = []
+        p_WF2s = []
+        f_F2_1Ws = []
+        f_F2_2Ws = []
 
         # NOTE: This assumes that all the segments have the same lengths!
         empty_shape = segments[0].p_WB.shape
@@ -171,46 +171,46 @@ class FootstepTrajectory:
         for segment, (left_active, right_active) in zip(segments, gait_schedule):
             both_active = left_active and right_active
             if both_active:
-                p_WFls.append(segment.p_WFl)
-                f_Fl_1Ws.append(segment.f_Fl_1W)
-                f_Fl_2Ws.append(segment.f_Fl_2W)
+                p_WF1s.append(segment.p_WF1)
+                f_F1_1Ws.append(segment.f_F1_1W)
+                f_F1_2Ws.append(segment.f_F1_1W)
 
-                p_WFrs.append(segment.p_WFr)
-                f_Fr_1Ws.append(segment.f_Fr_1W)
-                f_Fr_2Ws.append(segment.f_Fr_2W)
+                p_WF2s.append(segment.p_WF2)
+                f_F2_1Ws.append(segment.f_F2_1W)
+                f_F2_2Ws.append(segment.f_F2_2W)
             else:
                 # NOTE: These next lines look like they have a typo, but they don't.
                 # When there is only one foot active, the values for this foot is
                 # always stored in the "left" foot values (to avoid unecessary optimization
                 # variables)
                 if left_active:
-                    p_WFls.append(segment.p_WFl)
-                    f_Fl_1Ws.append(segment.f_Fl_1W)
-                    f_Fl_2Ws.append(segment.f_Fl_2W)
+                    p_WF1s.append(segment.p_WF1)
+                    f_F1_1Ws.append(segment.f_F1_1W)
+                    f_F1_2Ws.append(segment.f_F1_1W)
 
-                    p_WFrs.append(np.full(empty_shape, np.nan))
-                    f_Fr_1Ws.append(np.full(empty_shape, np.nan))
-                    f_Fr_2Ws.append(np.full(empty_shape, np.nan))
+                    p_WF2s.append(np.full(empty_shape, np.nan))
+                    f_F2_1Ws.append(np.full(empty_shape, np.nan))
+                    f_F2_2Ws.append(np.full(empty_shape, np.nan))
                 else:  # right_active
-                    p_WFls.append(np.full(empty_shape, np.nan))
-                    f_Fl_1Ws.append(np.full(empty_shape, np.nan))
-                    f_Fl_2Ws.append(np.full(empty_shape, np.nan))
+                    p_WF1s.append(np.full(empty_shape, np.nan))
+                    f_F1_1Ws.append(np.full(empty_shape, np.nan))
+                    f_F1_2Ws.append(np.full(empty_shape, np.nan))
 
                     # Notice that here we pick from the "left" values
-                    p_WFrs.append(segment.p_WFl)
-                    f_Fr_1Ws.append(segment.f_Fl_1W)
-                    f_Fr_2Ws.append(segment.f_Fl_2W)
+                    p_WF2s.append(segment.p_WF1)
+                    f_F2_1Ws.append(segment.f_F1_1W)
+                    f_F2_2Ws.append(segment.f_F1_1W)
 
-        p_WFls = np.vstack(p_WFls)
-        f_Fl_1Ws = np.vstack(f_Fl_1Ws)
-        f_Fl_2Ws = np.vstack(f_Fl_2Ws)
+        p_WF1s = np.vstack(p_WF1s)
+        f_F1_1Ws = np.vstack(f_F1_1Ws)
+        f_F1_2Ws = np.vstack(f_F1_2Ws)
 
-        p_WFrs = np.vstack(p_WFrs)
-        f_Fr_1Ws = np.vstack(f_Fr_1Ws)
-        f_Fr_2Ws = np.vstack(f_Fr_2Ws)
+        p_WF2s = np.vstack(p_WF2s)
+        f_F2_1Ws = np.vstack(f_F2_1Ws)
+        f_F2_2Ws = np.vstack(f_F2_2Ws)
 
         merged_knot_points = FootstepPlanKnotPoints(
-            p_WBs, theta_WBs, p_WFls, f_Fl_1Ws, f_Fl_2Ws, p_WFrs, f_Fr_1Ws, f_Fr_2Ws
+            p_WBs, theta_WBs, p_WF1s, f_F1_1Ws, f_F1_2Ws, p_WF2s, f_F2_1Ws, f_F2_2Ws
         )
 
         return cls(merged_knot_points, dt)
@@ -294,10 +294,10 @@ class FootstepPlanSegment:
         # TODO(bernhardpg): we might be able to get around this once we
         # have SDP constraints over the edges
         self.tau_F1_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F1_1")
-        self.tau_F2_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_F1_2")
+        self.tau_F1_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_F1_2")
         if self.two_feet:
-            self.tau_Fr_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_1")
-            self.tau_F2_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_2")
+            self.tau_F2_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_1")
+            self.tau_F2_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_2")
 
         # linear acceleration
         g = np.array([0, -9.81])
@@ -306,9 +306,9 @@ class FootstepPlanSegment:
             self.a_WB += (1 / robot.mass) * (self.f_F2_1W + self.f_F2_2W)
 
         # angular acceleration
-        self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F2_2)
+        self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F1_2)
         if self.two_feet:
-            self.omega_dot_WB += (1 / robot.inertia) * (self.tau_Fr_1 + self.tau_F2_1)
+            self.omega_dot_WB += (1 / robot.inertia) * (self.tau_F2_1 + self.tau_F2_2)
 
         # contact points positions
         self.p_BF1_1W = self.p_BF1_W + np.array([robot.foot_length / 2, 0])
@@ -333,16 +333,16 @@ class FootstepPlanSegment:
             )
             cs_for_knot_point.append(c)
             c = self.prog.AddQuadraticConstraint(
-                self.tau_F2_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
+                self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
             )
             cs_for_knot_point.append(c)
             if self.two_feet:
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_Fr_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]), 0, 0
+                    self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]), 0, 0
                 )
                 cs_for_knot_point.append(c)
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F2_1[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]), 0, 0
+                    self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]), 0, 0
                 )
                 cs_for_knot_point.append(c)
 
@@ -462,11 +462,11 @@ class FootstepPlanSegment:
         # squared torques
         for k in range(self.num_steps):
             tau1 = self.tau_F1_1[k]
-            tau2 = self.tau_F2_2[k]
+            tau2 = self.tau_F1_2[k]
             sq_torques = tau1**2 + tau2**2
             if self.two_feet:
-                tau3 = self.tau_Fr_1[k]
-                tau4 = self.tau_F2_1[k]
+                tau3 = self.tau_F2_1[k]
+                tau4 = self.tau_F2_2[k]
                 sq_torques += tau3**2 + tau4**2
             c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
             self.costs["sq_torques"].append(c)
@@ -620,9 +620,9 @@ class FootstepPlanSegment:
                     self.get_input(k),
                     (
                         self.tau_F1_1[k],
-                        self.tau_F2_2[k],
-                        self.tau_Fr_1[k],
+                        self.tau_F1_2[k],
                         self.tau_F2_1[k],
+                        self.tau_F2_2[k],
                     ),
                 )
             )
@@ -631,7 +631,7 @@ class FootstepPlanSegment:
                 (
                     self.get_state(k),
                     self.get_input(k),
-                    (self.tau_F1_1[k], self.tau_F2_2[k]),
+                    (self.tau_F1_1[k], self.tau_F1_2[k]),
                 )
             )
 
