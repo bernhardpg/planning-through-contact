@@ -198,19 +198,19 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
         robot,
         cfg,
         name="step_down",
-        stones_per_foot=(stone_1_low, stone_1_high),
+        stone_for_last_foot=stone_1_high,
     )
 
     assert segment_step_up.p_WF1[0, 1] == stone_1_low.z_pos
     assert segment_step_up.p_WF2[0, 1] == stone_1_high.z_pos
 
     segment_step_down = FootstepPlanSegment(
-        stone_1_low,
+        stone_2_high,
         "two_feet",
         robot,
         cfg,
         name="step_down",
-        stones_per_foot=(stone_2_high, stone_2_low),
+        stone_for_last_foot=stone_2_low,
     )
     assert segment_step_down.p_WF1[0, 1] == stone_1_high.z_pos
     assert segment_step_down.p_WF2[0, 1] == stone_1_low.z_pos
