@@ -257,7 +257,6 @@ class FootstepPlanner:
         self.gait_schedule = np.array([[0, 1], [1, 1], [1, 0], [1, 1]])  # (left, right)
 
         self.segments_per_stone = self._make_segments_for_terrain()
-        breakpoint()
 
         # TODO: add (1,1) segment to start of first stone and end of second stone
         # TODO: Add "connecting segment" between stones

@@ -43,12 +43,12 @@ def test_trajectory_segment_one_foot() -> None:
     assert segment.theta_WB.shape == (cfg.period_steps,)
     assert segment.omega_WB.shape == (cfg.period_steps,)
 
-    assert segment.p_WFl.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_WF1.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_2W.shape == (cfg.period_steps, 2)
 
-    assert segment.tau_Fl_1.shape == (cfg.period_steps,)
-    assert segment.tau_Fl_2.shape == (cfg.period_steps,)
+    assert segment.tau_F1_1.shape == (cfg.period_steps,)
+    assert segment.tau_F2_2.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.02, 0.0]) + desired_robot_pos
@@ -106,19 +106,19 @@ def test_trajectory_segment_two_feet() -> None:
         stone, np.array([1, 1]), robot, cfg, name="First step"
     )
 
-    assert segment.p_WFl.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_WF1.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_2W.shape == (cfg.period_steps, 2)
 
-    assert segment.tau_Fl_1.shape == (cfg.period_steps,)
-    assert segment.tau_Fl_2.shape == (cfg.period_steps,)
+    assert segment.tau_F1_1.shape == (cfg.period_steps,)
+    assert segment.tau_F2_2.shape == (cfg.period_steps,)
 
-    assert segment.p_WFr.shape == (cfg.period_steps, 2)
-    assert segment.f_Fr_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_Fr_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_WF2.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_F2_2W.shape == (cfg.period_steps, 2)
 
     assert segment.tau_Fr_1.shape == (cfg.period_steps,)
-    assert segment.tau_Fr_2.shape == (cfg.period_steps,)
+    assert segment.tau_F2_1.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
@@ -208,8 +208,8 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
         stones_per_foot=(stone_1_low, stone_1_high),
     )
 
-    assert segment_step_up.p_WFl[0, 1] == stone_1_low.z_pos
-    assert segment_step_up.p_WFr[0, 1] == stone_1_high.z_pos
+    assert segment_step_up.p_WF1[0, 1] == stone_1_low.z_pos
+    assert segment_step_up.p_WF2[0, 1] == stone_1_high.z_pos
 
     segment_step_down = FootstepPlanSegment(
         stone_1_low,
@@ -219,8 +219,8 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
         name="step_down",
         stones_per_foot=(stone_2_high, stone_2_low),
     )
-    assert segment_step_down.p_WFl[0, 1] == stone_1_high.z_pos
-    assert segment_step_down.p_WFr[0, 1] == stone_1_low.z_pos
+    assert segment_step_down.p_WF1[0, 1] == stone_1_high.z_pos
+    assert segment_step_down.p_WF2[0, 1] == stone_1_low.z_pos
 
     for terrain, segment in zip(
         (terrain_1, terrain_2), (segment_step_up, segment_step_down)

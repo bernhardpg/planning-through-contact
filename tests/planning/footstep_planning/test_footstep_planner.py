@@ -189,19 +189,19 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
         stone, np.array([1, 1]), robot, cfg, name="First step"
     )
 
-    assert segment.p_WFl.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_Fl_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_WF1.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_2W.shape == (cfg.period_steps, 2)
 
-    assert segment.tau_Fl_1.shape == (cfg.period_steps,)
-    assert segment.tau_Fl_2.shape == (cfg.period_steps,)
+    assert segment.tau_F1_1.shape == (cfg.period_steps,)
+    assert segment.tau_F2_2.shape == (cfg.period_steps,)
 
-    assert segment.p_WFr.shape == (cfg.period_steps, 2)
-    assert segment.f_Fr_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_Fr_2W.shape == (cfg.period_steps, 2)
+    assert segment.p_WF2.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
+    assert segment.f_F2_2W.shape == (cfg.period_steps, 2)
 
     assert segment.tau_Fr_1.shape == (cfg.period_steps,)
-    assert segment.tau_Fr_2.shape == (cfg.period_steps,)
+    assert segment.tau_F2_1.shape == (cfg.period_steps,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
