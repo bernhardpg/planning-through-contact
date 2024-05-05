@@ -274,7 +274,7 @@ def test_merging_two_trajectory_segments() -> None:
     target_pos_2 = np.array([stone.x_pos + 0.18, 0.0]) + desired_robot_pos
 
     segment_first = FootstepPlanSegment(
-        stone, "two_feet", robot, cfg, name="First step"
+        stone, "one_foot", robot, cfg, name="First step"
     )
     segment_first.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment_first.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
