@@ -299,7 +299,14 @@ def test_make_segments_per_terrain() -> None:
     initial_pose = np.concatenate([initial_pos, [0]])
     target_pose = np.concatenate([target_pos, [0]])
 
-    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name="initial",
+        target_stone_name="initial",
+    )
     segments = planner._make_segments_for_terrain()
 
     # we should have one segment per stone
@@ -310,7 +317,14 @@ def test_make_segments_per_terrain() -> None:
     # Add another stone and try again
 
     stone_2 = terrain.add_stone(x_pos=3.0, width=2.0, z_pos=0.2, name="initial")
-    planner = FootstepPlanner(cfg, terrain, initial_pose, target_pose)
+    planner = FootstepPlanner(
+        cfg,
+        terrain,
+        initial_pose,
+        target_pose,
+        initial_stone_name="initial",
+        target_stone_name="initial",
+    )
     segments = planner._make_segments_for_terrain()
 
     assert len(segments) == len(terrain.stepping_stones)
