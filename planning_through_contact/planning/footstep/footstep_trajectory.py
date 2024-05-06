@@ -655,7 +655,7 @@ class FootstepPlanSegment:
     def make_relaxed_prog(
         self,
         trace_cost: bool = False,
-        use_groups: bool = True,
+        use_groups: bool = False,
     ) -> MathematicalProgram:
         if use_groups:
             variable_groups = [

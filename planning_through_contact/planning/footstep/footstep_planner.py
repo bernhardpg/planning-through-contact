@@ -1,3 +1,4 @@
+import time
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import numpy as np
@@ -669,6 +670,7 @@ class FootstepPlanner:
 
         MAX_ROUNDINGS = 3
 
+        rounding_times = []
         print(f"Rounding {len(paths)} possible GCS paths...")
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
@@ -679,7 +681,10 @@ class FootstepPlanner:
             self.plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
+            start_time = time.time()
             self.rounded_result = self.plan_rounder.round()
+            elapsed_time = time.time() - start_time
+            rounding_times.append(elapsed_time)
             rounded_results.append(self.rounded_result)
             rounders.append(self.plan_rounder)
 
@@ -693,6 +698,7 @@ class FootstepPlanner:
             rounders[best_idx],
             rounded_results[best_idx],
         )
+        self.rounding_time = rounding_times[best_idx]
         assert self.rounded_result.is_success()
 
         active_edge_names = [e.name() for e in self.plan_rounder.active_edges]
@@ -700,8 +706,10 @@ class FootstepPlanner:
 
         c_round = self.rounded_result.get_optimal_cost()
         c_relax = gcs_result.get_optimal_cost()
-        ub_optimality_gap = (c_round - c_relax) / c_relax
+        ub_optimality_gap = ((c_round - c_relax) / c_relax) * 100
+        print(f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}")
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+        print(f"Rounding time: {self.rounding_time:.3f} s")
 
         plan = self.plan_rounder.get_plan(self.rounded_result)
 

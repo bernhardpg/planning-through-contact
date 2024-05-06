@@ -129,10 +129,10 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
 
     if DEBUG:
         planner.create_graph_diagram("test_one_stone_lp_approx_diagram")
-    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+    plan = planner.plan(print_flows=True, print_solver_output=False)
 
     if DEBUG:
-        output_file = "debug_plan_one_stone_lp_approx"
+        output_file = "debug_plan_one_stone_lp_approx_rounded"
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
@@ -178,7 +178,7 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     if DEBUG:
         planner.create_graph_diagram("test_many_stones_lp_approx_diagram")
 
-    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+    plan = planner.plan(print_flows=True, print_solver_output=False)
 
     if DEBUG:
         output_file = "debug_plan_many_stones_lp_approx_rounded"
