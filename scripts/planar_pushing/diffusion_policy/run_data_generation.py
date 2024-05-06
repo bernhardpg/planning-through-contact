@@ -5,6 +5,7 @@ import pathlib
 import os
 import shutil
 from tqdm import tqdm
+import copy
 import logging
 from typing import List, Optional, Tuple
 import pickle
@@ -17,6 +18,10 @@ from omegaconf import OmegaConf
 from pydrake.all import (
     Meshcat,
     StartMeshcat,
+    RollPitchYaw,
+    Transform,
+    RigidTransform,
+    Rgba,
 )
 
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
@@ -219,9 +224,8 @@ def create_plan(
             else:
                 traj_relaxed.save(f"{trajectory_folder}/traj_relaxed.pkl")  # type: ignore
 
-        slider_color = COLORS["aquamarine4"].diffuse()
-
         if traj_rounded is not None:
+            slider_color = COLORS["aquamarine4"].diffuse()
             make_traj_figure(
                 traj_rounded,
                 filename=f"{analysis_folder}/rounded_traj",
@@ -250,9 +254,10 @@ def render_plans(
     
     meshcat = StartMeshcat()
     for plan in tqdm(plans):
+        plan_sim_config = _domain_randomization(sim_config, meshcat)
         simulate_plan(
             traj=plan,
-            sim_config=sim_config,
+            sim_config=plan_sim_config,
             data_collection_config=data_collection_config,
             cfg=cfg,
             meshcat=meshcat,
@@ -616,6 +621,40 @@ def _get_plan_start_and_goals_to_point(
         )
 
     return plans
+
+def _domain_randomization(sim_config: PlanarPushingSimConfig, meshcat) -> PlanarPushingSimConfig:
+    new_camera_configs = []
+    default_camera_configs = sim_config.camera_configs
+
+    for camera_config in default_camera_configs:
+        # noise camera location
+        new_camera_config = copy.deepcopy(camera_config)
+
+
+        camera_pose = camera_config.X_PB.GetDeterministicValue()
+        xyz = np.random.normal(camera_pose.translation(), 0.01, 3)
+        
+        rpy = camera_pose.rotation().ToRollPitchYaw()
+        rot_std = 2*np.pi/180
+        new_rpy = RollPitchYaw(
+            np.random.normal(rpy.roll_angle(), rot_std),
+            np.random.normal(rpy.pitch_angle(), rot_std),
+            np.random.normal(rpy.yaw_angle(), rot_std)
+        )
+
+        new_camera_config.X_PB = Transform(
+            RigidTransform(new_rpy, xyz)
+        )
+
+        # randomize the background color
+        new_rgb = np.random.uniform(0, 1, 3)
+        new_camera_config.background = Rgba(new_rgb[0], new_rgb[1], new_rgb[2], 1)
+        
+        new_camera_configs.append(new_camera_config)
+    
+    new_sim_config = copy.deepcopy(sim_config)
+    new_sim_config.camera_configs = new_camera_configs
+    return new_sim_config
 
 def _print_data_collection_config_info(data_collection_config: DataCollectionConfig):
     """Output diagnostic info about the data collection configuration."""

@@ -103,6 +103,7 @@ class DataCollectionConfig:
         image_chunk_length: int,
         policy_freq: float,
         plan_config: PlanConfig,
+        domain_randomization: bool,
         LLSUB_RANK: int = None,
         LLSUB_SIZE: int = None,    
     ):
@@ -123,6 +124,7 @@ class DataCollectionConfig:
         self.target_chunk_length = target_chunk_length
         self.image_chunk_length = image_chunk_length
         self.policy_freq = policy_freq
+        self.domain_randomization = domain_randomization
 
         # Plan generatino config
         self.plan_config = plan_config

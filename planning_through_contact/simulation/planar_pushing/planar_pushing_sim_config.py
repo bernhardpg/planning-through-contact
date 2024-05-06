@@ -9,13 +9,16 @@ from pydrake.multibody.plant import (
     ContactModel,
 )
 from pydrake.systems.sensors import (
-    CameraConfig
+    CameraConfig,
 )
 from pydrake.math import (
     RigidTransform, 
     RotationMatrix,
 )
-from pydrake.all import RollPitchYaw
+from pydrake.all import (
+    RollPitchYaw,
+    Rgba,
+)
 from pydrake.common.schema import (
     Transform
 )
@@ -223,10 +226,11 @@ class PlanarPushingSimConfig:
                         roll=camera_config.orientation.roll,
                         pitch=camera_config.orientation.pitch,
                         yaw=camera_config.orientation.yaw
-                    )
+                    )                
+                    
                     X_PB=Transform(
                         RigidTransform(orientation, np.array(camera_config.position))
-                    )
+                    )               
                 
                 camera_configs.append(
                     CameraConfig(
@@ -235,6 +239,10 @@ class PlanarPushingSimConfig:
                         width=camera_config.width,
                         height=camera_config.height,
                         show_rgb=camera_config.show_rgb,
+                        center_x=camera_config.center_x,
+                        center_y=camera_config.center_y,
+                        focal=CameraConfig.FocalLength(x=camera_config.focal_x, y=camera_config.focal_y),
+                        background=Rgba(255.0/255.0, 228.0/255.0, 196.0/255.0, 1.0)
                     )
                 )
             sim_config.camera_configs = camera_configs
