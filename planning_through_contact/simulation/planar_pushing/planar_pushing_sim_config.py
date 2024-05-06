@@ -77,7 +77,7 @@ class MultiRunConfig:
                 buffer=0,
             ),
         )
-        self.initial_slider_poses = get_slider_start_poses(
+        self.initial_slider_poses_all = get_slider_start_poses(
             seed=seed,
             num_plans=num_runs,
             workspace=workspace,

@@ -141,8 +141,8 @@ def get_slider_pose_within_workspace(
         y_initial = np.random.uniform(workspace.slider.y_min, workspace.slider.y_max)
         EPS = 0.01
         if limit_rotations:
-            # th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
-            th_initial = np.random.uniform(-np.pi / 4 + EPS, np.pi / 4 - EPS)
+            th_initial = np.random.uniform(-np.pi / 2 + EPS, np.pi / 2 - EPS)
+            # th_initial = np.random.uniform(-np.pi / 4 + EPS, np.pi / 4 - EPS)
         else:
             th_initial = np.random.uniform(-np.pi + EPS, np.pi - EPS)
 

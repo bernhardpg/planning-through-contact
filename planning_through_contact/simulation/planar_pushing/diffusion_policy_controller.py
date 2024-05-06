@@ -73,6 +73,7 @@ class DiffusionPolicyController(LeafSystem):
 
         # indexing parameters for action predictions
         self._start = self._obs_horizon-1
+        self._start += 1
         if 'push_tee_v2' in checkpoint: # for backwards compatibility
             print("Using push_tee_v2 slicing for action predictions")
             self._start += 1
@@ -158,7 +159,8 @@ class DiffusionPolicyController(LeafSystem):
         obs_dict = self._deque_to_dict(
             self._pusher_pose_deque,
             self._image_deque,
-            self._target_slider_pose.vector()
+            # self._target_slider_pose.vector()
+            self._initial_pusher_pose.vector() # Doing this because of bug TODO: fix this
         )
         
         if len(self._actions) == 0:
