@@ -431,7 +431,7 @@ class FootstepPlanSegment:
         cost_acc_rot = 1.0
         cost_lin_vel = 10
         cost_ang_vel = 1.0
-        cost_nominal_pose = 10
+        cost_nominal_pose = 5
 
         # cost_force = 1e-5
         # cost_torque = 1e-3
@@ -465,16 +465,16 @@ class FootstepPlanSegment:
 
         # TODO: do we need these? Potentially remove
         # squared accelerations
-        for k in range(self.num_steps):
-            sq_acc = self.a_WB[k].T @ self.a_WB[k]
-            c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
-            self.costs["sq_acc_lin"].append(c)
-
-        for k in range(self.num_steps):
-            sq_rot_acc = self.omega_dot_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
-            self.costs["sq_acc_rot"].append(c)
-
+        # for k in range(self.num_steps):
+        #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
+        #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
+        #     self.costs["sq_acc_lin"].append(c)
+        #
+        # for k in range(self.num_steps):
+        #     sq_rot_acc = self.omega_dot_WB[k] ** 2
+        #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
+        #     self.costs["sq_acc_rot"].append(c)
+        #
         # squared robot velocity
         for k in range(self.num_steps):
             v = self.v_WB[k]
