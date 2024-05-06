@@ -76,7 +76,7 @@ class FootstepPlanRounder:
         self,
         active_edges: List[GcsEdge],
         vertex_segment_pairs: Dict[str, VertexSegmentPair],
-        result: MathematicalProgram,
+        relaxed_result: MathematicalProgramResult,
     ) -> None:
         """
         This object takes the result from a GCS plan and rounds it to obtain a feasible solution.
@@ -89,6 +89,7 @@ class FootstepPlanRounder:
         # we disregard source and target vertices when we extract the path
         active_pairs = [vertex_segment_pairs[e.v().name()] for e in active_edges[:-1]]
         self.active_edges = active_edges
+        self.relaxed_result = relaxed_result
 
         self.all_pairs = vertex_segment_pairs
 
@@ -153,7 +154,9 @@ class FootstepPlanRounder:
                     )
 
         # Set the initial guess
-        self.initial_guess = self._get_initial_guess_as_orig_variables(result)
+        self.initial_guess = self._get_initial_guess_as_orig_variables(
+            self.relaxed_result
+        )
 
     def _from_vertex_vars_to_prog_vars(
         self, vertex_vars: npt.NDArray, u: GcsVertex, v: GcsVertex
@@ -222,22 +225,59 @@ class FootstepPlanRounder:
         vertex_var_vals = gcs_result.GetSolution(all_vertex_vars_concatenated)
 
         if not len(vertex_var_vals) == len(self.prog.decision_variables()):
-            breakpoint()
             raise RuntimeError(
                 "Number of vertex variables must match number of decision variables when picking initial guess"
             )
         return vertex_var_vals
 
-    def round(self) -> MathematicalProgramResult:
+    def round(
+        self, save_output: bool = True, use_custom_tolerance: bool = False
+    ) -> MathematicalProgramResult:
         snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess)  # type: ignore
-        return rounded_result
+
+        solver_options = SolverOptions()
+        if save_output:
+            import os
+
+            snopt_log_path = "footstep_snopt_log.txt"
+            # Delete log file if it already exists as Snopt just keeps writing to the same file
+            if os.path.exists(snopt_log_path):
+                os.remove(snopt_log_path)
+
+            solver_options.SetOption(snopt.solver_id(), "Print file", snopt_log_path)
+
+        if use_custom_tolerance:
+            # TODO(bernhardpg): These don't seem to work with these values. Left only
+            # so it is easy to keep playing with these. Should be removed long term
+            solver_options.SetOption(
+                snopt.solver_id(), "Major Feasibility Tolerance", 1e-6
+            )
+            solver_options.SetOption(
+                snopt.solver_id(), "Major Optimality Tolerance", 1e-6
+            )
+            solver_options.SetOption(
+                snopt.solver_id(), "Minor Feasibility Tolerance", 1e-6
+            )
+            solver_options.SetOption(
+                snopt.solver_id(), "Minor Optimality Tolerance", 1e-6
+            )
+            solver_options.SetOption(snopt.solver_id(), "Major iterations limit", 1000)
+        self.rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess, solver_options=solver_options)  # type: ignore
+        return self.rounded_result
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
         knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
         dt = self.active_segments[0].dt
         plan = FootstepTrajectory.from_segments(knot_points, dt)
         return plan
+
+    def get_relaxed_plan(self) -> FootstepTrajectory:
+        """
+        WARNING: This currently ruins the MathematicalProgramResult.
+        """
+        for var, val in zip(self.prog.decision_variables(), self.initial_guess):
+            self.rounded_result.SetSolution(var, val)
+        return self.get_plan(self.rounded_result)
 
 
 class FootstepPlanner:
@@ -271,7 +311,9 @@ class FootstepPlanner:
                 )
             )
 
-        self.transition_pairs = self._make_transition_segments()
+        self.transition_pairs = self._make_transition_segments(
+            self.config.use_lp_approx
+        )
 
         # Collect all pairs in a flat dictionary that maps from segment name to segment
         self.all_segment_vertex_pairs = {
@@ -385,7 +427,9 @@ class FootstepPlanner:
 
         return pairs
 
-    def _make_transition_segments(self) -> Dict[Tuple[str, str], VertexSegmentPair]:
+    def _make_transition_segments(
+        self, use_lp_approx: bool = False
+    ) -> Dict[Tuple[str, str], VertexSegmentPair]:
         # Edges and transitions between stones
         transition_segments = []
         for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
@@ -400,7 +444,9 @@ class FootstepPlanner:
             transition_segments.append(transition_step)
 
         transition_vertices = [
-            self.gcs.AddVertex(s.get_convex_set(use_lp_approx=False), name=s.name)
+            self.gcs.AddVertex(
+                s.get_convex_set(use_lp_approx=use_lp_approx), name=s.name
+            )
             for s in transition_segments
         ]
         transition_pairs = {
@@ -630,12 +676,12 @@ class FootstepPlanner:
             print(f"Rounding_step: {idx}")
             if idx >= MAX_ROUNDINGS:
                 break
-            rounder = FootstepPlanRounder(
+            self.plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
-            rounded_result = rounder.round()
-            rounded_results.append(rounded_result)
-            rounders.append(rounder)
+            self.rounded_result = self.plan_rounder.round()
+            rounded_results.append(self.rounded_result)
+            rounders.append(self.plan_rounder)
 
         best_idx = np.argmin(
             [
@@ -643,17 +689,26 @@ class FootstepPlanner:
                 for res in rounded_results
             ]
         )
-        rounder, rounded_result = rounders[best_idx], rounded_results[best_idx]
-        assert rounded_result.is_success()
+        self.plan_rounder, self.rounded_result = (
+            rounders[best_idx],
+            rounded_results[best_idx],
+        )
+        assert self.rounded_result.is_success()
 
-        active_edge_names = [e.name() for e in rounder.active_edges]
+        active_edge_names = [e.name() for e in self.plan_rounder.active_edges]
         print(f"Best path: {' -> '.join(active_edge_names)}")
 
-        c_round = rounded_result.get_optimal_cost()
+        c_round = self.rounded_result.get_optimal_cost()
         c_relax = gcs_result.get_optimal_cost()
         ub_optimality_gap = (c_round - c_relax) / c_relax
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-        plan = rounder.get_plan(rounded_result)
+        plan = self.plan_rounder.get_plan(self.rounded_result)
 
         return plan
+
+    def get_relaxed_plan(self) -> FootstepTrajectory:
+        assert self.plan_rounder is not None
+        assert self.rounded_result is not None
+
+        return self.plan_rounder.get_relaxed_plan()

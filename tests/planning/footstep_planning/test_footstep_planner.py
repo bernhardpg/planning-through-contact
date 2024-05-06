@@ -137,8 +137,15 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
+    if DEBUG:
+        output_file = "debug_plan_one_stone_lp_approx_relaxation"
+    else:
+        output_file = None
+    animate_footstep_plan(
+        robot, terrain, planner.get_relaxed_plan(), output_file=output_file
+    )
 
-@pytest.mark.skip
+
 def test_footstep_planning_many_stones_lp_approx() -> None:
     terrain = InPlaneTerrain()
     initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
@@ -174,10 +181,18 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
-        output_file = "debug_plan_many_stones_lp_approx"
+        output_file = "debug_plan_many_stones_lp_approx_rounded"
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+
+    if DEBUG:
+        output_file = "debug_plan_many_stones_lp_approx_relaxation"
+    else:
+        output_file = None
+    animate_footstep_plan(
+        robot, terrain, planner.get_relaxed_plan(), output_file=output_file
+    )
 
 
 # Unfinished!
