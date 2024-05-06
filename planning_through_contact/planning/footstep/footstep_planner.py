@@ -15,6 +15,7 @@ from pydrake.solvers import (
     CommonSolverOption,
     MathematicalProgram,
     MathematicalProgramResult,
+    MosekSolver,
     SnoptSolver,
     SolutionResult,
     Solve,
@@ -621,17 +622,43 @@ class FootstepPlanner:
 
         return data
 
+    @staticmethod
+    def _get_mosek_params(
+        tolerance: float = 1e-5,
+    ) -> SolverOptions:
+        solver_options = SolverOptions()
+        mosek = MosekSolver()
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+        )
+        solver_options.SetOption(
+            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+        )
+
+        solver_options.SetOption(
+            mosek.solver_id(),
+            "MSK_DPAR_OPTIMIZER_MAX_TIME",
+            300.0,
+        )
+
+        return solver_options
+
     def plan(
         self, print_flows: bool = False, print_solver_output: bool = False
     ) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
-        options.max_rounded_paths = 20
+        MAX_ROUNDED_PATHS = 20
 
-        solver_options = SolverOptions()
+        mosek = MosekSolver()
+        options.solver = mosek
+        options.solver_options = self._get_mosek_params(1e-6)
+
         if print_solver_output:
-            solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-            options.solver_options = solver_options
+            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
         # tolerance = 1e-6
         # mosek = MosekSolver()
@@ -647,13 +674,14 @@ class FootstepPlanner:
         # )
 
         print("Solving GCS problem")
+
+        options.preprocessing = True
+        # We want to solve only the convex relaxation first
+        options.max_rounded_paths = 0
+
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
-        if not gcs_result.is_success():
-            print("GCS problem failed to solve")
-            # TODO
-        # TODO remove this
-        gcs_result.set_solution_result(SolutionResult.kSolutionFound)
+        assert gcs_result.is_success()
 
         if print_flows:
             flows = [
@@ -662,6 +690,7 @@ class FootstepPlanner:
             flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
+        options.max_rounded_paths = MAX_ROUNDED_PATHS
         paths, relaxed_results = self.gcs.GetRandomizedSolutionPath(
             self.source, self.target, gcs_result, options
         )

@@ -24,7 +24,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
 def test_footstep_planning_one_long_stone() -> None:
@@ -129,7 +129,7 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
 
     if DEBUG:
         planner.create_graph_diagram("test_one_stone_lp_approx_diagram")
-    plan = planner.plan(print_flows=True, print_solver_output=False)
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
         output_file = "debug_plan_one_stone_lp_approx_rounded"
@@ -178,7 +178,7 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     if DEBUG:
         planner.create_graph_diagram("test_many_stones_lp_approx_diagram")
 
-    plan = planner.plan(print_flows=True, print_solver_output=False)
+    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
         output_file = "debug_plan_many_stones_lp_approx_rounded"
