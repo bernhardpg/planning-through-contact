@@ -635,25 +635,26 @@ class FootstepPlanner:
 
     @staticmethod
     def _get_mosek_params(
-        tolerance: float = 1e-5,
+        tolerance: Optional[float] = None,
     ) -> SolverOptions:
         solver_options = SolverOptions()
         mosek = MosekSolver()
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
-        )
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
-        )
-        solver_options.SetOption(
-            mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
-        )
+        if tolerance is not None:
+            solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_PFEAS", tolerance
+            )
+            solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_DFEAS", tolerance
+            )
+            solver_options.SetOption(
+                mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
+            )
 
-        solver_options.SetOption(
-            mosek.solver_id(),
-            "MSK_DPAR_OPTIMIZER_MAX_TIME",
-            300.0,
-        )
+            solver_options.SetOption(
+                mosek.solver_id(),
+                "MSK_DPAR_OPTIMIZER_MAX_TIME",
+                300.0,
+            )
 
         return solver_options
 
@@ -725,15 +726,14 @@ class FootstepPlanner:
             rounded_results.append(rounded_result)
             rounders.append(self.plan_rounder)
             print(
-                f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s"
+                f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s, cost: {rounded_result.get_optimal_cost():.3f}"
             )
 
-        best_idx = np.argmin(
-            [
-                res.get_optimal_cost() if res.is_success() else np.inf
-                for res in rounded_results
-            ]
-        )
+        rounded_costs = [
+            res.get_optimal_cost() if res.is_success() else np.inf
+            for res in rounded_results
+        ]
+        best_idx = np.argmin(rounded_costs)
         self.plan_rounder, self.rounded_result = (
             rounders[best_idx],
             rounded_results[best_idx],
