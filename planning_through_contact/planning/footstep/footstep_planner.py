@@ -109,7 +109,7 @@ class FootstepPlanRounder:
 
         # Assemble one big nonlinear program from the small nonlinear programs
         self.prog = MathematicalProgram()
-        for s in active_segments:
+        for v, s in self.active_pairs:
             vars = s.prog.decision_variables()
             self.prog.AddDecisionVariables(vars)
 
@@ -118,6 +118,11 @@ class FootstepPlanRounder:
 
             for c in s.prog.GetAllCosts():
                 self.prog.AddCost(c.evaluator(), c.variables())
+
+            if not len(s.prog.GetAllCosts()) == len(v.GetCosts()):
+                raise RuntimeError(
+                    "Vertex and segment should have the same number of costs! Something must be wrong"
+                )
 
         # Add all the edge constraints from the graph
         # (which may couple the variables from individual nonlinear programs)
@@ -131,8 +136,8 @@ class FootstepPlanRounder:
                 )
                 exprs = binding.evaluator().Eval(binding.variables())
                 new_exprs = []
-                for e in exprs:
-                    new_expr = e.Substitute(
+                for expr in exprs:
+                    new_expr = expr.Substitute(
                         {
                             old_var: new_var
                             for old_var, new_var in zip(binding.variables(), new_vars)
@@ -154,6 +159,9 @@ class FootstepPlanRounder:
                     raise RuntimeError(
                         "Trying to add a constraint without an upper or lower bound"
                     )
+
+            if len(e.GetCosts()) > 0:
+                raise RuntimeError("Edge costs not supported yet")
 
         # Set the initial guess
         self.initial_guess = self._get_initial_guess_as_orig_variables(
@@ -455,6 +463,9 @@ class FootstepPlanner:
             (s.stone_first.name, s.stone_last.name): VertexSegmentPair(v, s)
             for v, s in zip(transition_vertices, transition_segments)
         }
+        for pair in transition_pairs.values():
+            pair.add_cost_to_vertex()
+
         return transition_pairs
 
     def _collect_all_graph_edges(self) -> List[Tuple[str, str]]:
