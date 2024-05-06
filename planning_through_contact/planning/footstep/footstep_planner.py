@@ -662,7 +662,7 @@ class FootstepPlanner:
     ) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
-        MAX_ROUNDED_PATHS = 20
+        MAX_ROUNDED_PATHS = 3
 
         mosek = MosekSolver()
         options.solver = mosek
@@ -708,25 +708,25 @@ class FootstepPlanner:
         rounders = []
         rounded_results = []
 
-        MAX_ROUNDINGS = 3
-
         rounding_times = []
         print(f"Rounding {len(paths)} possible GCS paths...")
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
-            print(f"Rounding_step: {idx}")
-            if idx >= MAX_ROUNDINGS:
+            if idx >= MAX_ROUNDED_PATHS:
                 break
             self.plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
             start_time = time.time()
-            self.rounded_result = self.plan_rounder.round()
+            rounded_result = self.plan_rounder.round()
             elapsed_time = time.time() - start_time
             rounding_times.append(elapsed_time)
-            rounded_results.append(self.rounded_result)
+            rounded_results.append(rounded_result)
             rounders.append(self.plan_rounder)
+            print(
+                f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s"
+            )
 
         best_idx = np.argmin(
             [
