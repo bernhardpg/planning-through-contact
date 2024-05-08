@@ -29,7 +29,13 @@ from planning_through_contact.simulation.systems.pusher_slider_pose_selector imp
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from planning_through_contact.simulation.sim_utils import AddSliderAndConfigureContact
+from planning_through_contact.simulation.sim_utils import (
+    AddSliderAndConfigureContact,
+    AddRandomizedSliderAndConfigureContact,
+    randomize_camera_config,
+    randomize_pusher,
+    randomize_table,
+)
 from planning_through_contact.simulation.state_estimators.plant_updater import (
     PlantUpdater,
 )
@@ -62,9 +68,27 @@ class StateEstimator(Diagram):
         self._scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
         self._plant.RegisterAsSourceForSceneGraph(self._scene_graph)
 
-        self.slider = AddSliderAndConfigureContact(
-            sim_config=sim_config, plant=self._plant, scene_graph=self._scene_graph
-        )
+        if not sim_config.domain_randomization:
+            self.slider = AddSliderAndConfigureContact(
+                sim_config=sim_config, plant=self._plant, scene_graph=self._scene_graph
+            )
+        else:
+            table_grey = np.random.uniform(0.3, 0.95)
+            pusher_grey = np.random.uniform(0.1, table_grey)
+            color_range = 0.025
+            
+            randomize_pusher()
+            randomize_table(
+                default_color=[table_grey, table_grey, table_grey],
+                color_range=color_range,
+            )
+            self.slider = AddRandomizedSliderAndConfigureContact(
+                default_color=[pusher_grey, pusher_grey, pusher_grey],
+                color_range=color_range,
+                sim_config=sim_config, 
+                plant=self._plant, 
+                scene_graph=self._scene_graph
+            )
 
         # Add camera
         if sim_config.camera_configs is not None:
@@ -72,6 +96,8 @@ class StateEstimator(Diagram):
                 ApplyCameraConfig
             )
             for camera_config in sim_config.camera_configs:
+                if sim_config.domain_randomization:
+                    camera_config = randomize_camera_config(camera_config)
                 ApplyCameraConfig(
                     config=camera_config,
                     builder=builder,

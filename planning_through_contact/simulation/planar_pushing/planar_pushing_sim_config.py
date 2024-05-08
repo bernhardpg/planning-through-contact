@@ -80,7 +80,7 @@ class MultiRunConfig:
                 buffer=0,
             ),
         )
-        self.initial_slider_poses_all = get_slider_start_poses(
+        self.initial_slider_poses = get_slider_start_poses(
             seed=seed,
             num_plans=num_runs,
             workspace=workspace,
@@ -152,6 +152,7 @@ class PlanarPushingSimConfig:
     use_hardware: bool = False
     pusher_z_offset: float = 0.05
     camera_configs: List[CameraConfig] = None
+    domain_randomization: bool = False
     log_dir: str = None # directory for logging rollouts from output_feedback_table_environments
     multi_run_config: MultiRunConfig = None
 
@@ -199,6 +200,7 @@ class PlanarPushingSimConfig:
             use_hardware=cfg.use_hardware,
             pusher_z_offset=cfg.pusher_z_offset,
             log_dir=cfg.log_dir,
+            domain_randomization=cfg.domain_randomization,
         )
 
         # Optional fields
@@ -283,5 +285,6 @@ class PlanarPushingSimConfig:
             self.log_dir == other.log_dir and
             np.allclose(self.default_joint_positions, other.default_joint_positions) and
             self.diffusion_policy_config == other.diffusion_policy_config and
-            self.multi_run_config == other.multi_run_config
+            self.multi_run_config == other.multi_run_config,
+            self.domain_randomization == other.domain_randomization
         )

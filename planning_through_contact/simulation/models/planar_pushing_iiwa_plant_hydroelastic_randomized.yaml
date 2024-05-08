@@ -1,0 +1,6 @@
+directives:
+- add_directives:
+    file: package://planning_through_contact/iiwa_controller_plant_randomized.yaml
+- add_directives:
+    file: package://planning_through_contact/small_table_randomized.yaml
+

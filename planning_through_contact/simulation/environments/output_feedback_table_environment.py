@@ -10,6 +10,7 @@ from pydrake.all import (
     LogVectorOutput,
     Meshcat,
     Simulator,
+    Rgba
 )
 
 from planning_through_contact.planning.planar.planar_plan_config import (
@@ -172,7 +173,6 @@ class OutputFeedbackTableEnvironment:
 
         self.context = self._simulator.get_mutable_context()
         self._robot_system.pre_sim_callback(self.context)
-
         # initialize slider above the table
         self.mbp_context = self._plant.GetMyContextFromRoot(self.context)
         if self._multi_run_config:

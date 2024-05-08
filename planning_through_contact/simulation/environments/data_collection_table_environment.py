@@ -1,9 +1,11 @@
 import logging
 import os
 from typing import Optional
+import cv2
 import numpy as np
 from math import ceil
 from dataclasses import dataclass
+from PIL import Image
 
 import pickle
 from pydrake.all import (
@@ -101,9 +103,10 @@ class DataCollectionConfig:
         action_chunk_length: int,
         target_chunk_length: int,
         image_chunk_length: int,
+        image_width: int,
+        image_height: int,
         policy_freq: float,
         plan_config: PlanConfig,
-        domain_randomization: bool,
         LLSUB_RANK: int = None,
         LLSUB_SIZE: int = None,    
     ):
@@ -124,7 +127,10 @@ class DataCollectionConfig:
         self.target_chunk_length = target_chunk_length
         self.image_chunk_length = image_chunk_length
         self.policy_freq = policy_freq
-        self.domain_randomization = domain_randomization
+
+        # image params
+        self.image_width = image_width
+        self.image_height = image_height
 
         # Plan generatino config
         self.plan_config = plan_config
@@ -417,6 +423,22 @@ class DataCollectionTableEnvironment:
         log_path = os.path.join(self._data_collection_dir, "combined_logs.pkl")
         with open(log_path, "wb") as f:
             pickle.dump(combined_logs, f)
+
+    def resize_saved_images(self):
+        desired_image_shape = np.array([
+            self._data_collection_config.image_width,
+            self._data_collection_config.image_height,
+            3
+        ])
+        for image_name in os.listdir(self._image_dir):
+            image_path = f"{self._image_dir}/{image_name}"
+            img = Image.open(image_path)
+            img = np.asarray(img)
+            if not np.allclose(img.shape, desired_image_shape):
+                img = cv2.resize(img, (desired_image_shape[1], desired_image_shape[0]))
+                img = Image.fromarray(img)
+                img.save(image_path)
+
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose

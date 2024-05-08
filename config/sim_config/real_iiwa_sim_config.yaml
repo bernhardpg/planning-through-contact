@@ -58,7 +58,7 @@ camera_configs:
     focal_x: 616.704
     focal_y: 616.777
     show_rgb: true
-
+domain_randomization: true
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
@@ -101,7 +101,8 @@ data_collection_config:
   action_chunk_length: 2048
   target_chunk_length: 1024
   image_chunk_length: 128
-  domain_randomization: true
+  image_width: 96
+  image_height: 96
   plan_config:
     _target_: planning_through_contact.simulation.environments.data_collection_table_environment.PlanConfig
     slider_type: ${slider_type}
@@ -115,8 +116,8 @@ data_collection_config:
       - ${slider_goal_pose.x}
       - ${slider_goal_pose.y}
     buffer: 0.0
-    seed: 163
-    num_plans: 1250
+    seed: 1
+    num_plans: 344
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false

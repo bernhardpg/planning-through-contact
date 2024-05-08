@@ -14,6 +14,7 @@ from PIL import Image
 import importlib
 import hydra
 from omegaconf import OmegaConf
+import cv2
 
 from pydrake.all import (
     Meshcat,
@@ -254,10 +255,9 @@ def render_plans(
     
     meshcat = StartMeshcat()
     for plan in tqdm(plans):
-        plan_sim_config = _domain_randomization(sim_config, meshcat)
         simulate_plan(
             traj=plan,
-            sim_config=plan_sim_config,
+            sim_config=sim_config,
             data_collection_config=data_collection_config,
             cfg=cfg,
             meshcat=meshcat,
@@ -301,10 +301,12 @@ def simulate_plan(
     )
     
     recording_name = f"recording.html" if save_recording else None
+    environment.export_diagram("data_collection_table_environment.pdf")
     environment.simulate(
         traj.end_time + sim_config.delay_before_execution + 0.5,
         recording_file=recording_name
     )
+    environment.resize_saved_images()
 
 def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=False):
     """
@@ -372,8 +374,14 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
     concatenated_targets = []
     episode_ends = []
     current_end = 0
+
     freq = data_collection_config.policy_freq
     dt = 1 / freq
+    desired_image_shape = np.array([
+        data_collection_config.image_width,
+        data_collection_config.image_height,
+        3
+    ])
 
     for traj_dir in tqdm(traj_dir_list):
         image_dir = traj_dir.joinpath("images")
@@ -429,6 +437,8 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool=Fa
             image_path = image_dir.joinpath(f"{int(image_name)}.png")
             img = Image.open(image_path).convert('RGB')
             img = np.asarray(img)
+            if not np.allclose(img.shape, desired_image_shape):
+                img = cv2.resize(img, (desired_image_shape[1], desired_image_shape[0]))
             images.append(img)
             if debug:
                 from matplotlib import pyplot as plt
@@ -621,40 +631,6 @@ def _get_plan_start_and_goals_to_point(
         )
 
     return plans
-
-def _domain_randomization(sim_config: PlanarPushingSimConfig, meshcat) -> PlanarPushingSimConfig:
-    new_camera_configs = []
-    default_camera_configs = sim_config.camera_configs
-
-    for camera_config in default_camera_configs:
-        # noise camera location
-        new_camera_config = copy.deepcopy(camera_config)
-
-
-        camera_pose = camera_config.X_PB.GetDeterministicValue()
-        xyz = np.random.normal(camera_pose.translation(), 0.01, 3)
-        
-        rpy = camera_pose.rotation().ToRollPitchYaw()
-        rot_std = 2*np.pi/180
-        new_rpy = RollPitchYaw(
-            np.random.normal(rpy.roll_angle(), rot_std),
-            np.random.normal(rpy.pitch_angle(), rot_std),
-            np.random.normal(rpy.yaw_angle(), rot_std)
-        )
-
-        new_camera_config.X_PB = Transform(
-            RigidTransform(new_rpy, xyz)
-        )
-
-        # randomize the background color
-        new_rgb = np.random.uniform(0, 1, 3)
-        new_camera_config.background = Rgba(new_rgb[0], new_rgb[1], new_rgb[2], 1)
-        
-        new_camera_configs.append(new_camera_config)
-    
-    new_sim_config = copy.deepcopy(sim_config)
-    new_sim_config.camera_configs = new_camera_configs
-    return new_sim_config
 
 def _print_data_collection_config_info(data_collection_config: DataCollectionConfig):
     """Output diagnostic info about the data collection configuration."""

@@ -1,0 +1,11 @@
+directives:
+- add_model:
+    name: small_table
+    file: package://planning_through_contact/small_table_hydroelastic_randomized.urdf
+
+- add_weld:
+    parent: world
+    child: small_table::TableTop
+    X_PC:
+        rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
+        translation: [0.486, 0, 0.0]

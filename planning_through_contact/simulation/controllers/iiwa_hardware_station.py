@@ -1,4 +1,5 @@
 import numpy as np
+from lxml import etree
 
 from manipulation.station import (
     MakeHardwareStation,
@@ -34,6 +35,10 @@ from planning_through_contact.simulation.sim_utils import (
     models_folder,
     package_xml_file,
     GetSliderUrl,
+    randomize_camera_config,
+    randomize_pusher,
+    randomize_table,
+    clamp,
 )
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
@@ -55,19 +60,58 @@ class IiwaHardwareStation(RobotSystemBase):
             scenario_name = "speed-optimized"
         else:
             scenario_name = "accuracy-optimized"
-        scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
+        
+        if not sim_config.domain_randomization:
+            scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario.yaml"
+            
+            def add_slider_to_parser(parser):
+                slider_sdf_url = GetSliderUrl(sim_config)
+                (slider,) = parser.AddModels(url=slider_sdf_url)
+                return
+        else:
+            scenario_file_name = f"{models_folder}/planar_pushing_iiwa_scenario_randomized.yaml"
+            
+            table_grey = np.random.uniform(0.3, 0.95)
+            pusher_grey = np.random.uniform(0.1, table_grey)
+            color_range = 0.025
+            
+            randomize_pusher()
+            randomize_table(
+                default_color=[table_grey, table_grey, table_grey],
+                color_range=color_range,
+            )
+
+            def add_slider_to_parser(parser): 
+                sdf_file = f'{models_folder}/t_pusher.sdf'
+                safe_parse = etree.XMLParser(recover=True)
+                tree = etree.parse(sdf_file, safe_parse)
+                root = tree.getroot()
+
+                diffuse_elements = root.xpath('//model/link/visual/material/diffuse')
+
+                R = clamp(pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+                G = clamp(pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+                B = clamp(pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+                A = 1 # assuming fully opaque 
+
+                new_diffuse_value = f"{R} {G} {B} {A}"  # Example: changing diffuse to white (R G B A)
+                for diffuse in diffuse_elements: 
+                    diffuse.text = new_diffuse_value
+
+                sdf_as_string = etree.tostring(tree, encoding="utf8").decode()
+
+                (slider,) = parser.AddModelsFromString(sdf_as_string, "sdf")
+        
         scenario = LoadScenario(
             filename=scenario_file_name, scenario_name=scenario_name
         )
         # Add cameras to scenario
         if sim_config.camera_configs:
             for camera_config in sim_config.camera_configs:
-                scenario.cameras[camera_config.name] = camera_config
-
-        def add_slider_to_parser(parser):
-            slider_sdf_url = GetSliderUrl(sim_config)
-            (slider,) = parser.AddModels(url=slider_sdf_url)
-            return
+                if sim_config.domain_randomization:
+                    scenario.cameras[camera_config.name] = randomize_camera_config(camera_config)
+                else:
+                    scenario.cameras[camera_config.name] = camera_config
 
         self._check_scenario_and_sim_config_consistent(scenario, sim_config)
 

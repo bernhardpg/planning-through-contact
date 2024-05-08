@@ -1,6 +1,8 @@
 import os
 import numpy as np
 from typing import Literal, List
+from lxml import etree
+import copy
 
 from pydrake.all import (
     LoadModelDirectives,
@@ -16,6 +18,8 @@ from pydrake.all import (
     MakePhongIllustrationProperties,
     Rgba,
     RigidTransform,
+    Transform,
+    RollPitchYaw,
 )
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
@@ -102,6 +106,131 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
         raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
     return slider_sdf_url
 
+
+## Domain Randomization Functions
+
+def AddRandomizedSliderAndConfigureContact(
+    sim_config, plant, 
+    scene_graph, 
+    default_color = [0.2, 0.2, 0.2],
+    color_range = 0.02,
+    slider_sdf: str = 't_pusher.sdf'
+) -> ModelInstanceIndex:
+    parser = Parser(plant, scene_graph)
+    ConfigureParser(parser)
+    use_hydroelastic = sim_config.contact_model == ContactModel.kHydroelastic
+
+    if not use_hydroelastic:
+        raise NotImplementedError()
+
+    scene_directive_name = f"{sim_config.scene_directive_name.split('.')[0]}_randomized.yaml"
+    directives = LoadModelDirectives(f"{models_folder}/{scene_directive_name}")
+    ProcessModelDirectives(directives, plant, parser)  # type: ignore
+
+    sdf_file = f'{models_folder}/{slider_sdf}'
+    safe_parse = etree.XMLParser(recover=True)
+    tree = etree.parse(sdf_file, safe_parse)
+    root = tree.getroot()
+
+    diffuse_elements = root.xpath('//model/link/visual/material/diffuse')
+
+    R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    A = 1 # assuming fully opaque
+
+    new_diffuse_value = f"{R} {G} {B} {A}"
+    for diffuse in diffuse_elements: 
+        diffuse.text = new_diffuse_value
+
+    sdf_as_string = etree.tostring(tree, encoding="utf8").decode()
+
+    (slider,) = parser.AddModelsFromString(sdf_as_string, "sdf")
+
+    if use_hydroelastic:
+        plant.set_contact_model(ContactModel.kHydroelastic)
+        plant.set_discrete_contact_approximation(DiscreteContactApproximation.kLagged)
+
+    plant.Finalize()
+    return slider
+
+def randomize_table(
+    default_color = [0.55, 0.55, 0.55],
+    color_range = 0.02,
+    table_urdf: str = "small_table_hydroelastic.urdf"
+) -> None: 
+    base_urdf = f'{models_folder}/{table_urdf}'
+    parser = etree.XMLParser(recover=True)
+    tree = etree.parse(base_urdf, parser)
+    root = tree.getroot()
+
+    R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    A = 1 # assuming fully opaque
+
+    new_color_value = f"{R} {G} {B} {A}"    
+    models = root.xpath('//material[@name="LightGrey"]')
+    for model in models:
+        for color in model: 
+            color.set("rgba", new_color_value)
+    
+    new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
+
+    tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+
+def randomize_pusher(
+    default_color = [1.0, 0.45, 0.14],
+    color_range = 0.02,
+    pusher_sdf: str = "pusher_floating_hydroelastic.sdf"
+) -> None:
+    base_sdf = f'{models_folder}/{pusher_sdf}'
+
+    safe_parse = etree.XMLParser(recover=True)
+    tree = etree.parse(base_sdf, safe_parse)
+    root = tree.getroot()
+
+    diffuse_elements = root.xpath('//model/link/visual/material/diffuse')
+
+    R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+    A = 1 # assuming fully opaque
+
+    new_diffuse_value = f"{R} {G} {B} {A}"  # Example: changing diffuse to white (R G B A)
+    for diffuse in diffuse_elements: 
+        diffuse.text = new_diffuse_value
+
+    new_sdf_location = f'{models_folder}/pusher_floating_hydroelastic_randomized.sdf'
+
+    tree.write(new_sdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+
+def clamp(val, min_val, max_val):
+    return max(min(val, max_val), min_val)
+
+def randomize_camera_config(camera_config):
+    # Randomize camera location
+    new_camera_config = copy.deepcopy(camera_config)
+    camera_pose = camera_config.X_PB.GetDeterministicValue()
+    
+    new_xyz = np.random.normal(camera_pose.translation(), 0.01, 3)
+    rpy = camera_pose.rotation().ToRollPitchYaw()
+    rot_std = 2*np.pi/180
+    new_rpy = RollPitchYaw(
+        np.random.normal(rpy.roll_angle(), rot_std),
+        np.random.normal(rpy.pitch_angle(), rot_std),
+        np.random.normal(rpy.yaw_angle(), rot_std)
+    )
+
+    new_camera_config.X_PB = Transform(
+        RigidTransform(new_rpy, new_xyz)
+    )
+
+    # randomize the background color
+    new_rgb = np.random.uniform(0, 1, 3)
+    new_camera_config.background = Rgba(new_rgb[0], new_rgb[1], new_rgb[2], 1)
+    
+    return new_camera_config
 
 ## Collision checkers for computing initial slider and pusher poses
 
