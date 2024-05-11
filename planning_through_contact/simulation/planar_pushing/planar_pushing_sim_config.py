@@ -32,6 +32,16 @@ from planning_through_contact.simulation.controllers.diffusion_policy_source imp
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.sim_utils import get_slider_start_poses
 
+from planning_through_contact.simulation.controllers.diffusion_policy_source import DiffusionPolicyConfig
+from planning_through_contact.experiments.utils import (
+    get_box,
+    get_tee,
+    get_default_plan_config,
+    get_arbitrary,
+)
+from planning_through_contact.simulation.sim_utils import (
+    get_slider_start_poses,
+)
 
 class MultiRunConfig:
     def __init__(
@@ -172,6 +182,8 @@ class PlanarPushingSimConfig:
             slider: RigidBody = get_box()
         elif cfg.slider_type == "tee":
             slider: RigidBody = get_tee()
+        elif cfg.slider_type == "arbitrary":
+            slider = get_arbitrary()
         else:
             raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
