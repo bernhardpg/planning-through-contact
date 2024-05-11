@@ -6,9 +6,6 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
-    do_one_run_get_path,
-)
 from planning_through_contact.experiments.utils import (
     get_default_plan_config,
     get_default_solver_params,
@@ -31,6 +28,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,
 )
+from planning_through_contact.planning.planar.utils import do_one_run_get_path
 from planning_through_contact.visualize.analysis import analyze_plan
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar_pushing import (
@@ -396,6 +394,7 @@ def create_plan(
 
     end_time = time.time()
     print(f"create_plan took {timedelta(seconds=end_time - start_time)}")
+
 
 def _get_time_as_str() -> str:
     current_time = datetime.now()
