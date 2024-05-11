@@ -163,7 +163,7 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     print(f"Finished generating start and goal pairs.")
 
     ## Generate plans
-    pbar = tqdm(total=_plan_config.num_plans)
+    pbar = tqdm(total=_plan_config.num_plans, desc="Generating plans")
     plan_idx = 0
     while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
@@ -181,8 +181,10 @@ def generate_plans(data_collection_config: DataCollectionConfig):
         )
 
         if success:
-            plan_idx += 1
             pbar.update(1)
+        else:
+            print("Failed to generate plan. Retrying...")
+        plan_idx += 1
     print(f"Finished generating {plan_idx} plans.")
     if plan_idx < _plan_config.num_plans:
         print(f"Failed to generate all plans since the solver can fail.")
