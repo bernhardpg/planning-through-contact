@@ -185,7 +185,7 @@ class PlanarPushingSimConfig:
         elif cfg.slider_type == "arbitrary":
             slider = get_arbitrary()
         else:
-            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")
+            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")        
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
             cfg.dynamics_config,
         )

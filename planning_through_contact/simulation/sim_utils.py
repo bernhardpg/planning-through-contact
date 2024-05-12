@@ -121,17 +121,27 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
         raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
     return slider_sdf_url
 
+def get_slider_sdf_path(sim_config, models_folder:str) -> str:
+    if isinstance(sim_config.slider.geometry, Box2d):
+        slider_sdf_url = f"{models_folder}/box_hydroelastic.sdf"
+    elif isinstance(sim_config.slider.geometry, TPusher2d):
+        slider_sdf_url = f"{models_folder}/t_pusher.sdf"
+    elif isinstance(sim_config.slider.geometry, ArbitraryShape2D):
+        slider_sdf_url = f"{models_folder}/arbitrary_shape.sdf"
+    else:
+        raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
+    return slider_sdf_url
+
 
 ## Domain Randomization Functions
 
 
 def AddRandomizedSliderAndConfigureContact(
     sim_config,
-    plant,
-    scene_graph,
-    default_color=[0.2, 0.2, 0.2],
-    color_range=0.02,
-    slider_sdf: str = "t_pusher.sdf",
+    plant, 
+    scene_graph, 
+    default_color = [0.2, 0.2, 0.2],
+    color_range = 0.02,
 ) -> ModelInstanceIndex:
     parser = Parser(plant, scene_graph)
     ConfigureParser(parser)
@@ -146,7 +156,7 @@ def AddRandomizedSliderAndConfigureContact(
     directives = LoadModelDirectives(f"{models_folder}/{scene_directive_name}")
     ProcessModelDirectives(directives, plant, parser)  # type: ignore
 
-    sdf_file = f"{models_folder}/{slider_sdf}"
+    sdf_file = get_slider_sdf_path(sim_config, models_folder)
     safe_parse = etree.XMLParser(recover=True)
     tree = etree.parse(sdf_file, safe_parse)
     root = tree.getroot()
