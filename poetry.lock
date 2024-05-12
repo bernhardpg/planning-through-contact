@@ -4145,6 +4145,9 @@ files = [
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 31a9bb4 (Fix dependencies)
 name = "pyvirtualdisplay"
 version = "3.0"
 description = "python wrapper for Xvfb, Xephyr and Xvnc"
@@ -4156,8 +4159,11 @@ files = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 =======
 >>>>>>> 0a445f8 (Add manipulation dependency)
+=======
+>>>>>>> 31a9bb4 (Fix dependencies)
 name = "pywin32"
 version = "306"
 description = "Python for Window Extensions"
@@ -6179,5 +6185,9 @@ content-hash = "f24e57b7ebdf718477f5e288d48a7364a6677b88bf318f3bef3ee14e389b61ae
 >>>>>>> 4f97c66 (Fix merge problems)
 =======
 python-versions = "^3.10, <3.11"
+<<<<<<< HEAD
 content-hash = "4f40e9a2d161b3a2f1fb1cbb8e6238c0cf541f2e70934398dc9b77e1da5507b9"
 >>>>>>> 726f7f7 (Fix dependencies)
+=======
+content-hash = "d2eb901983feaec2748adb0dcfda564bdc9fffdcde8104fc0fd98e0b7365770f"
+>>>>>>> 31a9bb4 (Fix dependencies)
