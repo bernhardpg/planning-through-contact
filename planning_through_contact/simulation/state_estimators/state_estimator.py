@@ -213,7 +213,6 @@ class StateEstimator(Diagram):
             self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
             if sim_config.draw_frames:
-                # print(f"Drawing frames")
                 for frame_name in [
                     # "iiwa_link_7",
                     # "pusher_base",
