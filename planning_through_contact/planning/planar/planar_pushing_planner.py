@@ -438,9 +438,10 @@ class PlanarPushingPlanner:
 
         options.solver_options = self._get_mosek_params(solver_params, 1e-5)
 
-        paths, results = self.gcs.GetRandomizedSolutionPath(
+        paths = self.gcs.SamplePaths(
             self.source.vertex, self.target.vertex, result, options
         )
+        results = [self.gcs.SolveConvexRestriction(path, options) for path in paths]
 
         flows = [result.GetSolution(e.phi()) for e in self.gcs.Edges()]
 
