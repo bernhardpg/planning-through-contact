@@ -27,7 +27,7 @@ if __name__ == "__main__":
         "--body",
         help="Which slider body to use.",
         type=str,
-        default="box",
+        default="sugar_box",
     )
     parser.add_argument(
         "--num",
@@ -56,6 +56,12 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--save_analysis",
+        help="Save trajectory data, like cost etc. This is likely not useful for anything except debugging. Will automatically \
+        be set to True when `debug` is set.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--output_dir",
         help="High-level output directory for plans. If the folder doesn't exist, it will be created. A timestamped \
         subfolder is created within 'output_dir'.",
@@ -73,6 +79,7 @@ if __name__ == "__main__":
     num_trajs = args.num
     output_dir = args.output_dir
     save_relaxed = args.save_relaxed
+    save_analysis = args.save_analysis
 
     pusher_radius = 0.015
 
@@ -109,7 +116,7 @@ if __name__ == "__main__":
             save_traj=True,
             animation_lims=None,
             interpolate_video=interpolate,
-            save_analysis=debug,
+            save_analysis=debug or save_analysis,
             do_rounding=rounding,
             hardware=True,
             save_relaxed=save_relaxed,

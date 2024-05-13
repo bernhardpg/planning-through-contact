@@ -221,8 +221,6 @@ class PlanarPushingPath:
         contact_mode_costs = {
             "keypoint_arc": [],
             "keypoint_reg": [],
-            "angular_vel_reg": [],
-            "translational_vel_reg": [],
             "force_reg": [],
             "contact_time": [],
             "mode_cost": [],
@@ -231,8 +229,6 @@ class PlanarPushingPath:
         contact_mode_sums = {
             "keypoint_arc": float,
             "keypoint_reg": float,
-            "angular_vel_reg": float,
-            "translational_vel_reg": float,
             "force_reg": float,
             "contact_time": float,
             "mode_cost": float,
@@ -242,7 +238,6 @@ class PlanarPushingPath:
             "pusher_arc_length": [],
             "pusher_vel_reg": [],
             "object_avoidance_socp": [],
-            "object_avoidance_quad": [],
             "non_contact_time": [],
         }
 
@@ -250,7 +245,6 @@ class PlanarPushingPath:
             "pusher_arc_length": float,
             "pusher_vel_reg": float,
             "object_avoidance_socp": float,
-            "object_avoidance_quad": float,
             "non_contact_time": float,
         }
 

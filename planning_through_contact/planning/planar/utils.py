@@ -507,7 +507,7 @@ def create_plan(
         if save_relaxed:
             make_traj_figure(
                 traj_relaxed,
-                filename=f"relaxed_traj",
+                filename=f"{trajectory_folder}/relaxed_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
                 show_workspace=hardware,
@@ -521,7 +521,7 @@ def create_plan(
         if traj_rounded is not None:
             make_traj_figure(
                 traj_rounded,
-                filename=f"rounded_traj",
+                filename=f"{trajectory_folder}/rounded_traj",
                 slider_color=slider_color,
                 split_on_mode_type=True,
                 show_workspace=hardware,
