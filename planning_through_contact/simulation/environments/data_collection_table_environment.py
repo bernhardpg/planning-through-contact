@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 class PlanConfig:
     # Geometry
     slider_type: str
+    arbitrary_shape_pickle_path: str
     pusher_radius: float
 
     # Solver

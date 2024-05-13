@@ -62,9 +62,13 @@ def get_tee() -> RigidBody:
     return body
 
 
-def get_arbitrary() -> RigidBody:
+def get_arbitrary(arbitrary_shape_pickle_path: str) -> RigidBody:
     mass = 0.1  # TODO: Make customizable
-    body = RigidBody("arbitrary_shape", ArbitraryShape2D(), mass)
+    body = RigidBody(
+        "arbitrary_shape",
+        ArbitraryShape2D(arbitrary_shape_pickle_path),
+        mass
+    )
     return body
 
 
@@ -126,6 +130,7 @@ def get_hardware_non_collision_cost() -> NonCollisionCost:
 
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee", "arbitrary"] = "box",
+    arbitrary_shape_pickle_path: str = "",
     pusher_radius: float = 0.015,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
@@ -139,7 +144,7 @@ def get_default_plan_config(
     elif slider_type == "tee":
         slider = get_tee()
     elif slider_type == "arbitrary":
-        slider = get_arbitrary()
+        slider = get_arbitrary(arbitrary_shape_pickle_path)
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 

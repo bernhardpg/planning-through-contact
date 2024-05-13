@@ -6,7 +6,8 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'tee'
+slider_type: 'arbitrary'
+arbitrary_shape_pickle_path: arbitrary_shape_pickles/single_box.pkl
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:
@@ -65,6 +66,7 @@ multi_run_config:
   max_attempt_duration: 30 # 80
   seed: 42
   slider_type: ${slider_type}
+  arbitrary_shape_pickle_path: ${arbitrary_shape_pickle_path}
   pusher_start_pose: ${pusher_start_pose}
   slider_goal_pose: ${slider_goal_pose}
   workspace_width: 0.3
@@ -105,6 +107,7 @@ data_collection_config:
   plan_config:
     _target_: planning_through_contact.simulation.environments.data_collection_table_environment.PlanConfig
     slider_type: ${slider_type}
+    arbitrary_shape_pickle_path: ${arbitrary_shape_pickle_path}
     pusher_radius: 0.015
     contact_lam_min: 0.2
     contact_lam_max: 0.8
@@ -116,7 +119,7 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 1
-    num_plans: 344
+    num_plans: 1
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false

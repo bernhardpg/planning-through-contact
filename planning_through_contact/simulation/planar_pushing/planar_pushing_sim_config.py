@@ -45,23 +45,25 @@ from planning_through_contact.simulation.sim_utils import (
 
 class MultiRunConfig:
     def __init__(
-        self,
-        num_runs: int,
-        max_attempt_duration: float,
-        seed: int,
-        slider_type: str,
-        pusher_start_pose: PlanarPose,
-        slider_goal_pose: PlanarPose,
-        workspace_width: float,
-        workspace_height: float,
-        trans_tol: float = 0.01,
-        rot_tol: float = 0.01,  # degrees
-        evaluate_final_pusher_position: bool = True,
-        evaluate_final_slider_rotation: bool = True,
+            self,
+            num_runs: int, 
+            max_attempt_duration: float, 
+            seed: int, 
+            slider_type: str,
+            arbitrary_shape_pickle_path: str,
+            pusher_start_pose: PlanarPose,
+            slider_goal_pose: PlanarPose,
+            workspace_width: float,
+            workspace_height: float,
+            trans_tol: float=0.01,
+            rot_tol: float=0.01, # degrees
+            evaluate_final_pusher_position: bool=True,
+            evaluate_final_slider_rotation: bool=True,
     ):
         # Set up multi run config
         config = get_default_plan_config(
             slider_type=slider_type,
+            arbitrary_shape_pickle_path=arbitrary_shape_pickle_path,
             pusher_radius=0.015,
             hardware=False,
         )
@@ -183,7 +185,7 @@ class PlanarPushingSimConfig:
         elif cfg.slider_type == "tee":
             slider: RigidBody = get_tee()
         elif cfg.slider_type == "arbitrary":
-            slider = get_arbitrary()
+            slider = get_arbitrary(cfg.arbitrary_shape_pickle_path)
         else:
             raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")        
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(

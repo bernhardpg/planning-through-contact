@@ -6186,8 +6186,12 @@ content-hash = "f24e57b7ebdf718477f5e288d48a7364a6677b88bf318f3bef3ee14e389b61ae
 =======
 python-versions = "^3.10, <3.11"
 <<<<<<< HEAD
+<<<<<<< HEAD
 content-hash = "4f40e9a2d161b3a2f1fb1cbb8e6238c0cf541f2e70934398dc9b77e1da5507b9"
 >>>>>>> 726f7f7 (Fix dependencies)
 =======
 content-hash = "d2eb901983feaec2748adb0dcfda564bdc9fffdcde8104fc0fd98e0b7365770f"
 >>>>>>> 31a9bb4 (Fix dependencies)
+=======
+content-hash = "caa4a160fcab999ab88451acff8b3a6f0e48acd9fb7a73528a8d82876b08a97d"
+>>>>>>> e3fd889 (Create arbitrary shapes from primitive info pickle file)

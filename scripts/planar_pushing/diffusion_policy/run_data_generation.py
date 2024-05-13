@@ -61,6 +61,8 @@ from planning_through_contact.simulation.sim_utils import (
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar_pushing import make_traj_figure
+from planning_through_contact.tools.utils import create_processed_mesh_primitive_sdf_file, load_primitive_info, PhysicalProperties
+from planning_through_contact.simulation.sim_utils import get_slider_sdf_path, models_folder
 
 
 @hydra.main(
@@ -127,6 +129,7 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     _plan_config = data_collection_config.plan_config
     config = get_default_plan_config(
         slider_type=_plan_config.slider_type,
+        arbitrary_shape_pickle_path=_plan_config.arbitrary_shape_pickle_path,
         pusher_radius=_plan_config.pusher_radius,
         hardware=False,
     )
@@ -266,6 +269,9 @@ def render_plans(
 
     print("\nRendering plans...")
 
+    if cfg.slider_type == "arbitrary":
+        create_arbitrary_shape_sdf_file(cfg, sim_config)
+
     plans = []
     for plan_dir in os.listdir(data_collection_config.plans_dir):
         if os.path.isdir(f"{data_collection_config.plans_dir}/{plan_dir}"):
@@ -285,6 +291,31 @@ def render_plans(
         meshcat.Delete()
         meshcat.DeleteAddedControls()
 
+def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
+    sdf_path = get_slider_sdf_path(sim_config, models_folder)
+    if os.path.exists(sdf_path):
+        user_input = input(f"{sdf_path} already exists. Delete? (y/n)\n")
+        if user_input.lower() != "y":
+            print("Exiting")
+            exit()
+        os.remove(sdf_path)
+
+    primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
+    create_processed_mesh_primitive_sdf_file(
+        primitive_info=primitive_info,
+        physical_properties=PhysicalProperties( # TODO: Make configurable!
+            mass=0.1,
+            inertia=np.array([[1.0e-5, 0.0, 0.0], [0.0, 1.0e-5, 0.0], [0.0, 0.0, 1.0e-5]]),
+            center_of_mass=np.array([0.0, 0.0, 0.0]),
+            hydroelastic_modulus=1.0e6,
+            is_compliant=False,
+        ),
+        output_file_path=sdf_path,
+        model_name="arbitrary_shape",
+        base_link_name="arbitrary_shape",
+        is_hydroelastic=False,
+        rgba=[0.0, 0.0, 0.0, 1.0],
+    )
 
 def simulate_plan(
     traj: PlanarPushingTrajectory,

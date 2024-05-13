@@ -5,6 +5,7 @@ Automatically generated version of the TPusher2d class.
 from dataclasses import dataclass
 from functools import cached_property
 from typing import List, Tuple
+import pickle
 
 import numpy as np
 import numpy.typing as npt
@@ -22,6 +23,7 @@ from planning_through_contact.geometry.hyperplane import (
     construct_2d_plane_from_points,
 )
 from planning_through_contact.geometry.utilities import normalize_vec
+from planning_through_contact.tools.utils import load_primitive_info
 
 from .helpers import (
     compute_box_union_bounds,
@@ -35,8 +37,12 @@ from .helpers import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass
 class ArbitraryShape2D(CollisionGeometry):
+
+    def __init__(self, arbitrary_shape_pickle_path: str):
+        assert arbitrary_shape_pickle_path is not None and arbitrary_shape_pickle_path != ""
+        self.arbitrary_shape_pickle_path = arbitrary_shape_pickle_path
 
     # TODO: This needs to match the sdf file for simulation to work...
     @property
@@ -68,37 +74,10 @@ class ArbitraryShape2D(CollisionGeometry):
         assumed to be planar on the xy-plane.
         NOTE: All boxes require a small overlap.
         """
-        boxes = [
-            {
-                "name": "box1",
-                "size": [0.2, 0.05, 0.05],
-                "transform": np.eye(4),
-            },
-            {
-                "name": "box2",
-                "size": [0.05, 0.15001, 0.05],
-                "transform": np.array(
-                    [
-                        [1.0, 0.0, 0.0, 0.04],
-                        [0.0, 1.0, 0.0, -0.1],
-                        [0.0, 0.0, 1.0, 0.0],
-                        [0.0, 0.0, 0.0, 1.0],
-                    ]
-                ),
-            },
-            # {
-            #     "name": "box3",
-            #     "size": [0.05, 0.05, 0.05],
-            #     "transform": np.array(
-            #         [
-            #             [1.0, 0.0, 0.0, 0.0],
-            #             [0.0, 1.0, 0.0, 0.0499],
-            #             [0.0, 0.0, 1.0, 0.0],
-            #             [0.0, 0.0, 0.0, 1.0],
-            #         ]
-            #     ),
-            # },
-        ]
+        boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
+        primitive_types = [box["name"] for box in boxes]
+        assert np.all([t == "box" for t in primitive_types]), f"Only boxes are supported. Got: {primitive_types}"
+      
         return boxes
 
     @cached_property
