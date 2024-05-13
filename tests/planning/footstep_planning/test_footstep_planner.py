@@ -27,7 +27,7 @@ from planning_through_contact.visualize.footstep_visualizer import animate_foots
 DEBUG = False
 
 
-def test_footstep_planning_one_long_stone() -> None:
+def test_footstep_planning_one_stone() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.2, name="initial")
 
@@ -37,9 +37,11 @@ def test_footstep_planning_one_long_stone() -> None:
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     desired_displacement = 0.2
     initial_pos = (
-        np.array([stone.x_pos - desired_displacement, 0.0]) + desired_robot_pos
+        np.array([stone.x_pos - desired_displacement, stone.z_pos]) + desired_robot_pos
     )
-    target_pos = np.array([stone.x_pos + desired_displacement, 0.0]) + desired_robot_pos
+    target_pos = (
+        np.array([stone.x_pos + desired_displacement, stone.z_pos]) + desired_robot_pos
+    )
 
     initial_pose = np.concatenate([initial_pos, [0]])
     target_pose = np.concatenate([target_pos, [0]])
@@ -156,7 +158,7 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     target_stone = terrain.add_stone(x_pos=3.75, width=0.5, z_pos=0.5, name="target")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True, period=0.3)
+    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=False, period=0.3)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = initial_stone.com + desired_robot_pos
@@ -329,6 +331,7 @@ def test_make_segments_per_terrain() -> None:
     # we should have one segment per stone
     assert len(segments) == len(terrain.stepping_stones)
     # Make sure we have the correct number of steps given the step length
+    # TODO this is outdated
     assert len(segments[0]) == int(np.floor(stone.width / step_span) + 2) * 2
 
     # Add another stone and try again

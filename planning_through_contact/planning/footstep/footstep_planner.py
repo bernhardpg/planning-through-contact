@@ -12,6 +12,7 @@ from pydrake.geometry.optimization import (
 from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     Binding,
+    ClarabelSolver,
     CommonSolverOption,
     MathematicalProgram,
     MathematicalProgramResult,
@@ -694,6 +695,7 @@ class FootstepPlanner:
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
 
         assert gcs_result.is_success()
+        # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
         if print_flows:
             flows = [
@@ -747,7 +749,9 @@ class FootstepPlanner:
         c_round = self.rounded_result.get_optimal_cost()
         c_relax = gcs_result.get_optimal_cost()
         ub_optimality_gap = ((c_round - c_relax) / c_relax) * 100
-        print(f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}")
+        print(
+            f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}, gcs_restriction_cost: {self.plan_rounder.relaxed_result.get_optimal_cost():.4f}"
+        )
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
         print(f"Rounding time: {self.rounding_time:.3f} s")
 
