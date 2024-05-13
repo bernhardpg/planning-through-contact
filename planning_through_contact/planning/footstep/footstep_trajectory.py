@@ -316,13 +316,6 @@ class FootstepPlanSegment:
             self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
             self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
 
-        # TODO: remove these!
-        # Start and end in an equilibrium position
-        self.prog.AddLinearConstraint(eq(self.a_WB[0], 0))
-        self.prog.AddLinearConstraint(eq(self.a_WB[self.num_steps - 1], 0))
-        self.prog.AddLinearEqualityConstraint(self.omega_dot_WB[0], 0)
-        self.prog.AddLinearEqualityConstraint(self.omega_dot_WB[self.num_steps - 1], 0)
-
         self.non_convex_constraints = []
         for k in range(self.num_steps):
             # torque = arm x force
@@ -438,7 +431,7 @@ class FootstepPlanSegment:
         cost_acc_rot = 1.0
         cost_lin_vel = 10
         cost_ang_vel = 1.0
-        cost_nominal_pose = 1.0
+        cost_nominal_pose = 5
 
         # cost_force = 1e-5
         # cost_torque = 1e-3
@@ -471,17 +464,17 @@ class FootstepPlanSegment:
             self.costs["sq_torques"].append(c)
 
         # TODO: do we need these? Potentially remove
-        # # squared accelerations
+        # squared accelerations
         # for k in range(self.num_steps):
         #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
         #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
         #     self.costs["sq_acc_lin"].append(c)
-
+        #
         # for k in range(self.num_steps):
         #     sq_rot_acc = self.omega_dot_WB[k] ** 2
         #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
         #     self.costs["sq_acc_rot"].append(c)
-
+        #
         # squared robot velocity
         for k in range(self.num_steps):
             v = self.v_WB[k]
@@ -679,6 +672,8 @@ class FootstepPlanSegment:
 
         if use_lp_approx:
             for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
+                # TODO remove
+                # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
                 X = get_X_from_psd_constraint(psd_constraint)
                 relaxed_prog.RemoveConstraint(psd_constraint)  # type: ignore
                 N = X.shape[0]

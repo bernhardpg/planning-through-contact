@@ -17,7 +17,7 @@ class PotatoRobot:
     foot_height: float = 0.15  # m
     step_span: float = 0.8  # m
     max_step_dist_from_robot: float = 0.4  # m
-    desired_com_height: float = 1.5  # m
+    desired_com_height: float = 1.3  # m
     size: Tuple[float, float, float] = (0.5, 0.5, 1.0)
 
     @property

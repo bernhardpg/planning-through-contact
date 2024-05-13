@@ -24,10 +24,10 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
-def test_footstep_planning_one_long_stone() -> None:
+def test_footstep_planning_one_stone() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.2, name="initial")
 
@@ -37,9 +37,11 @@ def test_footstep_planning_one_long_stone() -> None:
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     desired_displacement = 0.2
     initial_pos = (
-        np.array([stone.x_pos - desired_displacement, 0.0]) + desired_robot_pos
+        np.array([stone.x_pos - desired_displacement, stone.z_pos]) + desired_robot_pos
     )
-    target_pos = np.array([stone.x_pos + desired_displacement, 0.0]) + desired_robot_pos
+    target_pos = (
+        np.array([stone.x_pos + desired_displacement, stone.z_pos]) + desired_robot_pos
+    )
 
     initial_pose = np.concatenate([initial_pos, [0]])
     target_pose = np.concatenate([target_pos, [0]])
@@ -104,7 +106,6 @@ def test_footstep_planning_two_stones() -> None:
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
 
-@pytest.mark.skip
 def test_footstep_planning_one_long_stone_lp_approx() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
@@ -112,7 +113,7 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True)
 
-    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height + stone.z_pos])
     initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
     target_pos = np.array([stone.x_pos + 0.6, 0.0]) + desired_robot_pos
 
@@ -133,13 +134,20 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
     plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
-        output_file = "debug_plan_one_stone_lp_approx"
+        output_file = "debug_plan_one_stone_lp_approx_rounded"
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
+    if DEBUG:
+        output_file = "debug_plan_one_stone_lp_approx_relaxation"
+    else:
+        output_file = None
+    animate_footstep_plan(
+        robot, terrain, planner.get_relaxed_plan(), output_file=output_file
+    )
 
-@pytest.mark.skip
+
 def test_footstep_planning_many_stones_lp_approx() -> None:
     terrain = InPlaneTerrain()
     initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
@@ -175,13 +183,22 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
 
     if DEBUG:
-        output_file = "debug_plan_many_stones_lp_approx"
+        output_file = "debug_plan_many_stones_lp_approx_rounded"
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, plan, output_file=output_file)
 
+    if DEBUG:
+        output_file = "debug_plan_many_stones_lp_approx_relaxation"
+    else:
+        output_file = None
+    animate_footstep_plan(
+        robot, terrain, planner.get_relaxed_plan(), output_file=output_file
+    )
 
-# Unfinished!
+
+# Unfinished! This is meant to be a WIP on a cutting-plane algorithm on
+# lp approximation
 @pytest.mark.skip
 def test_semidefinite_relaxation_lp_approximation() -> None:
     terrain = InPlaneTerrain()
@@ -311,26 +328,42 @@ def test_make_segments_per_terrain() -> None:
         target_stone_name="initial",
     )
     segments = planner._make_segments_for_terrain()
+    DEBUG = True
+
+    if DEBUG:
+        planner.create_graph_diagram("test_make_segments_diagram")
 
     # we should have one segment per stone
     assert len(segments) == len(terrain.stepping_stones)
-    # Make sure we have the correct number of steps given the step length
-    assert len(segments[0]) == int(np.floor(stone.width / step_span) + 2) * 2
+
+    def _expected_num_steps(_stone):
+        return (
+            planner._calc_num_steps_required_per_stone(_stone.width, step_span) * 2 - 1
+        )
+
+    # We add 2 here, as the "start_stance" and "final_stance" are added to the first and last segments,
+    # which in this case is the same
+    assert len(segments[0]) == _expected_num_steps(stone) + 2
 
     # Add another stone and try again
 
-    stone_2 = terrain.add_stone(x_pos=3.0, width=2.0, z_pos=0.2, name="initial")
+    stone_2 = terrain.add_stone(x_pos=3.0, width=2.0, z_pos=0.2, name="stone_2")
     planner = FootstepPlanner(
         cfg,
         terrain,
         initial_pose,
         target_pose,
         initial_stone_name="initial",
-        target_stone_name="initial",
+        target_stone_name="stone_2",
     )
     segments = planner._make_segments_for_terrain()
 
+    if DEBUG:
+        planner.create_graph_diagram("test_make_segments_diagram_2")
+
     assert len(segments) == len(terrain.stepping_stones)
+
     # Make sure we have the correct number of steps given the step length
-    assert len(segments[0]) == int(np.floor(stone.width / step_span) + 2) * 2
-    assert len(segments[1]) == int(np.floor(stone.width / step_span) + 2) * 2
+    # We add 1 for both here, as the "start_stance" and "final_stance" are added to the first and last segments,
+    assert len(segments[0]) == _expected_num_steps(stone) + 1
+    assert len(segments[1]) == _expected_num_steps(stone) + 1
