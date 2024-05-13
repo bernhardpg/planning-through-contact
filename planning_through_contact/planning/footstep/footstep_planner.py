@@ -705,9 +705,10 @@ class FootstepPlanner:
             print(f"Graph flows: {', '.join(flow_strings)}")
 
         options.max_rounded_paths = MAX_ROUNDED_PATHS
-        paths, relaxed_results = self.gcs.GetRandomizedSolutionPath(
-            self.source, self.target, gcs_result, options
-        )
+        paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
+        relaxed_results = [
+            self.gcs.SolveConvexRestriction(path, options) for path in paths
+        ]
         rounders = []
         rounded_results = []
 
