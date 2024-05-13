@@ -199,6 +199,7 @@ def get_primitive_geometry_str(primitive_geometry: Dict[str,Any]) -> str:
 def create_processed_mesh_primitive_sdf_file(
     primitive_info: List[Dict[str, Any]],
     physical_properties: PhysicalProperties,
+    global_translation: np.ndarray,
     output_file_path: str,
     model_name: str,
     base_link_name: str,
@@ -215,6 +216,7 @@ def create_processed_mesh_primitive_sdf_file(
         "transform" which is a homogenous transformation matrix. The other params are
         primitive dependent but must be sufficient to construct that primitive.
     :param physical_properties: The physical properties.
+    :param global_translation: The translation of the processed mesh.
     :param output_file_path: The path to save the processed mesh SDF file.
     :param is_hydroelastic: Whether to make the body rigid hydroelastic.
     :param visual_mesh_file_path: The path to the mesh to use for the visual geometry.
@@ -256,7 +258,7 @@ def create_processed_mesh_primitive_sdf_file(
         # Use primitives for the visual geometry.
         for i, info in enumerate(primitive_info):
             transform = info["transform"]
-            translation = transform[:3, 3]
+            translation = transform[:3, 3] + global_translation
             rotation = R.from_matrix(transform[:3, :3]).as_euler("XYZ")
             geometry = get_primitive_geometry_str(info)
 
@@ -282,7 +284,7 @@ def create_processed_mesh_primitive_sdf_file(
     # Add the primitives
     for i, info in enumerate(primitive_info):
         transform = info["transform"]
-        translation = transform[:3, 3]
+        translation = transform[:3, 3] + global_translation
         rotation = R.from_matrix(transform[:3, :3]).as_euler("XYZ")
         geometry = get_primitive_geometry_str(info)
 

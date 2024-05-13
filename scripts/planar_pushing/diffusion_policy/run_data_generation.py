@@ -168,7 +168,8 @@ def generate_plans(data_collection_config: DataCollectionConfig):
     ## Generate plans
     pbar = tqdm(total=_plan_config.num_plans, desc="Generating plans")
     plan_idx = 0
-    while plan_idx < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
+    num_plans = 0
+    while num_plans < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
 
         success = create_plan(
@@ -185,11 +186,12 @@ def generate_plans(data_collection_config: DataCollectionConfig):
 
         if success:
             pbar.update(1)
+            num_plans += 1
         else:
             print("Failed to generate plan. Retrying...")
         plan_idx += 1
     print(f"Finished generating {plan_idx} plans.")
-    if plan_idx < _plan_config.num_plans:
+    if num_plans < _plan_config.num_plans:
         print(f"Failed to generate all plans since the solver can fail.")
 
 
@@ -300,6 +302,8 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
             exit()
         os.remove(sdf_path)
 
+    translation = np.concatenate([sim_config.slider.geometry.com_offset.flatten(), [0]])
+
     primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
     create_processed_mesh_primitive_sdf_file(
         primitive_info=primitive_info,
@@ -310,6 +314,7 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
             hydroelastic_modulus=1.0e6,
             is_compliant=False,
         ),
+        global_translation=translation,
         output_file_path=sdf_path,
         model_name="arbitrary_shape",
         base_link_name="arbitrary_shape",
