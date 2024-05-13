@@ -82,7 +82,6 @@ def get_default_non_collision_cost() -> NonCollisionCost:
         distance_to_object_socp=0.1,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=10.0,
-        time=None,
     )
     return non_collision_cost
 
@@ -109,7 +108,6 @@ def get_hardware_non_collision_cost() -> NonCollisionCost:
         distance_to_object_socp=0.25,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=5.0,
-        time=None,
     )
     return non_collision_cost
 

@@ -285,13 +285,6 @@ class NonCollisionMode(AbstractContactMode):
 
         self.cost_config = self.config.non_collision_cost
 
-        # TODO(bernhardpg): Deprecate this
-        if self.cost_config.time is not None:
-            cost = self.prog.AddLinearCost(
-                self.cost_config.time * self.config.time_non_collision  # type: ignore
-            )
-            self.costs["non_contact_time"].append(cost)
-
         if self.cost_config.pusher_velocity_regularization is not None:
             if self.num_knot_points > 1:
                 squared_vels = np.sum([v_BP.T @ v_BP for v_BP in self.variables.v_BPs])
