@@ -12,7 +12,8 @@ from planning_through_contact.visualize.ablation_study import (
 from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGERBLUE2
 
 main_folder = "trajectories/"
-study_tee = "run_20240201221116_tee_FINAL"
+# study_tee = "run_20240513144942_sugar_box"
+study_tee = "run_20240513153735_tee"
 # study_sugar_box = "run_20240202064957_sugar_box_FINAL"
 # study_sugar_box = "run_20240202080034_sugar_box"
 # study_tee = "run_20240202094838_tee"

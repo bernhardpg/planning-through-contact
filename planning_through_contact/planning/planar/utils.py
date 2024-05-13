@@ -461,7 +461,7 @@ def create_plan(
             filename=f"{folder_name}/start_and_goal",
         )
 
-    if debug:
+    if debug or save_analysis:
         solve_data, path = do_one_run_get_path(
             config, solver_params, start_and_goal=start_and_target, save_cost_vals=True
         )
@@ -472,7 +472,7 @@ def create_plan(
         path = planner.plan_path(solver_params)
         solve_data = None
 
-    if debug and solve_data is not None:
+    if solve_data is not None:
         solve_data.save(f"{analysis_folder}/solve_data.pkl")
         solve_data.save_as_text(f"{analysis_folder}/solve_data.txt")
 
