@@ -171,6 +171,14 @@ class PlanarPushingContactMode(Enum):
     FACE_5 = 6
     FACE_6 = 7
     FACE_7 = 8
+    FACE_8 = 9
+    FACE_9 = 10
+    FACE_10 = 11
+    FACE_11 = 12
+    FACE_12 = 13
+    FACE_13 = 14
+    FACE_14 = 15
+    FACE_15 = 16
 
     @classmethod
     def from_contact_location(
@@ -196,6 +204,22 @@ class PlanarPushingContactMode(Enum):
             idx = 6
         elif self == PlanarPushingContactMode.FACE_7:
             idx = 7
+        elif self == PlanarPushingContactMode.FACE_8:
+            idx = 8
+        elif self == PlanarPushingContactMode.FACE_9:
+            idx = 9
+        elif self == PlanarPushingContactMode.FACE_10:
+            idx = 10
+        elif self == PlanarPushingContactMode.FACE_11:
+            idx = 11
+        elif self == PlanarPushingContactMode.FACE_12:
+            idx = 12
+        elif self == PlanarPushingContactMode.FACE_13:
+            idx = 13
+        elif self == PlanarPushingContactMode.FACE_14:
+            idx = 14
+        elif self == PlanarPushingContactMode.FACE_15:
+            idx = 15
         else:
             raise NotImplementedError()
         return PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
