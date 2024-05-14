@@ -34,6 +34,9 @@ from .helpers import (
     compute_union_dimensions,
     extract_ordered_vertices,
     order_edges_by_connectivity,
+    direct_edges_so_right_points_inside,
+    compute_com_from_uniform_density,
+    offset_boxes,
 )
 
 
@@ -57,15 +60,13 @@ class ArbitraryShape2D(CollisionGeometry):
         raise NotImplementedError()
 
     # TODO: Take as input
-    @property
+    @cached_property
     def com_offset(self) -> npt.NDArray[np.float64]:
-        left, right, bottom, top = compute_box_union_bounds(self.primitive_boxes)
-        width = right - left
-        height = top - bottom
-        # Use the center of the bounding box as the COM offset.
-        x_offset = left + width / 2
-        y_offset = bottom + height / 2
-        return np.array([x_offset, y_offset]).reshape((2, 1))
+        boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
+        primitive_types = [box["name"] for box in boxes]
+        assert np.all([t == "box" for t in primitive_types]), f"Only boxes are supported. Got: {primitive_types}"
+        x_com, y_com = compute_com_from_uniform_density(boxes)
+        return np.array([x_com, y_com]).reshape((2, 1))
 
     @cached_property
     def primitive_boxes(self) -> dict:
@@ -77,7 +78,12 @@ class ArbitraryShape2D(CollisionGeometry):
         boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
         primitive_types = [box["name"] for box in boxes]
         assert np.all([t == "box" for t in primitive_types]), f"Only boxes are supported. Got: {primitive_types}"
-      
+
+        # TODO: Take as input
+        x_com, y_com = compute_com_from_uniform_density(boxes)
+        self.com_offset = np.array([x_com, y_com]).reshape((2, 1))
+        boxes = offset_boxes(boxes, [-x_com, -y_com])
+
         return boxes
 
     @cached_property
@@ -86,18 +92,16 @@ class ArbitraryShape2D(CollisionGeometry):
     ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         vertices = compute_outer_vertices(self.primitive_boxes)
         edges = compute_outer_edges(vertices, self.primitive_boxes)
-        ordered_edges = order_edges_by_connectivity(edges, self.primitive_boxes)
+        directed_edges = direct_edges_so_right_points_inside(edges, self.primitive_boxes)
+        ordered_edges = order_edges_by_connectivity(directed_edges, self.primitive_boxes)
+
         return ordered_edges
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
         ordered_vertices = extract_ordered_vertices(self.ordered_edges)
         vertices_np = [np.array(v).reshape((2, 1)) for v in ordered_vertices]
-
-        # Calculated COM for Tee
-        vs_offset = [v - self.com_offset for v in vertices_np]
-        print("COM offset:", self.com_offset.flatten())
-        return vs_offset
+        return vertices_np
 
     @property
     def num_vertices(self) -> int:
@@ -109,17 +113,17 @@ class ArbitraryShape2D(CollisionGeometry):
         hyperplanes = [construct_2d_plane_from_points(*edge) for edge in edges_np]
         return hyperplanes
 
-    @property
+    @cached_property
     def width(self) -> float:
         width, _ = compute_union_dimensions(self.primitive_boxes)
         return width
 
-    @property
+    @cached_property
     def height(self) -> float:
         _, height = compute_union_dimensions(self.primitive_boxes)
         return height
 
-    @property
+    @cached_property
     def contact_locations(self) -> List[PolytopeContactLocation]:
         locs = [
             PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)

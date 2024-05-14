@@ -218,8 +218,10 @@ def create_plan(
     paths = planner.plan_multiple_paths(solver_params)
 
     if paths is None:
+        print("Failed to generate plan.")
         return False
     if len(paths) < num_unique_plans:
+        print("Failed to generate enough unique plans.")
         return False
 
     # Perform top k sorting if required
@@ -302,7 +304,7 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
             exit()
         os.remove(sdf_path)
 
-    translation = np.concatenate([sim_config.slider.geometry.com_offset.flatten(), [0]])
+    translation = -np.concatenate([sim_config.slider.geometry.com_offset.flatten(), [0]])
 
     primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
     create_processed_mesh_primitive_sdf_file(

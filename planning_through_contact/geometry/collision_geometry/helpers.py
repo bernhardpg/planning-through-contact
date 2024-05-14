@@ -1,5 +1,4 @@
 import matplotlib.patches as patches
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -314,6 +313,35 @@ def find_next_edge(edges, current_edge):
             return (edge[1], edge[0])  # Reverse the edge if needed
     return None
 
+def direct_edges_so_right_points_inside(edges, boxes):
+    """
+    Flip edges so that the right side next to the edge is inside a box.
+    """
+    width, height = compute_union_dimensions(boxes)
+    scale = min(width, height) / 1000
+
+    directed_edges = []
+    for edge in edges:
+        # Compute the midpoint of the edge.
+        midpoint = (edge[0] + edge[1]) / 2
+
+        # Compute point to the right of the edge.
+        start, end = edge
+        diff0 = end[0] - start[0]
+        diff1 = end[1] - start[1]
+        normal = np.array([diff1, -diff0])
+        normal /= np.linalg.norm(normal)
+        normal *= scale * 100  # Scale for visualization
+        scaled_normal = normal * scale  # Scale for collision checking
+        right_point = (midpoint[0] + scaled_normal[0], midpoint[1] + scaled_normal[1])
+
+        # Check if the right point is inside a box.
+        if is_inside_any_box(boxes, right_point):
+            directed_edges.append(edge)
+        else:
+            directed_edges.append((edge[1], edge[0]))
+    
+    return directed_edges
 
 def order_edges_by_connectivity(edges, boxes):
     """
@@ -329,10 +357,13 @@ def order_edges_by_connectivity(edges, boxes):
         for edge in edges
     ]
 
+    # Start with edge that has highest y-coordinate of the first vertex.
+    edges.sort(key=lambda edge: edge[0][1], reverse=True)
+
     intersection_vertices = compute_intersection_points(boxes)
     if edges[0][0] in intersection_vertices:
-        # Reverse the first edge if the first vertex is an intersection vertex
-        edges[0] = (edges[0][1], edges[0][0])
+        # Use the 2nd edge as the starting edge.
+        edges = edges[1:] + [edges[0]]
 
     ordered_edges = [edges[0]]  # Start with the first edge
     remaining_edges = list(edges[1:])
@@ -532,3 +563,41 @@ def compute_normalized_normal_vector_points_from_edges(edges, boxes):
         vec / np.linalg.norm(vec) for vec in normal_vec_points
     ]
     return normalized_normal_vec_points
+
+
+def compute_com_from_uniform_density(boxes):
+   # Initialize variables to accumulate weighted centroids and total area
+    sum_weighted_x = 0
+    sum_weighted_y = 0
+    total_area = 0
+
+    # Iterate through each box
+    for box in boxes:
+        # Extract size and transformation
+        size = box["size"]
+        transform = box["transform"]
+
+        # Calculate area (ignoring z-dimension)
+        width, height = size[0], size[1]
+        area = width * height
+
+        # Calculate the centroid of the box
+        x_centroid = transform[0, 3]
+        y_centroid = transform[1, 3]
+
+        # Accumulate weighted centroids and total area
+        sum_weighted_x += x_centroid * area
+        sum_weighted_y += y_centroid * area
+        total_area += area
+
+    # Calculate the center of mass
+    center_of_mass_x = sum_weighted_x / total_area
+    center_of_mass_y = sum_weighted_y / total_area
+
+    return center_of_mass_x, center_of_mass_y
+
+def offset_boxes(boxes, offset):
+    for box in boxes:
+        box["transform"][0, 3] += offset[0]
+        box["transform"][1, 3] += offset[1]
+    return boxes

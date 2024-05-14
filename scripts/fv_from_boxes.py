@@ -13,74 +13,76 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from planning_through_contact.geometry.collision_geometry.helpers import *
-
+from planning_through_contact.tools.utils import load_primitive_info
 
 def main():
     # T-shape
     # TODO: Check that this actually is a T-shape and ensure some box overlap
-    loaded_boxes = [
-        {
-            "name": "box1",
-            "size": [0.2, 0.05, 0.05],
-            "transform": np.eye(4),
-        },
-        {
-            "name": "box2",
-            "size": [0.05, 0.15001, 0.05],  # Require a small overlap
-            "transform": np.array(
-                [
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, -0.1],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            ),
-        },
-    ]
+    # loaded_boxes = [
+    #     {
+    #         "name": "box1",
+    #         "size": [0.2, 0.05, 0.05],
+    #         "transform": np.eye(4),
+    #     },
+    #     {
+    #         "name": "box2",
+    #         "size": [0.05, 0.15001, 0.05],  # Require a small overlap
+    #         "transform": np.array(
+    #             [
+    #                 [1.0, 0.0, 0.0, 0.0],
+    #                 [0.0, 1.0, 0.0, -0.1],
+    #                 [0.0, 0.0, 1.0, 0.0],
+    #                 [0.0, 0.0, 0.0, 1.0],
+    #             ]
+    #         ),
+    #     },
+    # ]
 
-    loaded_boxes = [
-        {
-            "name": "box1",
-            "size": [0.3, 0.1, 0.05],
-            "transform": np.eye(4),
-        },
-        {
-            "name": "box2",
-            "size": [0.15, 0.15, 0.05],
-            "transform": np.array(
-                [
-                    [1.0, 0.0, 0.0, 0.1],
-                    [0.0, 1.0, 0.0, -0.1],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            ),
-        },
-        {
-            "name": "box3",
-            "size": [0.1, 0.3, 0.05],
-            "transform": np.array(
-                [
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, -0.12],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            ),
-        },
-        {
-            "name": "box3",
-            "size": [0.05, 0.05, 0.05],
-            "transform": np.array(
-                [
-                    [1.0, 0.0, 0.0, -0.15],
-                    [0.0, 1.0, 0.0, 0.0],  # More challenging: [0.0,0.0,-0.05]
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            ),
-        },
-    ]
+    # loaded_boxes = [
+    #     {
+    #         "name": "box1",
+    #         "size": [0.3, 0.1, 0.05],
+    #         "transform": np.eye(4),
+    #     },
+    #     {
+    #         "name": "box2",
+    #         "size": [0.15, 0.15, 0.05],
+    #         "transform": np.array(
+    #             [
+    #                 [1.0, 0.0, 0.0, 0.1],
+    #                 [0.0, 1.0, 0.0, -0.1],
+    #                 [0.0, 0.0, 1.0, 0.0],
+    #                 [0.0, 0.0, 0.0, 1.0],
+    #             ]
+    #         ),
+    #     },
+    #     {
+    #         "name": "box3",
+    #         "size": [0.1, 0.3, 0.05],
+    #         "transform": np.array(
+    #             [
+    #                 [1.0, 0.0, 0.0, 0.0],
+    #                 [0.0, 1.0, 0.0, -0.12],
+    #                 [0.0, 0.0, 1.0, 0.0],
+    #                 [0.0, 0.0, 0.0, 1.0],
+    #             ]
+    #         ),
+    #     },
+    #     {
+    #         "name": "box3",
+    #         "size": [0.05, 0.05, 0.05],
+    #         "transform": np.array(
+    #             [
+    #                 [1.0, 0.0, 0.0, -0.15],
+    #                 [0.0, 1.0, 0.0, 0.0],  # More challenging: [0.0,0.0,-0.05]
+    #                 [0.0, 0.0, 1.0, 0.0],
+    #                 [0.0, 0.0, 0.0, 1.0],
+    #             ]
+    #         ),
+    #     },
+    # ]
+
+    loaded_boxes = load_primitive_info("arbitrary_shape_pickles/two_boxes1.pkl")
 
     width, height = compute_union_dimensions(loaded_boxes)
     print(f"Union dimensions: width={width}, height={height}")
@@ -107,7 +109,9 @@ def main():
     print("Number of outer edges:", len(outer_edges))
     # plot_lines(ax, outer_edges)
 
-    ordered_edges = order_edges_by_connectivity(outer_edges, loaded_boxes)
+    directed_edges = direct_edges_so_right_points_inside(outer_edges, loaded_boxes)
+
+    ordered_edges = order_edges_by_connectivity(directed_edges, loaded_boxes)
     # plot_lines(ax, ordered_edges)
     ordered_vertices = extract_ordered_vertices(ordered_edges)
     # plot_vertices(ax, ordered_vertices)
