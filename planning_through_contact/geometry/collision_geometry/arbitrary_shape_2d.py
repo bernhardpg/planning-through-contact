@@ -82,6 +82,7 @@ class ArbitraryShape2D(CollisionGeometry):
         # TODO: Take as input
         x_com, y_com = compute_com_from_uniform_density(boxes)
         self.com_offset = np.array([x_com, y_com]).reshape((2, 1))
+        print(f"COM offset: {self.com_offset.flatten()}")
         boxes = offset_boxes(boxes, [-x_com, -y_com])
 
         return boxes
