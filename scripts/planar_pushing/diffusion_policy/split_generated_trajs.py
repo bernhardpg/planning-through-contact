@@ -15,7 +15,7 @@ for i in range(0, len(os.listdir(base_dir)), batch_size):
 # Move subdirectories into the "run" directories
 i = 0
 for subdir in sorted(
-    [name for name in os.listdir(base_dir) if not name.endswith("yaml")],
+    [name for name in os.listdir(base_dir) if not name.endswith("yaml") and not name.endswith("txt")],
     key=lambda x: int(x.split('_')[1])
 ):
     if subdir.startswith("traj"):

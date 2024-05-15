@@ -294,14 +294,16 @@ def render_plans(
         )
         meshcat.Delete()
         meshcat.DeleteAddedControls()
+        
+    if cfg.slider_type == "arbitrary":
+        # Remove the sdf file.
+        sdf_path = get_slider_sdf_path(sim_config, models_folder)
+        if os.path.exists(sdf_path):
+            os.remove(sdf_path)
 
 def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
     sdf_path = get_slider_sdf_path(sim_config, models_folder)
     if os.path.exists(sdf_path):
-        user_input = input(f"{sdf_path} already exists. Delete? (y/n)\n")
-        if user_input.lower() != "y":
-            print("Exiting")
-            exit()
         os.remove(sdf_path)
 
     translation = -np.concatenate([sim_config.slider.geometry.com_offset.flatten(), [0]])
