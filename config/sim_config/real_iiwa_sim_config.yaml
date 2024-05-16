@@ -7,12 +7,12 @@ dynamics_config:
   integration_constant: 0.3
   force_scale: 0.01
 slider_type: 'arbitrary'
-arbitrary_shape_pickle_path: arbitrary_shape_pickles/single_box.pkl
+arbitrary_shape_pickle_path: arbitrary_shape_pickles/hammer_3_boxes.pkl
 physical_properties: # Slider physical properties
   _target_: planning_through_contact.tools.utils.PhysicalProperties
   mass: 0.1
   inertia: [[1e-5, 0.0, 0.0], [0.0, 1e-5, 0.0], [0.0, 0.0, 1e-5]]
-  center_of_mass: [0.0, 0.0, 0.0]
+  center_of_mass: null # [0.0, 0.0, 0.0] # Use null for uniform density
   is_compliant: true
   hydroelastic_modulus: 1.0e6
   # NOTE: These friction coefficients are used for sim while the ones in `dynamic_config` are used for planning!
@@ -107,7 +107,7 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: false
+  generate_plans: true
   render_plans: true
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step

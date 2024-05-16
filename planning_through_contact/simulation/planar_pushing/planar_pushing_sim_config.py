@@ -198,6 +198,7 @@ class PlanarPushingSimConfig:
             slider = get_arbitrary(
                 cfg.arbitrary_shape_pickle_path,
                 slider_physical_properties.mass,
+                slider_physical_properties.center_of_mass,
             )
         else:
             raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")

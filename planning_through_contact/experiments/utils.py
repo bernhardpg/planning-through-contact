@@ -62,8 +62,13 @@ def get_tee(mass) -> RigidBody:
     return body
 
 
-def get_arbitrary(arbitrary_shape_pickle_path: str, mass) -> RigidBody:
-    body = RigidBody("arbitrary", ArbitraryShape2D(arbitrary_shape_pickle_path), mass)
+def get_arbitrary(
+    arbitrary_shape_pickle_path: str, mass: float, com: np.ndarray = None
+) -> RigidBody:
+    "com assumes uniform density if None."
+    body = RigidBody(
+        "arbitrary", ArbitraryShape2D(arbitrary_shape_pickle_path, com), mass
+    )
     return body
 
 
@@ -136,6 +141,11 @@ def get_default_plan_config(
     mass = (
         0.1 if slider_physical_properties is None else slider_physical_properties.mass
     )
+    com = (
+        None
+        if slider_physical_properties is None
+        else slider_physical_properties.center_of_mass
+    )
     if slider_physical_properties is None:
         logging.warning("Using default mass of 0.1 kg for the slider.")
     if slider_type == "box":
@@ -145,7 +155,7 @@ def get_default_plan_config(
     elif slider_type == "tee":
         slider = get_tee(mass)
     elif slider_type == "arbitrary":
-        slider = get_arbitrary(arbitrary_shape_pickle_path, mass)
+        slider = get_arbitrary(arbitrary_shape_pickle_path, mass, com)
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 

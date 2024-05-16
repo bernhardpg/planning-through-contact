@@ -2,15 +2,15 @@
 Automatically generated version of the TPusher2d class.
 """
 
-import pickle
+import logging
 from dataclasses import dataclass
 from functools import cached_property
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.geometry import Shape as DrakeShape
-from pydrake.math import RigidTransform, RotationMatrix
+from pydrake.math import RigidTransform
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -26,7 +26,6 @@ from planning_through_contact.geometry.utilities import normalize_vec
 from planning_through_contact.tools.utils import load_primitive_info
 
 from .helpers import (
-    compute_box_union_bounds,
     compute_collision_free_regions,
     compute_com_from_uniform_density,
     compute_normalized_normal_vector_points_from_edges,
@@ -42,12 +41,16 @@ from .helpers import (
 
 @dataclass
 class ArbitraryShape2D(CollisionGeometry):
-    def __init__(self, arbitrary_shape_pickle_path: str):
+    def __init__(
+        self, arbitrary_shape_pickle_path: str, com: Optional[np.ndarray] = None
+    ):
+        """NOTE: com computed using uniform density if None."""
         assert (
             arbitrary_shape_pickle_path is not None
             and arbitrary_shape_pickle_path != ""
         )
         self.arbitrary_shape_pickle_path = arbitrary_shape_pickle_path
+        self.com = com
 
     # TODO: This needs to match the sdf file for simulation to work...
     @property
@@ -61,7 +64,6 @@ class ArbitraryShape2D(CollisionGeometry):
     def from_drake(cls, drake_shape: DrakeShape):
         raise NotImplementedError()
 
-    # TODO: Take as input
     @cached_property
     def com_offset(self) -> npt.NDArray[np.float64]:
         boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
@@ -69,6 +71,10 @@ class ArbitraryShape2D(CollisionGeometry):
         assert np.all(
             [t == "box" for t in primitive_types]
         ), f"Only boxes are supported. Got: {primitive_types}"
+        if self.com is not None:
+            return np.array([self.com[0], self.com[1]]).reshape((2, 1))
+        # Compute the center of mass from uniform density
+        logging.warning("COM not provided. Computing from uniform density.")
         x_com, y_com = compute_com_from_uniform_density(boxes)
         return np.array([x_com, y_com]).reshape((2, 1))
 
@@ -86,9 +92,8 @@ class ArbitraryShape2D(CollisionGeometry):
         ), f"Only boxes are supported. Got: {primitive_types}"
 
         # TODO: Take as input
-        x_com, y_com = compute_com_from_uniform_density(boxes)
-        self.com_offset = np.array([x_com, y_com]).reshape((2, 1))
         print(f"COM offset: {self.com_offset.flatten()}")
+        x_com, y_com = self.com_offset.flatten()
         boxes = offset_boxes(boxes, [-x_com, -y_com])
 
         return boxes
