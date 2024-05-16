@@ -149,7 +149,7 @@ class ContactPoint2d:
         body: RigidBody2d,
         contact_location: PolytopeContactLocation,
         contact_force_defs: List[ContactForceDefinition],
-        friction_coeff: float = 0.5,
+        friction_coeff: float,
         name: str = "unnamed",
     ) -> None:
         """
