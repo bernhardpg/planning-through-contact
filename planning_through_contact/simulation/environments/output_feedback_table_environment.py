@@ -55,6 +55,7 @@ class OutputFeedbackTableEnvironment:
         robot_system: RobotSystemBase,
         sim_config: PlanarPushingSimConfig,
         station_meshcat: Optional[Meshcat] = None,
+        arbitrary_shape_pickle_path: Optional[str] = None,
     ):
         self._desired_position_source = desired_position_source
         self._robot_system = robot_system
@@ -86,6 +87,7 @@ class OutputFeedbackTableEnvironment:
             )
             self._plan_config = get_default_plan_config(
                 slider_type=sim_config.slider.name,
+                arbitrary_shape_pickle_path=arbitrary_shape_pickle_path,
                 pusher_radius=0.015,
                 hardware=False,
             )

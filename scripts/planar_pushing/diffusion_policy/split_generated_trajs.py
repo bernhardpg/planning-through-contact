@@ -2,7 +2,7 @@ import os
 import shutil
 
 # Path to the directory containing subdirectories
-base_dir = "trajectories/single_box200"
+base_dir = "trajectories/three_boxes"
 
 # Number of subdirectories to move into each "run" directory
 batch_size = 100
@@ -15,8 +15,12 @@ for i in range(0, len(os.listdir(base_dir)), batch_size):
 # Move subdirectories into the "run" directories
 i = 0
 for subdir in sorted(
-    [name for name in os.listdir(base_dir) if not name.endswith("yaml") and not name.endswith("txt")],
-    key=lambda x: int(x.split('_')[1])
+    [
+        name
+        for name in os.listdir(base_dir)
+        if not name.endswith("yaml") and not name.endswith("txt")
+    ],
+    key=lambda x: int(x.split("_")[1]),
 ):
     if subdir.startswith("traj"):
         source = os.path.join(base_dir, subdir)

@@ -15,6 +15,7 @@ import numpy as np
 from planning_through_contact.geometry.collision_geometry.helpers import *
 from planning_through_contact.tools.utils import load_primitive_info
 
+
 def main():
     # T-shape
     # TODO: Check that this actually is a T-shape and ensure some box overlap
@@ -115,7 +116,7 @@ def main():
     # plot_lines(ax, ordered_edges)
     ordered_vertices = extract_ordered_vertices(ordered_edges)
     # plot_vertices(ax, ordered_vertices)
-    
+
     normal_vecs = compute_normal_vecs_from_edges(ordered_edges, loaded_boxes)
     # plot_lines(ax, normal_vecs, color="black")
 

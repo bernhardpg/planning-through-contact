@@ -2,10 +2,10 @@
 Automatically generated version of the TPusher2d class.
 """
 
+import pickle
 from dataclasses import dataclass
 from functools import cached_property
 from typing import List, Tuple
-import pickle
 
 import numpy as np
 import numpy.typing as npt
@@ -28,23 +28,25 @@ from planning_through_contact.tools.utils import load_primitive_info
 from .helpers import (
     compute_box_union_bounds,
     compute_collision_free_regions,
+    compute_com_from_uniform_density,
     compute_normalized_normal_vector_points_from_edges,
     compute_outer_edges,
     compute_outer_vertices,
     compute_union_dimensions,
-    extract_ordered_vertices,
-    order_edges_by_connectivity,
     direct_edges_so_right_points_inside,
-    compute_com_from_uniform_density,
+    extract_ordered_vertices,
     offset_boxes,
+    order_edges_by_connectivity,
 )
 
 
 @dataclass
 class ArbitraryShape2D(CollisionGeometry):
-
     def __init__(self, arbitrary_shape_pickle_path: str):
-        assert arbitrary_shape_pickle_path is not None and arbitrary_shape_pickle_path != ""
+        assert (
+            arbitrary_shape_pickle_path is not None
+            and arbitrary_shape_pickle_path != ""
+        )
         self.arbitrary_shape_pickle_path = arbitrary_shape_pickle_path
 
     # TODO: This needs to match the sdf file for simulation to work...
@@ -64,7 +66,9 @@ class ArbitraryShape2D(CollisionGeometry):
     def com_offset(self) -> npt.NDArray[np.float64]:
         boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
         primitive_types = [box["name"] for box in boxes]
-        assert np.all([t == "box" for t in primitive_types]), f"Only boxes are supported. Got: {primitive_types}"
+        assert np.all(
+            [t == "box" for t in primitive_types]
+        ), f"Only boxes are supported. Got: {primitive_types}"
         x_com, y_com = compute_com_from_uniform_density(boxes)
         return np.array([x_com, y_com]).reshape((2, 1))
 
@@ -77,7 +81,9 @@ class ArbitraryShape2D(CollisionGeometry):
         """
         boxes = load_primitive_info(self.arbitrary_shape_pickle_path)
         primitive_types = [box["name"] for box in boxes]
-        assert np.all([t == "box" for t in primitive_types]), f"Only boxes are supported. Got: {primitive_types}"
+        assert np.all(
+            [t == "box" for t in primitive_types]
+        ), f"Only boxes are supported. Got: {primitive_types}"
 
         # TODO: Take as input
         x_com, y_com = compute_com_from_uniform_density(boxes)
@@ -93,8 +99,12 @@ class ArbitraryShape2D(CollisionGeometry):
     ) -> List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         vertices = compute_outer_vertices(self.primitive_boxes)
         edges = compute_outer_edges(vertices, self.primitive_boxes)
-        directed_edges = direct_edges_so_right_points_inside(edges, self.primitive_boxes)
-        ordered_edges = order_edges_by_connectivity(directed_edges, self.primitive_boxes)
+        directed_edges = direct_edges_so_right_points_inside(
+            edges, self.primitive_boxes
+        )
+        ordered_edges = order_edges_by_connectivity(
+            directed_edges, self.primitive_boxes
+        )
 
         return ordered_edges
 

@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 
+
 def main():
     output_file = "data/arbitrary_shape.pickle"
     boxes = [
@@ -23,8 +24,9 @@ def main():
         },
     ]
 
-    with open(output_file, 'wb') as f:
+    with open(output_file, "wb") as f:
         pickle.dump(boxes, f)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

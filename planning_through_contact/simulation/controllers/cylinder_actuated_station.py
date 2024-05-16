@@ -176,4 +176,3 @@ class CylinderActuatedStation(RobotSystemBase):
 
     def get_meshcat(self):
         return self._meshcat
-    

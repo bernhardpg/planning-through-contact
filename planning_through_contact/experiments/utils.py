@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from typing import List, Literal, Optional, Tuple
@@ -29,7 +30,7 @@ from planning_through_contact.planning.planar.utils import (
     get_plan_start_and_goals_to_point,
 )
 from planning_through_contact.tools.utils import PhysicalProperties
-import logging
+
 
 def create_output_folder(
     output_dir: str, slider_type: str, traj_number: Optional[int]
@@ -62,11 +63,7 @@ def get_tee(mass) -> RigidBody:
 
 
 def get_arbitrary(arbitrary_shape_pickle_path: str, mass) -> RigidBody:
-    body = RigidBody(
-        "arbitrary_shape",
-        ArbitraryShape2D(arbitrary_shape_pickle_path),
-        mass
-    )
+    body = RigidBody("arbitrary", ArbitraryShape2D(arbitrary_shape_pickle_path), mass)
     return body
 
 
@@ -136,7 +133,9 @@ def get_default_plan_config(
     workspace: Optional[PlanarPushingWorkspace] = None,
     hardware: bool = False,
 ) -> PlanarPlanConfig:
-    mass = 0.1 if slider_physical_properties is None else slider_physical_properties.mass
+    mass = (
+        0.1 if slider_physical_properties is None else slider_physical_properties.mass
+    )
     if slider_physical_properties is None:
         logging.warning("Using default mass of 0.1 kg for the slider.")
     if slider_type == "box":

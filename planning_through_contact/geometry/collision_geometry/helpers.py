@@ -313,6 +313,7 @@ def find_next_edge(edges, current_edge):
             return (edge[1], edge[0])  # Reverse the edge if needed
     return None
 
+
 def direct_edges_so_right_points_inside(edges, boxes):
     """
     Flip edges so that the right side next to the edge is inside a box.
@@ -340,8 +341,9 @@ def direct_edges_so_right_points_inside(edges, boxes):
             directed_edges.append(edge)
         else:
             directed_edges.append((edge[1], edge[0]))
-    
+
     return directed_edges
+
 
 def order_edges_by_connectivity(edges, boxes):
     """
@@ -566,7 +568,7 @@ def compute_normalized_normal_vector_points_from_edges(edges, boxes):
 
 
 def compute_com_from_uniform_density(boxes):
-   # Initialize variables to accumulate weighted centroids and total area
+    # Initialize variables to accumulate weighted centroids and total area
     sum_weighted_x = 0
     sum_weighted_y = 0
     total_area = 0
@@ -595,6 +597,7 @@ def compute_com_from_uniform_density(boxes):
     center_of_mass_y = sum_weighted_y / total_area
 
     return center_of_mass_x, center_of_mass_y
+
 
 def offset_boxes(boxes, offset):
     for box in boxes:

@@ -166,11 +166,13 @@ def main(cfg: OmegaConf) -> None:
 
         recording_name = os.path.join(
             full_log_dir,
-            traj_name
-            + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}"
-            + ".html"
-            if cfg.save_experiment_data
-            else None,
+            (
+                traj_name
+                + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}"
+                + ".html"
+                if cfg.save_experiment_data
+                else None
+            ),
         )
         timeout = (
             cfg.override_duration

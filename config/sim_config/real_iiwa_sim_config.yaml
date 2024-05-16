@@ -13,7 +13,7 @@ physical_properties: # Slider physical properties
   mass: 0.1
   inertia: [[1e-5, 0.0, 0.0], [0.0, 1e-5, 0.0], [0.0, 0.0, 1e-5]]
   center_of_mass: [0.0, 0.0, 0.0]
-  is_compliant: false
+  is_compliant: true
   hydroelastic_modulus: 1.0e6
   # NOTE: These friction coefficients are used for sim while the ones in `dynamic_config` are used for planning!
   mu_dynamic: 0.5
@@ -42,7 +42,7 @@ diffusion_policy_config:
   checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/pretrained_pusher/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
-  diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
+  diffusion_policy_path: '/home/nepfaff/src/gcs-diffusion'
   freq: 10.0
   delay: ${delay_before_execution}
   debug: false

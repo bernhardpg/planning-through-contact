@@ -1,4 +1,3 @@
-import copy
 import importlib
 import logging
 import math
@@ -10,19 +9,11 @@ from typing import List, Optional, Tuple
 
 import cv2
 import hydra
-import matplotlib.pyplot as plt
 import numpy as np
 import zarr
 from omegaconf import OmegaConf
 from PIL import Image
-from pydrake.all import (
-    Meshcat,
-    Rgba,
-    RigidTransform,
-    RollPitchYaw,
-    StartMeshcat,
-    Transform,
-)
+from pydrake.all import Meshcat, StartMeshcat
 from tqdm import tqdm
 
 from planning_through_contact.experiments.utils import (
@@ -62,7 +53,6 @@ from planning_through_contact.simulation.sim_utils import (
     models_folder,
 )
 from planning_through_contact.tools.utils import (
-    PhysicalProperties,
     create_processed_mesh_primitive_sdf_file,
     load_primitive_info,
 )
@@ -105,7 +95,7 @@ def main(cfg: OmegaConf):
 
     ## Render plans
     if data_collection_config.render_plans:
-        render_plans(sim_config, data_collection_config, cfg)
+        render_plans(sim_config, data_collection_config, cfg, save_recordings=False)
         save_omegaconf(
             cfg, data_collection_config.rendered_plans_dir, config_name="config.yaml"
         )
@@ -121,6 +111,7 @@ def main(cfg: OmegaConf):
 def save_omegaconf(cfg: OmegaConf, dir: str, config_name: str = "config.yaml"):
     with open(f"{dir}/{config_name}", "w") as f:
         OmegaConf.save(cfg, f)
+
 
 def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf):
     """Generates plans according to the data collection config."""
@@ -299,31 +290,13 @@ def render_plans(
         )
         meshcat.Delete()
         meshcat.DeleteAddedControls()
-        
+
     if cfg.slider_type == "arbitrary":
         # Remove the sdf file.
         sdf_path = get_slider_sdf_path(sim_config, models_folder)
         if os.path.exists(sdf_path):
             os.remove(sdf_path)
 
-def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
-    sdf_path = get_slider_sdf_path(sim_config, models_folder)
-    if os.path.exists(sdf_path):
-        os.remove(sdf_path)
-
-    translation = -np.concatenate([sim_config.slider.geometry.com_offset.flatten(), [0]])
-
-    primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
-    create_processed_mesh_primitive_sdf_file(
-        primitive_info=primitive_info,
-        physical_properties=hydra.utils.instantiate(cfg.physical_properties),
-        global_translation=translation,
-        output_file_path=sdf_path,
-        model_name="arbitrary_shape",
-        base_link_name="arbitrary_shape",
-        is_hydroelastic="hydroelastic" in cfg.contact_model.lower(),
-        rgba=[0.0, 0.0, 0.0, 1.0],
-    )
 
 def simulate_plan(
     traj: PlanarPushingTrajectory,
@@ -746,6 +719,28 @@ def _create_directory(dir_path):
         shutil.rmtree(dir_path)
     else:
         os.makedirs(dir_path)
+
+
+def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
+    sdf_path = get_slider_sdf_path(sim_config, models_folder)
+    if os.path.exists(sdf_path):
+        os.remove(sdf_path)
+
+    translation = -np.concatenate(
+        [sim_config.slider.geometry.com_offset.flatten(), [0]]
+    )
+
+    primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
+    create_processed_mesh_primitive_sdf_file(
+        primitive_info=primitive_info,
+        physical_properties=hydra.utils.instantiate(cfg.physical_properties),
+        global_translation=translation,
+        output_file_path=sdf_path,
+        model_name="arbitrary",
+        base_link_name="arbitrary",
+        is_hydroelastic="hydroelastic" in cfg.contact_model.lower(),
+        rgba=[0.0, 0.0, 0.0, 1.0],
+    )
 
 
 if __name__ == "__main__":

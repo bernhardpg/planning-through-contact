@@ -203,10 +203,16 @@ class StateEstimator(Diagram):
             builder, self._scene_graph.get_query_output_port(), self.meshcat
         )
         zoom = 1.8
-        camera_in_world = [sim_config.slider_goal_pose.x, 
-                           (sim_config.slider_goal_pose.y-1)/zoom,
-                           1.5/zoom]
-        target_in_world = [sim_config.slider_goal_pose.x, sim_config.slider_goal_pose.x, 0]
+        camera_in_world = [
+            sim_config.slider_goal_pose.x,
+            (sim_config.slider_goal_pose.y - 1) / zoom,
+            1.5 / zoom,
+        ]
+        target_in_world = [
+            sim_config.slider_goal_pose.x,
+            sim_config.slider_goal_pose.x,
+            0,
+        ]
         self.meshcat.SetCameraPose(camera_in_world, target_in_world)
         if sim_config.visualize_desired:
             assert sim_config.slider_goal_pose is not None

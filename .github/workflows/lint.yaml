@@ -1,0 +1,33 @@
+name: Lint
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: setup python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10.12
+          cache: pip
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolcache
+      - name: black
+        uses: psf/black@stable
+        with:
+          version: 23.12.1
+      - name: isort
+        uses: isort/isort-action@master
+        with:
+            configuration: "--profile black"
+            isort-version: 5.12.0
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.2
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      - name: Test poetry install
+        run: poetry install

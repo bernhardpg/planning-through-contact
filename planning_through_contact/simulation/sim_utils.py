@@ -6,13 +6,14 @@ import numpy as np
 from lxml import etree
 from pydrake.all import Box as DrakeBox
 import time
+from typing import List, Literal
+
+import numpy as np
+from lxml import etree
+from pydrake.all import Box as DrakeBox
 from pydrake.all import (
     ContactModel,
     DiscreteContactApproximation,
-    LoadModelDirectives,
-    ModelInstanceIndex,
-    Box as DrakeBox,
-    RigidBody as DrakeRigidBody,
     GeometryInstance,
     LoadModelDirectives,
     MakePhongIllustrationProperties,
@@ -27,6 +28,7 @@ from pydrake.all import (
     MultibodyPlant,
     Parser,
     ProcessModelDirectives,
+    Rgba,
 )
 from pydrake.all import RigidBody as DrakeRigidBody
 from pydrake.all import RigidTransform, RollPitchYaw, Transform
@@ -122,7 +124,8 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
         raise NotImplementedError(f"Body '{sim_config.slider}' not supported")
     return slider_sdf_url
 
-def get_slider_sdf_path(sim_config, models_folder:str) -> str:
+
+def get_slider_sdf_path(sim_config, models_folder: str) -> str:
     if isinstance(sim_config.slider.geometry, Box2d):
         slider_sdf_url = f"{models_folder}/box_hydroelastic.sdf"
     elif isinstance(sim_config.slider.geometry, TPusher2d):

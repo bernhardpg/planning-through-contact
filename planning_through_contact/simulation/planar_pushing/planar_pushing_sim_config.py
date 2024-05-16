@@ -12,6 +12,7 @@ from pydrake.multibody.plant import ContactModel
 from pydrake.systems.sensors import CameraConfig
 
 from planning_through_contact.experiments.utils import (
+    get_arbitrary,
     get_box,
     get_default_plan_config,
     get_tee,
@@ -44,23 +45,24 @@ from planning_through_contact.simulation.sim_utils import (
 )
 from planning_through_contact.tools.utils import PhysicalProperties
 
+
 class MultiRunConfig:
     def __init__(
-            self,
-            num_runs: int, 
-            max_attempt_duration: float, 
-            seed: int, 
-            slider_type: str,
-            arbitrary_shape_pickle_path: str,
-            pusher_start_pose: PlanarPose,
-            slider_goal_pose: PlanarPose,
-            workspace_width: float,
-            workspace_height: float,
-            trans_tol: float=0.01,
-            rot_tol: float=0.01, # degrees
-            evaluate_final_pusher_position: bool=True,
-            evaluate_final_slider_rotation: bool=True,
-            slider_physical_properties: PhysicalProperties=None
+        self,
+        num_runs: int,
+        max_attempt_duration: float,
+        seed: int,
+        slider_type: str,
+        arbitrary_shape_pickle_path: str,
+        pusher_start_pose: PlanarPose,
+        slider_goal_pose: PlanarPose,
+        workspace_width: float,
+        workspace_height: float,
+        trans_tol: float = 0.01,
+        rot_tol: float = 0.01,  # degrees
+        evaluate_final_pusher_position: bool = True,
+        evaluate_final_slider_rotation: bool = True,
+        slider_physical_properties: PhysicalProperties = None,
     ):
         # Set up multi run config
         config = get_default_plan_config(
@@ -185,7 +187,7 @@ class PlanarPushingSimConfig:
         slider_physical_properties: PhysicalProperties = hydra.utils.instantiate(
             cfg.physical_properties
         )
-        
+
         # Create sim_config with mandatory fields
         # TODO: read slider directly from yaml instead of if statement
         if cfg.slider_type == "box":
@@ -198,7 +200,7 @@ class PlanarPushingSimConfig:
                 slider_physical_properties.mass,
             )
         else:
-            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")        
+            raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
             cfg.dynamics_config,
         )

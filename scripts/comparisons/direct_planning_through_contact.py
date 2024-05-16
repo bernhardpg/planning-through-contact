@@ -706,7 +706,6 @@ def dir_trajopt(
                     visualize_knot_points=True,
                 )
             else:
-
                 if visualize_initial_guess:
                     traj_old = OldPlanarPushingTrajectory(
                         dt,

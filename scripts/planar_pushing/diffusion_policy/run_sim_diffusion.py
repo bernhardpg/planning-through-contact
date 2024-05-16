@@ -3,6 +3,11 @@ import logging
 import pathlib
 
 import hydra
+import os
+import pathlib
+
+import hydra
+import numpy as np
 from omegaconf import OmegaConf
 from pydrake.all import StartMeshcat
 
@@ -18,6 +23,15 @@ from planning_through_contact.simulation.environments.output_feedback_table_envi
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.sim_utils import (
+    get_slider_sdf_path,
+    models_folder,
+)
+from planning_through_contact.tools.utils import (
+    create_processed_mesh_primitive_sdf_file,
+    load_primitive_info,
+)
+
 
 
 @hydra.main(
@@ -36,6 +50,10 @@ def run_sim(cfg: OmegaConf):
     print(f"Initial finger pose: {sim_config.pusher_start_pose}")
     print(f"Target slider pose: {sim_config.slider_goal_pose}")
 
+    if cfg.slider_type == "arbitrary":
+        # create arbitrary shape sdf file
+        create_arbitrary_shape_sdf_file(cfg, sim_config)
+
     # Diffusion Policy source
     position_source = DiffusionPolicySource(sim_config.diffusion_policy_config)
 
@@ -53,6 +71,7 @@ def run_sim(cfg: OmegaConf):
         robot_system=position_controller,
         sim_config=sim_config,
         station_meshcat=station_meshcat,
+        arbitrary_shape_pickle_path=cfg.arbitrary_shape_pickle_path,
     )
 
     # Configure sim and recording
@@ -82,6 +101,34 @@ def run_sim(cfg: OmegaConf):
         f.write(f"Success_idx: {successful_idx}\n")
         f.write(f"Save dir: {save_dir}\n")
         f.write("\n")
+
+    if cfg.slider_type == "arbitrary":
+        # Remove the sdf file.
+        sdf_path = get_slider_sdf_path(sim_config, models_folder)
+        if os.path.exists(sdf_path):
+            os.remove(sdf_path)
+
+
+def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
+    sdf_path = get_slider_sdf_path(sim_config, models_folder)
+    if os.path.exists(sdf_path):
+        os.remove(sdf_path)
+
+    translation = -np.concatenate(
+        [sim_config.slider.geometry.com_offset.flatten(), [0]]
+    )
+
+    primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
+    create_processed_mesh_primitive_sdf_file(
+        primitive_info=primitive_info,
+        physical_properties=hydra.utils.instantiate(cfg.physical_properties),
+        global_translation=translation,
+        output_file_path=sdf_path,
+        model_name="arbitrary",
+        base_link_name="arbitrary",
+        is_hydroelastic="hydroelastic" in cfg.contact_model.lower(),
+        rgba=[0.0, 0.0, 0.0, 1.0],
+    )
 
 
 if __name__ == "__main__":
