@@ -1311,6 +1311,9 @@ files = [
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cf8cafe (Update depdendencies)
 name = "gitdb"
 version = "4.0.11"
 description = "Git Object Database"
@@ -1343,8 +1346,11 @@ doc = ["sphinx (==4.3.2)", "sphinx-autodoc-typehints", "sphinx-rtd-theme", "sphi
 test = ["coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock", "mypy", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions"]
 
 [[package]]
+<<<<<<< HEAD
 =======
 >>>>>>> 0a445f8 (Add manipulation dependency)
+=======
+>>>>>>> cf8cafe (Update depdendencies)
 name = "glooey"
 version = "0.3.6"
 description = "An object-oriented GUI library for pyglet."
@@ -3802,15 +3808,22 @@ wcwidth = "*"
 [[package]]
 name = "protobuf"
 <<<<<<< HEAD
+<<<<<<< HEAD
 version = "4.25.3"
 =======
 version = "5.26.1"
 >>>>>>> 4f97c66 (Fix merge problems)
+=======
+version = "4.25.3"
+>>>>>>> cf8cafe (Update depdendencies)
 description = ""
 optional = false
 python-versions = ">=3.8"
 files = [
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cf8cafe (Update depdendencies)
     {file = "protobuf-4.25.3-cp310-abi3-win32.whl", hash = "sha256:d4198877797a83cbfe9bffa3803602bbe1625dc30d8a097365dbc762e5790faa"},
     {file = "protobuf-4.25.3-cp310-abi3-win_amd64.whl", hash = "sha256:209ba4cc916bab46f64e56b85b090607a676f66b473e6b762e6f1d9d591eb2e8"},
     {file = "protobuf-4.25.3-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:f1279ab38ecbfae7e456a108c5c0681e4956d5b1090027c1de0f934dfdb4b35c"},
@@ -3822,6 +3835,7 @@ files = [
     {file = "protobuf-4.25.3-cp39-cp39-win_amd64.whl", hash = "sha256:e3c97a1555fd6388f857770ff8b9703083de6bf1f9274a002a332d65fbb56c8c"},
     {file = "protobuf-4.25.3-py3-none-any.whl", hash = "sha256:f0700d54bcf45424477e46a9f0944155b46fb0639d69728739c0e47bab83f2b9"},
     {file = "protobuf-4.25.3.tar.gz", hash = "sha256:25b5d0b42fd000320bd7830b349e3b696435f3b329810427a6bcce6a5492cc5c"},
+<<<<<<< HEAD
 =======
     {file = "protobuf-5.26.1-cp310-abi3-win32.whl", hash = "sha256:3c388ea6ddfe735f8cf69e3f7dc7611e73107b60bdfcf5d0f024c3ccd3794e23"},
     {file = "protobuf-5.26.1-cp310-abi3-win_amd64.whl", hash = "sha256:e6039957449cb918f331d32ffafa8eb9255769c96aa0560d9a5bf0b4e00a2a33"},
@@ -3835,6 +3849,8 @@ files = [
     {file = "protobuf-5.26.1-py3-none-any.whl", hash = "sha256:da612f2720c0183417194eeaa2523215c4fcc1a1949772dc65f05047e08d5932"},
     {file = "protobuf-5.26.1.tar.gz", hash = "sha256:8ca2a1d97c290ec7b16e4e5dff2e5ae150cc1582f55b5ab300d45cb0dfa90e51"},
 >>>>>>> 4f97c66 (Fix merge problems)
+=======
+>>>>>>> cf8cafe (Update depdendencies)
 ]
 
 [[package]]
@@ -4916,6 +4932,7 @@ test = ["array-api-strict", "asv", "gmpy2", "hypothesis (>=6.30)", "mpmath", "po
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
 name = "secretstorage"
 version = "3.3.3"
 description = "Python bindings to FreeDesktop.org Secret Service API"
@@ -4933,12 +4950,21 @@ jeepney = ">=0.6"
 [[package]]
 name = "sentry-sdk"
 version = "2.2.1"
+=======
+name = "sentry-sdk"
+version = "2.2.0"
+>>>>>>> cf8cafe (Update depdendencies)
 description = "Python client for Sentry (https://sentry.io)"
 optional = false
 python-versions = ">=3.6"
 files = [
+<<<<<<< HEAD
     {file = "sentry_sdk-2.2.1-py2.py3-none-any.whl", hash = "sha256:7d617a1b30e80c41f3b542347651fcf90bb0a36f3a398be58b4f06b79c8d85bc"},
     {file = "sentry_sdk-2.2.1.tar.gz", hash = "sha256:8aa2ec825724d8d9d645cab68e6034928b1a6a148503af3e361db3fa6401183f"},
+=======
+    {file = "sentry_sdk-2.2.0-py2.py3-none-any.whl", hash = "sha256:674f58da37835ea7447fe0e34c57b4a4277fad558b0a7cb4a6c83bcb263086be"},
+    {file = "sentry_sdk-2.2.0.tar.gz", hash = "sha256:70eca103cf4c6302365a9d7cf522e7ed7720828910eb23d43ada8e50d1ecda9d"},
+>>>>>>> cf8cafe (Update depdendencies)
 ]
 
 [package.dependencies]
@@ -4960,7 +4986,11 @@ django = ["django (>=1.8)"]
 falcon = ["falcon (>=1.4)"]
 fastapi = ["fastapi (>=0.79.0)"]
 flask = ["blinker (>=1.1)", "flask (>=0.11)", "markupsafe"]
+<<<<<<< HEAD
 grpcio = ["grpcio (>=1.21.1)", "protobuf (>=3.8.0)"]
+=======
+grpcio = ["grpcio (>=1.21.1)"]
+>>>>>>> cf8cafe (Update depdendencies)
 httpx = ["httpx (>=0.16.0)"]
 huey = ["huey (>=2)"]
 huggingface-hub = ["huggingface-hub (>=0.22)"]
@@ -5081,8 +5111,11 @@ files = [
 test = ["pytest"]
 
 [[package]]
+<<<<<<< HEAD
 =======
 >>>>>>> 0a445f8 (Add manipulation dependency)
+=======
+>>>>>>> cf8cafe (Update depdendencies)
 name = "setuptools"
 version = "69.5.1"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
@@ -5143,6 +5176,9 @@ files = [
 
 [[package]]
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cf8cafe (Update depdendencies)
 name = "smmap"
 version = "5.0.1"
 description = "A pure Python implementation of a sliding window memory map manager"
@@ -6187,6 +6223,7 @@ content-hash = "f24e57b7ebdf718477f5e288d48a7364a6677b88bf318f3bef3ee14e389b61ae
 python-versions = "^3.10, <3.11"
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 content-hash = "4f40e9a2d161b3a2f1fb1cbb8e6238c0cf541f2e70934398dc9b77e1da5507b9"
 >>>>>>> 726f7f7 (Fix dependencies)
 =======
@@ -6195,3 +6232,6 @@ content-hash = "d2eb901983feaec2748adb0dcfda564bdc9fffdcde8104fc0fd98e0b7365770f
 =======
 content-hash = "caa4a160fcab999ab88451acff8b3a6f0e48acd9fb7a73528a8d82876b08a97d"
 >>>>>>> e3fd889 (Create arbitrary shapes from primitive info pickle file)
+=======
+content-hash = "ce7e45cf1ecf1ee1823fdbacb43f272cbb9ed54d00cd7f533758e7c9a92877f3"
+>>>>>>> cf8cafe (Update depdendencies)
