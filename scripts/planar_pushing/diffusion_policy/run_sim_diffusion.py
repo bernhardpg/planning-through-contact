@@ -57,7 +57,7 @@ def run_sim(cfg: OmegaConf):
 
     # Configure sim and recording
     recording_name = "diffusion_policy_roll_out.html"
-    environment.export_diagram("diffusion_environment_diagram.pdf")
+    # environment.export_diagram("diffusion_environment_diagram.pdf")
     if sim_config.multi_run_config is None:
         end_time = 100.0
         seed = "N/A (no multi_run_config seed provided)"

@@ -58,11 +58,16 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
 )
 from planning_through_contact.simulation.sim_utils import (
     get_slider_pose_within_workspace,
+    get_slider_sdf_path,
+    models_folder,
+)
+from planning_through_contact.tools.utils import (
+    PhysicalProperties,
+    create_processed_mesh_primitive_sdf_file,
+    load_primitive_info,
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.planar_pushing import make_traj_figure
-from planning_through_contact.tools.utils import create_processed_mesh_primitive_sdf_file, load_primitive_info, PhysicalProperties
-from planning_through_contact.simulation.sim_utils import get_slider_sdf_path, models_folder
 
 
 @hydra.main(
@@ -95,7 +100,7 @@ def main(cfg: OmegaConf):
 
     ## Generate plans
     if data_collection_config.generate_plans:
-        generate_plans(data_collection_config)
+        generate_plans(data_collection_config, cfg)
         save_omegaconf(cfg, data_collection_config.plans_dir, config_name="config.yaml")
 
     ## Render plans
@@ -117,8 +122,7 @@ def save_omegaconf(cfg: OmegaConf, dir: str, config_name: str = "config.yaml"):
     with open(f"{dir}/{config_name}", "w") as f:
         OmegaConf.save(cfg, f)
 
-
-def generate_plans(data_collection_config: DataCollectionConfig):
+def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf):
     """Generates plans according to the data collection config."""
 
     print("\nGenerating plans...")
@@ -132,6 +136,7 @@ def generate_plans(data_collection_config: DataCollectionConfig):
         arbitrary_shape_pickle_path=_plan_config.arbitrary_shape_pickle_path,
         pusher_radius=_plan_config.pusher_radius,
         hardware=False,
+        slider_physical_properties=hydra.utils.instantiate(cfg.physical_properties),
     )
     solver_params = get_default_solver_params(debug=False, clarabel=False)
     config.contact_config.lam_min = _plan_config.contact_lam_min
@@ -311,18 +316,12 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
     primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
     create_processed_mesh_primitive_sdf_file(
         primitive_info=primitive_info,
-        physical_properties=PhysicalProperties( # TODO: Make configurable!
-            mass=0.1,
-            inertia=np.array([[1.0e-5, 0.0, 0.0], [0.0, 1.0e-5, 0.0], [0.0, 0.0, 1.0e-5]]),
-            center_of_mass=np.array([0.0, 0.0, 0.0]),
-            hydroelastic_modulus=1.0e6,
-            is_compliant=False,
-        ),
+        physical_properties=hydra.utils.instantiate(cfg.physical_properties),
         global_translation=translation,
         output_file_path=sdf_path,
         model_name="arbitrary_shape",
         base_link_name="arbitrary_shape",
-        is_hydroelastic=False,
+        is_hydroelastic="hydroelastic" in cfg.contact_model.lower(),
         rgba=[0.0, 0.0, 0.0, 1.0],
     )
 

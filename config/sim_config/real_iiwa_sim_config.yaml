@@ -8,6 +8,16 @@ dynamics_config:
   force_scale: 0.01
 slider_type: 'arbitrary'
 arbitrary_shape_pickle_path: arbitrary_shape_pickles/single_box.pkl
+physical_properties: # Slider physical properties
+  _target_: planning_through_contact.tools.utils.PhysicalProperties
+  mass: 0.1
+  inertia: [[1e-5, 0.0, 0.0], [0.0, 1e-5, 0.0], [0.0, 0.0, 1e-5]]
+  center_of_mass: [0.0, 0.0, 0.0]
+  is_compliant: false
+  hydroelastic_modulus: 1.0e6
+  mu_dynamic: 0.5
+  mu_static: 0.5
+  mesh_resolution_hint: 0.01
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:

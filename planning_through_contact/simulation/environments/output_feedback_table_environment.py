@@ -85,7 +85,7 @@ class OutputFeedbackTableEnvironment:
                 ),
             )
             self._plan_config = get_default_plan_config(
-                slider_type="box" if sim_config.slider.name == "box" else "tee",
+                slider_type=sim_config.slider.name,
                 pusher_radius=0.015,
                 hardware=False,
             )

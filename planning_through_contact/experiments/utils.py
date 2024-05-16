@@ -28,7 +28,8 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.planning.planar.utils import (
     get_plan_start_and_goals_to_point,
 )
-
+from planning_through_contact.tools.utils import PhysicalProperties
+import logging
 
 def create_output_folder(
     output_dir: str, slider_type: str, traj_number: Optional[int]
@@ -49,21 +50,18 @@ def get_time_as_str() -> str:
     return formatted_time
 
 
-def get_box() -> RigidBody:
-    mass = 0.1
+def get_box(mass) -> RigidBody:
     box_geometry = Box2d(width=0.1, height=0.1)
     slider = RigidBody("box", box_geometry, mass)
     return slider
 
 
-def get_tee() -> RigidBody:
-    mass = 0.1
+def get_tee(mass) -> RigidBody:
     body = RigidBody("t_pusher", TPusher2d(), mass)
     return body
 
 
-def get_arbitrary(arbitrary_shape_pickle_path: str) -> RigidBody:
-    mass = 0.1  # TODO: Make customizable
+def get_arbitrary(arbitrary_shape_pickle_path: str, mass) -> RigidBody:
     body = RigidBody(
         "arbitrary_shape",
         ArbitraryShape2D(arbitrary_shape_pickle_path),
@@ -131,20 +129,24 @@ def get_hardware_non_collision_cost() -> NonCollisionCost:
 def get_default_plan_config(
     slider_type: Literal["box", "sugar_box", "tee", "arbitrary"] = "box",
     arbitrary_shape_pickle_path: str = "",
+    slider_physical_properties: PhysicalProperties = None,
     pusher_radius: float = 0.015,
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
     hardware: bool = False,
 ) -> PlanarPlanConfig:
+    mass = 0.1 if slider_physical_properties is None else slider_physical_properties.mass
+    if slider_physical_properties is None:
+        logging.warning("Using default mass of 0.1 kg for the slider.")
     if slider_type == "box":
-        slider = get_box()
+        slider = get_box(mass)
     elif slider_type == "sugar_box":
-        slider = get_sugar_box()
+        slider = get_sugar_box(mass)
     elif slider_type == "tee":
-        slider = get_tee()
+        slider = get_tee(mass)
     elif slider_type == "arbitrary":
-        slider = get_arbitrary(arbitrary_shape_pickle_path)
+        slider = get_arbitrary(arbitrary_shape_pickle_path, mass)
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 

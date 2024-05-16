@@ -1,6 +1,6 @@
-from typing import Callable, List, Optional, Dict, Any, Union
-from dataclasses import dataclass
 import pickle
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -66,6 +66,7 @@ def approx_exponential_map(omega_hat, num_dims: int = 2):
     # Approximates the exponential map (matrix exponential) by truncating terms of higher degree than 2
     return np.eye(num_dims) + omega_hat + 0.5 * omega_hat @ omega_hat
 
+
 @dataclass
 class PhysicalProperties:
     """
@@ -100,10 +101,19 @@ class PhysicalProperties:
     fineness of the meshes. It is a no-op for mesh geometries and is consequently not
     required for mesh geometries."""
 
+    def __post_init__(self):
+        # Convert all lists to numpy arrays
+        if self.inertia is not None:
+            self.inertia = np.array(self.inertia)
+        if self.center_of_mass is not None:
+            self.center_of_mass = np.array(self.center_of_mass)
+
+
 def load_primitive_info(primitive_info_file: str) -> List[Dict[str, Any]]:
     with open(primitive_info_file, "rb") as f:
         primitive_info = pickle.load(f)
     return primitive_info
+
 
 def construct_drake_proximity_properties_sdf_str(
     physical_properties: PhysicalProperties, is_hydroelastic: bool
@@ -160,7 +170,8 @@ def construct_drake_proximity_properties_sdf_str(
         """
     return proximity_properties_str
 
-def get_primitive_geometry_str(primitive_geometry: Dict[str,Any]) -> str:
+
+def get_primitive_geometry_str(primitive_geometry: Dict[str, Any]) -> str:
     if primitive_geometry["name"] == "ellipsoid":
         radii = primitive_geometry["radii"]
         geometry = f"""
@@ -193,8 +204,9 @@ def get_primitive_geometry_str(primitive_geometry: Dict[str,Any]) -> str:
         """
     else:
         raise RuntimeError(f"Unsupported primitive type: {primitive_geometry['name']}")
-    
+
     return geometry
+
 
 def create_processed_mesh_primitive_sdf_file(
     primitive_info: List[Dict[str, Any]],

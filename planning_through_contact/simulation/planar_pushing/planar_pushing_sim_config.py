@@ -42,6 +42,7 @@ from planning_through_contact.experiments.utils import (
 from planning_through_contact.simulation.sim_utils import (
     get_slider_start_poses,
 )
+from planning_through_contact.tools.utils import PhysicalProperties
 
 class MultiRunConfig:
     def __init__(
@@ -164,6 +165,7 @@ class PlanarPushingSimConfig:
         None  # directory for logging rollouts from output_feedback_table_environments
     )
     multi_run_config: MultiRunConfig = None
+    slider_physical_properties: PhysicalProperties = None
 
     @classmethod
     def from_traj(cls, trajectory: PlanarPushingTrajectory, **kwargs):
@@ -178,14 +180,21 @@ class PlanarPushingSimConfig:
 
     @classmethod
     def from_yaml(cls, cfg: OmegaConf):
+        slider_physical_properties: PhysicalProperties = hydra.utils.instantiate(
+            cfg.physical_properties
+        )
+        
         # Create sim_config with mandatory fields
         # TODO: read slider directly from yaml instead of if statement
         if cfg.slider_type == "box":
-            slider: RigidBody = get_box()
+            slider: RigidBody = get_box(slider_physical_properties.mass)
         elif cfg.slider_type == "tee":
-            slider: RigidBody = get_tee()
+            slider: RigidBody = get_tee(slider_physical_properties.mass)
         elif cfg.slider_type == "arbitrary":
-            slider = get_arbitrary(cfg.arbitrary_shape_pickle_path)
+            slider = get_arbitrary(
+                cfg.arbitrary_shape_pickle_path,
+                slider_physical_properties.mass,
+            )
         else:
             raise ValueError(f"Slider type not yet implemented: {cfg.slider_type}")        
         dynamics_config: SliderPusherSystemConfig = hydra.utils.instantiate(
@@ -213,6 +222,7 @@ class PlanarPushingSimConfig:
             log_dir=cfg.log_dir,
             domain_randomization=cfg.domain_randomization,
             randomize_camera=cfg.randomize_camera,
+            slider_physical_properties=slider_physical_properties,
         )
 
         # Optional fields
