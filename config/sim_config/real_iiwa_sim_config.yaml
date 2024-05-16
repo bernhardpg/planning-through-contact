@@ -90,12 +90,17 @@ multi_run_config:
 
 ## Robot specific configs
 # sim_config
-scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
-default_joint_positions: [0.41, 0.88, -0.65, -1.45, 0.59, 1.01, 2.76]
+# scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
+# default_joint_positions: [0.41, 0.88, -0.65, -1.45, 0.59, 1.01, 2.76]
+scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+default_joint_positions:
+  - ${pusher_start_pose.x}
+  - ${pusher_start_pose.y}
 
 # position controller / robot station
 robot_station:
-  _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
+  # _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
+  _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
   sim_config: null  # override in hydra.utils.instantiate
   meshcat: null     # override in hydra.utils.instantiate
 

@@ -160,7 +160,7 @@ class CylinderActuatedStation(RobotSystemBase):
         if self._sim_config.slider.name == "box":
             return "box"
         else:
-            return "t_pusher"
+            return "pusher"
 
     def num_positions(self) -> int:
         return self._num_positions

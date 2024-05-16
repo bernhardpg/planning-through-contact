@@ -53,6 +53,9 @@ class PlanarPose:
 
         The z-position value is disregarded, and theta is set to the rotation about the z-axis.
         """
+        if len(q) == 2:
+            return cls(q[0], q[1], 0)
+
         q_wxyz = q[0:4] / np.linalg.norm(q[0:4])
         x = q[4]
         y = q[5]
