@@ -60,6 +60,7 @@ class MultiRunConfig:
             rot_tol: float=0.01, # degrees
             evaluate_final_pusher_position: bool=True,
             evaluate_final_slider_rotation: bool=True,
+            slider_physical_properties: PhysicalProperties=None
     ):
         # Set up multi run config
         config = get_default_plan_config(
@@ -67,6 +68,7 @@ class MultiRunConfig:
             arbitrary_shape_pickle_path=arbitrary_shape_pickle_path,
             pusher_radius=0.015,
             hardware=False,
+            slider_physical_properties=slider_physical_properties,
         )
         # update config (probably don't need these)
         config.contact_config.lam_min = 0.15

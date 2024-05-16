@@ -27,7 +27,7 @@ class ContactPoint:
         body: RigidBody,
         contact_location: PolytopeContactLocation,
         contact_force_defs: List[ContactForceDefinition],
-        friction_coeff: float = 0.5,
+        friction_coeff: float,
         name: str = "unnamed",
         contact_position_var: Optional[sym.Variable] = None,
     ) -> None:

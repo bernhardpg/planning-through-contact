@@ -77,7 +77,7 @@ class ContactPairDefinition:
     body_A_contact_location: PolytopeContactLocation
     body_B: RigidBody
     body_B_contact_location: PolytopeContactLocation
-    friction_coeff: float = 0.5
+    friction_coeff: float
 
     def create_pair(
         self,

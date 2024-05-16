@@ -86,6 +86,7 @@ multi_run_config:
   rot_tol: 4 # degrees
   evaluate_final_pusher_position: false
   evaluate_final_slider_rotation: true
+  slider_physical_properties: ${physical_properties}
 
 ## Robot specific configs
 # sim_config
@@ -129,8 +130,8 @@ data_collection_config:
       - ${slider_goal_pose.x}
       - ${slider_goal_pose.y}
     buffer: 0.0
-    seed: 1
-    num_plans: 1
+    seed: 10
+    num_plans: 200
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
