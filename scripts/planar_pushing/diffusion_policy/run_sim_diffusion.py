@@ -109,6 +109,8 @@ def run_sim(cfg: OmegaConf):
             os.remove(sdf_path)
 
 
+# TODO: This is duplicated from scripts/planar_pushing/run_data_generation.py. Move this
+# to a common location.
 def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSimConfig):
     sdf_path = get_slider_sdf_path(sim_config, models_folder)
     if os.path.exists(sdf_path):
