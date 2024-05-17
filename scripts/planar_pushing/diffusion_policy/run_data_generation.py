@@ -733,6 +733,7 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
     primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
     create_processed_mesh_primitive_sdf_file(
         primitive_info=primitive_info,
+        visual_mesh_file_path=cfg.arbitrary_shape_visual_mesh_path,
         physical_properties=hydra.utils.instantiate(cfg.physical_properties),
         global_translation=translation,
         output_file_path=sdf_path,

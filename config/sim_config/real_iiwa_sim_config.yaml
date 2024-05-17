@@ -8,6 +8,7 @@ dynamics_config:
   force_scale: 0.01
 slider_type: 'arbitrary'
 arbitrary_shape_pickle_path: arbitrary_shape_pickles/hammer_3_boxes.pkl
+arbitrary_shape_visual_mesh_path: "hammer/rotated_hammer.obj" # Can be null (collision mesh will be used)
 physical_properties: # Slider physical properties
   _target_: planning_through_contact.tools.utils.PhysicalProperties
   mass: 0.1
