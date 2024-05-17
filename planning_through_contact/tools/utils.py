@@ -1,3 +1,4 @@
+import logging
 import pickle
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -217,6 +218,7 @@ def create_processed_mesh_primitive_sdf_file(
     base_link_name: str,
     is_hydroelastic: bool,
     visual_mesh_file_path: Optional[str] = None,
+    com_override: Optional[np.ndarray] = None,
     rgba: Optional[List[float]] = None,
 ) -> None:
     """
@@ -234,8 +236,14 @@ def create_processed_mesh_primitive_sdf_file(
     :param visual_mesh_file_path: The path to the mesh to use for the visual geometry.
     :param rgba: The color of the visual geometry. Only used if visual_mesh_file_path is
         None.
+    :param com_override: The center of mass to use. If None, the center of mass from
+        physical_properties is used.
     """
-    com = physical_properties.center_of_mass
+    com = (
+        com_override if com_override is not None else physical_properties.center_of_mass
+    )
+    if physical_properties.center_of_mass is None:
+        logging.warning("Center of mass not provided. Using [0, 0, 0] as default.")
     procesed_mesh_sdf_str = f"""
         <?xml version="1.0"?>
         <sdf version="1.7">

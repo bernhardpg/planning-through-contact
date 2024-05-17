@@ -116,7 +116,7 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
 
     translation = -np.concatenate(
         [sim_config.slider.geometry.com_offset.flatten(), [0]]
-    )
+    )  # Plan assumes that object frame = CoM frame
 
     primitive_info = load_primitive_info(cfg.arbitrary_shape_pickle_path)
     create_processed_mesh_primitive_sdf_file(
@@ -128,6 +128,7 @@ def create_arbitrary_shape_sdf_file(cfg: OmegaConf, sim_config: PlanarPushingSim
         base_link_name="arbitrary",
         is_hydroelastic="hydroelastic" in cfg.contact_model.lower(),
         rgba=[0.0, 0.0, 0.0, 1.0],
+        com_override=[0.0, 0.0, 0.0],  # Plan assumes that object frame = CoM frame
     )
 
 
