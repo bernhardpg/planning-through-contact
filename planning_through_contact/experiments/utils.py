@@ -82,7 +82,6 @@ def get_default_non_collision_cost() -> NonCollisionCost:
         distance_to_object_socp=0.1,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=10.0,
-        time=None,
     )
     return non_collision_cost
 
@@ -109,7 +108,6 @@ def get_hardware_non_collision_cost() -> NonCollisionCost:
         distance_to_object_socp=0.25,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=5.0,
-        time=None,
     )
     return non_collision_cost
 
@@ -142,9 +140,9 @@ def get_default_plan_config(
 
         contact_cost = get_hardware_contact_cost()
         non_collision_cost = get_hardware_non_collision_cost()
-        lam_buffer = 0.25
+        buffer_to_corners = 0.25
         contact_config = ContactConfig(
-            cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
+            cost=contact_cost, lam_min=buffer_to_corners, lam_max=1 - buffer_to_corners
         )
         time_contact = 5.0
         time_non_collision = 2.0
@@ -161,9 +159,9 @@ def get_default_plan_config(
         )
         contact_cost = get_default_contact_cost()
         non_collision_cost = get_default_non_collision_cost()
-        lam_buffer = 0.0
+        buffer_to_corners = 0.0
         contact_config = ContactConfig(
-            cost=contact_cost, lam_min=lam_buffer, lam_max=1 - lam_buffer
+            cost=contact_cost, lam_min=buffer_to_corners, lam_max=1 - buffer_to_corners
         )
 
         time_contact = 4.0

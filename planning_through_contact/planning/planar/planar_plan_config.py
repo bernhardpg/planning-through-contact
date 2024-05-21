@@ -156,7 +156,6 @@ class NonCollisionCost:
         None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
     )
     pusher_arc_length: Optional[float] = None
-    time: Optional[float] = None
 
     @property
     def avoid_object(self) -> bool:

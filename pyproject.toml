@@ -28,6 +28,7 @@ underactuated = "^2024.4.27"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.25.1"
+natsort = "^8.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
