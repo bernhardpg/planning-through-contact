@@ -7,8 +7,8 @@ dynamics_config:
   integration_constant: 0.3
   force_scale: 0.01
 slider_type: 'arbitrary'
-arbitrary_shape_pickle_path: arbitrary_shape_pickles/hammer_3_boxes.pkl
-arbitrary_shape_visual_mesh_path: "hammer/rotated_hammer.obj" # Can be null (collision mesh will be used)
+arbitrary_shape_pickle_path: arbitrary_shape_pickles/single_box.pkl
+arbitrary_shape_visual_mesh_path: null # "hammer/rotated_hammer.obj" # Can be null (collision mesh will be used)
 physical_properties: # Slider physical properties
   _target_: planning_through_contact.tools.utils.PhysicalProperties
   mass: 0.1
@@ -68,9 +68,9 @@ camera_configs:
     center_y: 244.107
     focal_x: 616.704
     focal_y: 616.777
-    show_rgb: false
+    show_rgb: true
 randomize_camera: false
-domain_randomization: true
+domain_randomization: false
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
@@ -91,29 +91,29 @@ multi_run_config:
 
 ## Robot specific configs
 # sim_config
-# scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
-# default_joint_positions: [0.41, 0.88, -0.65, -1.45, 0.59, 1.01, 2.76]
-scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
-default_joint_positions:
-  - ${pusher_start_pose.x}
-  - ${pusher_start_pose.y}
+scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
+default_joint_positions: [0.41, 0.88, -0.65, -1.45, 0.59, 1.01, 2.76]
+# scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
+# default_joint_positions:
+#   - ${pusher_start_pose.x}
+#   - ${pusher_start_pose.y}
 
 # position controller / robot station
 robot_station:
-  # _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
-  _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
+  _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
+  # _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
   sim_config: null  # override in hydra.utils.instantiate
   meshcat: null     # override in hydra.utils.instantiate
 
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: true
+  generate_plans: false
   render_plans: true
-  convert_to_zarr: false
+  convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'trajectories/underactuated'
-  rendered_plans_dir: 'trajectories_rendered/underactuated_domain_randomization'
+  plans_dir: 'trajectories/test'
+  rendered_plans_dir: 'trajectories_rendered/test'
   zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
   policy_freq: 10.0
   state_chunk_length: 1024
@@ -137,7 +137,7 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 10
-    num_plans: 200
+    num_plans: 2
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false

@@ -28,7 +28,7 @@
       <geometry>
         <box size="1.22 0.761 .05"/>
       </geometry>
-      <material name=""><texture filename="/home/adam/workspace/planning-through-contact/planning_through_contact/simulation/models/images/IMG_7085.png"/></material>
+      <material name=""><texture filename="/home/adam/workspace/planning-through-contact/planning_through_contact/simulation/models/russ.png"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 -0.025" rpy="0 0 0"/>
