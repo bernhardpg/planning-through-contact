@@ -154,29 +154,72 @@ def AddRandomizedSliderAndConfigureContact(
     plant.Finalize()
     return slider
 
+# def randomize_table(
+#     default_color = [0.55, 0.55, 0.55],
+#     color_range = 0.02,
+#     table_urdf: str = "small_table_hydroelastic.urdf"
+# ) -> None: 
+#     base_urdf = f'{models_folder}/{table_urdf}'
+#     parser = etree.XMLParser(recover=True)
+#     tree = etree.parse(base_urdf, parser)
+#     root = tree.getroot()
+
+#     R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+#     G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+#     B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+#     A = 1 # assuming fully opaque
+
+#     new_color_value = f"{R} {G} {B} {A}"    
+#     models = root.xpath('//material[@name="LightGrey"]')
+#     for model in models:
+#         for color in model: 
+#             color.set("rgba", new_color_value)
+    
+#     new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
+
+#     tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+
 def randomize_table(
     default_color = [0.55, 0.55, 0.55],
     color_range = 0.02,
-    table_urdf: str = "small_table_hydroelastic.urdf"
-) -> None: 
+    table_urdf: str = "small_table_hydroelastic.urdf",
+) -> None:
     base_urdf = f'{models_folder}/{table_urdf}'
     parser = etree.XMLParser(recover=True)
     tree = etree.parse(base_urdf, parser)
     root = tree.getroot()
 
-    R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-    G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-    B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-    A = 1 # assuming fully opaque
+    rv = np.random.uniform(0, 1)
+    import random
 
-    new_color_value = f"{R} {G} {B} {A}"    
-    models = root.xpath('//material[@name="LightGrey"]')
-    for model in models:
-        for color in model: 
-            color.set("rgba", new_color_value)
-    
+    if rv < 0.3:
+        image_dir = f'{models_folder}/images'
+        image_files = os.listdir(image_dir)
+        image_file = random.choice(image_files)
+        material = root.xpath('//link[@name="TableTop"]/visual/material')
+        material[0].set("name", "")
+        texture = etree.SubElement(material[0], "texture")
+        texture.set("filename", f'{models_folder}/images/{image_file}')
+    else:
+        R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+        G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+        B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
+        A = 1 # assuming fully opaque
+        new_color_value = f"{R} {G} {B} {A}"
+        models = root.xpath('//materialz[@name="LightGrey"]')
+        for model in models:
+            for color in model:
+                color.set("rgba", new_color_value)
+    # else:
+    #     image_dir = f'{models_folder}/images'
+    #     image_files = os.listdir(image_dir)
+    #     image_file = "russ.png"
+    #     material = root.xpath('//link[@name="TableTop"]/visual/material')
+    #     material[0].set("name", "")
+    #     texture = etree.SubElement(material[0], "texture")
+    #     texture.set("filename", f'{models_folder}/{image_file}')
+    #     # new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
     new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
-
     tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
 
 def randomize_pusher(

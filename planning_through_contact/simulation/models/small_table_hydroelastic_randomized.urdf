@@ -8,7 +8,7 @@
     <color rgba="1 1 1 1"/>
   </material>
   <material name="LightGrey">
-    <color rgba="0.8835355444584283 0.8917593367092195 0.8746217659681993 1"/>
+    <color rgba=".55 .55 .55 1"/>
   </material>
   <material name="Grey">
     <color rgba=".3 .3 .3 1"/>
@@ -28,7 +28,7 @@
       <geometry>
         <box size="1.22 0.761 .05"/>
       </geometry>
-      <material name="LightGrey"/>
+      <material name=""><texture filename="/home/adam/workspace/planning-through-contact/planning_through_contact/simulation/models/images/IMG_7085.png"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 -0.025" rpy="0 0 0"/>

@@ -301,7 +301,7 @@ def simulate_plan(
     )
     
     recording_name = f"recording.html" if save_recording else None
-    environment.export_diagram("data_collection_table_environment.pdf")
+    # environment.export_diagram("data_collection_table_environment.pdf")
     environment.simulate(
         traj.end_time + sim_config.delay_before_execution + 0.5,
         recording_file=recording_name

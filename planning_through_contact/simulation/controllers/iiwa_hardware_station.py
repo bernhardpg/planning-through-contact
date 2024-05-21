@@ -108,7 +108,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # Add cameras to scenario
         if sim_config.camera_configs:
             for camera_config in sim_config.camera_configs:
-                if sim_config.domain_randomization:
+                if sim_config.randomize_camera:
                     scenario.cameras[camera_config.name] = randomize_camera_config(camera_config)
                 else:
                     scenario.cameras[camera_config.name] = camera_config

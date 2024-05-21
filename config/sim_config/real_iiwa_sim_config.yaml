@@ -23,13 +23,11 @@ time_step: 0.001
 closed_loop: false # MPC flag
 draw_frames: true
 use_realtime: false
-delay_before_execution: 5.0
+delay_before_execution: 3.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
-  # checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0050-val_loss=0.007444.ckpt'
-  # checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0055-val_loss=0.007343.ckpt'
-  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0090-val_loss=0.007753.ckpt'
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/pretrained_pusher/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
   diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
@@ -57,13 +55,14 @@ camera_configs:
     center_y: 244.107
     focal_x: 616.704
     focal_y: 616.777
-    show_rgb: true
+    show_rgb: false
+randomize_camera: false
 domain_randomization: true
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
   num_runs: 10
-  max_attempt_duration: 80
+  max_attempt_duration: 30 # 80
   seed: 42
   slider_type: ${slider_type}
   pusher_start_pose: ${pusher_start_pose}
@@ -93,8 +92,8 @@ data_collection_config:
   render_plans: true
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'trajectories/test'
-  rendered_plans_dir: 'trajectories_rendered/test'
+  plans_dir: 'trajectories/underactuated'
+  rendered_plans_dir: 'trajectories_rendered/underactuated_domain_randomization'
   zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
   policy_freq: 10.0
   state_chunk_length: 1024

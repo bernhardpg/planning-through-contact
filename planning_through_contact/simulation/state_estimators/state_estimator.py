@@ -74,9 +74,9 @@ class StateEstimator(Diagram):
             )
         else:
             table_grey = np.random.uniform(0.3, 0.95)
-            pusher_grey = np.random.uniform(0.1, table_grey)
+            pusher_grey = np.random.uniform(0.1, min(table_grey, 0.4))
             color_range = 0.025
-            
+
             randomize_pusher()
             randomize_table(
                 default_color=[table_grey, table_grey, table_grey],
@@ -96,7 +96,7 @@ class StateEstimator(Diagram):
                 ApplyCameraConfig
             )
             for camera_config in sim_config.camera_configs:
-                if sim_config.domain_randomization:
+                if sim_config.randomize_camera:
                     camera_config = randomize_camera_config(camera_config)
                 ApplyCameraConfig(
                     config=camera_config,
@@ -200,7 +200,7 @@ class StateEstimator(Diagram):
             self._visualize_desired_slider_pose(sim_config.slider_goal_pose)
 
             if sim_config.draw_frames:
-                print(f"Drawing frames")
+                # print(f"Drawing frames")
                 for frame_name in [
                     # "iiwa_link_7",
                     # "pusher_base",

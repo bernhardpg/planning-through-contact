@@ -27,9 +27,7 @@ delay_before_execution: 10.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
-  # checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0050-val_loss=0.007444.ckpt'
-  # checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0055-val_loss=0.007343.ckpt'
-  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/iiwa_tee_v3/checkpoints/epoch=0090-val_loss=0.007753.ckpt'
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/pretrained_pusher/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
   diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
@@ -69,6 +67,8 @@ multi_run_config:
   rot_tol: 4 # degrees
   evaluate_final_pusher_position: false
   evaluate_final_slider_rotation: true
+randomize_camera: false
+domain_randomization: false
 
 ## Robot specific configs
 # sim_config

@@ -153,6 +153,7 @@ class PlanarPushingSimConfig:
     pusher_z_offset: float = 0.05
     camera_configs: List[CameraConfig] = None
     domain_randomization: bool = False
+    randomize_camera: bool = False
     log_dir: str = None # directory for logging rollouts from output_feedback_table_environments
     multi_run_config: MultiRunConfig = None
 
@@ -201,6 +202,7 @@ class PlanarPushingSimConfig:
             pusher_z_offset=cfg.pusher_z_offset,
             log_dir=cfg.log_dir,
             domain_randomization=cfg.domain_randomization,
+            randomize_camera=cfg.randomize_camera,
         )
 
         # Optional fields
@@ -286,5 +288,6 @@ class PlanarPushingSimConfig:
             np.allclose(self.default_joint_positions, other.default_joint_positions) and
             self.diffusion_policy_config == other.diffusion_policy_config and
             self.multi_run_config == other.multi_run_config,
-            self.domain_randomization == other.domain_randomization
+            self.domain_randomization == other.domain_randomization,
+            self.randomize_camera == other.randomize_camera,
         )

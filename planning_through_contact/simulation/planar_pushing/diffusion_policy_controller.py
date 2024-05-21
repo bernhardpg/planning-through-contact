@@ -5,6 +5,7 @@ from collections import deque
 import pathlib
 import time as pytime
 from typing import List, Optional, Tuple
+import cv2
 
 # Pydrake imports
 from pydrake.common.value import AbstractValue, Value
@@ -127,7 +128,7 @@ class DiffusionPolicyController(LeafSystem):
             self._cfg.task.dataset.zarr_path
         )
         dataset: BaseImageDataset = hydra.utils.instantiate(self._cfg.task.dataset)
-        self._normalizer = dataset.get_normalizer()
+        self._normalizer = dataset.get_normalizer() # TODO: this might not be needed
 
         # get policy from workspace
         self._policy = workspace.model
@@ -228,4 +229,8 @@ class DiffusionPolicyController(LeafSystem):
         image = self.camera_port.Eval(context)
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
-        self._image_deque.append(image.data[:,:,:-1])
+        if image.shape[0] != self._image_height or image.shape[1] != self._image_width:
+            image = cv2.resize(image.data[:,:,:-1], (self._image_height, self._image_width))
+            self._image_deque.append(image)
+        else:
+            self._image_deque.append(image.data[:,:,:-1])
