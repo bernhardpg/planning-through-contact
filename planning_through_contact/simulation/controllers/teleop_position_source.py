@@ -1,11 +1,7 @@
-from typing import Dict, Any
+from typing import Any, Dict
 
-from pydrake.all import (
-    DiagramBuilder,
-    Multiplexer,
-    Meshcat,
-)
 from manipulation.meshcat_utils import MeshcatSliders
+from pydrake.all import DiagramBuilder, Meshcat, Multiplexer
 
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,

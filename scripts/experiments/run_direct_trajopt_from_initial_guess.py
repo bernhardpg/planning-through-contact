@@ -60,7 +60,6 @@ if __name__ == "__main__":
     debug = args.debug
 
     if run_dir is not None:
-
         initial_guess_paths = []
         if traj is not None:
             traj_folders = [Path(run_dir) / Path(traj)]

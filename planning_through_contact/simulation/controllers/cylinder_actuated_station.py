@@ -1,20 +1,22 @@
 from pydrake.all import (
-    DiagramBuilder,
-    MultibodyPlant,
-    InverseDynamicsController,
-    StateInterpolatorWithDiscreteDerivative,
-    AddMultibodyPlantSceneGraph,
     AddDefaultVisualization,
+    AddMultibodyPlantSceneGraph,
+    DiagramBuilder,
+    InverseDynamicsController,
     Meshcat,
+    MultibodyPlant,
+    StateInterpolatorWithDiscreteDerivative,
 )
+
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-from .robot_system_base import RobotSystemBase
 from planning_through_contact.simulation.sim_utils import (
-    GetParser,
     AddSliderAndConfigureContact,
+    GetParser,
 )
+
+from .robot_system_base import RobotSystemBase
 
 
 class CylinderActuatedStation(RobotSystemBase):
@@ -52,10 +54,16 @@ class CylinderActuatedStation(RobotSystemBase):
 
         # Set the initial camera pose
         zoom = 1.8
-        camera_in_world = [sim_config.slider_goal_pose.x, 
-                           (sim_config.slider_goal_pose.y-1)/zoom,
-                           1.5/zoom]
-        target_in_world = [sim_config.slider_goal_pose.x, sim_config.slider_goal_pose.y, 0]
+        camera_in_world = [
+            sim_config.slider_goal_pose.x,
+            (sim_config.slider_goal_pose.y - 1) / zoom,
+            1.5 / zoom,
+        ]
+        target_in_world = [
+            sim_config.slider_goal_pose.x,
+            sim_config.slider_goal_pose.y,
+            0,
+        ]
         self._meshcat.SetCameraPose(camera_in_world, target_in_world)
         AddDefaultVisualization(builder, self._meshcat)
 
@@ -84,14 +92,10 @@ class CylinderActuatedStation(RobotSystemBase):
 
         # Add cameras
         if sim_config.camera_configs:
-            from pydrake.systems.sensors import (
-                ApplyCameraConfig
-            )
+            from pydrake.systems.sensors import ApplyCameraConfig
+
             for camera_config in sim_config.camera_configs:
-                ApplyCameraConfig(
-                    config=camera_config,
-                    builder=builder
-                )
+                ApplyCameraConfig(config=camera_config, builder=builder)
                 builder.ExportOutput(
                     builder.GetSubsystemByName(
                         f"rgbd_sensor_{camera_config.name}"
@@ -149,7 +153,7 @@ class CylinderActuatedStation(RobotSystemBase):
     def robot_model_name(self) -> str:
         """The name of the robot model."""
         return "pusher"
-    
+
     @property
     def slider_model_name(self) -> str:
         """The name of the robot model."""
@@ -157,19 +161,18 @@ class CylinderActuatedStation(RobotSystemBase):
             return "box"
         else:
             return "t_pusher"
-    
+
     def num_positions(self) -> int:
         return self._num_positions
-    
+
     def get_station_plant(self):
         return self.station_plant
 
     def get_scene_graph(self):
         return self._scene_graph
-    
+
     def get_slider(self):
         return self.slider
-    
+
     def get_meshcat(self):
         return self._meshcat
-    

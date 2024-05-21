@@ -5,9 +5,6 @@ from typing import List, TypeVar, Union
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, SolutionResult, Solve
-
 from convex_relaxation.mccormick import (
     add_bilinear_constraints_to_prog,
     add_bilinear_frame_constraints_to_prog,
@@ -25,6 +22,8 @@ from geometry.two_d.contact.contact_scene_2d import (
 )
 from geometry.two_d.contact.types import ContactMode, ContactPosition, ContactType
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, SolutionResult, Solve
 from tools.types import NpExpressionArray, NpFormulaArray, NpVariableArray
 from tools.utils import evaluate_np_expressions_array, evaluate_np_formulas_array
 from visualize.analysis import (
@@ -440,7 +439,6 @@ def plan_box_flip_up_newtons_third_law():
     ]
 
     if show_animation:
-
         viz_contact_positions = [
             VisualizationPoint2d.from_fc_details(pos, CONTACT_COLOR)
             for pos in contact_positions_ctrl_points

@@ -6,9 +6,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy.typing as npt
 import pydrake.symbolic as sym
-from pydrake.geometry.optimization import ConvexSet
-
 from geometry.polyhedron import PolyhedronFormulator
+from pydrake.geometry.optimization import ConvexSet
 
 
 class ContactModeType(Enum):

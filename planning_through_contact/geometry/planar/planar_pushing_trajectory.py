@@ -95,9 +95,9 @@ class LinTrajSegment:
     end_time: float
     knot_points: npt.NDArray[np.float64]
     traj: Trajectory
-    traj_type: Literal["zero_order_hold", "first_order_hold", "bezier"] = (
-        "first_order_hold"
-    )
+    traj_type: Literal[
+        "zero_order_hold", "first_order_hold", "bezier"
+    ] = "first_order_hold"
 
     @classmethod
     def from_knot_points(

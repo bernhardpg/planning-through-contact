@@ -5,9 +5,6 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
-from pydrake.geometry.optimization import ConvexSet
-from pydrake.math import eq, ge, le
-
 from deprecated.geometry.bezier import BezierVariable
 from deprecated.geometry.contact_mode import (
     ContactMode,
@@ -18,6 +15,8 @@ from deprecated.geometry.contact_mode import (
 )
 from deprecated.geometry.rigid_body import RigidBody
 from geometry.polyhedron import PolyhedronFormulator
+from pydrake.geometry.optimization import ConvexSet
+from pydrake.math import eq, ge, le
 
 
 @dataclass

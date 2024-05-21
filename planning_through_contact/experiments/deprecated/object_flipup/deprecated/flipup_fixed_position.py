@@ -5,12 +5,11 @@ from typing import Dict, List, Tuple, TypeVar
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
-
 from geometry.bezier import BezierCurve
 from geometry.box import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, Solve
 
 
 @dataclass
@@ -216,7 +215,6 @@ def plan_box_flip_up_contact_point_fixed():
     # TODO clean up this code!
     f_Wg_val = fg_W * FORCE_SCALE
     for idx in range(len(cos_curve)):
-
         canvas.delete("all")
         R_WB_val = R_curve[idx]
         det_R = np.linalg.det(R_WB_val)

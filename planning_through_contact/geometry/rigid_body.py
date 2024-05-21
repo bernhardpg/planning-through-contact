@@ -47,7 +47,7 @@ class RigidBody:
     @cached_property
     def gravity_force_in_W(self) -> npt.NDArray[np.float64]:
         return np.array([0, -self.mass * self.grav_acc]).reshape((-1, 1))
-    
+
     def __eq__(self, other: "RigidBody"):
         return (
             self.name == other.name

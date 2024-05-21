@@ -1,20 +1,20 @@
-from enum import Enum
-import numpy as np
-from copy import copy
 import logging
+from copy import copy
+from enum import Enum
 
+import numpy as np
 from pydrake.all import (
+    AbstractValue,
     GcsTrajectoryOptimization,
     HPolyhedron,
+    InputPortIndex,
+    LeafSystem,
+    MultibodyPlant,
+    PathParameterizedTrajectory,
     PiecewisePolynomial,
     Point,
-    Toppra,
-    PathParameterizedTrajectory,
-    LeafSystem,
-    AbstractValue,
-    InputPortIndex,
     RigidTransform,
-    MultibodyPlant,
+    Toppra,
 )
 
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (

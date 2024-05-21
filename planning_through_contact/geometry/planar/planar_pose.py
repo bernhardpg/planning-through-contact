@@ -122,9 +122,10 @@ class PlanarPose:
             f"{field.name}: {getattr(self, field.name)}" for field in fields(self)
         ]
         return ", ".join(field_strings)
-    
+
     def __eq__(self, other: "PlanarPose") -> bool:
         return np.allclose(self.vector(), other.vector())
+
 
 class PlanarVelocity(PlanarPose):
     """

@@ -1,16 +1,16 @@
-import logging
-import hydra
-import pathlib
 import importlib
+import logging
+import pathlib
 
+import hydra
 from omegaconf import OmegaConf
 from pydrake.all import StartMeshcat
 
-from planning_through_contact.simulation.controllers.robot_system_base import (
-    RobotSystemBase,
-)
 from planning_through_contact.simulation.controllers.diffusion_policy_source import (
     DiffusionPolicySource,
+)
+from planning_through_contact.simulation.controllers.robot_system_base import (
+    RobotSystemBase,
 )
 from planning_through_contact.simulation.environments.output_feedback_table_environment import (
     OutputFeedbackTableEnvironment,
@@ -19,10 +19,10 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 
+
 @hydra.main(
     version_base=None,
-    config_path=str(pathlib.Path(__file__).parents[3].joinpath(
-        'config','sim_config'))
+    config_path=str(pathlib.Path(__file__).parents[3].joinpath("config", "sim_config")),
 )
 def run_sim(cfg: OmegaConf):
     logging.basicConfig(level=logging.INFO)
@@ -44,8 +44,7 @@ def run_sim(cfg: OmegaConf):
     module_name, class_name = cfg.robot_station._target_.rsplit(".", 1)
     robot_system_class = getattr(importlib.import_module(module_name), class_name)
     position_controller: RobotSystemBase = robot_system_class(
-        sim_config=sim_config, 
-        meshcat=station_meshcat
+        sim_config=sim_config, meshcat=station_meshcat
     )
 
     # Set up environment
@@ -61,25 +60,29 @@ def run_sim(cfg: OmegaConf):
     environment.export_diagram("diffusion_environment_diagram.pdf")
     if sim_config.multi_run_config is None:
         end_time = 100.0
-        seed = 'N/A (no multi_run_config seed provided)'
+        seed = "N/A (no multi_run_config seed provided)"
     else:
         num_runs = sim_config.multi_run_config.num_runs
         max_attempt_duration = sim_config.multi_run_config.max_attempt_duration
         seed = sim_config.multi_run_config.seed
         end_time = num_runs * max_attempt_duration
-    
-    successful_idx, save_dir = environment.simulate(end_time, recording_file=recording_name)
-    
+
+    successful_idx, save_dir = environment.simulate(
+        end_time, recording_file=recording_name
+    )
+
     # Update logs and save config file
     OmegaConf.save(cfg, f"{save_dir}/sim_config.yaml")
     with open(f"{cfg.log_dir}/checkpoint_statistics.txt", "a") as f:
         f.write(f"{sim_config.diffusion_policy_config.checkpoint}\n")
         f.write(f"Seed: {seed}\n")
-        f.write(f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n")
+        f.write(
+            f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n"
+        )
         f.write(f"Success_idx: {successful_idx}\n")
         f.write(f"Save dir: {save_dir}\n")
         f.write("\n")
-    
+
 
 if __name__ == "__main__":
     """

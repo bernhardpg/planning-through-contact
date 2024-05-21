@@ -36,10 +36,10 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
     RigidTransformToPlanarPoseVectorSystem,
 )
 from planning_through_contact.visualize.analysis import (
+    plot_and_save_planar_pushing_logs_from_sim,
     plot_control_sols_vs_time,
     plot_cost,
     plot_joint_state_logs,
-    plot_and_save_planar_pushing_logs_from_sim,
     plot_mpc_solve_times,
     plot_realtime_rate,
 )

@@ -1,30 +1,33 @@
 import logging
 import os
+import pickle
+from dataclasses import dataclass
+from math import ceil
 from typing import Optional
+
 import cv2
 import numpy as np
-from math import ceil
-from dataclasses import dataclass
 from PIL import Image
-
-import pickle
 from pydrake.all import (
     DiagramBuilder,
+    DiscreteTimeDelay,
     LogVectorOutput,
     Meshcat,
     Simulator,
     StateInterpolatorWithDiscreteDerivative,
-    DiscreteTimeDelay,
-    ZeroOrderHold
+    ZeroOrderHold,
 )
-from pydrake.systems.sensors import (
-    ImageWriter,
-    PixelType
-)
+from pydrake.systems.sensors import ImageWriter, PixelType
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
+    CylinderActuatedStation,
+)
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
+)
+from planning_through_contact.simulation.controllers.replay_position_source import (
+    ReplayPositionSource,
 )
 from planning_through_contact.simulation.controllers.robot_system_base import (
     RobotSystemBase,
@@ -36,29 +39,24 @@ from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_confi
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.sensors.optitrack_config import OptitrackConfig
+from planning_through_contact.simulation.sim_utils import LoadRobotOnly
 from planning_through_contact.simulation.state_estimators.state_estimator import (
     StateEstimator,
 )
+from planning_through_contact.simulation.systems.diff_ik_system import DiffIKSystem
 from planning_through_contact.simulation.systems.planar_pose_to_generalized_coords import (
     PlanarPoseToGeneralizedCoords,
-)
-from planning_through_contact.visualize.analysis import (
-    PlanarPushingLog,
 )
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
-from planning_through_contact.simulation.systems.diff_ik_system import DiffIKSystem
-from planning_through_contact.simulation.sim_utils import LoadRobotOnly
-from planning_through_contact.simulation.controllers.replay_position_source import (
-    ReplayPositionSource,
+from planning_through_contact.visualize.analysis import (
+    CombinedPlanarPushingLogs,
+    PlanarPushingLog,
 )
-from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
-    CylinderActuatedStation,
-)
-from planning_through_contact.visualize.analysis import CombinedPlanarPushingLogs
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PlanConfig:
@@ -89,6 +87,7 @@ class PlanConfig:
     num_unique_plans: int = 1
     sort_plans: bool = True
 
+
 class DataCollectionConfig:
     def __init__(
         self,
@@ -108,7 +107,7 @@ class DataCollectionConfig:
         policy_freq: float,
         plan_config: PlanConfig,
         LLSUB_RANK: int = None,
-        LLSUB_SIZE: int = None,    
+        LLSUB_SIZE: int = None,
     ):
         # Data collection steps
         self.generate_plans = generate_plans
@@ -140,15 +139,17 @@ class DataCollectionConfig:
         self.LLSUB_SIZE = LLSUB_SIZE
         if self.LLSUB_RANK is not None and self.LLSUB_SIZE is not None:
             assert not self.convert_to_zarr and not self.convert_to_zarr_reduce
-            
+
             self.plans_dir = f"{self.plans_dir}/run_{self.LLSUB_RANK}"
             self.rendered_plans_dir = f"{self.rendered_plans_dir}/run_{self.LLSUB_RANK}"
             self.plan_config.seed += self.LLSUB_RANK
-            num_plans_per_run = ceil(1.0*self.plan_config.num_plans / self.LLSUB_SIZE)
+            num_plans_per_run = ceil(1.0 * self.plan_config.num_plans / self.LLSUB_SIZE)
             if self.LLSUB_RANK != self.LLSUB_SIZE - 1:
                 self.plan_config.num_plans = num_plans_per_run
             else:
-                num_plans = self.plan_config.num_plans - num_plans_per_run*(self.LLSUB_SIZE - 1)
+                num_plans = self.plan_config.num_plans - num_plans_per_run * (
+                    self.LLSUB_SIZE - 1
+                )
                 self.plan_config.num_plans = num_plans
 
 
@@ -171,8 +172,8 @@ class DataCollectionTableEnvironment:
         self._data_collection_dir = self._setup_data_collection_dir(
             data_collection_config.rendered_plans_dir
         )
-        self._image_dir = f'{self._data_collection_dir}/images'
-        self._log_path = f'{self._data_collection_dir}/log.txt'
+        self._image_dir = f"{self._data_collection_dir}/images"
+        self._log_path = f"{self._data_collection_dir}/log.txt"
         self._diff_ik_time_step = self._get_diff_ik_time_step()
 
         builder = DiagramBuilder()
@@ -226,14 +227,14 @@ class DataCollectionTableEnvironment:
                 DiscreteTimeDelay(
                     update_sec=self._diff_ik_time_step,
                     delay_time_steps=1,
-                    vector_size=state_size
+                    vector_size=state_size,
                 ),
             )
 
             self._diff_ik_zoh = builder.AddSystem(
                 ZeroOrderHold(
-                    period_sec = self._diff_ik_time_step,
-                    vector_size = diff_ik_plant.num_positions()
+                    period_sec=self._diff_ik_time_step,
+                    vector_size=diff_ik_plant.num_positions(),
                 )
             )
 
@@ -241,12 +242,11 @@ class DataCollectionTableEnvironment:
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
             "PlanarPoseToGeneralizedCoords",
             PlanarPoseToGeneralizedCoords(
-                z_value=0.025, # Assumes objects are 5cm tall
+                z_value=0.025,  # Assumes objects are 5cm tall
                 z_axis_is_positive=True,
             ),
         )
 
-        
         if type(self._robot_system) == CylinderActuatedStation:
             # No diff IK required for actuated cylinder
             builder.Connect(
@@ -266,8 +266,10 @@ class DataCollectionTableEnvironment:
             )
 
             builder.Connect(
-                self._position_to_rigid_transform.GetOutputPort("rigid_transform_output"),
-                self._diff_ik_system.GetInputPort("rigid_transform_input")
+                self._position_to_rigid_transform.GetOutputPort(
+                    "rigid_transform_output"
+                ),
+                self._diff_ik_system.GetInputPort("rigid_transform_input"),
             )
 
             builder.Connect(
@@ -287,12 +289,12 @@ class DataCollectionTableEnvironment:
 
             builder.Connect(
                 self._state_estimator.GetOutputPort(f"{self._robot_model_name}_state"),
-                self._time_delay.get_input_port()
+                self._time_delay.get_input_port(),
             )
 
             builder.Connect(
                 self._time_delay.get_output_port(),
-                self._diff_ik_system.GetInputPort("state")
+                self._diff_ik_system.GetInputPort("state"),
             )
 
         # Connections to update the object position within state estimator
@@ -300,7 +302,7 @@ class DataCollectionTableEnvironment:
             self._desired_position_source.GetOutputPort(
                 "desired_slider_planar_pose_vector"
             ),
-            self._slider_pose_to_generalized_coords.get_input_port()
+            self._slider_pose_to_generalized_coords.get_input_port(),
         )
         builder.Connect(
             self._slider_pose_to_generalized_coords.get_output_port(),
@@ -309,24 +311,21 @@ class DataCollectionTableEnvironment:
 
         # Set up camera logging
         image_writers = []
-        for camera_config in sim_config.camera_configs:                
+        for camera_config in sim_config.camera_configs:
             image_writers.append(ImageWriter())
             image_writers[-1].DeclareImageInputPort(
                 pixel_type=PixelType.kRgba8U,
                 port_name=f"{camera_config.name}_image",
-                file_name_format= self._image_dir + '/{time_msec}.png',
+                file_name_format=self._image_dir + "/{time_msec}.png",
                 publish_period=0.1,
-                start_time=0.0
+                start_time=0.0,
             )
-            builder.AddNamedSystem(
-                f"{camera_config}_image_writer",
-                image_writers[-1]
-            )
+            builder.AddNamedSystem(f"{camera_config}_image_writer", image_writers[-1])
             builder.Connect(
                 self._state_estimator.GetOutputPort(
                     f"rgbd_sensor_state_estimator_{camera_config.name}"
                 ),
-                image_writers[-1].get_input_port()
+                image_writers[-1].get_input_port(),
             )
 
         # Set up desired planar pose loggers
@@ -335,7 +334,9 @@ class DataCollectionTableEnvironment:
             builder,
         )
         self._slider_pose_desired_logger = LogVectorOutput(
-            self._desired_position_source.GetOutputPort("desired_slider_planar_pose_vector"),
+            self._desired_position_source.GetOutputPort(
+                "desired_slider_planar_pose_vector"
+            ),
             builder,
         )
 
@@ -345,7 +346,7 @@ class DataCollectionTableEnvironment:
         self._simulator = Simulator(diagram)
         if sim_config.use_realtime:
             self._simulator.set_target_realtime_rate(1.0)
-        
+
         self.context = self._simulator.get_mutable_context()
 
     def simulate(
@@ -400,18 +401,10 @@ class DataCollectionTableEnvironment:
         assert self._data_collection_dir is not None
 
         # Save the logs
-        pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(
-            self.context
-        )
-        pusher_desired = PlanarPushingLog.from_pose_vector_log(
-            pusher_pose_desired_log
-        )
-        slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(
-            self.context
-        )
-        slider_desired = PlanarPushingLog.from_pose_vector_log(
-            slider_pose_desired_log
-        )
+        pusher_pose_desired_log = self._pusher_pose_desired_logger.FindLog(self.context)
+        pusher_desired = PlanarPushingLog.from_pose_vector_log(pusher_pose_desired_log)
+        slider_pose_desired_log = self._slider_pose_desired_logger.FindLog(self.context)
+        slider_desired = PlanarPushingLog.from_pose_vector_log(slider_pose_desired_log)
 
         combined_logs = CombinedPlanarPushingLogs(
             pusher_desired=pusher_desired,
@@ -425,11 +418,13 @@ class DataCollectionTableEnvironment:
             pickle.dump(combined_logs, f)
 
     def resize_saved_images(self):
-        desired_image_shape = np.array([
-            self._data_collection_config.image_width,
-            self._data_collection_config.image_height,
-            3
-        ])
+        desired_image_shape = np.array(
+            [
+                self._data_collection_config.image_width,
+                self._data_collection_config.image_height,
+                3,
+            ]
+        )
         for image_name in os.listdir(self._image_dir):
             image_path = f"{self._image_dir}/{image_name}"
             img = Image.open(image_path)
@@ -438,7 +433,6 @@ class DataCollectionTableEnvironment:
                 img = cv2.resize(img, (desired_image_shape[1], desired_image_shape[0]))
                 img = Image.fromarray(img)
                 img.save(image_path)
-
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
@@ -457,7 +451,7 @@ class DataCollectionTableEnvironment:
             PlanarPose(*pusher_desired_pose_vec, 0),
             time_in_recording=t,
         )
-    
+
     def _setup_data_collection_dir(self, data_collection_dir: str) -> str:
         assert data_collection_dir is not None
         # Create data_collection_dir if it doesn't already exist
@@ -469,14 +463,16 @@ class DataCollectionTableEnvironment:
         for path in os.listdir(data_collection_dir):
             if os.path.isdir(os.path.join(data_collection_dir, path)):
                 traj_idx += 1
-        
+
         # Setup the current directory
-        os.makedirs(f'{data_collection_dir}/{traj_idx}/images')
-        open(f'{data_collection_dir}/{traj_idx}/log.txt', 'w').close()
-        return f'{data_collection_dir}/{traj_idx}'
-    
+        os.makedirs(f"{data_collection_dir}/{traj_idx}/images")
+        open(f"{data_collection_dir}/{traj_idx}/log.txt", "w").close()
+        return f"{data_collection_dir}/{traj_idx}"
+
     def _get_diff_ik_time_step(self):
-        if type(self._desired_position_source) == ReplayPositionSource and \
-            self._desired_position_source.get_time_step() is not None:
+        if (
+            type(self._desired_position_source) == ReplayPositionSource
+            and self._desired_position_source.get_time_step() is not None
+        ):
             return self._desired_position_source.get_time_step()
         return self._sim_config.time_step

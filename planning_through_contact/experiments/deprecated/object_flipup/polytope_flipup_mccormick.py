@@ -2,7 +2,6 @@ import argparse
 from typing import Optional
 
 import numpy as np
-
 from geometry.two_d.box_2d import Box2d
 from geometry.two_d.contact.contact_pair_2d import ContactPairDefinition
 from geometry.two_d.contact.contact_scene_2d import ContactScene2d

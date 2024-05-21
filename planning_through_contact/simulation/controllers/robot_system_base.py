@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from pydrake.all import Meshcat, Diagram
+from pydrake.all import Diagram, Meshcat
 
 
 class RobotSystemBase(Diagram):
@@ -20,12 +20,12 @@ class RobotSystemBase(Diagram):
     def robot_model_name(self) -> str:
         """The name of the robot model."""
         ...
-    
+
     @abstractmethod
     def num_positions(self) -> int:
         """The number of positions in the robot model."""
         ...
-    
+
     # methods for visualization functions
 
     @property
@@ -33,7 +33,7 @@ class RobotSystemBase(Diagram):
     def slider_model_name(self) -> str:
         """The name of the robot model."""
         ...
-    
+
     @abstractmethod
     def get_station_plant(self):
         ...
@@ -41,11 +41,11 @@ class RobotSystemBase(Diagram):
     @abstractmethod
     def get_scene_graph(self):
         ...
-    
+
     @abstractmethod
     def get_slider(self):
         ...
-    
+
     @abstractmethod
     def get_meshcat(self):
         ...

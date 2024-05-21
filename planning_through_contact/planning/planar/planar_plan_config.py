@@ -101,7 +101,6 @@ class SliderPusherSystemConfig:
     def limit_surface_const(self) -> float:
         return (self.max_contact_radius * self.integration_constant) ** -2
 
-
     def __eq__(self, other: "SliderPusherSystemConfig") -> bool:
         return (
             self.slider == other.slider
@@ -113,15 +112,12 @@ class SliderPusherSystemConfig:
             and self.force_scale == other.force_scale
         )
 
+
 @dataclass
 class PlanarSolverParams:
     rounding_steps: int = 20
-    max_rounding_trials: int = (
-        10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
-    )
-    gcs_convex_relaxation: bool = (
-        True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
-    )
+    max_rounding_trials: int = 10000  # number of rounding trials to find paths in the graph BEFORE solving any ConvexRestriction
+    gcs_convex_relaxation: bool = True  # NOTE: Currently, there is no way to solve the MISDP, so this must be true
     print_flows: bool = False
     assert_determinants: bool = False  # TODO: Remove this
     assert_result: bool = True
@@ -163,9 +159,9 @@ class NonCollisionCost:
     # NOTE: The single mode is only used to test one non-collision mode at a time
     distance_to_object_socp_single_mode: Optional[float] = None
     pusher_velocity_regularization: Optional[float] = None
-    pusher_velocity_constraint: Optional[float] = (
-        None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
-    )
+    pusher_velocity_constraint: Optional[
+        float
+    ] = None  # TODO: move this (it is not a cost, as the name of the class entails it should be)
     pusher_arc_length: Optional[float] = None
     time: Optional[float] = None
 

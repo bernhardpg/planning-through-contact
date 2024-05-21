@@ -1,4 +1,5 @@
 from pydrake.systems.framework import LeafSystem
+
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 
@@ -17,13 +18,8 @@ class PlanarPoseToGeneralizedCoords(LeafSystem):
     def DoCalcOutput(self, context, output):
         planar_pose_input = self.EvalVectorInput(context, 0).get_value()
         planar_pose = PlanarPose(
-            planar_pose_input[0], 
-            planar_pose_input[1], 
-            planar_pose_input[2]
+            planar_pose_input[0], planar_pose_input[1], planar_pose_input[2]
         )
         output.set_value(
-            planar_pose.to_generalized_coords(
-                self._z_value,
-                self._z_axis_is_positive
-            )
+            planar_pose.to_generalized_coords(self._z_value, self._z_axis_is_positive)
         )

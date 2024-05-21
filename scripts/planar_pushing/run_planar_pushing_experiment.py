@@ -1,18 +1,15 @@
-from copy import copy
 import logging
 import os
+from copy import copy
 from datetime import datetime
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import get_original_cwd, instantiate
 from omegaconf import OmegaConf, open_dict
+from pydrake.all import StartMeshcat
 
-from pydrake.all import (
-    StartMeshcat,
-)
 from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
-
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )

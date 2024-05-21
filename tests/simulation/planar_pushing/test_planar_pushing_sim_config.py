@@ -1,29 +1,21 @@
-import pytest
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import List, Optional
+
+import hydra
 import numpy as np
 import numpy.typing as npt
-import hydra
+import pytest
 from omegaconf import OmegaConf
-
-from pydrake.multibody.plant import (
-    ContactModel,
-)
-from pydrake.systems.sensors import (
-    CameraConfig
-)
-from pydrake.math import (
-    RigidTransform, 
-    RotationMatrix,
-)
 from pydrake.all import RollPitchYaw
-from pydrake.common.schema import (
-    Transform
-)
+from pydrake.common.schema import Transform
+from pydrake.math import RigidTransform, RotationMatrix
+from pydrake.multibody.plant import ContactModel
+from pydrake.systems.sensors import CameraConfig
 
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
-    MultiRunConfig,
-    PlanarPushingSimConfig,
+from planning_through_contact.experiments.utils import (
+    get_box,
+    get_default_plan_config,
+    get_tee,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -31,20 +23,21 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    SliderPusherSystemConfig,
     BoxWorkspace,
     PlanarPushingWorkspace,
+    SliderPusherSystemConfig,
+)
+from planning_through_contact.simulation.controllers.diffusion_policy_source import (
+    DiffusionPolicyConfig,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
-from planning_through_contact.simulation.controllers.diffusion_policy_source import DiffusionPolicyConfig
-from planning_through_contact.experiments.utils import (
-    get_box,
-    get_tee,
-    get_default_plan_config,
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
+    MultiRunConfig,
+    PlanarPushingSimConfig,
 )
-from planning_through_contact.simulation.sim_utils import (
-    get_slider_start_poses,
-)
+from planning_through_contact.simulation.sim_utils import get_slider_start_poses
+
+
 @pytest.fixture
 def multi_run_config() -> MultiRunConfig:
     return MultiRunConfig(
@@ -55,8 +48,9 @@ def multi_run_config() -> MultiRunConfig:
         pusher_start_pose=PlanarPose(x=0.5, y=0.25, theta=0.0),
         slider_goal_pose=PlanarPose(x=0.5, y=0.0, theta=0.0),
         workspace_width=0.5,
-        workspace_height=0.5
+        workspace_height=0.5,
     )
+
 
 @pytest.fixture()
 def diffusion_policy_config() -> DiffusionPolicyConfig:
@@ -65,6 +59,7 @@ def diffusion_policy_config() -> DiffusionPolicyConfig:
         initial_pusher_pose=PlanarPose(x=0.5, y=0.25, theta=0.0),
         target_slider_pose=PlanarPose(x=0.5, y=0.0, theta=0.0),
     )
+
 
 @pytest.fixture()
 def sim_config() -> PlanarPushingSimConfig:
@@ -75,7 +70,7 @@ def sim_config() -> PlanarPushingSimConfig:
         friction_coeff_slider_pusher=0.1,
         grav_acc=9.81,
         integration_constant=0.3,
-        force_scale=0.01
+        force_scale=0.01,
     )
     dynamics_config.slider = slider
 
@@ -99,12 +94,12 @@ def sim_config() -> PlanarPushingSimConfig:
             checkpoint="checkpoint",
             initial_pusher_pose=PlanarPose(x=0.5, y=0.25, theta=0.0),
             target_slider_pose=PlanarPose(x=0.5, y=0.0, theta=0.0),
-            cfg_overrides={'n_actions': 8}
+            cfg_overrides={"n_actions": 8},
         ),
         use_hardware=False,
         pusher_z_offset=0.03,
         camera_configs=None,
-        log_dir='diffusion_policy_logs',
+        log_dir="diffusion_policy_logs",
         multi_run_config=MultiRunConfig(
             num_runs=1,
             max_attempt_duration=100,
@@ -113,20 +108,18 @@ def sim_config() -> PlanarPushingSimConfig:
             pusher_start_pose=PlanarPose(x=0.5, y=0.25, theta=0.0),
             slider_goal_pose=PlanarPose(x=0.5, y=0.0, theta=0.0),
             workspace_width=0.5,
-            workspace_height=0.5
+            workspace_height=0.5,
         ),
-        scene_directive_name='planar_pushing_iiwa_plant_hydroelastic.yaml'
+        scene_directive_name="planar_pushing_iiwa_plant_hydroelastic.yaml",
     )
+
 
 def test_multi_run_config_equality(multi_run_config):
     assert multi_run_config == multi_run_config
 
+
 def test_from_yaml(sim_config):
-    sim_config_from_yaml = PlanarPushingSimConfig.from_yaml(OmegaConf.load("tests/simulation/planar_pushing/test_sim_config.yaml"))
+    sim_config_from_yaml = PlanarPushingSimConfig.from_yaml(
+        OmegaConf.load("tests/simulation/planar_pushing/test_sim_config.yaml")
+    )
     assert sim_config == sim_config_from_yaml
-
-
-        
-
-
-

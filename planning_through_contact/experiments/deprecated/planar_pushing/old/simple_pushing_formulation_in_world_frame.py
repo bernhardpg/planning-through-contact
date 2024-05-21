@@ -4,15 +4,14 @@ from typing import List, TypeVar
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
-from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
-
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from geometry.utilities import cross_2d
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 from tools.types import NpExpressionArray
 from visualize.analysis import create_quasistatic_pushing_analysis
 from visualize.colors import COLORS

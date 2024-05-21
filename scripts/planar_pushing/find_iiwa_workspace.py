@@ -1,20 +1,19 @@
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 from pydrake.multibody.plant import ContactModel
+
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
-    PlanarPushingSimConfig,
-)
-
-from planning_through_contact.simulation.sim_utils import LoadRobotOnly
 from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
     solve_ik,
 )
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
+    PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.sim_utils import LoadRobotOnly
 
 
 def run_sim(plan: str, save_recording: bool = False, debug: bool = False):

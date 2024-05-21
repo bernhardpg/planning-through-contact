@@ -1,11 +1,10 @@
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge, le
-from pydrake.solvers import MathematicalProgram, Solve
-
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.utilities import cross_2d
+from pydrake.math import eq, ge, le
+from pydrake.solvers import MathematicalProgram, Solve
 from tools.types import NpVariableArray
 
 

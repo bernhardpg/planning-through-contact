@@ -745,7 +745,9 @@ def direct_trajopt_through_contact(
     sq_forces_cost = []
     if cost_config.force_regularization is not None:
         for lambda_n, lambda_f in force_comps:
-            cost = cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
+            cost = (
+                cost_config.force_regularization * (lambda_n**2 + lambda_f**2) * dt
+            )
             sq_forces_cost.append(prog.AddCost(cost))
 
     if use_cos_sin:
@@ -1000,7 +1002,6 @@ def direct_trajopt_through_contact(
                     visualize_knot_points=True,
                 )
             else:
-
                 traj_old = OldPlanarPushingTrajectory(
                     dt,
                     [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs],

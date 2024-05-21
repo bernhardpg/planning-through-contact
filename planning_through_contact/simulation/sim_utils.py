@@ -1,43 +1,43 @@
-import os
-import numpy as np
-from typing import Literal, List
-from lxml import etree
 import copy
+import os
+from typing import List, Literal
 
+import numpy as np
+from lxml import etree
+from pydrake.all import Box as DrakeBox
 from pydrake.all import (
-    LoadModelDirectives,
-    Parser,
-    ProcessModelDirectives,
-    MultibodyPlant,
     ContactModel,
     DiscreteContactApproximation,
-    ModelInstanceIndex,
-    Box as DrakeBox,
-    RigidBody as DrakeRigidBody,
     GeometryInstance,
+    LoadModelDirectives,
     MakePhongIllustrationProperties,
+    ModelInstanceIndex,
+    MultibodyPlant,
+    Parser,
+    ProcessModelDirectives,
     Rgba,
-    RigidTransform,
-    Transform,
-    RollPitchYaw,
 )
+from pydrake.all import RigidBody as DrakeRigidBody
+from pydrake.all import RigidTransform, RollPitchYaw, Transform
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.simulation.controllers.robot_system_base import RobotSystemBase
+from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.planar.non_collision import (
+    check_finger_pose_in_contact_location,
+)
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
-    PlanarPushingWorkspace,
     PlanarPushingStartAndGoal,
+    PlanarPushingWorkspace,
 )
-from planning_through_contact.geometry.planar.non_collision import (
-    check_finger_pose_in_contact_location,
+from planning_through_contact.simulation.controllers.robot_system_base import (
+    RobotSystemBase,
 )
 from planning_through_contact.visualize.colors import COLORS
 
@@ -109,12 +109,14 @@ def GetSliderUrl(sim_config, format: Literal["sdf", "yaml"] = "sdf"):
 
 ## Domain Randomization Functions
 
+
 def AddRandomizedSliderAndConfigureContact(
-    sim_config, plant, 
-    scene_graph, 
-    default_color = [0.2, 0.2, 0.2],
-    color_range = 0.02,
-    slider_sdf: str = 't_pusher.sdf'
+    sim_config,
+    plant,
+    scene_graph,
+    default_color=[0.2, 0.2, 0.2],
+    color_range=0.02,
+    slider_sdf: str = "t_pusher.sdf",
 ) -> ModelInstanceIndex:
     parser = Parser(plant, scene_graph)
     ConfigureParser(parser)
@@ -123,24 +125,26 @@ def AddRandomizedSliderAndConfigureContact(
     if not use_hydroelastic:
         raise NotImplementedError()
 
-    scene_directive_name = f"{sim_config.scene_directive_name.split('.')[0]}_randomized.yaml"
+    scene_directive_name = (
+        f"{sim_config.scene_directive_name.split('.')[0]}_randomized.yaml"
+    )
     directives = LoadModelDirectives(f"{models_folder}/{scene_directive_name}")
     ProcessModelDirectives(directives, plant, parser)  # type: ignore
 
-    sdf_file = f'{models_folder}/{slider_sdf}'
+    sdf_file = f"{models_folder}/{slider_sdf}"
     safe_parse = etree.XMLParser(recover=True)
     tree = etree.parse(sdf_file, safe_parse)
     root = tree.getroot()
 
-    diffuse_elements = root.xpath('//model/link/visual/material/diffuse')
+    diffuse_elements = root.xpath("//model/link/visual/material/diffuse")
 
     R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
     G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
     B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-    A = 1 # assuming fully opaque
+    A = 1  # assuming fully opaque
 
     new_diffuse_value = f"{R} {G} {B} {A}"
-    for diffuse in diffuse_elements: 
+    for diffuse in diffuse_elements:
         diffuse.text = new_diffuse_value
 
     sdf_as_string = etree.tostring(tree, encoding="utf8").decode()
@@ -154,11 +158,12 @@ def AddRandomizedSliderAndConfigureContact(
     plant.Finalize()
     return slider
 
+
 # def randomize_table(
 #     default_color = [0.55, 0.55, 0.55],
 #     color_range = 0.02,
 #     table_urdf: str = "small_table_hydroelastic.urdf"
-# ) -> None: 
+# ) -> None:
 #     base_urdf = f'{models_folder}/{table_urdf}'
 #     parser = etree.XMLParser(recover=True)
 #     tree = etree.parse(base_urdf, parser)
@@ -169,22 +174,23 @@ def AddRandomizedSliderAndConfigureContact(
 #     B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
 #     A = 1 # assuming fully opaque
 
-#     new_color_value = f"{R} {G} {B} {A}"    
+#     new_color_value = f"{R} {G} {B} {A}"
 #     models = root.xpath('//material[@name="LightGrey"]')
 #     for model in models:
-#         for color in model: 
+#         for color in model:
 #             color.set("rgba", new_color_value)
-    
+
 #     new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
 
 #     tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
 
+
 def randomize_table(
-    default_color = [0.55, 0.55, 0.55],
-    color_range = 0.02,
+    default_color=[0.55, 0.55, 0.55],
+    color_range=0.02,
     table_urdf: str = "small_table_hydroelastic.urdf",
 ) -> None:
-    base_urdf = f'{models_folder}/{table_urdf}'
+    base_urdf = f"{models_folder}/{table_urdf}"
     parser = etree.XMLParser(recover=True)
     tree = etree.parse(base_urdf, parser)
     root = tree.getroot()
@@ -193,18 +199,24 @@ def randomize_table(
     import random
 
     if rv < 0.3:
-        image_dir = f'{models_folder}/images'
+        image_dir = f"{models_folder}/images"
         image_files = os.listdir(image_dir)
         image_file = random.choice(image_files)
         material = root.xpath('//link[@name="TableTop"]/visual/material')
         material[0].set("name", "")
         texture = etree.SubElement(material[0], "texture")
-        texture.set("filename", f'{models_folder}/images/{image_file}')
+        texture.set("filename", f"{models_folder}/images/{image_file}")
     else:
-        R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-        G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-        B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-        A = 1 # assuming fully opaque
+        R = clamp(
+            default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0
+        )
+        G = clamp(
+            default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0
+        )
+        B = clamp(
+            default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0
+        )
+        A = 1  # assuming fully opaque
         new_color_value = f"{R} {G} {B} {A}"
         models = root.xpath('//materialz[@name="LightGrey"]')
         for model in models:
@@ -219,63 +231,72 @@ def randomize_table(
     #     texture = etree.SubElement(material[0], "texture")
     #     texture.set("filename", f'{models_folder}/{image_file}')
     #     # new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
-    new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
-    tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+    new_urdf_location = f"{models_folder}/small_table_hydroelastic_randomized.urdf"
+    tree.write(
+        new_urdf_location, pretty_print=True, xml_declaration=True, encoding="UTF-8"
+    )
+
 
 def randomize_pusher(
-    default_color = [1.0, 0.45, 0.14],
-    color_range = 0.02,
-    pusher_sdf: str = "pusher_floating_hydroelastic.sdf"
+    default_color=[1.0, 0.45, 0.14],
+    color_range=0.02,
+    pusher_sdf: str = "pusher_floating_hydroelastic.sdf",
 ) -> None:
-    base_sdf = f'{models_folder}/{pusher_sdf}'
+    base_sdf = f"{models_folder}/{pusher_sdf}"
 
     safe_parse = etree.XMLParser(recover=True)
     tree = etree.parse(base_sdf, safe_parse)
     root = tree.getroot()
 
-    diffuse_elements = root.xpath('//model/link/visual/material/diffuse')
+    diffuse_elements = root.xpath("//model/link/visual/material/diffuse")
 
     R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
     G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
     B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-    A = 1 # assuming fully opaque
+    A = 1  # assuming fully opaque
 
-    new_diffuse_value = f"{R} {G} {B} {A}"  # Example: changing diffuse to white (R G B A)
-    for diffuse in diffuse_elements: 
+    new_diffuse_value = (
+        f"{R} {G} {B} {A}"  # Example: changing diffuse to white (R G B A)
+    )
+    for diffuse in diffuse_elements:
         diffuse.text = new_diffuse_value
 
-    new_sdf_location = f'{models_folder}/pusher_floating_hydroelastic_randomized.sdf'
+    new_sdf_location = f"{models_folder}/pusher_floating_hydroelastic_randomized.sdf"
 
-    tree.write(new_sdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+    tree.write(
+        new_sdf_location, pretty_print=True, xml_declaration=True, encoding="UTF-8"
+    )
+
 
 def clamp(val, min_val, max_val):
     return max(min(val, max_val), min_val)
+
 
 def randomize_camera_config(camera_config):
     # Randomize camera location
     new_camera_config = copy.deepcopy(camera_config)
     camera_pose = camera_config.X_PB.GetDeterministicValue()
-    
+
     new_xyz = np.random.normal(camera_pose.translation(), 0.01, 3)
     rpy = camera_pose.rotation().ToRollPitchYaw()
-    rot_std = 2*np.pi/180
+    rot_std = 2 * np.pi / 180
     new_rpy = RollPitchYaw(
         np.random.normal(rpy.roll_angle(), rot_std),
         np.random.normal(rpy.pitch_angle(), rot_std),
-        np.random.normal(rpy.yaw_angle(), rot_std)
+        np.random.normal(rpy.yaw_angle(), rot_std),
     )
 
-    new_camera_config.X_PB = Transform(
-        RigidTransform(new_rpy, new_xyz)
-    )
+    new_camera_config.X_PB = Transform(RigidTransform(new_rpy, new_xyz))
 
     # randomize the background color
     new_rgb = np.random.uniform(0, 1, 3)
     new_camera_config.background = Rgba(new_rgb[0], new_rgb[1], new_rgb[2], 1)
-    
+
     return new_camera_config
 
+
 ## Collision checkers for computing initial slider and pusher poses
+
 
 def get_slider_start_poses(
     seed: int,
@@ -296,6 +317,7 @@ def get_slider_start_poses(
         slider_initial_poses.append(slider_initial_pose)
 
     return slider_initial_poses
+
 
 def get_slider_pose_within_workspace(
     workspace: PlanarPushingWorkspace,
@@ -332,6 +354,7 @@ def get_slider_pose_within_workspace(
 
     return slider_pose
 
+
 # TODO: refactor
 def check_collision(
     pusher_pose_world: PlanarPose,
@@ -361,7 +384,8 @@ def check_collision(
         return True
     else:
         return False
-    
+
+
 def slider_within_workspace(
     workspace: PlanarPushingWorkspace, pose: PlanarPose, slider: CollisionGeometry
 ) -> bool:
@@ -385,9 +409,13 @@ def slider_within_workspace(
 
 ## Meshcat visualizations
 
+
 def get_slider_body(robot_system: RobotSystemBase) -> DrakeRigidBody:
-    slider_body = robot_system.station_plant.GetUniqueFreeBaseBodyOrThrow(robot_system.slider)
+    slider_body = robot_system.station_plant.GetUniqueFreeBaseBodyOrThrow(
+        robot_system.slider
+    )
     return slider_body
+
 
 def get_slider_shapes(robot_system: RobotSystemBase) -> List[DrakeBox]:
     slider_body = get_slider_body(robot_system)
@@ -403,6 +431,7 @@ def get_slider_shapes(robot_system: RobotSystemBase) -> List[DrakeBox]:
 
     return shapes
 
+
 def get_slider_shape_poses(robot_system: RobotSystemBase) -> List[DrakeBox]:
     slider_body = get_slider_body(robot_system)
     collision_geometries_ids = robot_system.station_plant.GetCollisionGeometriesForBody(
@@ -414,20 +443,19 @@ def get_slider_shape_poses(robot_system: RobotSystemBase) -> List[DrakeBox]:
 
     return poses
 
+
 def create_goal_geometries(
     robot_system: RobotSystemBase,
     desired_planar_pose: PlanarPose,
-    box_color = COLORS["emeraldgreen"],
-    desired_pose_alpha = 0.3,
+    box_color=COLORS["emeraldgreen"],
+    desired_pose_alpha=0.3,
 ) -> List[str]:
     shapes = get_slider_shapes(robot_system)
     poses = get_slider_shape_poses(robot_system)
     heights = [shape.height() for shape in shapes]
     min_height = min(heights)
-    desired_pose = desired_planar_pose.to_pose(
-        min_height / 2, z_axis_is_positive=True
-    )
-    
+    desired_pose = desired_planar_pose.to_pose(min_height / 2, z_axis_is_positive=True)
+
     source_id = robot_system._scene_graph.RegisterSource()
 
     goal_geometries = []
@@ -444,9 +472,7 @@ def create_goal_geometries(
         robot_system._scene_graph.AssignRole(
             source_id,
             curr_shape_geometry_id,
-            MakePhongIllustrationProperties(
-                box_color.diffuse(desired_pose_alpha)
-            ),
+            MakePhongIllustrationProperties(box_color.diffuse(desired_pose_alpha)),
         )
         geom_name = f"goal_shape_{idx}"
         goal_geometries.append(geom_name)
@@ -455,10 +481,11 @@ def create_goal_geometries(
         )
     return goal_geometries
 
+
 def visualize_desired_slider_pose(
     robot_system: RobotSystemBase,
     desired_planar_pose: PlanarPose,
-    goal_geometries: List[str], 
+    goal_geometries: List[str],
     time_in_recording: float = 0.0,
 ) -> None:
     shapes = get_slider_shapes(robot_system)
@@ -466,9 +493,7 @@ def visualize_desired_slider_pose(
 
     heights = [shape.height() for shape in shapes]
     min_height = min(heights)
-    desired_pose = desired_planar_pose.to_pose(
-        min_height / 2, z_axis_is_positive=True
-    )
+    desired_pose = desired_planar_pose.to_pose(min_height / 2, z_axis_is_positive=True)
 
     for pose, geom_name in zip(poses, goal_geometries):
         robot_system._meshcat.SetTransform(

@@ -1,5 +1,6 @@
-from pydrake.all import LeafSystem, QueryObject, AbstractValue
 from typing import List
+
+from pydrake.all import AbstractValue, LeafSystem, QueryObject
 
 
 class ContactDetectionSystem(LeafSystem):

@@ -1,5 +1,6 @@
-from pydrake.systems.framework import LeafSystem, BasicVector
-from pydrake.all import RigidTransform, AbstractValue
+from pydrake.all import AbstractValue, RigidTransform
+from pydrake.systems.framework import BasicVector, LeafSystem
+
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 
 

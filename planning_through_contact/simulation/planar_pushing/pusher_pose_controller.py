@@ -1,18 +1,12 @@
+import logging
 from enum import Enum
 from typing import List, Optional, Tuple
-import logging
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
-from pydrake.systems.framework import (
-    AbstractStateIndex,
-    Context,
-    LeafSystem,
-    AbstractStateIndex,
-    State,
-)
+from pydrake.systems.framework import AbstractStateIndex, Context, LeafSystem, State
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (

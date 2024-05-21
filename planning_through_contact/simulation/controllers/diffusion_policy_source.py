@@ -1,19 +1,16 @@
-import numpy as np
 from dataclasses import dataclass, field
 
-from pydrake.all import (
-    DiagramBuilder,
-    ZeroOrderHold,
-    LeafSystem,
-)
+import numpy as np
+from pydrake.all import DiagramBuilder, LeafSystem, ZeroOrderHold
 
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )
 from planning_through_contact.simulation.planar_pushing.diffusion_policy_controller import (
     DiffusionPolicyController,
 )
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+
 
 @dataclass
 class DiffusionPolicyConfig:
@@ -24,7 +21,7 @@ class DiffusionPolicyConfig:
     freq: float = 10.0
     delay: float = 1.0
     debug: bool = False
-    device: str = 'cuda:0'
+    device: str = "cuda:0"
     cfg_overrides: dict = field(default_factory={})
 
     def __eq__(self, other: "DiffusionPolicyConfig"):
@@ -39,6 +36,7 @@ class DiffusionPolicyConfig:
             and self.device == other.device
             and self.cfg_overrides == other.cfg_overrides
         )
+
 
 class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
     """Uses the desired trajectory of the entire system and diffusion controller
@@ -72,66 +70,57 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
         self._zero_order_hold = builder.AddNamedSystem(
             "ZeroOrderHold",
             ZeroOrderHold(
-                period_sec=1/freq, 
-                vector_size=2, 
+                period_sec=1 / freq,
+                vector_size=2,
             ),
         )
 
         # AppendZeros (add theta to x y positions)
-        self._append_zeros = builder.AddSystem(
-            AppendZeros(input_size=2, num_zeros=1)
-        )
-
+        self._append_zeros = builder.AddSystem(AppendZeros(input_size=2, num_zeros=1))
 
         ## Internal connections
 
         builder.Connect(
             self._diffusion_policy_controller.get_output_port(),
-            self._zero_order_hold.get_input_port()
+            self._zero_order_hold.get_input_port(),
         )
 
         builder.Connect(
-            self._zero_order_hold.get_output_port(),
-            self._append_zeros.get_input_port()
+            self._zero_order_hold.get_output_port(), self._append_zeros.get_input_port()
         )
 
         ## Export inputs and outputs (external)
 
         builder.ExportInput(
-            self._diffusion_policy_controller.GetInputPort(
-                "pusher_pose_measured"
-            ),
-            "pusher_pose_measured"
+            self._diffusion_policy_controller.GetInputPort("pusher_pose_measured"),
+            "pusher_pose_measured",
         )
 
         builder.ExportInput(
-            self._diffusion_policy_controller.GetInputPort("camera"),
-            "camera"
-        )
-        
-        builder.ExportOutput(
-            self._zero_order_hold.get_output_port(),
-            "planar_position_command"
+            self._diffusion_policy_controller.GetInputPort("camera"), "camera"
         )
 
         builder.ExportOutput(
-            self._append_zeros.get_output_port(),
-            "planar_pose_command"
+            self._zero_order_hold.get_output_port(), "planar_position_command"
+        )
+
+        builder.ExportOutput(
+            self._append_zeros.get_output_port(), "planar_pose_command"
         )
 
         builder.BuildInto(self)
 
 
 class AppendZeros(LeafSystem):
-    def __init__(self, input_size:int, num_zeros: int):
+    def __init__(self, input_size: int, num_zeros: int):
         super().__init__()
         self._input_size = input_size
         self._num_zeros = num_zeros
         self.DeclareVectorInputPort("input", input_size)
-        self.DeclareVectorOutputPort("output", input_size+num_zeros, self.CalcOutput)
+        self.DeclareVectorOutputPort("output", input_size + num_zeros, self.CalcOutput)
 
     def CalcOutput(self, context, output):
         input = self.EvalVectorInput(context, 0).get_value()
         output_vec = np.zeros(self._input_size + self._num_zeros)
-        output_vec[:self._input_size] = input
+        output_vec[: self._input_size] = input
         output.SetFromVector(output_vec)

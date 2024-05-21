@@ -1,8 +1,6 @@
 # NOTE: All of this will be refactored in the not too distant future.
 
 import numpy as np
-from pydrake.math import eq
-
 from deprecated.geometry.collision_pair import CollisionPair
 from deprecated.geometry.contact_mode import ContactModeType, PositionModeType
 from deprecated.geometry.rigid_body import RigidBody
@@ -10,6 +8,7 @@ from deprecated.planning.gcs import GcsContactPlanner
 from deprecated.planning.graph_builder import ContactModeConfig
 from deprecated.visualize.visualize import animate_positions, plot_positions_and_forces
 from geometry.bezier import BezierCurve
+from pydrake.math import eq
 
 # TODO remove
 # flake8: noqa

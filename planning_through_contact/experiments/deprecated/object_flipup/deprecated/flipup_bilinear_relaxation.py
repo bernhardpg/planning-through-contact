@@ -5,13 +5,12 @@ from typing import List, TypeVar
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
-
 from convex_relaxation.mccormick import relax_bilinear_expression
 from geometry.bezier import BezierCurve
 from geometry.two_d.box_2d import Box2d, construct_2d_plane_from_points
 from geometry.utilities import cross_2d
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, Solve
 
 T = TypeVar("T")
 

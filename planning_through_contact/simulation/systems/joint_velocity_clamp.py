@@ -1,5 +1,6 @@
-from pydrake.all import LeafSystem, AbstractValue
 import logging
+
+from pydrake.all import AbstractValue, LeafSystem
 
 logger = logging.getLogger(__name__)
 

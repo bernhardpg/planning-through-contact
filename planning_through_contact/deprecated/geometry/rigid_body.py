@@ -3,7 +3,6 @@ from typing import Literal
 
 import numpy.typing as npt
 import pydrake.symbolic as sym
-
 from deprecated.geometry.bezier import BezierVariable
 
 
