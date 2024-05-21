@@ -78,14 +78,17 @@ class Experiment:
 
         return frames
 
-    def make_figures(self):
-        frames_per_video = [self._make_frames(file) for file in self.video_files]
-        frames_per_row = max([len(frame) for frame in frames_per_video])
+    def make_figures(self, save: bool = True) -> None:
+        figure_folder = self.experiment_path / "figures"
+        if save:
+            figure_folder.mkdir(parents=True, exist_ok=True)
 
-        for frames in frames_per_video:
+        for video_file in self.video_files:
+            frames = self._make_frames(video_file)
+
             frames_per_row = len(frames)
             fig, axes = plt.subplots(
-                1, frames_per_row, figsize=(1.9 * frames_per_row, 1.7)
+                1, frames_per_row, figsize=(5.0 * frames_per_row, 4.5)
             )  # Adjust the size as needed
 
             for col, frame in enumerate(frames):
@@ -95,7 +98,13 @@ class Experiment:
             # Adjust subplot parameters to remove padding
             plt.subplots_adjust(wspace=0, hspace=1.2)
             plt.tight_layout()
-            plt.show()
+
+            video_type = str(video_file.name).split(".")[0]
+
+            if save:
+                fig.savefig(str(figure_folder / f"{video_type}.pdf"))
+            else:
+                plt.show()
 
 
 @dataclass
@@ -155,8 +164,8 @@ def main():
     ]
     keyframes = [
         [5, 9, 13.4, 23, 34, 42],
-        [20, 56, 73],
-        [20, 56, 73],
+        [5, 12, 17, 36, 39, 44, 66, 71],
+        [5, 9, 15, 35, 38, 39, 60, 65],
         [20, 56, 73],
     ]
 
