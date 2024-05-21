@@ -1,3 +1,9 @@
+import argparse
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import List
+
 import cv2
 import matplotlib.pyplot as plt
 
@@ -7,102 +13,160 @@ def time_to_frame_index(time_sec, fps):
     return int(time_sec * fps)
 
 
-video_paths = [
-    # "traj_0_video.mp4",
-    # "traj_1_video.mp4",  # the one from shao slack
-    # "traj_14_video.mp4",  # the one from shao slack
-    # "traj_0_video.mov",
-    "traj_1_video.mov",  # the one from shao slack
-    # "traj_14_video.mov",  # the one from shao slack
-]
-main_folder = "videos/"
+@dataclass
+class Experiment:
+    experiment_path: Path
+    keyframe_times: List[float]
 
-# Specify the times (in seconds) at which you want to extract frames
-times_per_video = [
-    # [20, 55, 72, 95, 111, 146, 162, 196, 209, 225],
-    [20, 56, 73, 109, 125.4, 160],
-    # [10, 35, 50, 70, 86.5, 95],
-]
+    def __post_init__(self) -> None:
+        if not self.experiment_path.exists():
+            raise RuntimeError(f"{self.experiment_path} does not exist")
+
+        self.video_files = [
+            self.experiment_path / file
+            for file in ("camera_front.mp4", "camera_side.mp4", "camera_top.mp4")
+        ]
+        for file in self.video_files:
+            if not file.exists():
+                raise RuntimeError(
+                    f"Could not find {file.name} in {self.experiment_path}"
+                )
+
+    def _make_frames(self, video_path: Path):
+        # Read the video file
+        cap = cv2.VideoCapture(str(video_path))
+
+        # Ensure the video is opened
+        if not cap.isOpened():
+            print("Error: Could not open video.")
+            exit()
+
+        # Get the frame rate of the video
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        # Extract and overlay frames
+        frames = []
+        for idx in range(len(self.keyframe_times) - 1):
+            time_sec = self.keyframe_times[idx]
+            frame_index = time_to_frame_index(time_sec, fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+
+            ret, frame1 = cap.read()
+            if not ret:
+                break
+
+            time_sec_next = self.keyframe_times[idx + 1]
+            frame_index = time_to_frame_index(time_sec_next, fps)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+
+            ret, frame2 = cap.read()
+            if not ret:
+                frame2 = frame1  # If there's no next frame, use the same frame
+
+            # Convert color to RGB
+            frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
+            frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
+
+            # Overlay the second frame on the first frame with transparency
+            alpha = 0.5  # Transparency factor
+            overlay_frame = cv2.addWeighted(frame1, alpha, frame2, 0.8, 0)
+
+            frames.append(overlay_frame)
+
+        # Clean up
+        cap.release()
+
+        return frames
+
+    def make_figures(self):
+        frames_per_video = [self._make_frames(file) for file in self.video_files]
+        frames_per_row = max([len(frame) for frame in frames_per_video])
+
+        for frames in frames_per_video:
+            frames_per_row = len(frames)
+            fig, axes = plt.subplots(
+                1, frames_per_row, figsize=(1.9 * frames_per_row, 1.7)
+            )  # Adjust the size as needed
+
+            for col, frame in enumerate(frames):
+                axes[col].imshow(frame)
+                axes[col].axis("off")
+
+            # Adjust subplot parameters to remove padding
+            plt.subplots_adjust(wspace=0, hspace=1.2)
+            plt.tight_layout()
+            plt.show()
 
 
-def make_frames(video_path, times):
-    # Read the video file
-    cap = cv2.VideoCapture(video_path)
+@dataclass
+class ExperimentsMetadata:
+    experiment_folder: str
+    exps_to_use: List[str]
+    keyframes: List[List[float]]
 
-    # Ensure the video is opened
-    if not cap.isOpened():
-        print("Error: Could not open video.")
-        exit()
+    def save(self, filepath: Path) -> None:
+        metadata_as_dict = asdict(self)
 
-    # Get the frame rate of the video
-    fps = cap.get(cv2.CAP_PROP_FPS)
+        with open(filepath, "w") as f:
+            json.dump(metadata_as_dict, f)
 
-    # Extract and overlay frames
-    frames = []
-    for idx in range(len(times) - 1):
-        time_sec = times[idx]
-        frame_index = time_to_frame_index(time_sec, fps)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+    @classmethod
+    def load(cls, filepath: Path) -> "ExperimentsMetadata":
+        with open(filepath, "r") as f:
+            data = json.load(f)
 
-        ret, frame1 = cap.read()
-        if not ret:
-            break
+        return cls(**data)
 
-        time_sec_next = times[idx + 1]
-        frame_index = time_to_frame_index(time_sec_next, fps)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+    @property
+    def exp_dir(self) -> Path:
+        return Path(self.experiment_folder) / "hardware_experiments"
 
-        ret, frame2 = cap.read()
-        if not ret:
-            frame2 = frame1  # If there's no next frame, use the same frame
-
-        # Convert color to RGB
-        frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
-        frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
-
-        # Overlay the second frame on the first frame with transparency
-        alpha = 0.5  # Transparency factor
-        overlay_frame = cv2.addWeighted(frame1, alpha, frame2, 0.8, 0)
-
-        frames.append(overlay_frame)
-
-    # Clean up
-    cap.release()
-
-    return frames
+    def load_experiments(self) -> List[Experiment]:
+        exps = [
+            Experiment(self.exp_dir / exp, keyframe)
+            for exp, keyframe in zip(self.exps_to_use, self.keyframes)
+        ]
+        return exps
 
 
-frames_per_video = [
-    # make_frames(main_folder + path, times[:-1])  # skip last frame
-    make_frames(main_folder + path, times)  # skip last frame
-    for path, times in zip(video_paths, times_per_video)
-]
-frames_per_row = max([len(frame) for frame in frames_per_video])
-num_seqs = len(frames_per_video)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dir",
+        help="Path to folder containing experiments",
+        type=str,
+        default=None,
+    )
 
-individual_plots = True
-if individual_plots:
-    for frames in frames_per_video:
-        frames_per_row = len(frames)
-        fig, axes = plt.subplots(
-            1, frames_per_row, figsize=(1.9 * frames_per_row, 1.7)
-        )  # Adjust the size as needed
+    args = parser.parse_args()
+    exp_folder = Path(args.dir)
 
-        for col, frame in enumerate(frames):
-            axes[col].imshow(frame)
-            axes[col].axis("off")
+    assert exp_folder.exists()
 
-else:
-    for row, frames in enumerate(frames_per_video):
-        for col, frame in enumerate(frames):
-            axes[row, col].imshow(frame)
+    # metadata_files = list(exp_folder.glob("**/*metadata.txt"))
+    # assert len(metadata_files) == 1
+    # metadata_file = metadata_files[0]
 
-        # Make sure to turn of axis for ALL subplots, including
-        # where there is no video frame
-        for col in range(frames_per_row):
-            axes[row, col].axis("off")
+    exps_to_use = [
+        "19-05-00",
+        "19-08-27",
+        "20-39-51",
+        "20-47-40",
+    ]
+    keyframes = [
+        [5, 9, 13.4, 23, 34, 42],
+        [20, 56, 73],
+        [20, 56, 73],
+        [20, 56, 73],
+    ]
 
-# Adjust subplot parameters to remove padding
-plt.subplots_adjust(wspace=0, hspace=1.2)
-plt.tight_layout()
-plt.show()
+    metadata = ExperimentsMetadata(str(exp_folder), exps_to_use, keyframes)
+    metadata.save(exp_folder / "metadata.json")
+
+    exps = metadata.load_experiments()
+    for exp in exps:
+        exp.make_figures()
+
+
+if __name__ == "__main__":
+    main()
