@@ -95,6 +95,9 @@ class NonCollisionSubGraph:
         for m, v in zip(non_collision_modes, non_collision_vertices):
             m.add_cost_to_vertex(v)
 
+        for m, v in zip(non_collision_modes, non_collision_vertices):
+            m.add_constraints_to_vertex(v)
+
         # Add bi-directional edges
         edge_idxs = cls._get_overlapping_edge_idxs(non_collision_modes)
         for i, j in edge_idxs:

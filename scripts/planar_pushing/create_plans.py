@@ -78,8 +78,8 @@ if __name__ == "__main__":
     slider_type = args.body
     num_trajs = args.num
     output_dir = args.output_dir
-    save_relaxed = args.save_relaxed
-    save_analysis = args.save_analysis
+    save_analysis = args.save_analysis or debug
+    save_relaxed = args.save_relaxed or debug
 
     pusher_radius = 0.015
 

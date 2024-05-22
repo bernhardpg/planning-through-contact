@@ -266,7 +266,7 @@ def test_avoid_object_t_pusher(
     plan_config.non_collision_cost = NonCollisionCost(
         pusher_velocity_regularization=1.0
     )
-    plan_config.non_collision_cost.distance_to_object_socp_single_mode = 1.0
+    plan_config.non_collision_cost.distance_to_object = 1.0
 
     plan_config.time_non_collision = 3
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)

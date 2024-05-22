@@ -79,7 +79,7 @@ def get_default_contact_cost() -> ContactCost:
 
 def get_default_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_socp=0.1,
+        distance_to_object=0.1,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=10.0,
     )
@@ -105,7 +105,7 @@ def get_hardware_contact_cost() -> ContactCost:
 
 def get_hardware_non_collision_cost() -> NonCollisionCost:
     non_collision_cost = NonCollisionCost(
-        distance_to_object_socp=0.25,
+        distance_to_object=0.25,
         pusher_velocity_regularization=10.0,
         pusher_arc_length=5.0,
     )
@@ -318,7 +318,7 @@ def get_baseline_comparison_configs(
         config.non_collision_cost.pusher_velocity_regularization = 0.1
 
         config.contact_config.cost.time = 1
-        config.non_collision_cost.distance_to_object_socp = 0.1
+        config.non_collision_cost.distance_to_object = 0.1
         config.non_collision_cost.pusher_arc_length = 1
         config.contact_config.cost.keypoint_arc_length = 1
     else:
