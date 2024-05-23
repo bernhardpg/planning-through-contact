@@ -6,13 +6,12 @@ import numpy as np
 
 from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
     AblationStudy,
-    SingleRunResult,
 )
-from planning_through_contact.visualize.colors import GRAY, GRAY1
+from planning_through_contact.visualize.colors import GRAY
 
 
 def visualize_ablation_as_histogram(study: AblationStudy) -> None:
-    color = "blue"
+    pass
 
     # Creating a 1x2 subplot
     fig = plt.figure(figsize=(10, 5))

@@ -131,14 +131,10 @@ class InPlaneGeometry(LeafSystem):
         p_x = p_WB[0, 0]  # type: ignore
         p_y = p_WB[1, 0]  # type: ignore
 
-        slider_pose = RigidTransform(
-            RotationMatrix(R_WB), np.array([p_x, p_y, 0.0])  # type: ignore
-        )
+        slider_pose = RigidTransform(RotationMatrix(R_WB), np.array([p_x, p_y, 0.0]))  # type: ignore
         output.get_mutable_value().set_value(id=slider_frame_id, value=slider_pose)  # type: ignore
 
-        pusher_pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0]))  # type: ignore
-        )
+        pusher_pose = RigidTransform(RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0])))  # type: ignore
         output.get_mutable_value().set_value(id=pusher_frame_id, value=pusher_pose)  # type: ignore
 
     def calc_output(self, context: Context, output: FramePoseVector) -> None:

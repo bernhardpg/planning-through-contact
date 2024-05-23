@@ -1,23 +1,15 @@
 from enum import Enum
-from itertools import permutations
 from typing import Callable, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.math import eq, ge
-from pydrake.solvers import (
-    Binding,
-    LinearConstraint,
-    LinearEqualityConstraint,
-    MathematicalProgram,
-    Solve,
-)
+from pydrake.solvers import Binding, MathematicalProgram
 
 from planning_through_contact.geometry.utilities import unit_vector
 from planning_through_contact.tools.types import (
     NpExpressionArray,
-    NpFormulaArray,
     NpMonomialArray,
     NpPolynomialArray,
     NpVariableArray,
@@ -34,7 +26,7 @@ def _linear_binding_to_expressions(binding: Binding) -> NpExpressionArray:
     """
     Takes in a binding and returns a polynomial p that should satisfy\
     p(x) = 0 for equality constraints, p(x) >= for inequality constraints
-    
+
     """
     # NOTE: I cannot use binding.evaluator().Eval(binding.variables())
     # here, because it ignores the constant term for linear constraints! Is this a bug?
@@ -192,8 +184,8 @@ def _generic_constraint_bindings_to_polynomials(
 
 
 def _assert_max_degree(polys: NpPolynomialArray, degree: int) -> None:
-    max_degree = max([p.TotalDegree() for p in polys])
-    min_degree = min([p.TotalDegree() for p in polys])
+    max([p.TotalDegree() for p in polys])
+    min([p.TotalDegree() for p in polys])
     # if max_degree > degree or min_degree < degree:
     #     breakpoint()
     #     raise ValueError(

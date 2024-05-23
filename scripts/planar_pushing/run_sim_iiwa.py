@@ -2,21 +2,11 @@ import logging
 from typing import List, Optional
 
 import numpy as np
-from pydrake.all import (
-    ContactModel,
-    RigidTransform,
-    RollPitchYaw,
-    RotationMatrix,
-    StartMeshcat,
-)
+from pydrake.all import ContactModel, RigidTransform, RollPitchYaw, StartMeshcat
 
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
-)
-from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
-    CylinderActuatedStation,
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
@@ -24,9 +14,6 @@ from planning_through_contact.simulation.controllers.iiwa_hardware_station impor
 )
 from planning_through_contact.simulation.controllers.mpc_position_source import (
     MPCPositionSource,
-)
-from planning_through_contact.simulation.controllers.teleop_position_source import (
-    TeleopPositionSource,
 )
 from planning_through_contact.simulation.environments.table_environment import (
     TableEnvironment,
@@ -38,7 +25,6 @@ from planning_through_contact.simulation.sensors.optitrack_config import Optitra
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
     plot_cost,
-    plot_velocities,
 )
 
 

@@ -5,15 +5,11 @@ import pytest
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
-    ContactMode,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.in_plane.contact_force import (
     ContactForce,
     ContactForceDefinition,
-)
-from planning_through_contact.geometry.in_plane.contact_pair import (
-    ContactPairDefinition,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.types import NpExpressionArray

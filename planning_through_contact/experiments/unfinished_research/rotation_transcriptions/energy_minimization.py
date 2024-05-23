@@ -1,12 +1,6 @@
 import numpy as np
 from pydrake.math import eq, le
-from pydrake.solvers import (
-    CommonSolverOption,
-    MakeSemidefiniteRelaxation,
-    MathematicalProgram,
-    Solve,
-    SolverOptions,
-)
+from pydrake.solvers import MathematicalProgram, Solve
 
 from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs

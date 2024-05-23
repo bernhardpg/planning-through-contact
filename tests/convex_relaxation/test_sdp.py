@@ -15,7 +15,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     find_solution,
     get_nullspace_matrix,
 )
-from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
+from planning_through_contact.tools.types import NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 
@@ -73,7 +73,7 @@ def test_get_nullspace_matrix(underdetermined_linear_system: LinearSystem) -> No
 def bounding_box_prog() -> MathematicalProgram:
     prog = MathematicalProgram()
     x = prog.NewContinuousVariables(1, "x")[0]
-    y = prog.NewContinuousVariables(1, "y")[0]
+    prog.NewContinuousVariables(1, "y")[0]
 
     prog.AddLinearConstraint(x >= -1)
     prog.AddLinearConstraint(x <= 1)
@@ -85,7 +85,7 @@ def test_collect_bounding_box_constraints(
 ) -> None:
     prog = bounding_box_prog
     x = prog.decision_variables()[0]
-    y = prog.decision_variables()[1]
+    prog.decision_variables()[1]
 
     bounding_box_eqs, bounding_box_ineqs = _collect_bounding_box_constraints(
         prog.bounding_box_constraints()
@@ -401,7 +401,7 @@ def test_eq_elimination_with_relaxation(
     result = Solve(relaxed_prog)
     assert result.is_success()
 
-    N = prog.num_vars()
+    prog.num_vars()
 
     def get_X(original_prog, relaxed_prog) -> NpVariableArray:
         N = original_prog.num_vars()

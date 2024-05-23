@@ -29,7 +29,7 @@ f_c2 = [f_c2_x; f_c2_y];
 p_c2 = (1 - lam) * p_m2 + lam * p_m3;
 
 cross = @(v1, v2) v1(1) * v2(2) - v1(2) * v2(1);
- 
+
 torque_balance = cross(p_c1, f_c1) + cross(p_c2, f_c2) == 0;
 force_balance = f_c1 + f_c2 + f_g == 0;
 
@@ -50,7 +50,7 @@ for k = 1:numel(lams)
     clf
     p_c2_val = subs(p_c2, lam, lams(k));
     f_c2_val = subs(f_c2_by_lam, lam, lams(k));
-    
+
     f_c1_x_val = subs(f_c1_x_as_func, f_c2_x, f_c2_val(2));
     f_c1_val = [f_c1_x_val; f_c1_y_val];
 

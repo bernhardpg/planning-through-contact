@@ -1,18 +1,12 @@
-from enum import Enum
-from typing import List, Optional, Tuple
 import logging
+from enum import Enum
+from typing import List
 
 import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.math import RigidTransform
-from pydrake.systems.framework import (
-    AbstractStateIndex,
-    Context,
-    LeafSystem,
-    AbstractStateIndex,
-    State,
-)
+from pydrake.systems.framework import AbstractStateIndex, Context, LeafSystem, State
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -195,9 +189,7 @@ class PusherPoseController(LeafSystem):
         loc = mode.to_contact_location()
         return self.mpc_controllers[loc]
 
-    def _get_system_for_mode(
-        self, mode: PlanarPushingContactMode
-    ) -> SliderPusherSystem:  # type: ignore
+    def _get_system_for_mode(self, mode: PlanarPushingContactMode) -> SliderPusherSystem:  # type: ignore
         loc = mode.to_contact_location()
         return self.systems[loc]
 

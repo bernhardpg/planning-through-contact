@@ -44,7 +44,7 @@
           <cylinder>
             <radius> 0.01 </radius>
             <length> 0.14 </length>
-          </cylinder>        
+          </cylinder>
         </geometry>
         <surface>
           <friction>

@@ -6,20 +6,15 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge
 from pydrake.solvers import (
-    ClarabelSolver,
     CommonSolverOption,
-    L1NormCost,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
     MosekSolver,
     SnoptSolver,
-    Solve,
     SolverOptions,
 )
-from pydrake.symbolic import Variable
 
-from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -482,7 +477,7 @@ def plot_vals(result: MathematicalProgramResult, title: str):
     sin_th_sol = result.GetSolution(sin_th)
     finger1_lambda_n_sol = result.GetSolution(finger1_lambda_n)
     finger1_lambda_f_sol = evaluate_np_expressions_array(finger1_lambda_f, result)
-    finger_lambda_f_comps_sol = result.GetSolution(finger1_lambda_f_comps)
+    result.GetSolution(finger1_lambda_f_comps)
     finger1_phi_sol = evaluate_np_expressions_array(
         finger1_phi, result
     )  #  type: ignore

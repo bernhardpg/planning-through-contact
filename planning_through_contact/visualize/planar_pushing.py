@@ -39,17 +39,14 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.geometry.planar.trajectory_builder import (
     OldPlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.colors import (
     BLACK,
-    CADMIUMORANGE,
     COLORS,
     CRIMSON,
-    DARKORCHID2,
     EMERALDGREEN,
 )
 from planning_through_contact.visualize.visualizer_2d import (
@@ -78,11 +75,9 @@ def compare_trajs_vertically(
     # Colors for each subplot
     colors = ["red", "blue", "green", "purple", "orange"]
 
-    GOAL_COLOR = EMERALDGREEN.diffuse()
-    GOAL_TRANSPARENCY = 1.0
+    EMERALDGREEN.diffuse()
 
-    START_COLOR = CRIMSON.diffuse()
-    START_TRANSPARENCY = 1.0
+    CRIMSON.diffuse()
 
     def _get_seg_groups(
         traj,
@@ -166,7 +161,7 @@ def compare_trajs_vertically(
                 for idx in range(knot_points.num_knot_points):
                     R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
                     p_WB = traj_segment.get_p_WB(ts[idx])
-                    p_WP = traj_segment.get_p_WP(ts[idx])
+                    traj_segment.get_p_WP(ts[idx])
 
                     # We only plot the current frame if it will change next frame
                     # (this is to avoid plotting multiple frames on top of each other)
@@ -175,11 +170,10 @@ def compare_trajs_vertically(
                             :2, :2
                         ]  # 2x2 matrix
                         next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
-                        next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
+                        traj_segment.get_p_WP(ts[idx + 1])
                     else:
                         next_R_WB = R_WB
                         next_p_WB = p_WB
-                        next_p_WP = p_WP
 
                     vertices_W = get_vertices_W(p_WB, R_WB)
 
@@ -281,11 +275,9 @@ def compare_trajs(
     TRAJ_B_COLOR = COLORS["firebrick3"].diffuse()
     TRAJ_B_COLOR_DARK = COLORS["firebrick4"].diffuse()
 
-    GOAL_COLOR = EMERALDGREEN.diffuse()
-    GOAL_TRANSPARENCY = 1.0
+    EMERALDGREEN.diffuse()
 
-    START_COLOR = CRIMSON.diffuse()
-    START_TRANSPARENCY = 1.0
+    CRIMSON.diffuse()
 
     traj_a_segment_groups = []
     idx = 0
@@ -376,7 +368,7 @@ def compare_trajs(
                 for idx in range(knot_points.num_knot_points):
                     R_WB = traj_segment.get_R_WB(ts[idx])[:2, :2]  # 2x2 matrix
                     p_WB = traj_segment.get_p_WB(ts[idx])
-                    p_WP = traj_segment.get_p_WP(ts[idx])
+                    traj_segment.get_p_WP(ts[idx])
 
                     # We only plot the current frame if it will change next frame
                     # (this is to avoid plotting multiple frames on top of each other)
@@ -385,11 +377,10 @@ def compare_trajs(
                             :2, :2
                         ]  # 2x2 matrix
                         next_p_WB = traj_segment.get_p_WB(ts[idx + 1])
-                        next_p_WP = traj_segment.get_p_WP(ts[idx + 1])
+                        traj_segment.get_p_WP(ts[idx + 1])
                     else:
                         next_R_WB = R_WB
                         next_p_WB = p_WB
-                        next_p_WP = p_WP
 
                     vertices_W = get_vertices_W(p_WB, R_WB)
 
@@ -1230,9 +1221,7 @@ def _add_pusher_geometry(
         source_id,
         pusher_frame_id,
         GeometryInstance(
-            RigidTransform(
-                RotationMatrix.Identity(), np.array([0, 0, CYLINDER_HEIGHT / 2])  # type: ignore
-            ),
+            RigidTransform(RotationMatrix.Identity(), np.array([0, 0, CYLINDER_HEIGHT / 2])),  # type: ignore
             DrakeCylinder(pusher_radius, CYLINDER_HEIGHT),
             "pusher",
         ),
@@ -1360,14 +1349,10 @@ class PlanarPushingStartGoalGeometry(LeafSystem):
         p_x = p_WB[0, 0]  # type: ignore
         p_y = p_WB[1, 0]  # type: ignore
 
-        slider_pose = RigidTransform(
-            RotationMatrix(R_WB), np.array([p_x, p_y, 0.0])  # type: ignore
-        )
+        slider_pose = RigidTransform(RotationMatrix(R_WB), np.array([p_x, p_y, 0.0]))  # type: ignore
         output.get_mutable_value().set_value(id=slider_frame_id, value=slider_pose)  # type: ignore
 
-        pusher_pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0]))  # type: ignore
-        )
+        pusher_pose = RigidTransform(RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0])))  # type: ignore
         output.get_mutable_value().set_value(id=pusher_frame_id, value=pusher_pose)  # type: ignore
 
     def _get_pusher_in_world(self, slider_pose, pusher_pose) -> PlanarPose:
@@ -1563,14 +1548,10 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
         p_x = p_WB[0, 0]  # type: ignore
         p_y = p_WB[1, 0]  # type: ignore
 
-        slider_pose = RigidTransform(
-            RotationMatrix(R_WB), np.array([p_x, p_y, 0.0])  # type: ignore
-        )
+        slider_pose = RigidTransform(RotationMatrix(R_WB), np.array([p_x, p_y, 0.0]))  # type: ignore
         output.get_mutable_value().set_value(id=slider_frame_id, value=slider_pose)  # type: ignore
 
-        pusher_pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0]))  # type: ignore
-        )
+        pusher_pose = RigidTransform(RotationMatrix.Identity(), np.concatenate((p_WP.flatten(), [0])))  # type: ignore
         output.get_mutable_value().set_value(id=pusher_frame_id, value=pusher_pose)  # type: ignore
 
     def calc_output(self, context: Context, output: FramePoseVector) -> None:
@@ -1848,7 +1829,6 @@ def visualize_initial_conditions(
     GOAL_TRANSPARENCY = 1.0
 
     START_COLOR = CRIMSON.diffuse()
-    START_TRANSPARENCY = 1.0
     PUSHER_COLOR = COLORS["firebrick3"].diffuse()
 
     LINE_COLOR = BLACK.diffuse()

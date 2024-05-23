@@ -5,7 +5,6 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    CollisionGeometry,
     ContactLocation,
     PolytopeContactLocation,
 )
@@ -28,7 +27,7 @@ class ContactForceDefinition(NamedTuple):
     """
     A tuple that contains all the relevant information for creating a contact force and
     its derived quantities.
-    
+
     displacement: useful when there are multiple contact points with a fixed displacement
                   (i.e.) for a face on face contact
     """

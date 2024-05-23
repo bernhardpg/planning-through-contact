@@ -1,29 +1,14 @@
 import numpy as np
 import pydot
-import pytest
 from pydrake.all import ConnectPlanarSceneGraphVisualizer, PlanarSceneGraphVisualizer
-from pydrake.geometry import (
-    DrakeVisualizer,
-    MeshcatVisualizer,
-    SceneGraph,
-    StartMeshcat,
-)
+from pydrake.geometry import MeshcatVisualizer, SceneGraph, StartMeshcat
 from pydrake.systems.analysis import Simulator
-from pydrake.systems.framework import Diagram, DiagramBuilder
+from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.primitives import ConstantVectorSource
 
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.collision_geometry.collision_geometry import (
-    ContactLocation,
-    PolytopeContactLocation,
-)
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.dynamics.slider_pusher.general_slider_pusher_geometry import (
     GeneralSliderPusherGeometry,
-)
-from planning_through_contact.simulation.dynamics.slider_pusher.slider_pusher_geometry import (
-    SliderPusherGeometry,
 )
 
 DEBUG = False
@@ -111,7 +96,7 @@ def test_visualize_3d() -> None:
     if DEBUG:
         meshcat = StartMeshcat()  # type: ignore
         meshcat.Delete()  # remove everything from visualizer
-        visualizer = MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+        MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
     diagram = builder.Build()
     diagram.set_name("diagram")

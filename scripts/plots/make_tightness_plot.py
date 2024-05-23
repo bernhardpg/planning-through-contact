@@ -1,10 +1,7 @@
 import numpy as np
 from pydrake.solvers import MosekSolver
 
-from planning_through_contact.experiments.utils import (
-    get_default_contact_cost,
-    get_default_plan_config,
-)
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -22,19 +19,10 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.visualize.analysis import (
     analyze_mode_result,
-    analyze_plan,
-    analyze_plans,
     get_constraint_violation_for_face_mode,
     plot_constraint_violation_for_trajs,
 )
-from planning_through_contact.visualize.colors import (
-    AQUAMARINE3,
-    AQUAMARINE4,
-    BROWN2,
-    BURLYWOOD3,
-    DARKORCHID3,
-    DODGERBLUE2,
-)
+from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGERBLUE2
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,

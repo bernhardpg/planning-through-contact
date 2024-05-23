@@ -21,17 +21,10 @@ from planning_through_contact.geometry.planar.planar_pushing_path import (
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPlanConfig,
     PlanarPushingStartAndGoal,
-    SliderPusherSystemConfig,
 )
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
-)
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    gcs_options,
-    plan_config,
-    rigid_body_box,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 

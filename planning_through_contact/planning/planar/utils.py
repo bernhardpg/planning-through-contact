@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -312,9 +311,7 @@ def _slider_within_workspace(
     ]
 
     lb, ub = workspace.slider.bounds
-    vertices_within_workspace: bool = np.all([v <= ub for v in p_Wv_s]) and np.all(  # type: ignore
-        [v >= lb for v in p_Wv_s]
-    )
+    vertices_within_workspace: bool = np.all([v <= ub for v in p_Wv_s]) and np.all([v >= lb for v in p_Wv_s])  # type: ignore
     return vertices_within_workspace
 
 

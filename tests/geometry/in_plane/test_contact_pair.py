@@ -18,11 +18,7 @@ from planning_through_contact.geometry.in_plane.contact_pair import (
 from planning_through_contact.geometry.in_plane.contact_point import ContactPoint
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
-from tests.utils import (
-    assert_formula_array_degree,
-    assert_formula_degree,
-    assert_num_vars_in_formula_array,
-)
+from tests.utils import assert_formula_array_degree, assert_num_vars_in_formula_array
 
 
 def test_contact_pair_face_on_face():

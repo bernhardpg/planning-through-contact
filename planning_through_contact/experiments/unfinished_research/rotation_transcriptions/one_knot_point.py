@@ -1,5 +1,5 @@
 import numpy as np
-from pydrake.math import eq, ge, le
+from pydrake.math import eq
 from pydrake.solvers import MakeSemidefiniteRelaxation, MathematicalProgram, Solve
 
 from planning_through_contact.geometry.utilities import two_d_rotation_matrix_from_angle
@@ -105,14 +105,14 @@ def test_more_knot_points():
         return np.array([[r[0], -r[1]], [r[1], r[0]]])
 
     delta_th_max = 0.2
-    delta_R_max = two_d_rotation_matrix_from_angle(delta_th_max)
+    two_d_rotation_matrix_from_angle(delta_th_max)
 
     # Constraint on max movement
     for i in range(NUM_CTRL_POINTS - 1):
         r_i = r[:, i]
         r_i_next = r[:, i + 1]
         delta_r_i = r_i_next - r_i
-        delta_R_i = two_d_rot_matrix(delta_r_i)
+        two_d_rot_matrix(delta_r_i)
         R_i = two_d_rot_matrix(r_i)
         # This seems to work well
         prog.AddConstraint(delta_r_i.T @ delta_r_i <= delta_th_max**2)
@@ -123,7 +123,7 @@ def test_more_knot_points():
         # prog.AddConstraint(delta_theta <= -delta_th_max)
 
         R_i_next = two_d_rot_matrix(r_i_next)
-        delta_R_i = R_i_next @ R_i.T
+        R_i_next @ R_i.T
         # prog.AddQuadraticConstraint(delta_R_i[0, 0], -np.inf, 0)
         # prog.AddQuadraticConstraint(delta_R_i[1, 0], -np.inf, 0)
         # This seems to be doing something:

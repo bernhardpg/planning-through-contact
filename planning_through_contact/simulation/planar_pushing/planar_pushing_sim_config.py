@@ -3,9 +3,7 @@ from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
-from pydrake.multibody.plant import (
-    ContactModel,
-)
+from pydrake.multibody.plant import ContactModel
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -55,5 +53,5 @@ class PlanarPushingSimConfig:
             pusher_start_pose=trajectory.initial_pusher_planar_pose,
             slider_start_pose=trajectory.initial_slider_planar_pose,
             slider_goal_pose=trajectory.target_slider_planar_pose,
-            **kwargs
+            **kwargs,
         )

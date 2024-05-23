@@ -879,7 +879,7 @@ def plot_constraint_violation_for_trajs(
     num_groups = len(violations[0])
     fig, axs = plt.subplots(1, num_groups)
     group_names = list(violations[0].keys())  # TODO: Change
-    max_bars = len(violations)
+    len(violations)
 
     # Colors for each subplot
     if colors is None:
@@ -1062,10 +1062,10 @@ def analyze_plans(
     if rounded:
         assert all([path.rounded_result is not None for path in paths])
         results = [path.rounded_result for path in paths]
-        path_knot_points = [path.get_rounded_vars() for path in paths]
+        [path.get_rounded_vars() for path in paths]
     else:
         results = [path.result for path in paths]
-        path_knot_points = [path.get_vars() for path in paths]
+        [path.get_vars() for path in paths]
 
     constraint_violations = [
         _get_constraint_violation(path, result, rounded, compute_mean=True, keys_to_merge=[("translational_dynamics", "translational_dynamics_red")])  # type: ignore
@@ -1102,7 +1102,7 @@ def analyze_plan(
         path, result, rounded, compute_mean=False
     )
 
-    num_knot_points_in_path = sum((pair.mode.num_knot_points for pair in path.pairs))
+    sum((pair.mode.num_knot_points for pair in path.pairs))
     MIN_REF_THETA_VEL = np.pi / 15
     ref_theta_vel = max(
         np.mean(

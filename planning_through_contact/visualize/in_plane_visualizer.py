@@ -11,10 +11,8 @@ from planning_through_contact.planning.in_plane.contact_scene_program import (
 from planning_through_contact.planning.in_plane.in_plane_trajectory import (
     InPlaneTrajectory,
 )
-from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
-    VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
@@ -37,10 +35,7 @@ def visualize_in_plane_manipulation_plan(
 
     body_colors = [TABLE_COLOR, BOX_COLOR, FINGER_COLOR]
 
-    viz_com_points = [
-        VisualizationPoint2d(com, GRAVITY_COLOR)  # type: ignore
-        for com in traj.body_positions.values()
-    ]
+    viz_com_points = [VisualizationPoint2d(com, GRAVITY_COLOR) for com in traj.body_positions.values()]  # type: ignore
     viz_polygons = [
         VisualizationPolygon2d.from_trajs(
             np.hstack(traj.body_positions[body]).T,

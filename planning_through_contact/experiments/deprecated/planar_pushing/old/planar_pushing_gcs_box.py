@@ -1,7 +1,7 @@
 import argparse
 import time
 from dataclasses import dataclass
-from itertools import combinations, permutations
+from itertools import combinations
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
@@ -10,20 +10,17 @@ import numpy.typing as npt
 import pydot
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge, le
+from pydrake.math import eq, ge
 from pydrake.solvers import (
     CommonSolverOption,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
-    MixedIntegerBranchAndBound,
-    MosekSolver,
     Solve,
     SolverOptions,
 )
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -1039,7 +1036,7 @@ def plan_planar_pushing():
 
     start = time.time()
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
-    elapsed_time = time.time() - start
+    time.time() - start
 
     assert result.is_success()
     print("Success!")
@@ -1067,7 +1064,7 @@ def plan_planar_pushing():
     vertices_on_path = [all_vertices[name] for name in vertex_names_on_path]
     modes_on_path = [all_modes[name] for name in vertex_names_on_path]
 
-    ress = [v.GetSolution(result) for v in vertices_on_path]
+    [v.GetSolution(result) for v in vertices_on_path]
 
     mode_vars_on_path = [
         mode.get_vars_from_gcs_vertex(vertex)
@@ -1094,7 +1091,7 @@ def plan_planar_pushing():
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
 
-    dets = [np.linalg.det(R) for R in R_traj]
+    [np.linalg.det(R) for R in R_traj]
 
     traj_length = len(R_traj)
 
@@ -1138,7 +1135,7 @@ def plan_planar_pushing():
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
-    TABLE_COLOR = COLORS["bisque3"]
+    COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
     TARGET_COLOR = COLORS["firebrick1"]
 

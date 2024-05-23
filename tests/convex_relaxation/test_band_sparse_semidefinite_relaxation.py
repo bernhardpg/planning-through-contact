@@ -1,32 +1,10 @@
 import numpy as np
-import numpy.typing as npt
 from pydrake.math import eq, le
-from pydrake.solvers import (
-    Binding,
-    BoundingBoxConstraint,
-    CommonSolverOption,
-    LinearConstraint,
-    MakeSemidefiniteRelaxation,
-    MathematicalProgram,
-    Solve,
-    SolverOptions,
-)
-from pydrake.symbolic import (
-    DecomposeAffineExpression,
-    DecomposeAffineExpressions,
-    Expression,
-    Variable,
-    Variables,
-)
+from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
 
 from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
     BandSparseSemidefiniteRelaxation,
 )
-from planning_through_contact.convex_relaxation.sdp import (
-    create_sdp_relaxation,
-    linear_bindings_to_homogenuous_form,
-)
-from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
 DEBUG = False

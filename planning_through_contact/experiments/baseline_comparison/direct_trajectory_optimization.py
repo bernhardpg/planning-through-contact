@@ -4,7 +4,6 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge, sqrt
 from pydrake.solvers import (
-    Binding,
     MathematicalProgram,
     MathematicalProgramResult,
     SnoptSolver,
@@ -385,9 +384,7 @@ def direct_trajopt_through_contact(
             angle_interpolated = _interpolate_traj_1d(
                 angle_initial, angle_target + 2 * np.pi, end_time + dt, end_time, dt
             ) % (np.pi * 2)
-            radius_interpolated = _interpolate_traj_1d(
-                radius_initial, radius_target, end_time + dt, end_time, dt  # type: ignore
-            )
+            radius_interpolated = _interpolate_traj_1d(radius_initial, radius_target, end_time + dt, end_time, dt)  # type: ignore
 
             p_BPs_initial_guess = np.vstack(
                 [
@@ -914,7 +911,7 @@ def direct_trajopt_through_contact(
         if solver_params.print_cost:
             print(f"Direct trajopt cost: {result.get_optimal_cost()}")
 
-        normal_force_sols = result.GetSolution(normal_forces)
+        result.GetSolution(normal_forces)
         force_comps_sols = result.GetSolution(force_comps)
         p_BPs_sols = result.GetSolution(p_BPs)
         R_WBs_sols = [evaluate_np_expressions_array(R_WB, result) for R_WB in R_WBs]
@@ -930,7 +927,7 @@ def direct_trajopt_through_contact(
         if debug:  # some useful quantities for debugging
             theta_WBs_sols = result.GetSolution(r_WBs)
 
-            p_WBs_sols = result.GetSolution(p_WBs)
+            result.GetSolution(p_WBs)
             p_BPs_sols = result.GetSolution(p_BPs)
 
             omega_WB_sols = [

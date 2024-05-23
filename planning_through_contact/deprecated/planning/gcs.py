@@ -5,6 +5,10 @@ import numpy.typing as npt
 import pydot
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
+from deprecated.geometry.bezier import BezierCurve
+from deprecated.geometry.collision_pair import CollisionPair, CollisionPairHandler
+from deprecated.geometry.rigid_body import RigidBody
+from deprecated.planning.graph_builder import ContactModeConfig, Graph, GraphBuilder
 from pydrake.geometry.optimization import GraphOfConvexSets
 from pydrake.math import eq
 from pydrake.solvers import (
@@ -15,11 +19,6 @@ from pydrake.solvers import (
     MathematicalProgramResult,
 )
 from tqdm import tqdm
-
-from deprecated.geometry.bezier import BezierCurve
-from deprecated.geometry.collision_pair import CollisionPair, CollisionPairHandler
-from deprecated.geometry.rigid_body import RigidBody
-from deprecated.planning.graph_builder import ContactModeConfig, Graph, GraphBuilder
 
 
 class GcsContactPlanner:

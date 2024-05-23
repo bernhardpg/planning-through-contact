@@ -29,7 +29,7 @@ function get_sol(θ)
     @constraint(model, X[1,1] == 1)
     x = X[2:end, 1]
 
-    ## SO(2) constraints 
+    ## SO(2) constraints
     for i ∈ 1:2:n-1
         Q_eq = -e_i(i+1) * e_i(i+1)' - e_i(i+2) * e_i(i+2)';
         Q_eq[1,1] = 1;
@@ -69,4 +69,3 @@ end
 extreme_points = vcat([get_sol(θ)' for θ ∈ θs]...)
 
 plot(extreme_points[:,1], extreme_points[:,2], fillrange = 0, fillalpha = 0.35, c = 1, aspect_ratio=1, label="Projection of SDP unit-circle constraint onto R^2")
-

@@ -4,12 +4,7 @@ import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
 from pydrake.all import LinearCost
-from pydrake.solvers import (
-    L2NormCost,
-    MosekSolver,
-    PerspectiveQuadraticCost,
-    QuadraticCost,
-)
+from pydrake.solvers import L2NormCost, MosekSolver, QuadraticCost
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -40,13 +35,6 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
-)
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    gcs_options,
-    plan_config,
-    rigid_body_box,
-    subgraph,
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,
@@ -362,13 +350,7 @@ def test_subgraph_with_contact_modes(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if subgraph.config.non_collision_cost.avoid_object:
         first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore
@@ -453,13 +435,7 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if subgraph.config.non_collision_cost.avoid_object:
         # check that all trajectory points (after source and target modes) don't collide
@@ -654,13 +630,7 @@ def test_subgraph_with_contact_modes_band_sparsity(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if subgraph.config.non_collision_cost.avoid_object:
         first_segment = np.hstack(traj.path_knot_points[1].p_BPs)  # type: ignore

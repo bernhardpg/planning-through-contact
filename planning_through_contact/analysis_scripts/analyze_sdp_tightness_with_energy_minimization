@@ -40,7 +40,7 @@ function e_i(i)
     return v
 end
 
-## SO(2) constraints 
+## SO(2) constraints
 for i ∈ 1:2:n-1
     Q_eq = -e_i(i+1) * e_i(i+1)' - e_i(i+2) * e_i(i+2)';
     Q_eq[1,1] = 1;
@@ -103,4 +103,3 @@ end
 # Plot the unit circle
 θs = 0:0.01:2*π
 plot!(cos.(θs), sin.(θs), color=:grey, label="")
-

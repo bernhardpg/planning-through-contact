@@ -274,9 +274,7 @@ def run_ablation_with_default_config(
     arc_length_weight: Optional[float] = None,
     filename: Optional[str] = None,
 ) -> None:
-    config = get_default_plan_config(
-        slider_type, pusher_radius, integration_constant, arc_length_weight  # type: ignore
-    )
+    config = get_default_plan_config(slider_type, pusher_radius, integration_constant, arc_length_weight)  # type: ignore
     solver_params = get_default_solver_params()
     run_ablation(config, solver_params, num_experiments, filename)  # type: ignore
 

@@ -7,10 +7,7 @@ from pydrake.solvers import MathematicalProgram, Solve
 from planning_through_contact.convex_relaxation.deprecated.sdp_deprecated import (
     SdpRelaxation,
 )
-from planning_through_contact.geometry.collision_geometry.box_2d import (
-    Box2d,
-    construct_2d_plane_from_points,
-)
+from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.utilities import cross_2d
 
 
@@ -27,7 +24,7 @@ def test_sdp_relaxation():
     result = Solve(prog.prog)
     assert result.is_success()
 
-    X_result = result.GetSolution(prog.X)
+    result.GetSolution(prog.X)
     return
 
 
@@ -51,7 +48,7 @@ def compute_so_2_intersection(plane_normal_vec):
 
 
 def plot_so_2():
-    from sympy import And, Eq, plot_implicit, symbols
+    from sympy import Eq, plot_implicit, symbols
 
     cos_th, sin_th = symbols("c s")
     so_2_constraint = 1 - cos_th**2 - sin_th**2
@@ -74,7 +71,6 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
 
     BOX_WIDTH = 2
     BOX_HEIGHT = 2
-    BOX_MASS = 1
 
     box = Box2d(BOX_WIDTH, BOX_HEIGHT)
     table = Box2d(10, 0)
@@ -97,7 +93,7 @@ def plot_cuts_corners_fixed(use_relaxation: bool = False):
 
     # Add Non-penetration
     p_Wm1 = R_WB.dot(box.vertices[0]) + p_WB
-    p_Wm2 = R_WB.dot(box.vertices[1]) + p_WB
+    R_WB.dot(box.vertices[1]) + p_WB
     p_Wm3 = R_WB.dot(box.vertices[2]) + p_WB
 
     a, b = table.faces[0]
@@ -155,7 +151,6 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = True):
 
     BOX_WIDTH = 2
     BOX_HEIGHT = 2
-    BOX_MASS = 1
 
     box = Box2d(BOX_WIDTH, BOX_HEIGHT)
     table = Box2d(10, 0)
@@ -232,14 +227,12 @@ def plot_cuts_with_fixed_position(use_relaxation: bool = True):
     plt.plot(corners_box[0, :], corners_box[1, :])
     plt.plot(corners_table[0, :], corners_table[1, :])
     plt.ylim(-5, 5)
-    ax = plt.gca()
+    plt.gca()
 
 
 def test_cuts():
     BOX_WIDTH = 3
     BOX_HEIGHT = 2
-    BOX_MASS = 1
-    GRAV_ACC = 9.81
 
     box = Box2d(BOX_WIDTH, BOX_HEIGHT)
     box_table = Box2d(10, 0)
@@ -316,8 +309,6 @@ def test_cuts():
 def sdp_relaxation():
     BOX_WIDTH = 3
     BOX_HEIGHT = 2
-    BOX_MASS = 1
-    GRAV_ACC = 9.81
 
     box = Box2d(BOX_WIDTH, BOX_HEIGHT)
 
@@ -348,7 +339,7 @@ def sdp_relaxation():
 
     for c in eq(p_WB, 0):
         prog.add_constraint(c[0])
-    solution = prog.get_solution()
+    prog.get_solution()
     breakpoint()
 
     return

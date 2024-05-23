@@ -3,4 +3,3 @@ directives:
     file: package://planning_through_contact/small_table.yaml
 - add_directives:
     file: package://planning_through_contact/cylinder_controller_plant.yaml
-

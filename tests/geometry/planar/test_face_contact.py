@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from pydrake.solvers import MosekSolver
-from pydrake.symbolic import Expression, Variables
+from pydrake.symbolic import Expression
 
 from planning_through_contact.convex_relaxation.sdp import (
     eliminate_equality_constraints,
@@ -33,14 +33,6 @@ from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
     visualize_planar_pushing_trajectory_legacy,
-)
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    face_contact_mode,
-    face_contact_vars,
-    plan_config,
-    rigid_body_box,
-    t_pusher,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 

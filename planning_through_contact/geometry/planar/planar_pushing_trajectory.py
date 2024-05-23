@@ -20,7 +20,6 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
@@ -252,15 +251,9 @@ class FaceContactTrajSegment(AbstractTrajSegment):
         config: SliderPusherSystemConfig,
     ) -> "FaceContactTrajSegment":
         # FirstOrderHold
-        p_WB_x = LinTrajSegment.from_knot_points(
-            knot_points.p_WB_xs, start_time, end_time, "first_order_hold"  # type: ignore
-        )
-        p_WB_y = LinTrajSegment.from_knot_points(
-            knot_points.p_WB_ys, start_time, end_time, "first_order_hold"  # type: ignore
-        )
-        lam = LinTrajSegment.from_knot_points(
-            knot_points.lams, start_time, end_time, "first_order_hold"  # type: ignore
-        )
+        p_WB_x = LinTrajSegment.from_knot_points(knot_points.p_WB_xs, start_time, end_time, "first_order_hold")  # type: ignore
+        p_WB_y = LinTrajSegment.from_knot_points(knot_points.p_WB_ys, start_time, end_time, "first_order_hold")  # type: ignore
+        lam = LinTrajSegment.from_knot_points(knot_points.lams, start_time, end_time, "first_order_hold")  # type: ignore
         R_WB = So3TrajSegment.from_knot_points(knot_points.R_WBs, start_time, end_time)
 
         v_WB_x = p_WB_x.make_derivative()

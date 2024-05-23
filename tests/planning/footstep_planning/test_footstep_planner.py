@@ -260,10 +260,10 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
     assert relaxed_result.is_success()
 
     relaxed_prog.AddConstraint(sdp_constraint.evaluator(), sdp_constraint.variables())
-    X_val = relaxed_result.GetSolution(X)
+    relaxed_result.GetSolution(X)
 
     if DEBUG:
-        a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+        evaluate_np_expressions_array(segment.a_WB, relaxed_result)
         cost_vals = segment.evaluate_costs_with_result(relaxed_result)
         cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
         for key, val in cost_vals_sums.items():

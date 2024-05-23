@@ -1,12 +1,10 @@
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge, le
-from pydrake.solvers import MathematicalProgram, Solve
-
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.utilities import cross_2d
-from tools.types import NpVariableArray
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, Solve
 
 
 def _get_sol_from_svd(X: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -51,14 +49,14 @@ def main():
 
     prog.AddCost(f.T.dot(f).item())
 
-    vars = prog.decision_variables()
+    prog.decision_variables()
 
     relaxed_prog, X = create_sdp_relaxation(prog)
     result = Solve(relaxed_prog)
     assert result.is_success()
     X_val = result.GetSolution(X)
     x_val = X_val[:, 0]
-    rounded_sols = _get_sol_from_svd(X_val)
+    _get_sol_from_svd(X_val)
 
     # TODO: Also implement cost for SDP!
 
@@ -79,12 +77,12 @@ def test():
     prog.AddConstraint(x**2 + y**2 <= 1)
     prog.AddConstraint(-2 <= x * z)
     prog.AddConstraint(x * z <= 2)
-    vars = prog.decision_variables()
+    prog.decision_variables()
 
     relaxed_prog, X = create_sdp_relaxation(prog)
     result = Solve(relaxed_prog)
     assert result.is_success()
-    X_val = result.GetSolution(X)
+    result.GetSolution(X)
 
     # TODO: Also implement cost for SDP!
 

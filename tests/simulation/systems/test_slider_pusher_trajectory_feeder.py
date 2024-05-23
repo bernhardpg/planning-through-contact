@@ -19,9 +19,6 @@ from planning_through_contact.geometry.planar.face_contact import (
     FaceContactVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.planar_pushing_path import (
-    assemble_progs_from_contact_modes,
-)
 from planning_through_contact.geometry.planar.trajectory_builder import (
     PlanarTrajectoryBuilder,
 )
@@ -42,14 +39,6 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory_legacy,
 )
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    face_contact_mode,
-    plan_config,
-    rigid_body_box,
-    t_pusher,
-)
-from tests.simulation.dynamics.test_slider_pusher_system import face_idx
 
 
 @pytest.fixture
@@ -58,7 +47,8 @@ def contact_mode_example(rigid_body_box: RigidBody, face_idx: int) -> FaceContac
 
     contact_location = PolytopeContactLocation(ContactLocation.FACE, face_idx)
     dynamics_config = SliderPusherSystemConfig(
-        slider=rigid_body, friction_coeff_slider_pusher=0.05
+        slider=rigid_body,
+        friction_coeff_slider_pusher=0.05,
     )
     config = PlanarPlanConfig(dynamics_config=dynamics_config)
     config.dynamics_config.slider = rigid_body
@@ -108,7 +98,8 @@ def test_feeder_get_state(
     contact_mode_example: FaceContactMode,
 ) -> None:
     feeder = SliderPusherTrajectoryFeeder(
-        one_contact_mode_vars, contact_mode_example.config.dynamics_config
+        one_contact_mode_vars,
+        contact_mode_example.config.dynamics_config,
     )
 
     assert feeder.get_state(0).shape == (4,)
@@ -126,7 +117,8 @@ def test_feeder_state_feedforward_visualization(
     feeder = builder.AddNamedSystem(
         "feedforward",
         SliderPusherTrajectoryFeeder(
-            one_contact_mode_vars, face_contact_mode.config.dynamics_config
+            one_contact_mode_vars,
+            face_contact_mode.config.dynamics_config,
         ),
     )
     pusher_radius = face_contact_mode.config.pusher_radius
@@ -145,7 +137,11 @@ def test_feeder_state_feedforward_visualization(
     DEBUG = False
     if DEBUG:
         T_VW = np.array(
-            [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
         )
         LIM = 0.8
         visualizer = ConnectPlanarSceneGraphVisualizer(
@@ -173,7 +169,9 @@ def test_feeder_state_feedforward_visualization(
     # TODO(bernhardpg): Add some actual tests here?
 
     if DEBUG:
-        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png(
+            "diagram.png"
+        )  # type: ignore
 
         visualizer.stop_recording()  # type: ignore
         ani = visualizer.get_recording_as_animation()  # type: ignore
@@ -193,20 +191,28 @@ def test_visualize_both_desired_and_actual_traj(
     feeder = builder.AddNamedSystem(
         "feedforward",
         SliderPusherTrajectoryFeeder(
-            one_contact_mode_vars, face_contact_mode.config.dynamics_config
+            one_contact_mode_vars,
+            face_contact_mode.config.dynamics_config,
         ),
     )
     scene_graph = builder.AddNamedSystem("scene_graph", SceneGraph())
     slider_pusher = builder.AddNamedSystem(
         "slider_pusher",
-        SliderPusherSystem(contact_location, face_contact_mode.dynamics_config),
+        SliderPusherSystem(
+            contact_location,
+            face_contact_mode.dynamics_config,
+        ),
     )
 
     # only feedforward a constant force on the block
     constant_input = builder.AddNamedSystem(
-        "input", ConstantVectorSource(np.array([1.0, 0, 0]))
+        "input",
+        ConstantVectorSource(np.array([1.0, 0, 0])),
     )
-    builder.Connect(constant_input.get_output_port(), slider_pusher.get_input_port())
+    builder.Connect(
+        constant_input.get_output_port(),
+        slider_pusher.get_input_port(),
+    )
 
     slider_pusher_geometry = SliderPusherGeometry.add_to_builder(
         builder,
@@ -231,7 +237,11 @@ def test_visualize_both_desired_and_actual_traj(
     DEBUG = False
     if DEBUG:
         T_VW = np.array(
-            [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
         )
         LIM = 0.8
         visualizer = ConnectPlanarSceneGraphVisualizer(
@@ -258,7 +268,9 @@ def test_visualize_both_desired_and_actual_traj(
     simulator.AdvanceTo(SIMULATION_END)
 
     if DEBUG:
-        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png("diagram.png")  # type: ignore
+        pydot.graph_from_dot_data(diagram.GetGraphvizString())[0].write_png(
+            "diagram.png"
+        )  # type: ignore
 
         visualizer.stop_recording()  # type: ignore
         ani = visualizer.get_recording_as_animation()  # type: ignore

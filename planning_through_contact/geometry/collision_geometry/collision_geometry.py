@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any, List, NamedTuple, Tuple, TypeVar
 
@@ -38,18 +37,15 @@ class CollisionGeometry(ABC):
 
     @property
     @abstractmethod
-    def collision_geometry_names(self) -> List[str]:
-        ...
+    def collision_geometry_names(self) -> List[str]: ...
 
     @property
     @abstractmethod
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
-        ...
+    def vertices(self) -> List[npt.NDArray[np.float64]]: ...
 
     @property
     @abstractmethod
-    def faces(self) -> List[Hyperplane]:
-        ...
+    def faces(self) -> List[Hyperplane]: ...
 
     @abstractmethod
     def get_proximate_vertices_from_location(

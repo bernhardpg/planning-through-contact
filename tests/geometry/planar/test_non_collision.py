@@ -18,9 +18,6 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     NonCollisionCost,
@@ -30,14 +27,6 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 )
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
-    visualize_planar_pushing_trajectory_legacy,
-)
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    non_collision_mode,
-    non_collision_vars,
-    plan_config,
-    rigid_body_box,
 )
 from tests.geometry.planar.tools import (
     assert_initial_and_final_poses,

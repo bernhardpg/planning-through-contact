@@ -1,8 +1,8 @@
-import numpy as np
-from pydrake.all import ContactModel, StartMeshcat
 import logging
 
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+import numpy as np
+from pydrake.all import ContactModel, StartMeshcat
+
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -10,24 +10,19 @@ from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
 from planning_through_contact.simulation.controllers.cylinder_actuated_station import (
     CylinderActuatedStation,
 )
+from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.controllers.mpc_position_source import (
     MPCPositionSource,
 )
-from planning_through_contact.simulation.controllers.teleop_position_source import (
-    TeleopPositionSource,
-)
-from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.environments.table_environment import (
     TableEnvironment,
 )
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
-
 from planning_through_contact.visualize.analysis import (
     plot_control_sols_vs_time,
     plot_cost,
-    plot_velocities,
 )
 
 

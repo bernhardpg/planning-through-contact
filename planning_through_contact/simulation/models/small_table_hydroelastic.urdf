@@ -42,7 +42,7 @@
         <drake:mu_dynamic value="0.5"/>
         <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
-    </collision>    
+    </collision>
   </link>
 
   <link name="tableLegUL">
@@ -145,7 +145,7 @@
         <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>
-  </link>  
+  </link>
 
   <link name="tableLegLL">
     <inertial>
@@ -178,7 +178,7 @@
         <drake:mu_static value="0.5"/>
       </drake:proximity_properties>
     </collision>
-  </link>    
+  </link>
 
   <joint name="TableTopToLegUL" type="fixed">
     <parent link="TableTop"/>

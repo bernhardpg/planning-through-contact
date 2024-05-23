@@ -2,10 +2,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
-import numpy as np
-import numpy.typing as npt
 import pydrake.geometry.optimization as opt
-from pydrake.solvers import Binding, QuadraticCost
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -15,7 +12,6 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     AbstractContactMode,
     add_continuity_constraints_btwn_modes,
 )
-from planning_through_contact.geometry.planar.face_contact import FaceContactMode
 from planning_through_contact.geometry.planar.non_collision import NonCollisionMode
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody

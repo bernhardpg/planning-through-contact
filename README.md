@@ -34,7 +34,7 @@ of Drake. To install, follow these instructions:
 Navigate to a desired installation location and run:
 
 ```console
-git clone git@github.com:bernhardpg/drake.git 
+git clone git@github.com:bernhardpg/drake.git
 cd drake
 git checkout towards-tight-convex-relaxations
 ```

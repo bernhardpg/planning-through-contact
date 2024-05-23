@@ -69,7 +69,7 @@ class Experiment:
             final_frame = np.zeros_like(curr_frames[0])
 
             # Determine the weight for each frame
-            n = len(curr_frames)
+            len(curr_frames)
             # weight = 1.0 / n
 
             # Overlay the frames using cv2.addWeighted

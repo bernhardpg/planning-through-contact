@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 from pydrake.all import LoadModelDirectives, Parser, ProcessModelDirectives
 from pydrake.common.value import AbstractValue
-from pydrake.examples import ManipulationStationHardwareInterface
 from pydrake.math import RigidTransform, RollPitchYaw
 from pydrake.multibody.inverse_kinematics import (
     DifferentialInverseKinematicsIntegrator,

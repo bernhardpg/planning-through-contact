@@ -41,4 +41,3 @@ end
 extreme_points = vcat([get_sol(θ)' for θ ∈ θs]...)
 
 plot(extreme_points[:,1], extreme_points[:,2], fillrange = 0, fillalpha = 0.35, c = 1, aspect_ratio=1, label="Projection of SDP unit-circle constraint onto R^2")
-

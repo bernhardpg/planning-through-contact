@@ -3,4 +3,3 @@ directives:
     file: package://planning_through_contact/iiwa_controller_plant.yaml
 - add_directives:
     file: package://planning_through_contact/small_table.yaml
-

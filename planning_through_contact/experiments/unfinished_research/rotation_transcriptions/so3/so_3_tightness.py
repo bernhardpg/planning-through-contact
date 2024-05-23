@@ -1,4 +1,4 @@
-from itertools import combinations, permutations
+from itertools import combinations
 
 import numpy as np
 from pydrake.math import eq

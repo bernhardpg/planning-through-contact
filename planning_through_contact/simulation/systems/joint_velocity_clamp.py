@@ -1,5 +1,6 @@
-from pydrake.all import LeafSystem, AbstractValue
 import logging
+
+from pydrake.all import LeafSystem
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class JointVelocityClamp(LeafSystem):
         time_step = context.get_time() - last_time_state.get_value()[0]
 
         last_command = last_command_state.get_value()
-        last_velocity = last_velocity_state.get_value()
+        last_velocity_state.get_value()
         if time_step == 0 or (last_command == [-999] * self._num_positions).all():
             joint_positions_clamped = joint_positions_commanded
             velocity_clamped = [0.0] * self._num_positions

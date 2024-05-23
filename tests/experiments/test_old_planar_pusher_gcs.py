@@ -1,10 +1,6 @@
 import numpy as np
-from pydrake.solvers import CommonSolverOption, MosekSolver, Solve, SolverOptions
+from pydrake.solvers import CommonSolverOption, MosekSolver, SolverOptions
 
-from planning_through_contact.deprecated.geometry.two_d.equilateral_polytope_2d import (
-    EquilateralPolytope2d,
-)
-from planning_through_contact.deprecated.geometry.two_d.t_pusher import TPusher
 from planning_through_contact.experiments.deprecated.planar_pushing.old.planar_pushing_gcs import (
     DynamicsConfig,
     PlanarPushingContactMode,
@@ -79,8 +75,7 @@ def test_temp_test_old_mode() -> None:
     )
 
     for R in R_traj:
-        det = np.abs(np.linalg.det(R))
-        eps = 0.01
+        np.abs(np.linalg.det(R))
         # relaxation will not be tight
         # assert det <= 1 + eps and det >= 1 - eps
 
@@ -93,15 +88,15 @@ def test_temp_test_old_mode() -> None:
     contact_pos_traj = np.vstack(
         [val.get_p_c_W_traj(DT, interpolate=interpolate) for val in vals]
     )
-    traj_length = len(R_traj)
+    len(R_traj)
 
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
-    TABLE_COLOR = COLORS["bisque3"]
+    COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
     TARGET_COLOR = COLORS["firebrick1"]
-    VELOCITY_COLOR = COLORS["darkorange1"]
+    COLORS["darkorange1"]
 
     if DEBUG:
         flattened_rotation = np.vstack([R.flatten() for R in R_traj])
@@ -125,7 +120,6 @@ def test_temp_test_old_mode() -> None:
         contact_force_viz = VisualizationForce2d(contact_pos_traj, CONTACT_COLOR, force_traj)  # type: ignore
 
         # visualize velocity with an arrow (i.e. as a force), and reverse force scaling
-        VEL_VIZ_SCALE_CONSTANT = 0.3
 
         viz = Visualizer2d()
         FRAMES_PER_SEC = len(R_traj) / (time_in_contact / VIS_REALTIME_RATE)

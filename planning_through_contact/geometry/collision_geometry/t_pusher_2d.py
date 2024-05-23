@@ -189,7 +189,7 @@ class TPusher2d(CollisionGeometry):
         """
         Gets the faces that defines the collision free sets (except for the contact face)
         This function is hand designed for the object geometry.
-       
+
            \       0      /
             \____________/
         5   |            | 1
@@ -200,7 +200,7 @@ class TPusher2d(CollisionGeometry):
                 |____|
                /      \
               /    3   \
-            
+
         """
         UL = np.array([-1, 1]).reshape((-1, 1))
         UR = np.array([1, 1]).reshape((-1, 1))

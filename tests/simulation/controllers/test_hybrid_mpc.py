@@ -6,14 +6,14 @@ import pydot
 import pydrake.symbolic as sym
 import pytest
 from pydrake.geometry import SceneGraph
-from pydrake.solvers import CommonSolverOption, Solve, SolverOptions
+from pydrake.solvers import Solve
 from pydrake.systems.all import ZeroOrderHold
 from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.planar_scenegraph_visualizer import (
     ConnectPlanarSceneGraphVisualizer,
 )
-from pydrake.systems.primitives import VectorLogSink, ZeroOrderHold_
+from pydrake.systems.primitives import VectorLogSink
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
@@ -25,9 +25,6 @@ from planning_through_contact.geometry.planar.face_contact import (
     FaceContactVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.planar_pushing_path import (
-    assemble_progs_from_contact_modes,
-)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
     PlanarPushingTrajectory,
@@ -55,17 +52,11 @@ from planning_through_contact.simulation.systems.slider_pusher_trajectory_feeder
 )
 from planning_through_contact.visualize.analysis import (
     PlanarPushingLog,
-    analyze_mode_result,
     plot_control_sols_vs_time,
     plot_planar_pushing_logs,
     plot_planar_pushing_trajectory,
-    plot_velocities,
 )
-from planning_through_contact.visualize.planar_pushing import (
-    make_traj_figure,
-    visualize_planar_pushing_start_and_goal,
-    visualize_planar_pushing_trajectory,
-)
+from planning_through_contact.visualize.planar_pushing import make_traj_figure
 
 DEBUG = False
 logging.getLogger(
@@ -291,9 +282,7 @@ def test_get_control_with_plan(
     times = np.arange(0, dt * N, dt)
 
     actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
-    desired = PlanarPushingLog.from_np(
-        times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T  # type: ignore
-    )
+    desired = PlanarPushingLog.from_np(times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T)  # type: ignore
 
     # No deviation should happen
     state_treshold = 0.1
@@ -341,9 +330,7 @@ def test_get_control_with_disturbance(
     times = np.arange(0, dt * N, dt)
 
     actual = PlanarPushingLog.from_np(times, state_sol, control_sol)
-    desired = PlanarPushingLog.from_np(
-        times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T  # type: ignore
-    )
+    desired = PlanarPushingLog.from_np(times, np.vstack(desired_state_traj).T, np.vstack(desired_control_traj).T)  # type: ignore
 
     if DEBUG:
         plot_planar_pushing_trajectory(actual, desired)

@@ -1,8 +1,6 @@
 from typing import List, Optional
 
 import numpy as np
-import numpy.typing as npt
-from pydrake.math import eq, le
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,

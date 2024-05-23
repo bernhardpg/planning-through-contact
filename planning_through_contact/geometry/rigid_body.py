@@ -7,7 +7,6 @@ import numpy.typing as npt
 from pydrake.geometry import Box as DrakeBox
 from pydrake.geometry import Shape as DrakeShape
 from pydrake.multibody.tree import RigidBody as DrakeRigidBody
-from pydrake.multibody.tree import SpatialInertia
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (

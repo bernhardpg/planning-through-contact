@@ -5,7 +5,7 @@ from typing import List, Literal, NamedTuple, Optional, Tuple, Union
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym  # type: ignore
-from pydrake.math import eq, ge, le
+from pydrake.math import eq, le
 from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.hyperplane import (

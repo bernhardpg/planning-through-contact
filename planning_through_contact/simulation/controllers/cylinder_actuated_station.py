@@ -1,26 +1,25 @@
 import numpy as np
-
 from pydrake.all import (
-    DiagramBuilder,
-    MultibodyPlant,
-    InverseDynamicsController,
-    StateInterpolatorWithDiscreteDerivative,
+    AddDefaultVisualization,
     AddMultibodyPlantSceneGraph,
+    DiagramBuilder,
+    InverseDynamicsController,
+    Meshcat,
+    MultibodyPlant,
     RigidTransform,
     RollPitchYaw,
-    AddDefaultVisualization,
-    Meshcat,
+    StateInterpolatorWithDiscreteDerivative,
 )
 
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
+from planning_through_contact.simulation.sim_utils import (
+    AddSliderAndConfigureContact,
+    GetParser,
+)
 
 from .robot_system_base import RobotSystemBase
-from planning_through_contact.simulation.sim_utils import (
-    GetParser,
-    AddSliderAndConfigureContact,
-)
 
 
 class CylinderActuatedStation(RobotSystemBase):

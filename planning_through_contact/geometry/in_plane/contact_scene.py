@@ -9,7 +9,6 @@ from pydrake.math import eq
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactMode,
 )
-from planning_through_contact.geometry.in_plane.contact_force import ContactForce
 from planning_through_contact.geometry.in_plane.contact_pair import (
     AbstractContactPair,
     ContactFrameConstraints,

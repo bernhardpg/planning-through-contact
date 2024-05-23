@@ -4,15 +4,14 @@ from typing import List, TypeVar
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, Solve
-from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
-
 from convex_relaxation.sdp import create_sdp_relaxation
 from geometry.two_d.contact.types import ContactLocation
 from geometry.two_d.equilateral_polytope_2d import EquilateralPolytope2d
 from geometry.two_d.rigid_body_2d import PolytopeContactLocation
 from geometry.utilities import cross_2d
+from pydrake.math import eq
+from pydrake.solvers import MathematicalProgram, Solve
+from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 from tools.types import NpExpressionArray
 from visualize.analysis import create_quasistatic_pushing_analysis
 from visualize.colors import COLORS
@@ -219,10 +218,7 @@ def plan_planar_pushing(
     # Minimize kinetic energy through squared velocities
     sq_linear_vels = sum([v_WB.T.dot(v_WB) for v_WB in v_WBs])
     sq_angular_vels = sum(
-        [
-            cos_dot**2 + sin_dot**2
-            for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)
-        ]
+        [cos_dot**2 + sin_dot**2 for cos_dot, sin_dot in zip(cos_th_dots, sin_th_dots)]
     )
     prog.AddQuadraticCost(sq_linear_vels)
     prog.AddQuadraticCost(sq_angular_vels)
@@ -349,7 +345,7 @@ def plan_planar_pushing(
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
-    TABLE_COLOR = COLORS["bisque3"]
+    COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
     TARGET_COLOR = COLORS["firebrick1"]
 

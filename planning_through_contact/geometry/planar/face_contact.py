@@ -751,7 +751,7 @@ class FaceContactMode(AbstractContactMode):
                 self.reduced_prog,
                 self.get_original_vars_from_reduced,
             )
-            c = self.reduced_prog.linear_constraints()[0]
+            self.reduced_prog.linear_constraints()[0]
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.reduced_prog)
         else:
@@ -779,9 +779,7 @@ class FaceContactMode(AbstractContactMode):
     ) -> FaceContactVariables:
         # TODO: This can probably be cleaned up somehow
         lams = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.lams, result)  # type: ignore
-        normal_forces = self._get_vars_solution_for_vertex_vars(
-            vertex.x(), self.variables.normal_forces, result  # type: ignore
-        )
+        normal_forces = self._get_vars_solution_for_vertex_vars(vertex.x(), self.variables.normal_forces, result)  # type: ignore
         friction_forces = self._get_vars_solution_for_vertex_vars(
             vertex.x(), self.variables.friction_forces, result  # type: ignore
         )

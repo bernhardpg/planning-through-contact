@@ -1,7 +1,5 @@
 import numpy as np
 from pydrake.solvers import (
-    ClarabelSolver,
-    CommonSolverOption,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MosekSolver,

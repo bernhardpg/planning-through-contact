@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 from pydrake.solvers import (  # CommonSolverOption,
     Binding,
     CommonSolverOption,
@@ -14,11 +13,9 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
     PotatoRobot,
 )
-from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanSegment,
     FootstepTrajectory,
-    get_X_from_semidefinite_relaxation,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -77,8 +74,8 @@ def test_trajectory_segment_one_foot() -> None:
     assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps, 2)
 
     if DEBUG:
-        a_WB = evaluate_np_expressions_array(segment.a_WB, result)
-        cost_vals = segment.evaluate_costs_with_result(result)
+        evaluate_np_expressions_array(segment.a_WB, result)
+        segment.evaluate_costs_with_result(result)
 
     if DEBUG:
         output_file = "debug_one_foot"
@@ -135,7 +132,7 @@ def test_trajectory_segment_two_feet() -> None:
     )
 
     if DEBUG:
-        a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+        evaluate_np_expressions_array(segment.a_WB, relaxed_result)
         cost_vals = segment.evaluate_costs_with_result(relaxed_result)
         cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
         for key, val in cost_vals_sums.items():

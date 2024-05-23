@@ -1,37 +1,35 @@
-from typing import List, Optional
+from typing import List
+
 import numpy as np
 from manipulation.scenarios import AddMultibodyTriad
+from pydrake.all import Box as DrakeBox
+from pydrake.all import Context
+from pydrake.all import Cylinder as DrakeCylinder
 from pydrake.all import (
-    Context,
     Diagram,
     DiagramBuilder,
-    MultibodyPlant,
-    MultibodyPositionToGeometryPose,
-    SceneGraph,
-    StartMeshcat,
-    MeshcatVisualizer,
-    ModelInstanceIndex,
-    GeometryInstance,
-    RigidBody as DrakeRigidBody,
-    Box as DrakeBox,
-    Cylinder as DrakeCylinder,
     GeometryInstance,
     MakePhongIllustrationProperties,
-    Rgba,
-    RigidTransform,
-    RollPitchYaw,
     Meshcat,
+    MeshcatVisualizer,
+    ModelInstanceIndex,
+    MultibodyPlant,
+    MultibodyPositionToGeometryPose,
+    Rgba,
 )
+from pydrake.all import RigidBody as DrakeRigidBody
+from pydrake.all import RigidTransform, RollPitchYaw, SceneGraph
+
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.simulation.systems.pusher_slider_pose_selector import (
-    PusherSliderPoseSelector,
-)
 from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
     PlanarPushingSimConfig,
 )
 from planning_through_contact.simulation.sim_utils import AddSliderAndConfigureContact
 from planning_through_contact.simulation.state_estimators.plant_updater import (
     PlantUpdater,
+)
+from planning_through_contact.simulation.systems.pusher_slider_pose_selector import (
+    PusherSliderPoseSelector,
 )
 from planning_through_contact.visualize.colors import COLORS
 
@@ -227,7 +225,7 @@ class StateEstimator(Diagram):
         # height = 0.1 # height for the actuated cylinder robot
         height = shape.length() / 2
         # height = self._sim_config.pusher_z_offset +( shape.length())/2 # height for iiwa
-        pose = self.get_pusher_shape_pose()
+        self.get_pusher_shape_pose()
         desired_pose = desired_planar_pose.to_pose(height, z_axis_is_positive=True)
         if self._desired_pusher_geometry is None:
             source_id = self._scene_graph.RegisterSource()

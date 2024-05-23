@@ -1,0 +1,19 @@
+{
+    "tests": [
+        {
+            "name": "Tests that the positioning of the feet minimized the sum of the",
+            "score": 8,
+            "max_score": 8,
+            "status": "passed"
+        },
+        {
+            "name": "Tests the constraints on the relative position of the feet",
+            "score": 8,
+            "max_score": 8,
+            "status": "passed"
+        }
+    ],
+    "leaderboard": [],
+    "execution_time": "0.67",
+    "score": 16
+}

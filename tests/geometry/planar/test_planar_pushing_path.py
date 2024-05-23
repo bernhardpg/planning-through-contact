@@ -35,7 +35,6 @@ from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
 )
-from tests.geometry.planar.fixtures import plan_config, planner, t_pusher
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
@@ -144,9 +143,9 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
     expected_num_vars = sum([p.mode.prog.num_vars() for p in path.pairs])  # type: ignore
     assert prog.num_vars() == expected_num_vars
 
-    expected_num_constraints = sum(
-        [len(p.mode.prog.GetAllConstraints()) for p in path.pairs]  # type: ignore
-    ) + sum([len(edge.GetConstraints()) for edge in path.edges])
+    expected_num_constraints = sum([len(p.mode.prog.GetAllConstraints()) for p in path.pairs]) + sum(  # type: ignore
+        [len(edge.GetConstraints()) for edge in path.edges]
+    )
     assert len(prog.GetAllConstraints()) == expected_num_constraints
 
 
@@ -175,7 +174,7 @@ def test_path_construction_with_teleportation(planner: PlanarPushingPlanner) -> 
     ids=[1, 2, 3],
 )
 def test_path_rounding(plan_spec: PlanarPushingStartAndGoal) -> None:
-    slider = get_sugar_box()
+    get_sugar_box()
     config = get_default_plan_config(pusher_radius=0.035)
     planner = PlanarPushingPlanner(config)
     solver_params = PlanarSolverParams(

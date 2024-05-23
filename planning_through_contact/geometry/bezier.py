@@ -3,10 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge, le
-from pydrake.solvers import MathematicalProgram, Solve
 
 
 @dataclass
@@ -42,8 +39,8 @@ class BezierCurve:
 
     @classmethod
     def create_from_ctrl_points(
-        cls, ctrl_points: npt.NDArray[np.float64]  # (num_dims, num_ctrl_points)
-    ) -> "BezierCurve":
+        cls, ctrl_points: npt.NDArray[np.float64]
+    ) -> "BezierCurve":  # (num_dims, num_ctrl_points)
         dim = ctrl_points.shape[0]
         order = ctrl_points.shape[1] - 1
         curve = cls(order, dim)

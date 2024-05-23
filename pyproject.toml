@@ -9,7 +9,6 @@ license = "MIT License"
 python = "~3.12"
 matplotlib = "^3.6.1"
 numpy = "^1.23.3"
-pre-commit = "^2.20.0"
 pdbpp = "^0.10.3"
 tqdm = "^4.64.1"
 pydot = "^1.4.2"
@@ -23,12 +22,17 @@ opencv-python = "^4.9.0.80"
 hydra-core = "^1.3.2"
 omegaconf = "^2.3.0"
 underactuated = "^2024.4.27"
+setuptools = "^70.0.0"
+black = "^24.4.2"
+flake8 = "^7.0.0"
+autoflake = "^2.3.1"
 
 [tool.poetry.dev-dependencies]
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.25.1"
 natsort = "^8.4.0"
+pre-commit = "^3.7.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -38,5 +42,25 @@ build-backend = "poetry.core.masonry.api"
 # PyRight wrongly reports that several Drake modules are missing (could also be an issue with Drake)
 reportMissingImports = false
 
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+| \.hg
+| \.mypy_cache
+| \.tox
+| \.venv
+| _build
+| buck-out
+| build
+)/
+'''
+
 [tool.isort]
-profile = "black" # Make isort and Black agree on sorting
+atomic = true
+profile = "black"
+line_length = 88
+skip_gitignore = true

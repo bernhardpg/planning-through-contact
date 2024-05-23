@@ -4,14 +4,13 @@ from itertools import permutations
 from queue import PriorityQueue
 from typing import Optional, Tuple
 
-from pydrake.geometry.optimization import ConvexSet
-from tqdm import tqdm
-
 from deprecated.geometry.collision_pair import CollisionPairHandler
 from deprecated.geometry.contact_mode import (
     ContactModeConfig,
     PrioritizedContactModeConfig,
 )
+from pydrake.geometry.optimization import ConvexSet
+from tqdm import tqdm
 
 
 @dataclass(eq=True)

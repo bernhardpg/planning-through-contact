@@ -49,9 +49,7 @@ def calc_displacements(
     else:
         scale = 1
 
-    displacements = [
-        (var_next - var_curr) * scale for var_curr, var_next in zip(vars[:-1], vars[1:])  # type: ignore
-    ]
+    displacements = [(var_next - var_curr) * scale for var_curr, var_next in zip(vars[:-1], vars[1:])]  # type: ignore
     return displacements
 
 

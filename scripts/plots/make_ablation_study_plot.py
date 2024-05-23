@@ -2,23 +2,14 @@ import numpy as np
 
 from planning_through_contact.experiments.ablation_study.planar_pushing_ablation import (
     AblationStudy,
-    SingleRunResult,
 )
 from planning_through_contact.visualize.ablation_study import (
-    visualize_ablation_as_histogram,
-    visualize_ablation_optimality_percentages,
     visualize_multiple_ablation_studies,
 )
-from planning_through_contact.visualize.colors import AQUAMARINE4, BROWN2, DODGERBLUE2
 
 main_folder = "trajectories/"
-# study_tee = "run_20240513144942_sugar_box"
-# study_tee = "run_20240522174456_tee"
-# study_tee = "run_20240522222534_sugar_box"
-study_tee = "run_20240523080453_sugar_box"
-# study_sugar_box = "run_20240202064957_sugar_box_FINAL"
-# study_sugar_box = "run_20240202080034_sugar_box"
-# study_tee = "run_20240202094838_tee"
+study_tee = "run_20240522174456_tee"
+# study_tee = "run_20240523080453_sugar_box"
 
 # study_names = [study_sugar_box]
 study_names = [study_tee]
@@ -94,9 +85,9 @@ for folder, study in zip(study_folders, studies):
             file=f,
         )
         print("#####", file=f)
-        # print(f"Mean rounding time: {np.mean(study.total_rounding_times)}")
-        # print(f"Std rounding time: {np.std(study.total_rounding_times)}")
-        # print(f"Median rounding time: {np.median(study.total_rounding_times)}")
+        print(f"Mean rounding time: {np.mean(study.total_rounding_times)}", file=f)
+        print(f"Std rounding time: {np.std(study.total_rounding_times)}", file=f)
+        print(f"Median rounding time: {np.median(study.total_rounding_times)}", file=f)
         print(f"Infeasible runs::", file=f)
         for name in study.get_infeasible_idxs():
             print(name, file=f)
@@ -105,11 +96,16 @@ for folder, study in zip(study_folders, studies):
         for name in study.get_numerical_difficulties_idxs():
             print(name, file=f)
 
-        # print(f"Mean solve time feasible: {np.mean(study.solve_times_feasible)}")
-        # print(f"Std solve time feasible: {np.std(study.solve_times_feasible)}")
-        # print(f"Median solve time feasible: {np.median(study.solve_times_feasible)}")
-        # print(f"Max solve time feasible: {np.max(study.solve_times_feasible)}")
-        # print(f"Min solve time feasible: {np.min(study.solve_times_feasible)}")
+        print(
+            f"Mean solve time feasible: {np.mean(study.solve_times_feasible)}", file=f
+        )
+        print(f"Std solve time feasible: {np.std(study.solve_times_feasible)}", file=f)
+        print(
+            f"Median solve time feasible: {np.median(study.solve_times_feasible)}",
+            file=f,
+        )
+        print(f"Max solve time feasible: {np.max(study.solve_times_feasible)}", file=f)
+        print(f"Min solve time feasible: {np.min(study.solve_times_feasible)}", file=f)
 
 
 colors = [

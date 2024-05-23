@@ -23,18 +23,13 @@ Drake maintainers should keep this file in sync with both hardware_sim.cc and
 scenario.h.
 """
 
-from manipulation.station import JointStiffnessDriver, _ApplyDriverConfigsSim
-from planning_through_contact.simulation.sim_utils import (
-    ConfigureParser,
-    package_xml_file,
-)
-from pydrake.all import Parser
-
 import argparse
 import dataclasses as dc
 import math
 import typing
 
+from manipulation.station import JointStiffnessDriver
+from pydrake.all import Parser
 from pydrake.common import RandomGenerator
 from pydrake.common.yaml import yaml_load_typed
 from pydrake.lcm import DrakeLcmParams
@@ -44,30 +39,19 @@ from pydrake.manipulation import (
     SchunkWsgDriver,
     ZeroForceDriver,
 )
-from pydrake.multibody.plant import (
-    AddMultibodyPlant,
-    MultibodyPlantConfig,
-)
 from pydrake.multibody.parsing import (
     ModelDirective,
     ModelDirectives,
     ProcessModelDirectives,
 )
-from pydrake.systems.analysis import (
-    ApplySimulatorConfig,
-    Simulator,
-    SimulatorConfig,
-)
+from pydrake.multibody.plant import AddMultibodyPlant, MultibodyPlantConfig
+from pydrake.systems.analysis import ApplySimulatorConfig, Simulator, SimulatorConfig
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.systems.lcm import ApplyLcmBusConfig
-from pydrake.systems.sensors import (
-    ApplyCameraConfig,
-    CameraConfig,
-)
-from pydrake.visualization import (
-    ApplyVisualizationConfig,
-    VisualizationConfig,
-)
+from pydrake.systems.sensors import ApplyCameraConfig, CameraConfig
+from pydrake.visualization import ApplyVisualizationConfig, VisualizationConfig
+
+from planning_through_contact.simulation.sim_utils import ConfigureParser
 
 
 @dc.dataclass

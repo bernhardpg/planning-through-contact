@@ -1,14 +1,10 @@
 from typing import Callable, List, TypeVar
 
 import numpy as np
-import numpy.typing as npt
 from pydrake.common.value import AbstractValue
 from pydrake.systems.framework import Context, LeafSystem
 
-from planning_through_contact.geometry.planar.planar_pose import (
-    PlanarPose,
-    PlanarVelocity,
-)
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingContactMode,
     PlanarPushingTrajectory,

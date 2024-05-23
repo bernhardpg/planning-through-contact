@@ -1,7 +1,7 @@
 import argparse
 import time
 from dataclasses import dataclass
-from itertools import combinations, permutations
+from itertools import combinations
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
@@ -20,14 +20,12 @@ from pydrake.geometry import (
     MakePhongIllustrationProperties,
     SceneGraph,
 )
-from pydrake.math import RigidTransform, RollPitchYaw, RotationMatrix, eq, ge, le
+from pydrake.math import RigidTransform, RotationMatrix, eq, ge
 from pydrake.solvers import (
     CommonSolverOption,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
-    MixedIntegerBranchAndBound,
-    MosekSolver,
     Solve,
     SolverOptions,
 )
@@ -39,7 +37,6 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import Context, DiagramBuilder, LeafSystem
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
@@ -47,20 +44,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
-from planning_through_contact.geometry.planar.non_collision_subgraph import (
-    NonCollisionSubGraph,
-    VertexModePair,
-)
 from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
 from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
-    EquilateralPolytope2d,
-)
 from planning_through_contact.geometry.utilities import cross_2d
-from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarPlanConfig,
-    SliderPusherSystemConfig,
-)
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -446,10 +432,10 @@ class PlanarPushingContactMode:
         if pos_target is not None:
             prog.AddLinearConstraint(eq(p_WBs[-1], pos_target.flatten()))
 
-        start = time.time()
+        time.time()
         # print("Starting to create SDP relaxation...")
         self.relaxed_prog = MakeSemidefiniteRelaxation(prog)
-        end = time.time()
+        time.time()
         # print(
         #     f"Finished formulating relaxed problem. Elapsed time: {end - start} seconds"
         # )
@@ -1317,7 +1303,7 @@ def plan_planar_pushing(
 
     start = time.time()
     result = gcs.SolveShortestPath(source_vertex, target_vertex, options)
-    elapsed_time = time.time() - start
+    time.time() - start
 
     assert result.is_success()
     print("Success!")
@@ -1437,7 +1423,7 @@ def plan_planar_pushing(
         CONTACT_COLOR = COLORS["dodgerblue4"]
         GRAVITY_COLOR = COLORS["blueviolet"]
         BOX_COLOR = COLORS["aquamarine4"]
-        TABLE_COLOR = COLORS["bisque3"]
+        COLORS["bisque3"]
         FINGER_COLOR = COLORS["firebrick3"]
         TARGET_COLOR = COLORS["firebrick1"]
 

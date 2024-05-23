@@ -1,9 +1,9 @@
-from dataclasses import dataclass
-import threading
-import pyrealsense2 as rs
-import numpy as np
-import cv2
 import logging
+import threading
+
+import cv2
+import numpy as np
+import pyrealsense2 as rs
 
 from planning_through_contact.simulation.sensors.realsense_camera_config import (
     RealsenseCameraConfig,

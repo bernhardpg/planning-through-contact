@@ -1,4 +1,3 @@
-import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -34,12 +33,7 @@ from planning_through_contact.geometry.planar.non_collision_subgraph import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    BoxWorkspace,
-    ContactConfig,
-    ContactCost,
-    NonCollisionCost,
     PlanarPushingStartAndGoal,
-    SliderPusherSystemConfig,
 )
 from planning_through_contact.planning.planar.planar_pushing_planner import (
     PlanarPushingPlanner,

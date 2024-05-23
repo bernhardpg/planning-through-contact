@@ -443,7 +443,7 @@ class PlanarPushingPlanner:
         )
         results = [self.gcs.SolveConvexRestriction(path, options) for path in paths]
 
-        flows = [result.GetSolution(e.phi()) for e in self.gcs.Edges()]
+        [result.GetSolution(e.phi()) for e in self.gcs.Edges()]
 
         # Sort the paths and results by optimal cost
         paths_and_results = zip(paths, results)
@@ -547,8 +547,8 @@ class PlanarPushingPlanner:
         rounded_costs = [
             p.rounded_result.get_optimal_cost()
             for p in paths
-            if p.rounded_result is not None  # type
-        ]
+            if p.rounded_result is not None
+        ]  # type
 
         best_idx = np.argmin(rounded_costs)
         path = paths[best_idx]

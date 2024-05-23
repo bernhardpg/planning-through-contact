@@ -1,25 +1,54 @@
 repos:
--   repo: https://github.com/humitos/mirrors-autoflake
-    rev: v1.3
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0  # Use the latest stable version or the one you need
     hooks:
-      - id: autoflake
-        args:
-          - --remove-all-unused-imports
-          - --in-place
-          - --ignore-init-module-imports
--   repo: https://github.com/timothycrosley/isort
-    rev: 5.6.4
+      - id: trailing-whitespace
+        exclude: .*/deprecated/.*
+      - id: end-of-file-fixer
+        exclude: .*/deprecated/.*
+        # These currently don't work
+      #      - id: check-yaml
+      #        exclude: .*/deprecated/.*
+      #      - id: check-json
+      #        exclude: .*/deprecated/.*
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2  # Use the latest stable version or the one you need
     hooks:
       - id: isort
-        args: ["--profile", "black"]
         name: isort (python)
--   repo: https://github.com/psf/black
-    rev: 22.3.0
+        additional_dependencies: ['setuptools']
+        language_version: python3.12
+        exclude: .*/deprecated/.*
+
+
+  - repo: https://github.com/psf/black
+    rev: 24.4.2  # Use the latest stable version or the one you need
     hooks:
       - id: black
--   repo: https://github.com/PyCQA/flake8
-    rev: 3.9.2
+        language_version: python3.12
+        exclude: .*/deprecated/.*
+
+  - repo: https://github.com/humitos/mirrors-autoflake
+    rev: v1.1  # Use the latest stable version or the one you need
     hooks:
-      -   id: flake8
-          args:
-          - --ignore=E203,W503,E501
+      - id: autoflake
+        additional_dependencies: ['setuptools']
+        language_version: python3.12
+        exclude: .*/deprecated/.*
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0  # Use the latest stable version or the one you need
+    hooks:
+      - id: mypy
+        additional_dependencies: ['setuptools']
+        language_version: python3.12
+        exclude: .*/deprecated/.*
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0  # Use the latest stable version or the one you need
+    hooks:
+      - id: flake8
+        additional_dependencies: ['setuptools']
+        language_version: python3.12
+        exclude: .*/deprecated/.*

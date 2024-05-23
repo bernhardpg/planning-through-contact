@@ -55,7 +55,7 @@
           <cylinder>
             <radius> 0.015 </radius>
             <length> 0.14 </length>
-          </cylinder>        
+          </cylinder>
         </geometry>
         <drake:proximity_properties>
           <drake:compliant_hydroelastic/>

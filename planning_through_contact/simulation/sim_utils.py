@@ -1,15 +1,14 @@
 import os
-import sys
 from typing import Literal
 
 from pydrake.all import (
-    LoadModelDirectives,
-    Parser,
-    ProcessModelDirectives,
-    MultibodyPlant,
     ContactModel,
     DiscreteContactApproximation,
+    LoadModelDirectives,
     ModelInstanceIndex,
+    MultibodyPlant,
+    Parser,
+    ProcessModelDirectives,
 )
 
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d

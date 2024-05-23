@@ -5,10 +5,8 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.solvers import MathematicalProgramResult
 
-from planning_through_contact.geometry.in_plane.contact_force import ContactForce
 from planning_through_contact.geometry.in_plane.contact_scene import (
     ContactSceneCtrlPoint,
-    FrictionConeDetails,
 )
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.in_plane.contact_scene_program import (

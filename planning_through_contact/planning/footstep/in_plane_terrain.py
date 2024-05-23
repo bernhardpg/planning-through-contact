@@ -4,7 +4,6 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from pydrake.geometry.optimization import GraphOfConvexSets
 from underactuated.exercises.humanoids.footstep_planning_gcs_utils import plot_rectangle
 
 

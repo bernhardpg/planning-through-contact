@@ -3,19 +3,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pydrake.solvers import LinearCost
-from pydrake.symbolic import Variables
 
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.planar.planar_pushing_path import (
-    PlanarPushingPath,
-)
-from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
-    PlanarPushingTrajectory,
-)
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
 from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarSolverParams,
 )
@@ -26,14 +15,6 @@ from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
     make_traj_figure,
     visualize_planar_pushing_trajectory,
-    visualize_planar_pushing_trajectory_legacy,
-)
-from tests.geometry.planar.fixtures import (
-    box_geometry,
-    plan_config,
-    planner,
-    rigid_body_box,
-    t_pusher,
 )
 from tests.geometry.planar.tools import assert_initial_and_final_poses
 
@@ -107,10 +88,8 @@ def test_planner_set_initial_and_final(
     num_contact_modes = 4
     num_subgraphs = 8  # 4 choose 2 + entry and exit
     expected_num_vertices = (
-        num_contact_modes
-        + num_vertices_per_subgraph * num_subgraphs
-        + 2  # source and target vertices
-    )
+        num_contact_modes + num_vertices_per_subgraph * num_subgraphs + 2
+    )  # source and target vertices
     assert len(planner.gcs.Vertices()) == expected_num_vertices
 
     num_edges_per_subgraph = 8
@@ -216,13 +195,7 @@ def test_planner_with_teleportation(planner: PlanarPushingPlanner) -> None:
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("teleportation_graph.svg"))
@@ -297,13 +270,7 @@ def test_make_plan(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
@@ -370,13 +337,7 @@ def test_make_plan_band_sparsity_box(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 5.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 5.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
@@ -432,13 +393,7 @@ def test_make_plan_band_sparsity_t_pusher(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
@@ -484,13 +439,7 @@ def test_planner_standard_cost(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))
@@ -533,13 +482,7 @@ def test_planner_plan_path(
     )
 
     # Make sure we are not leaving the object
-    assert np.all(
-        [
-            np.abs(p_BP) <= 1.0
-            for knot_point in traj.path_knot_points
-            for p_BP in knot_point.p_BPs  # type: ignore
-        ]
-    )
+    assert np.all([np.abs(p_BP) <= 1.0 for knot_point in traj.path_knot_points for p_BP in knot_point.p_BPs])  # type: ignore
 
     if DEBUG:
         save_gcs_graph_diagram(planner.gcs, Path("planar_pushing_graph.svg"))

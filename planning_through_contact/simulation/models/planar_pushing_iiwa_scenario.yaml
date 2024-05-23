@@ -57,4 +57,3 @@ accuracy-optimized:
         #             kp: 800
         #             kd: 100
     simulation_duration: 6000
-                

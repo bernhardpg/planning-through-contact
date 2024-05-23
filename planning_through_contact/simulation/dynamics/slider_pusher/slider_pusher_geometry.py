@@ -125,16 +125,12 @@ class SliderPusherGeometry(LeafSystem):
         p_x = state[0]
         p_y = state[1]
         theta = state[2]
-        pose = RigidTransform(
-            RollPitchYaw(np.array([0.0, 0.0, theta])), np.array([p_x, p_y, 0.0])  # type: ignore
-        )
+        pose = RigidTransform(RollPitchYaw(np.array([0.0, 0.0, theta])), np.array([p_x, p_y, 0.0]))  # type: ignore
         output.get_mutable_value().set_value(id=self.slider_frame_id, value=pose)  # type: ignore
 
         lam = state[3]
         p_BP = self.slider_geometry.get_p_BP_from_lam(
             lam, self.contact_location, self.pusher_radius
         )
-        pose = RigidTransform(
-            RotationMatrix.Identity(), np.concatenate((p_BP.flatten(), [0]))  # type: ignore
-        )
+        pose = RigidTransform(RotationMatrix.Identity(), np.concatenate((p_BP.flatten(), [0])))  # type: ignore
         output.get_mutable_value().set_value(id=self.pusher_frame_id, value=pose)  # type: ignore

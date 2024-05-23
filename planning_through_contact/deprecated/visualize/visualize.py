@@ -3,9 +3,8 @@ from typing import Dict, List
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from matplotlib import animation
-
 from deprecated.geometry.rigid_body import RigidBody
+from matplotlib import animation
 
 # WARNING: This will be deprecated soon in favor of Visualizer2d
 

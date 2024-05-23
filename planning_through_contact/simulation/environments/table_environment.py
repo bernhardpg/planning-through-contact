@@ -4,7 +4,6 @@ from typing import Optional
 
 import numpy as np
 from pydrake.all import (
-    ConstantVectorSource,
     Demultiplexer,
     DiagramBuilder,
     LogVectorOutput,
@@ -15,9 +14,6 @@ from pydrake.all import (
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
-)
-from planning_through_contact.simulation.controllers.iiwa_hardware_station import (
-    IiwaHardwareStation,
 )
 from planning_through_contact.simulation.controllers.robot_system_base import (
     RobotSystemBase,
@@ -36,11 +32,10 @@ from planning_through_contact.simulation.systems.rigid_transform_to_planar_pose_
     RigidTransformToPlanarPoseVectorSystem,
 )
 from planning_through_contact.visualize.analysis import (
+    plot_and_save_planar_pushing_logs_from_sim,
     plot_control_sols_vs_time,
     plot_cost,
     plot_joint_state_logs,
-    plot_and_save_planar_pushing_logs_from_sim,
-    plot_mpc_solve_times,
     plot_realtime_rate,
 )
 
@@ -94,7 +89,9 @@ class TableEnvironment:
                 OptitrackObjectTransformUpdaterDiagram,
             )
 
-            optitrack_object_transform_updater: OptitrackObjectTransformUpdaterDiagram = builder.AddNamedSystem(
+            optitrack_object_transform_updater: (
+                OptitrackObjectTransformUpdaterDiagram
+            ) = builder.AddNamedSystem(
                 "OptitrackTransformUpdater",
                 OptitrackObjectTransformUpdaterDiagram(
                     state_estimator=self._state_estimator,
@@ -240,9 +237,7 @@ class TableEnvironment:
     def export_diagram(self, filename: str):
         import pydot
 
-        pydot.graph_from_dot_data(self._diagram.GetGraphvizString())[0].write_pdf(  # type: ignore
-            filename
-        )
+        pydot.graph_from_dot_data(self._diagram.GetGraphvizString())[0].write_pdf(filename)  # type: ignore
         print(f"Saved diagram to: {filename}")
 
     def set_slider_planar_pose(self, pose: PlanarPose):

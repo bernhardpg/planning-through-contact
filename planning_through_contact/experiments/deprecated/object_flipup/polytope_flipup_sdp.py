@@ -1,7 +1,6 @@
 import argparse
 from typing import List, Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.solvers import Solve
@@ -26,19 +25,15 @@ from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
 from planning_through_contact.geometry.two_d.rigid_body_2d import (
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.contact_mode_motion_planner import (
     ContactModeMotionPlanner,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.visualize.analysis import (
-    create_forces_eq_and_opposite_analysis,
-    create_static_equilibrium_analysis,
     plot_cos_sine_trajs,
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
-    VisualizationCone2d,
     VisualizationForce2d,
     VisualizationPoint2d,
     VisualizationPolygon2d,
@@ -133,7 +128,7 @@ def plot_from_sdp_relaxation(
     show_animation: bool = True,
     plot_rotation_curves: bool = False,
 ):
-    decision_var_ctrl_points = planner.get_ctrl_points_for_all_decision_variables()
+    planner.get_ctrl_points_for_all_decision_variables()
     # Need this order for the reshaping to be equivalent to the above expression
     decision_var_ctrl_points_vals = x_sol.reshape((-1, num_ctrl_points), order="F")
 

@@ -204,9 +204,9 @@ class OptitrackObjectTransformUpdater(LeafSystem):
         optitrack_frame: optitrack_frame_t = self.get_input_port(
             self._optitrack_frame_index
         ).Eval(context)
-        optitrack_rigid_bodies: List[
-            optitrack_rigid_body_t
-        ] = optitrack_frame.rigid_bodies
+        optitrack_rigid_bodies: List[optitrack_rigid_body_t] = (
+            optitrack_frame.rigid_bodies
+        )
         if len(optitrack_rigid_bodies) == 0:
             logging.warning("Skipping object pose update as no optitrack bodies found.")
             return

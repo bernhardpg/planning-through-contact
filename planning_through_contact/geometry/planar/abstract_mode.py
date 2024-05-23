@@ -7,16 +7,12 @@ import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
 from pydrake.math import eq
-from pydrake.solvers import MathematicalProgram, MathematicalProgramResult
+from pydrake.solvers import MathematicalProgramResult
 
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     PolytopeContactLocation,
 )
-from planning_through_contact.geometry.rigid_body import RigidBody
-from planning_through_contact.planning.planar.planar_plan_config import (
-    PlanarPlanConfig,
-    SliderPusherSystemConfig,
-)
+from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
@@ -65,9 +61,7 @@ class ContinuityVariables:
                 (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th), self.v_BP.flatten())  # type: ignore
             )
         else:
-            return np.concatenate(
-                (self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
-            )
+            return np.concatenate((self.p_BP.flatten(), self.p_WB.flatten(), (self.cos_th, self.sin_th)))  # type: ignore
 
     def get_pure_variables(
         self, include_pusher_velocities: bool = False
@@ -87,9 +81,7 @@ class ContinuityVariables:
         return np.array(list(vars))
 
     def slider_vector(self) -> NpVariableArray | NpExpressionArray:
-        return np.concatenate(
-            (self.p_WB.flatten(), (self.cos_th, self.sin_th))  # type: ignore
-        )
+        return np.concatenate((self.p_WB.flatten(), (self.cos_th, self.sin_th)))  # type: ignore
 
     def create_expressions_with_vertex_variables(
         self,

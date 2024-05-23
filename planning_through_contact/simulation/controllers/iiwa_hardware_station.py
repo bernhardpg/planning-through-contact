@@ -1,30 +1,34 @@
 import numpy as np
-
 from manipulation.station import (
-    MakeHardwareStation,
-    LoadScenario,
-    Scenario,
-    JointStiffnessDriver,
     IiwaDriver,
+    JointStiffnessDriver,
+    LoadScenario,
+    MakeHardwareStation,
+    Scenario,
 )
-
 from pydrake.all import (
-    DiagramBuilder,
-    Context,
-    StateInterpolatorWithDiscreteDerivative,
-    ConstantValueSource,
     AbstractValue,
-    Meshcat,
+    ConstantValueSource,
+    Context,
+    Demultiplexer,
+    DiagramBuilder,
     DifferentialInverseKinematicsIntegrator,
     DifferentialInverseKinematicsParameters,
-    PortSwitch,
-    Demultiplexer,
+    Meshcat,
     Multiplexer,
+    PortSwitch,
+    StateInterpolatorWithDiscreteDerivative,
 )
-from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
 
-from planning_through_contact.simulation.planar_pushing.inverse_kinematics import (
-    solve_ik,
+from planning_through_contact.simulation.planar_pushing.iiwa_planner import IiwaPlanner
+from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
+    PlanarPushingSimConfig,
+)
+from planning_through_contact.simulation.sim_utils import (
+    GetSliderUrl,
+    LoadRobotOnly,
+    models_folder,
+    package_xml_file,
 )
 from planning_through_contact.simulation.systems.joint_velocity_clamp import (
     JointVelocityClamp,
@@ -32,16 +36,8 @@ from planning_through_contact.simulation.systems.joint_velocity_clamp import (
 from planning_through_contact.simulation.systems.planar_translation_to_rigid_transform_system import (
     PlanarTranslationToRigidTransformSystem,
 )
+
 from .robot_system_base import RobotSystemBase
-from planning_through_contact.simulation.sim_utils import (
-    LoadRobotOnly,
-    models_folder,
-    package_xml_file,
-    GetSliderUrl,
-)
-from planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config import (
-    PlanarPushingSimConfig,
-)
 
 
 class IiwaHardwareStation(RobotSystemBase):
@@ -311,8 +307,7 @@ class IiwaHardwareStation(RobotSystemBase):
         # Check that the duplicated config between scenario and sim config are consistent
         ...
 
-    def pre_sim_callback(self, root_context: Context) -> None:
-        ...
+    def pre_sim_callback(self, root_context: Context) -> None: ...
 
     @property
     def robot_model_name(self) -> str:

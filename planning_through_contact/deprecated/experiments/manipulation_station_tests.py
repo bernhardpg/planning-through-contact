@@ -253,7 +253,7 @@ def manipulation_station():
         "package://drake/examples/manipulation_station/models/"
         "amazon_table_simplified.sdf"
     )
-    table_model = Parser(plant, scene_graph).AddModelsFromUrl(table_url)[0]
+    Parser(plant, scene_graph).AddModelsFromUrl(table_url)[0]
 
     dx_table_center_to_robot_base = 0.3257
     dz_table_top_robot_base = 0.0127

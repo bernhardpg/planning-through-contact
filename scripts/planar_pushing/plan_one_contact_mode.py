@@ -1,18 +1,6 @@
-import matplotlib.pyplot as plt
-from IPython.display import HTML, SVG, display
-from pydrake.solvers import (
-    ClarabelSolver,
-    CommonSolverOption,
-    MosekSolver,
-    Solve,
-    SolverOptions,
-)
+from pydrake.solvers import ClarabelSolver, CommonSolverOption, SolverOptions
 
-from planning_through_contact.experiments.utils import (
-    get_default_plan_config,
-    get_default_solver_params,
-)
-from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
+from planning_through_contact.experiments.utils import get_default_plan_config
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
     PolytopeContactLocation,
@@ -22,17 +10,9 @@ from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-from planning_through_contact.geometry.planar.trajectory_builder import (
-    PlanarTrajectoryBuilder,
-)
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
-    NonCollisionCost,
-    PlanarPlanConfig,
     PlanarPushingStartAndGoal,
-    SliderPusherSystemConfig,
 )
-from planning_through_contact.visualize.analysis import analyze_mode_result
 from planning_through_contact.visualize.planar_pushing import (
     visualize_planar_pushing_trajectory,
 )

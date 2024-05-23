@@ -8,7 +8,6 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
-from planning_through_contact.convex_relaxation.sdp import create_sdp_relaxation
 from planning_through_contact.tools.utils import convert_formula_to_lhs_expression
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 

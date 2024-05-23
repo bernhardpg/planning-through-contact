@@ -5,18 +5,15 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.all import DecomposeAffineExpression
-from pydrake.math import eq, ge
+from pydrake.math import eq
 from pydrake.solvers import (
     Binding,
     BoundingBoxConstraint,
     L2NormCost,
     LinearConstraint,
     LinearCost,
-    LorentzConeConstraint,
     MathematicalProgram,
     MathematicalProgramResult,
-    PerspectiveQuadraticCost,
     QuadraticCost,
     RotatedLorentzConeConstraint,
     Solve,
@@ -32,7 +29,6 @@ from planning_through_contact.geometry.planar.abstract_mode import (
     ContinuityVariables,
 )
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
-from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import PlanarPlanConfig
 from planning_through_contact.tools.types import NpVariableArray
 from planning_through_contact.tools.utils import calc_displacements

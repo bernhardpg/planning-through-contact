@@ -1,7 +1,6 @@
 import os
 
 import numpy as np
-import numpy.typing as npt
 import pytest
 from pydrake.solvers import (
     CommonSolverOption,
@@ -9,9 +8,7 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
-from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
-from planning_through_contact.geometry.bezier import BezierCurve
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     ContactLocation,
@@ -28,15 +25,8 @@ from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.in_plane.contact_scene_program import (
     ContactSceneProgram,
 )
-from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
-from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.in_plane_visualizer import (
     visualize_in_plane_manipulation_plan,
-)
-from planning_through_contact.visualize.visualizer_2d import (
-    VisualizationForce2d,
-    VisualizationPolygon2d,
-    Visualizer2d,
 )
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"

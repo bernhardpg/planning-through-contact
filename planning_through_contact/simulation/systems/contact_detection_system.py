@@ -1,5 +1,6 @@
-from pydrake.all import LeafSystem, QueryObject, AbstractValue
 from typing import List
+
+from pydrake.all import AbstractValue, LeafSystem, QueryObject
 
 
 class ContactDetectionSystem(LeafSystem):
@@ -18,7 +19,7 @@ class ContactDetectionSystem(LeafSystem):
         inspector = query_object.inspector()
         bodyB_geometry_ids = []
         for geometry_id in inspector.GetAllGeometryIds():
-            frame_id = inspector.GetFrameId(geometry_id)
+            inspector.GetFrameId(geometry_id)
             name = inspector.GetName(geometry_id)
             # print(f"Geometry id {geometry_id}, frame_id {frame_id}, name {name}")
             if name == self._geometry_A_name:

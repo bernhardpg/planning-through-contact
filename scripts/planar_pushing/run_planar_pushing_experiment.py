@@ -1,17 +1,13 @@
-from copy import copy
 import logging
 import os
+from copy import copy
 from datetime import datetime
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import get_original_cwd, instantiate
 from omegaconf import OmegaConf, open_dict
-
-from pydrake.all import (
-    StartMeshcat,
-)
-from planning_through_contact.geometry.planar.non_collision import NonCollisionVariables
+from pydrake.all import StartMeshcat
 
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
@@ -169,11 +165,13 @@ def main(cfg: OmegaConf) -> None:
 
         recording_name = os.path.join(
             full_log_dir,
-            traj_name
-            + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}"
-            + ".html"
-            if cfg.save_experiment_data
-            else None,
+            (
+                traj_name
+                + f"_hw_{sim_config.use_hardware}_cl{sim_config.closed_loop}"
+                + ".html"
+                if cfg.save_experiment_data
+                else None
+            ),
         )
         timeout = (
             cfg.override_duration

@@ -49,7 +49,7 @@
           <drake:mu_static>0.5</drake:mu_static>
         </drake:proximity_properties>
       </collision>
-      
+
       <visual name="t_pusher_bottom_visual">
         <pose>0.0 -0.05714286 0.0 0.0 0.0 0.0</pose>
         <geometry>

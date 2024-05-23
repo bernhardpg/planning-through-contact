@@ -16,9 +16,6 @@ from pydrake.solvers import (
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
 
-from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
-    BandSparseSemidefiniteRelaxation,
-)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -427,8 +424,6 @@ class FootstepPlanSegment:
 
         cost_force = 1e-6
         cost_torque = 1.0
-        cost_acc_lin = 100.0
-        cost_acc_rot = 1.0
         cost_lin_vel = 10
         cost_ang_vel = 1.0
         cost_nominal_pose = 5
@@ -752,7 +747,7 @@ class FootstepPlanSegment:
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
     ) -> FootstepPlanKnotPoints:
         X_var = get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
-        X = result.GetSolution(self.get_lin_exprs_in_vertex(X_var, vertex_vars))
+        result.GetSolution(self.get_lin_exprs_in_vertex(X_var, vertex_vars))
         x = result.GetSolution(
             self.get_vars_in_vertex(self.prog.decision_variables(), vertex_vars)
         )

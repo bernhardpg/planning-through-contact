@@ -5,18 +5,14 @@ from typing import List, NamedTuple, Optional, TypeVar
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import pydot
-import pydrake.geometry.optimization as opt
 import pydrake.symbolic as sym
-from pydrake.math import eq, ge, le
+from pydrake.math import eq
 from pydrake.solvers import (
     CommonSolverOption,
     IpoptSolver,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
-    MixedIntegerBranchAndBound,
-    MosekSolver,
     SnoptSolver,
     Solve,
     SolverOptions,
@@ -24,10 +20,8 @@ from pydrake.solvers import (
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.convex_relaxation.sdp import (
-    create_sdp_relaxation,
     eliminate_equality_constraints,
 )
-from planning_through_contact.geometry.polyhedron import PolyhedronFormulator
 from planning_through_contact.geometry.two_d.contact.types import ContactLocation
 from planning_through_contact.geometry.two_d.equilateral_polytope_2d import (
     EquilateralPolytope2d,
@@ -36,16 +30,12 @@ from planning_through_contact.geometry.two_d.rigid_body_2d import (
     PolytopeContactLocation,
     RigidBody2d,
 )
-from planning_through_contact.geometry.two_d.t_pusher import TPusher
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.tools.types import (
-    NpExpressionArray,
-    NpFormulaArray,
     NpVariableArray,
 )
 from planning_through_contact.visualize.analysis import (
     create_quasistatic_pushing_analysis,
-    plot_cos_sine_trajs,
 )
 from planning_through_contact.visualize.colors import COLORS
 from planning_through_contact.visualize.visualizer_2d import (
@@ -708,7 +698,7 @@ def plan_planar_pushing(
     CONTACT_COLOR = COLORS["dodgerblue4"]
     GRAVITY_COLOR = COLORS["blueviolet"]
     BOX_COLOR = COLORS["aquamarine4"]
-    TABLE_COLOR = COLORS["bisque3"]
+    COLORS["bisque3"]
     FINGER_COLOR = COLORS["firebrick3"]
     TARGET_COLOR = COLORS["firebrick1"]
     VELOCITY_COLOR = COLORS["darkorange1"]

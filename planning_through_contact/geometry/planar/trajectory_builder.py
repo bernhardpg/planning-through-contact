@@ -7,7 +7,6 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.geometry.optimization as opt
 from pydrake.solvers import MathematicalProgramResult
-from pydrake.systems.primitives import VectorLog
 from pydrake.trajectories import PiecewisePolynomial, PiecewiseQuaternionSlerp
 
 from planning_through_contact.geometry.planar.abstract_mode import AbstractModeVariables
@@ -100,9 +99,7 @@ class PlanarTrajectoryBuilder:
                 ],
                 [],  # merge all of the lists to one
             )
-            p_WB = np.vstack(
-                [self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]  # type: ignore
-            ).T
+            p_WB = np.vstack([self._get_traj_by_interpolation(p.p_WBs, dt, p.time_in_mode) for p in self.path]).T  # type: ignore
             p_c_W = np.vstack(
                 [
                     self._get_traj_by_interpolation(p.p_WPs, dt, p.time_in_mode)

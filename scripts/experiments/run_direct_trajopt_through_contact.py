@@ -9,8 +9,6 @@ from planning_through_contact.experiments.baseline_comparison.direct_trajectory_
 from planning_through_contact.experiments.utils import (
     get_baseline_comparison_configs,
     get_default_experiment_plans,
-    get_default_plan_config,
-    get_default_solver_params,
 )
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-import numpy as np
 from tqdm import tqdm
 
 from planning_through_contact.experiments.baseline_comparison.direct_trajectory_optimization import (
@@ -17,7 +16,6 @@ from planning_through_contact.experiments.utils import (
     get_default_experiment_plans,
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
-from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
     SimplePlanarPushingTrajectory,

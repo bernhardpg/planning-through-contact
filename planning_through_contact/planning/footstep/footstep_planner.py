@@ -9,21 +9,17 @@ from pydrake.geometry.optimization import (
     GraphOfConvexSetsOptions,
     Point,
 )
-from pydrake.math import eq, ge, le
+from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
-    ClarabelSolver,
     CommonSolverOption,
     MathematicalProgram,
     MathematicalProgramResult,
     MosekSolver,
     SnoptSolver,
-    SolutionResult,
-    Solve,
     SolverOptions,
 )
 from pydrake.symbolic import Variable, Variables
-from tqdm import tqdm
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -590,14 +586,14 @@ class FootstepPlanner:
             # source -> v
             e = self.gcs.AddEdge(s, pair.v)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(0))
-            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(0))
+            pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(0))
             spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(0))
         else:  # target
             s = self.target
             # v -> target
             e = self.gcs.AddEdge(pair.v, s)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(-1))
-            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
+            pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
             spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-1))
 
         # The only variables in the source/target are the pose variables

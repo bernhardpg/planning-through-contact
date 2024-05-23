@@ -1,11 +1,8 @@
-from pydrake.all import (
-    DiagramBuilder,
-    ZeroOrderHold,
-)
+from pydrake.all import DiagramBuilder, ZeroOrderHold
+
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     PlanarPushingTrajectory,
 )
-
 from planning_through_contact.simulation.controllers.desired_planar_position_source_base import (
     DesiredPlanarPositionSourceBase,
 )

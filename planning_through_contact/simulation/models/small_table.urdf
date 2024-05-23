@@ -32,7 +32,7 @@
         <box size="1 1 .05"/>
       </geometry>
       <material name="Brown"/>
-    </collision>    
+    </collision>
   </link>
 
   <link name="tableLegUL">
@@ -99,7 +99,7 @@
       </geometry>
       <material name="Brown"/>
     </collision>
-  </link>  
+  </link>
 
   <link name="tableLegLL">
     <inertial>
@@ -121,7 +121,7 @@
       </geometry>
       <material name="Brown"/>
     </collision>
-  </link>    
+  </link>
 
   <joint name="TableTopToLegUL" type="fixed">
     <parent link="TableTop"/>

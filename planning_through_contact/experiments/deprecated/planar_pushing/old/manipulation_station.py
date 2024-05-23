@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import numpy as np
-from geometry.planar.trajectory_builder import PlanarTrajectoryBuilder
 from planning.planar_pushing_planner import PlanarPlanSpecs, PlanarPushingPlanner
 from simulation.planar_pushing.planar_pushing_iiwa import (
     PlanarPose,
@@ -37,7 +35,7 @@ def planar_pushing_station():
 
     # sim.set_pusher_planar_pose(finger_initial_pose)
 
-    finger_pose = sim.get_pusher_planar_pose()
+    sim.get_pusher_planar_pose()
     sim.run()
 
 

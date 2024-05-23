@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from pydrake.all import Meshcat, Diagram
+from pydrake.all import Diagram, Meshcat
 
 
 class RobotSystemBase(Diagram):
@@ -12,8 +12,7 @@ class RobotSystemBase(Diagram):
     def add_meshcat(self, meshcat: Meshcat) -> None:
         self._meshcat = meshcat
 
-    def pre_sim_callback(self, root_context):
-        ...
+    def pre_sim_callback(self, root_context): ...
 
     @property
     @abstractmethod
