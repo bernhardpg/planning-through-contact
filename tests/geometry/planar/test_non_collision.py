@@ -100,8 +100,8 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
 
     assert len(mode.prog.linear_equality_constraints()) == 0
 
-    # No time cost
-    assert len(mode.prog.linear_costs()) == 0
+    # Object avoidance
+    assert len(mode.prog.linear_costs()) == mode.num_knot_points
 
     # One quadratic cost for velocity regularization
     assert len(mode.prog.quadratic_costs()) == 1
@@ -266,7 +266,7 @@ def test_avoid_object_t_pusher(
     plan_config.non_collision_cost = NonCollisionCost(
         pusher_velocity_regularization=1.0
     )
-    plan_config.non_collision_cost.distance_to_object_socp_single_mode = 1.0
+    plan_config.non_collision_cost.distance_to_object = 1.0
 
     plan_config.time_non_collision = 3
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)

@@ -242,8 +242,10 @@ class NonCollisionMode(AbstractContactMode):
         )
 
         self.l2_norm_costs = []
-        self.distance_to_object_socp_costs = []
+        self.distance_to_object_cost = []
         self.velocity_reg_cost = None
+
+        self.slack_vars = []
 
         # We keep these to evaluate cost term contributions later
         self.costs = {
@@ -322,47 +324,54 @@ class NonCollisionMode(AbstractContactMode):
         if self.cost_config.avoid_object:
             planes = self.slider_geometry.get_contact_planes(self.contact_location.idx)
 
-            if self.cost_config.distance_to_object_socp is not None:
-                # TODO(bernhardpg): Clean up this part
-                planes = self.slider_geometry.get_contact_planes(
-                    self.contact_location.idx
-                )
+            self.distance_to_object_cost = []
+            self.distance_to_object_socp_constraints = []
+
+            self.slack_vars = self.prog.NewContinuousVariables(
+                self.num_knot_points, "s"
+            )
+
+            # We minimize the cost max(1/x_1, ..., 1/x_N) to penalize the distance to the closest face.
+            #
+            # This we formulate with a slack variable and N RotatedLorentzConeConstraints as:
+            # min max(1/x_1, ..., 1/x_N)
+            # ⇔ min s st. s ≥ 1/x_i, i = 1, ..., N
+            # ⇔ min s st. s * x_i ≥ 1, i = 1, ..., N
+            # ⇔ min s st. [s; x_i; 1] ∈ RotatedLorentzCone, i = 1, ..., N
+            #
+            # Here, x_i is used to simplify the concept. We really want: min max(c_1 / (1 + c_2 * phi_1), ..., c_1 / (1 + c_2 * phi_N))
+            # where phi_i = a_i^T x + b_i is the distance to face i, so x_i = 1 / c_1 + (c_2 / c_1) * phi_i)
+
+            # Add the linear cost on the slack variable (min s)
+            for s in self.slack_vars:
+                cost = self.prog.AddLinearCost(s)
+                self.distance_to_object_cost.append(cost)
+                self.costs["object_avoidance_socp"].append(cost)
+
+            for s, p_BP in zip(self.slack_vars, self.variables.p_BPs):
+                constraints_for_knot_point = []
                 for plane in planes:
-                    for p_BP in self.variables.p_BPs:
-                        # A = [a^T; 0]
-                        NUM_VARS = 2  # num variables required in the PerspectiveQuadraticCost formulation
-                        NUM_DIMS = 2
-                        A = np.zeros((NUM_VARS, NUM_DIMS))
-                        # We want:
-                        #   min (c_1 / (1 + c_2 * phi)) where phi = a^T x + b
-                        # which we formulate with
-                        #   min z_1^2 + ... + z_n^2 / z_0
-                        # where
-                        # z = [(1/c_1) + (c_2/c_1) * phi; 1]
-                        assert self.config.contact_config.cost.time is not None
-                        c_1 = self.config.contact_config.cost.time * self.dt
-                        assert (
-                            self.config.non_collision_cost.distance_to_object_socp
-                            is not None
-                        )
+                    assert self.config.contact_config.cost.time is not None
+                    c_1 = self.config.contact_config.cost.time * self.dt
+                    assert self.config.non_collision_cost.distance_to_object is not None
 
-                        c_2 = 1 / (
-                            self.config.non_collision_cost.distance_to_object_socp
-                            * self.dt
-                        )
+                    c_2 = 1 / (
+                        self.config.non_collision_cost.distance_to_object * self.dt
+                    )
 
-                        phi = (
-                            plane.dist_to(p_BP)
-                            - self.config.dynamics_config.pusher_radius
-                        )
-                        z = np.array([(1 / c_1) + (c_2 / c_1) * phi, 1])
-                        A, b = sym.DecomposeAffineExpressions(z, p_BP.flatten())  # type: ignore
+                    dist = (
+                        plane.dist_to(p_BP) - self.config.dynamics_config.pusher_radius
+                    )
 
-                        cost = PerspectiveQuadraticCost(A, b)
-                        binding = self.prog.AddCost(cost, p_BP)
-                        self.distance_to_object_socp_costs.append(binding)
+                    # Now we formulate the constraint as per the comment above.
+                    x_i = (1 / c_1) + (c_2 / c_1) * dist
+                    vec = np.array([s, x_i, 1])
+                    constraint = self.prog.AddRotatedLorentzConeConstraint(vec)  # type: ignore
+                    constraints_for_knot_point.append(constraint)
 
-                        self.costs["object_avoidance_socp"].append(binding)
+                self.distance_to_object_socp_constraints.extend(
+                    constraints_for_knot_point
+                )
 
     def set_slider_pose(self, pose: PlanarPose) -> None:
         self.slider_pose = pose
@@ -441,6 +450,10 @@ class NonCollisionMode(AbstractContactMode):
         x = temp_prog.NewContinuousVariables(self.prog.num_vars(), "x")
         # Some linear constraints will be added as bounding box constraints
         for c in self.prog.GetAllConstraints():
+            # Skip these constraints as they must be added as vertex constraints
+            if isinstance(c.evaluator(), RotatedLorentzConeConstraint):
+                continue
+
             if not (
                 isinstance(c.evaluator(), LinearConstraint)
                 or isinstance(c.evaluator(), BoundingBoxConstraint)
@@ -530,9 +543,17 @@ class NonCollisionMode(AbstractContactMode):
                 binding = Binding[L2NormCost](evaluator, vars)
                 vertex.AddCost(binding)
 
-        if self.cost_config.distance_to_object_socp:
-            for binding in self.distance_to_object_socp_costs:
+        if self.cost_config.distance_to_object:
+            for binding in self.distance_to_object_cost:
                 var_idxs, evaluator = self._get_cost_terms(binding)
                 vars = vertex.x()[var_idxs]
-                binding = Binding[PerspectiveQuadraticCost](evaluator, vars)
+                binding = Binding[LinearCost](evaluator, vars)
                 vertex.AddCost(binding)
+
+    def add_constraints_to_vertex(self, vertex: GcsVertex) -> None:
+        if self.cost_config.distance_to_object:
+            for binding in self.distance_to_object_socp_constraints:
+                var_idxs, evaluator = self._get_cost_terms(binding)
+                vars = vertex.x()[var_idxs]
+                binding = Binding[RotatedLorentzConeConstraint](evaluator, vars)
+                vertex.AddConstraint(binding)

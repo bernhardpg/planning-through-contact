@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
+from pydrake.all import LinearCost
 from pydrake.solvers import (
     L2NormCost,
     MosekSolver,
@@ -37,6 +38,7 @@ from planning_through_contact.planning.planar.planar_plan_config import (
 from planning_through_contact.tools.gcs_tools import get_gcs_solution_path_vertices
 from planning_through_contact.visualize.analysis import save_gcs_graph_diagram
 from planning_through_contact.visualize.planar_pushing import (
+    make_traj_figure,
     visualize_planar_pushing_trajectory,
 )
 from tests.geometry.planar.fixtures import (
@@ -93,7 +95,7 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
             end_idx = len(costs)
             for i in range(start_idx, end_idx):
                 # maximize distance cost
-                assert isinstance(costs[i].evaluator(), PerspectiveQuadraticCost)
+                assert isinstance(costs[i].evaluator(), LinearCost)
 
 
 @pytest.mark.parametrize(
@@ -113,6 +115,7 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
         },
     ],
     indirect=["subgraph"],
+    ids=[1, 2],
 )
 def test_non_collision_subgraph_initial_and_final(
     subgraph: NonCollisionSubGraph,
@@ -398,9 +401,11 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
         pusher_velocity_regularization=1.0
     )
     if avoid_object:
-        plan_config.non_collision_cost.distance_to_object_socp = 1.0
+        plan_config.non_collision_cost.distance_to_object = 1.0
 
-    plan_config.num_knot_points_non_collision = 4
+    plan_config.continuity_on_pusher_velocity = False
+
+    plan_config.num_knot_points_non_collision = 5
     plan_config.dynamics_config.slider = RigidBody("T", TPusher2d(), mass=0.2)
     gcs = opt.GraphOfConvexSets()
 
@@ -411,11 +416,11 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
     )
 
     slider_pose = PlanarPose(0.0, 0.0, 0)
-    initial = PlanarPose(-0.20, 0, 0)
-    target = PlanarPose(0.20, -0.1, 0)
+    pusher_initial = PlanarPose(-0.20, -0.1, 0)
+    pusher_target = PlanarPose(0.20, -0.1, 0)
 
-    subgraph.set_initial_poses(initial, slider_pose)
-    subgraph.set_final_poses(target, slider_pose)
+    subgraph.set_initial_poses(pusher_initial, slider_pose)
+    subgraph.set_final_poses(pusher_target, slider_pose)
 
     # get rid of all LSP errors
     assert subgraph.source is not None
@@ -477,12 +482,13 @@ def test_subgraph_planning_t_pusher(plan_config: PlanarPlanConfig, avoid_object:
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph.svg"))
         save_gcs_graph_diagram(subgraph.gcs, Path("subgraph_result.svg"), result)
         start_and_goal = PlanarPushingStartAndGoal(
-            slider_pose, slider_pose, initial, target
+            slider_pose, slider_pose, pusher_initial, pusher_target
         )
         traj.config.start_and_goal = start_and_goal  # needed for viz
         visualize_planar_pushing_trajectory(
             traj, visualize_knot_points=True, save=True, filename="debug_file"
         )
+        make_traj_figure(traj, filename=f"debug_file", split_on_mode_type=True)
 
 
 @pytest.mark.parametrize("avoid_object", [False, True], ids=["non_avoid", "avoid"])

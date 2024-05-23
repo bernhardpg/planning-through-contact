@@ -711,9 +711,9 @@ def direct_trajopt_through_contact(
 
     if config.contact_config.cost.time is not None:
         c_1 = config.contact_config.cost.time * dt
-        assert config.non_collision_cost.distance_to_object_socp is not None
+        assert config.non_collision_cost.distance_to_object is not None
 
-        c_2 = 1 / (config.non_collision_cost.distance_to_object_socp * dt)
+        c_2 = 1 / (config.non_collision_cost.distance_to_object * dt)
 
         for phi in sdf_slacks:
             cost = prog.AddCost(1 / (1 / c_1 + (c_2 / c_1) * phi))
