@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pydrake.geometry.optimization as opt
 import pytest
+from pydrake.all import LinearCost
 from pydrake.solvers import (
     L2NormCost,
     MosekSolver,
@@ -94,7 +95,7 @@ def test_non_collision_subgraph(subgraph: NonCollisionSubGraph):
             end_idx = len(costs)
             for i in range(start_idx, end_idx):
                 # maximize distance cost
-                assert isinstance(costs[i].evaluator(), PerspectiveQuadraticCost)
+                assert isinstance(costs[i].evaluator(), LinearCost)
 
 
 @pytest.mark.parametrize(

@@ -100,8 +100,8 @@ def test_non_collision_mode(non_collision_mode: NonCollisionMode) -> None:
 
     assert len(mode.prog.linear_equality_constraints()) == 0
 
-    # No time cost
-    assert len(mode.prog.linear_costs()) == 0
+    # Object avoidance
+    assert len(mode.prog.linear_costs()) == mode.num_knot_points
 
     # One quadratic cost for velocity regularization
     assert len(mode.prog.quadratic_costs()) == 1

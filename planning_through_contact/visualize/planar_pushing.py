@@ -518,6 +518,7 @@ def compare_trajs(
     fig.tight_layout()
     if filename is not None:
         fig.savefig(filename + f".pdf")  # type: ignore
+        plt.close()
 
 
 def plot_forces(
@@ -551,6 +552,7 @@ def plot_forces(
 
     if filename is not None:
         fig.savefig(filename + ".pdf")  # type: ignore
+        plt.close()
     else:
         plt.show()
 
