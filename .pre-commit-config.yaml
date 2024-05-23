@@ -36,6 +36,8 @@ repos:
         additional_dependencies: ['setuptools']
         language_version: python3.12
         exclude: .*/deprecated/.*
+        args: ["--remove-unused-variables", "--remove-all-unused-imports", "--in-place", "--recursive"]
+
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0  # Use the latest stable version or the one you need
