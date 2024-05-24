@@ -12,6 +12,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     PositiveSemidefiniteConstraint,
+    QuadraticConstraint,
     SnoptSolver,
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
@@ -379,55 +380,59 @@ class FootstepPlanSegment:
             self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
             self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
 
-        # torque = arm x force
+        # # torque = arm x force
         self.non_convex_constraints = []
-        for k in range(self.num_steps):
-            if config.use_convex_concave:
-                cs_for_knot_point = []
-                cross_prod = cross_product_2d_as_convex_concave(
-                    self.prog, self.p_BF1_1W[k], self.f_F1_1W[k], cs_for_knot_point
-                )
-                c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_1[k] - cross_prod, 0, 0
-                )
-
-                cross_prod = cross_product_2d_as_convex_concave(
-                    self.prog, self.p_BF1_2W[k], self.f_F1_2W[k], cs_for_knot_point
-                )
-                c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_2[k] - cross_prod, 0, 0
-                )
-
-                if self.two_feet:
-                    raise NotImplementedError()
-            else:  # add quadratic equality constraints
-                cs_for_knot_point = []
-                c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
-                )
-                cs_for_knot_point.append(c)
-                c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
-                )
-                cs_for_knot_point.append(c)
-                if self.two_feet:
-                    c = self.prog.AddQuadraticConstraint(
-                        self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]),
-                        0,
-                        0,
-                    )
-                    cs_for_knot_point.append(c)
-                    c = self.prog.AddQuadraticConstraint(
-                        self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]),
-                        0,
-                        0,
-                    )
-                    cs_for_knot_point.append(c)
-
-            self.non_convex_constraints.append(cs_for_knot_point)
+        # for k in range(self.num_steps):
+        #     if config.use_convex_concave:
+        #         cs_for_knot_point = []
+        #         cross_prod = cross_product_2d_as_convex_concave(
+        #             self.prog, self.p_BF1_1W[k], self.f_F1_1W[k], cs_for_knot_point
+        #         )
+        #         c = self.prog.AddLinearConstraint(self.tau_F1_1[k] == cross_prod)
+        #
+        #         cross_prod = cross_product_2d_as_convex_concave(
+        #             self.prog, self.p_BF1_2W[k], self.f_F1_2W[k], cs_for_knot_point
+        #         )
+        #         c = self.prog.AddLinearConstraint(self.tau_F1_2[k] == cross_prod)
+        #
+        #         if self.two_feet:
+        #             cross_prod = cross_product_2d_as_convex_concave(
+        #                 self.prog, self.p_BF2_1W[k], self.f_F2_1W[k], cs_for_knot_point
+        #             )
+        #             c = self.prog.AddLinearConstraint(self.tau_F2_1[k] == cross_prod)
+        #
+        #             cross_prod = cross_product_2d_as_convex_concave(
+        #                 self.prog, self.p_BF2_2W[k], self.f_F2_2W[k], cs_for_knot_point
+        #             )
+        #             c = self.prog.AddLinearConstraint(self.tau_F2_2[k] == cross_prod)
+        #     else:  # add quadratic equality constraints
+        #         cs_for_knot_point = []
+        #         c = self.prog.AddQuadraticConstraint(
+        #             self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
+        #         )
+        #         cs_for_knot_point.append(c)
+        #         c = self.prog.AddQuadraticConstraint(
+        #             self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
+        #         )
+        #         cs_for_knot_point.append(c)
+        #         if self.two_feet:
+        #             c = self.prog.AddQuadraticConstraint(
+        #                 self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]),
+        #                 0,
+        #                 0,
+        #             )
+        #             cs_for_knot_point.append(c)
+        #             c = self.prog.AddQuadraticConstraint(
+        #                 self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]),
+        #                 0,
+        #                 0,
+        #             )
+        #             cs_for_knot_point.append(c)
+        #
+        #     self.non_convex_constraints.append(cs_for_knot_point)
 
         # Stay on the stepping stone
-        for k in range(self.num_steps):
+        for k in range(self.num_inputs):
             self.prog.AddLinearConstraint(
                 self.stone_first.x_min <= self.p_WF1[k][0] - robot.foot_length / 2
             )
@@ -443,7 +448,7 @@ class FootstepPlanSegment:
                 )
 
         # Don't move the feet too far from the robot
-        for k in range(self.num_steps):
+        for k in range(self.num_inputs):
             self.prog.AddLinearConstraint(
                 self.p_WB[k][0] - self.p_WF1[k][0] <= robot.max_step_dist_from_robot
             )
@@ -460,7 +465,7 @@ class FootstepPlanSegment:
                 )
 
         # constrain feet to not move too far from each other:
-        for k in range(self.num_steps):
+        for k in range(self.num_inputs):
             if self.two_feet:
                 first_last_foot_distance = self.p_WF1_x[k] - self.p_WF2_x[k]
                 self.prog.AddLinearConstraint(
@@ -471,7 +476,7 @@ class FootstepPlanSegment:
                 )
 
         # Friction cones
-        for k in range(self.num_steps):
+        for k in range(self.num_inputs):
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
@@ -493,9 +498,12 @@ class FootstepPlanSegment:
             f = self.get_dynamics(k)
             # forward euler
             dynamics = s_next - (s_curr + dt * f)
-            self.prog.AddLinearConstraint(eq(dynamics, 0))
+            self.prog.AddLinearConstraint(eq(dynamics[[0, 1, 3, 4]], 0))
 
-            # foot can't move during segment
+            temp = dynamics[[1, 4]]
+
+        # feet can't move during segment
+        for k in range(self.num_inputs - 1):
             const = eq(self.p_WF1[k], self.p_WF1[k + 1])
             for c in const:
                 self.prog.AddLinearEqualityConstraint(c)
@@ -529,31 +537,31 @@ class FootstepPlanSegment:
         # cost_nominal_pose = 1.0
 
         # squared forces
-        for k in range(self.num_steps):
-            f1 = self.f_F1_1W[k]
-            f2 = self.f_F1_2W[k]
-            sq_forces = f1.T @ f1 + f2.T @ f2
-            if self.two_feet:
-                f1 = self.f_F2_1W[k]
-                f2 = self.f_F2_2W[k]
-                sq_forces += f1.T @ f1 + f2.T @ f2
-            c = self.prog.AddQuadraticCost(cost_force * sq_forces)
-            self.costs["sq_forces"].append(c)
-
-        # squared torques
-        for k in range(self.num_steps):
-            tau1 = self.tau_F1_1[k]
-            tau2 = self.tau_F1_2[k]
-            sq_torques = tau1**2 + tau2**2
-            if self.two_feet:
-                tau3 = self.tau_F2_1[k]
-                tau4 = self.tau_F2_2[k]
-                sq_torques += tau3**2 + tau4**2
-            c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
-            self.costs["sq_torques"].append(c)
-
-        # TODO: do we need these? Potentially remove
-        # squared accelerations
+        # for k in range(self.num_steps):
+        #     f1 = self.f_F1_1W[k]
+        #     f2 = self.f_F1_2W[k]
+        #     sq_forces = f1.T @ f1 + f2.T @ f2
+        #     if self.two_feet:
+        #         f1 = self.f_F2_1W[k]
+        #         f2 = self.f_F2_2W[k]
+        #         sq_forces += f1.T @ f1 + f2.T @ f2
+        #     c = self.prog.AddQuadraticCost(cost_force * sq_forces)
+        #     self.costs["sq_forces"].append(c)
+        #
+        # # squared torques
+        # for k in range(self.num_steps):
+        #     tau1 = self.tau_F1_1[k]
+        #     tau2 = self.tau_F1_2[k]
+        #     sq_torques = tau1**2 + tau2**2
+        #     if self.two_feet:
+        #         tau3 = self.tau_F2_1[k]
+        #         tau4 = self.tau_F2_2[k]
+        #         sq_torques += tau3**2 + tau4**2
+        #     c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
+        #     self.costs["sq_torques"].append(c)
+        #
+        # # TODO: do we need these? Potentially remove
+        # # squared accelerations
         # for k in range(self.num_steps):
         #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
         #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
@@ -564,28 +572,28 @@ class FootstepPlanSegment:
         #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
         #     self.costs["sq_acc_rot"].append(c)
         #
-        # squared robot velocity
-        for k in range(self.num_steps):
-            v = self.v_WB[k]
-            sq_lin_vel = v.T @ v
-            c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
-            self.costs["sq_lin_vel"].append(c)
-
-            sq_rot_vel = self.omega_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
-            self.costs["sq_rot_vel"].append(c)
-
-        # squared distance from nominal pose
-        # TODO: Use the mean stone height?
-        pose_offset = np.array(
-            [0, self.stone_first.height, 0]
-        )  # offset the stone height
-        for k in range(self.num_steps):
-            pose = self.get_robot_pose(k) - pose_offset
-            diff = pose - robot.get_nominal_pose()
-            sq_diff = diff.T @ diff
-            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
-            self.costs["sq_nominal_pose"].append(c)
+        # # squared robot velocity
+        # for k in range(self.num_steps):
+        #     v = self.v_WB[k]
+        #     sq_lin_vel = v.T @ v
+        #     c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
+        #     self.costs["sq_lin_vel"].append(c)
+        #
+        #     sq_rot_vel = self.omega_WB[k] ** 2
+        #     c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
+        #     self.costs["sq_rot_vel"].append(c)
+        #
+        # # squared distance from nominal pose
+        # # TODO: Use the mean stone height?
+        # pose_offset = np.array(
+        #     [0, self.stone_first.height, 0]
+        # )  # offset the stone height
+        # for k in range(self.num_steps):
+        #     pose = self.get_robot_pose(k) - pose_offset
+        #     diff = pose - robot.get_nominal_pose()
+        #     sq_diff = diff.T @ diff
+        #     c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
+        #     self.costs["sq_nominal_pose"].append(c)
 
     @property
     def dt(self) -> float:
@@ -614,6 +622,30 @@ class FootstepPlanSegment:
             )
         else:
             return np.concatenate([self.f_F1_1W[k], self.f_F1_2W[k], [self.p_WF1_x[k]]])
+
+    def constrain_foot_pos_ge(self, foot: Literal["first", "last"], x: float) -> None:
+        """
+        Constrain the given foot to have a position more than the given treshold x
+        """
+        if foot == "first":
+            p_WF = self.p_WF1
+        else:  # last
+            p_WF = self.p_WF2
+
+        for k in range(self.num_steps):
+            self.prog.AddLinearConstraint(p_WF[k][0] + self.robot.foot_length / 2 >= x)
+
+    def constrain_foot_pos_le(self, foot: Literal["first", "last"], x: float) -> None:
+        """
+        Constrain the given foot to have a position less than the given treshold x
+        """
+        if foot == "first":
+            p_WF = self.p_WF1
+        else:  # last
+            p_WF = self.p_WF2
+
+        for k in range(self.num_steps):
+            self.prog.AddLinearConstraint(p_WF[k][0] + self.robot.foot_length / 2 <= x)
 
     def get_foot_pos(self, foot: Literal["first", "last"], k: int) -> Variable:
         """
@@ -732,7 +764,23 @@ class FootstepPlanSegment:
         if k == -1:
             k = self.config.period_steps - 1
         self.prog.AddLinearConstraint(eq(self.v_WB[k], v_WB))
-        self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
+        # self.prog.AddLinearConstraint(self.omega_WB[k] == omega_WB)
+
+    def add_spatial_acc_constraint(
+        self, k: int, a_WB: npt.NDArray[np.float64], omega_dot_WB: float
+    ) -> None:
+        if k == -1:
+            k = self.config.period_steps - 1
+        self.prog.AddLinearConstraint(eq(self.a_WB[k], a_WB))
+        self.prog.AddLinearConstraint(self.omega_dot_WB[k] == omega_dot_WB)
+
+    def add_equilibrium_constraint(self, k: int) -> None:
+        """
+        Enforce that all accelerations are 0 for knot point k.
+        """
+        if k == -1:
+            k = self.config.period_steps - 1
+        self.add_spatial_acc_constraint(k, np.zeros((2,)), 0)
 
     def make_relaxed_prog(
         self,
@@ -821,7 +869,7 @@ class FootstepPlanSegment:
         x = result.GetSolution(self.prog.decision_variables())
 
         snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=x)
+        rounded_result = snopt.Solve(self.prog, initial_guess=x)  # type: ignore
         assert rounded_result.is_success()
 
         p_WB = rounded_result.GetSolution(self.p_WB)
@@ -867,7 +915,7 @@ class FootstepPlanSegment:
         )
 
         snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=x)
+        rounded_result = snopt.Solve(self.prog, initial_guess=x)  # type: ignore
         assert rounded_result.is_success()
 
         p_WB = rounded_result.GetSolution(self.p_WB)
