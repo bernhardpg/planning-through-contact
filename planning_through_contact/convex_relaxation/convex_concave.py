@@ -10,6 +10,7 @@ def inner_product_as_convex_concave(
     x: np.ndarray,
     y: np.ndarray,
     nonconvex_constraints: Optional[List] = None,
+    conic_form: bool = True,
 ) -> Expression:
     """
     Encodes the inner product xᵀy with a convex-concave relaxation.
@@ -33,11 +34,33 @@ def inner_product_as_convex_concave(
     x = x.reshape((N,))
     y = y.reshape((N,))
 
-    expr_pos = Q_pos - (x + y).T @ (x + y)  # ≥ 0
-    prog.AddQuadraticConstraint(expr_pos, 0, np.inf)
+    expr_pos = (x + y).T @ (x + y)  # ≥ 0
+    expr_neg = (x - y).T @ (x - y)  # ≥ 0
+    c_pos = prog.AddQuadraticConstraint(expr_pos - Q_pos, -np.inf, 0)
+    c_neg = prog.AddQuadraticConstraint(expr_neg - Q_neg, -np.inf, 0)
 
-    expr_neg = Q_neg - (x - y).T @ (x - y)  # ≥ 0
-    prog.AddQuadraticConstraint(expr_neg, 0, np.inf)
+    def _add_as_conic(binding) -> None:
+        # Quadratic constraints are saved as: lb ≤ .5 xᵀQx + bᵀx ≤ ub
+        # which we parse as: 0.5xᵀQx + bᵀx <= -c
+        # Note: this function only allows constraints with an upper bound
+        # (this is only for fast implementation)
+        assert not np.isinf(binding.evaluator().upper_bound())
+        assert np.isinf(binding.evaluator().lower_bound())
+
+        Q_temp = binding.evaluator().Q()
+        TOL = 1e-10  # make sure Q is numerically PSD
+        Q = Q_temp + np.eye(Q_temp.shape[0]) * TOL
+        b = binding.evaluator().b()
+        c = -binding.evaluator().upper_bound()
+        prog.AddQuadraticAsRotatedLorentzConeConstraint(Q, b, c, binding.variables())
+
+    if conic_form:
+        # Remove the constraints and parse them as conic constraints
+        prog.RemoveConstraint(c_pos)  # type: ignore
+        prog.RemoveConstraint(c_neg)  # type: ignore
+
+        _add_as_conic(c_pos)
+        _add_as_conic(c_neg)
 
     if nonconvex_constraints is not None:
         # Add the constraints to the prog to parse them into bindings, but then remove them.
