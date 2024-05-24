@@ -88,6 +88,9 @@ class So3TrajSegment:
         return R
 
 
+TrajType = Literal["zero_order_hold", "first_order_hold", "bezier"]
+
+
 @dataclass
 class LinTrajSegment:
     num_dims: int
@@ -95,9 +98,7 @@ class LinTrajSegment:
     end_time: float
     knot_points: npt.NDArray[np.float64]
     traj: Trajectory
-    traj_type: Literal["zero_order_hold", "first_order_hold", "bezier"] = (
-        "first_order_hold"
-    )
+    traj_type: TrajType = "first_order_hold"
 
     @classmethod
     def from_knot_points(
@@ -105,9 +106,7 @@ class LinTrajSegment:
         knot_points: npt.NDArray[np.float64],
         start_time: float,
         end_time: float,
-        traj_type: Literal[
-            "zero_order_hold", "first_order_hold", "bezier"
-        ] = "first_order_hold",
+        traj_type: TrajType = "first_order_hold",
     ) -> "LinTrajSegment":
         if len(knot_points.shape) == 1:  # (NUM_SAMPLES, )
             knot_points = knot_points.reshape(
