@@ -11,6 +11,7 @@ from pydrake.solvers import (  # CommonSolverOption,
     PositiveSemidefiniteConstraint,
     QuadraticCost,
     RotatedLorentzConeConstraint,
+    SnoptSolver,
     SolutionResult,
     Solve,
     SolverOptions,
@@ -112,7 +113,7 @@ def test_traj_segment_convex_concave_decomposition() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
 
-    robot = PotatoRobot(max_step_dist_from_robot=0.6)
+    robot = PotatoRobot(max_step_dist_from_robot=0.6, step_span=0.2)
     cfg = FootstepPlanningConfig(robot=robot, use_convex_concave=True, period_steps=3)
 
     segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
@@ -165,11 +166,11 @@ def test_traj_segment_convex_concave_decomposition() -> None:
     assert len(segment.prog.generic_costs()) == 0
 
     # We should only have the convex/concave variables in the cost
-    for c in segment.prog.GetAllCosts():
-        assert type(c.evaluator()) is QuadraticCost
-
-        assert len(c.variables()) == 1  # Q+ or Q-
-        assert "Q" in str(c.variables()[0])
+    # for c in segment.prog.GetAllCosts():
+    #     assert type(c.evaluator()) is QuadraticCost
+    #
+    #     assert len(c.variables()) == 1  # Q+ or Q-
+    #     assert "Q" in str(c.variables()[0])
 
     solver_options = SolverOptions()
     if DEBUG:
@@ -177,32 +178,40 @@ def test_traj_segment_convex_concave_decomposition() -> None:
 
     mosek = MosekSolver()
     relaxed_result = mosek.Solve(segment.prog, solver_options=solver_options)  # type: ignore
-
+    assert relaxed_result.is_success()
     assert relaxed_result.get_solver_id().name() == "Mosek"
 
-    assert relaxed_result.is_success()
-
-    # if DEBUG:
-    #     a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
-    #     omega_dot_WB = evaluate_np_expressions_array(
-    #         segment.omega_dot_WB, relaxed_result
-    #     )
-    #     cost_vals = segment.evaluate_costs_with_result(relaxed_result)
-    #     cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
-    #     for key, val in cost_vals_sums.items():
-    #         print(f"Cost {key}: {val}")
-    #
-    #     print(f"Total cost: {relaxed_result.get_optimal_cost()}")
-    #
-    #     non_convex_constraint_violation = (
-    #         segment.evaluate_non_convex_constraints_with_result(relaxed_result)
-    #     )
-    #     print(
-    #         f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
-    #     )
+    # snopt = SnoptSolver()
+    # relaxed_result = snopt.Solve(segment.prog, solver_options=solver_options)  # type: ignore
+    # assert relaxed_result.is_success()
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
     traj_relaxed = FootstepTrajectory.from_segments([segment_value_relaxed], cfg.dt)
+
+    if DEBUG:
+        a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+        omega_dot_WB = evaluate_np_expressions_array(
+            segment.omega_dot_WB, relaxed_result
+        )
+        cost_vals = segment.evaluate_costs_with_result(relaxed_result)
+        cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
+        for key, val in cost_vals_sums.items():
+            print(f"Cost {key}: {val}")
+
+        print(f"Total cost: {relaxed_result.get_optimal_cost()}")
+
+        if len(segment.non_convex_constraints) > 0:
+            non_convex_constraint_violation = (
+                segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+            )
+            print(
+                f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+            )
+        if len(segment.convex_concave_slack_vars) > 0:
+            slack_vars = np.array(segment.convex_concave_slack_vars)
+            slack_vars_vals = relaxed_result.GetSolution(slack_vars)
+
+            breakpoint()
 
     # segment_value, rounded_result = segment.round_with_result(relaxed_result)
 

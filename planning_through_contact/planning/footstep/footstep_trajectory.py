@@ -380,56 +380,77 @@ class FootstepPlanSegment:
             self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
             self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
 
-        # # torque = arm x force
+        # torque = arm x force
         self.non_convex_constraints = []
-        # for k in range(self.num_steps):
-        #     if config.use_convex_concave:
-        #         cs_for_knot_point = []
-        #         cross_prod = cross_product_2d_as_convex_concave(
-        #             self.prog, self.p_BF1_1W[k], self.f_F1_1W[k], cs_for_knot_point
-        #         )
-        #         c = self.prog.AddLinearConstraint(self.tau_F1_1[k] == cross_prod)
-        #
-        #         cross_prod = cross_product_2d_as_convex_concave(
-        #             self.prog, self.p_BF1_2W[k], self.f_F1_2W[k], cs_for_knot_point
-        #         )
-        #         c = self.prog.AddLinearConstraint(self.tau_F1_2[k] == cross_prod)
-        #
-        #         if self.two_feet:
-        #             cross_prod = cross_product_2d_as_convex_concave(
-        #                 self.prog, self.p_BF2_1W[k], self.f_F2_1W[k], cs_for_knot_point
-        #             )
-        #             c = self.prog.AddLinearConstraint(self.tau_F2_1[k] == cross_prod)
-        #
-        #             cross_prod = cross_product_2d_as_convex_concave(
-        #                 self.prog, self.p_BF2_2W[k], self.f_F2_2W[k], cs_for_knot_point
-        #             )
-        #             c = self.prog.AddLinearConstraint(self.tau_F2_2[k] == cross_prod)
-        #     else:  # add quadratic equality constraints
-        #         cs_for_knot_point = []
-        #         c = self.prog.AddQuadraticConstraint(
-        #             self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
-        #         )
-        #         cs_for_knot_point.append(c)
-        #         c = self.prog.AddQuadraticConstraint(
-        #             self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
-        #         )
-        #         cs_for_knot_point.append(c)
-        #         if self.two_feet:
-        #             c = self.prog.AddQuadraticConstraint(
-        #                 self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]),
-        #                 0,
-        #                 0,
-        #             )
-        #             cs_for_knot_point.append(c)
-        #             c = self.prog.AddQuadraticConstraint(
-        #                 self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]),
-        #                 0,
-        #                 0,
-        #             )
-        #             cs_for_knot_point.append(c)
-        #
-        #     self.non_convex_constraints.append(cs_for_knot_point)
+        self.convex_concave_slack_vars = []
+        for k in range(self.num_inputs):
+            if config.use_convex_concave:
+                cs_for_knot_point = []
+                slack_vars_for_knot_point = []
+                cross_prod = cross_product_2d_as_convex_concave(
+                    self.prog,
+                    self.p_BF1_1W[k],
+                    self.f_F1_1W[k],
+                    cs_for_knot_point,
+                    slack_vars_for_knot_point,
+                )
+                c = self.prog.AddLinearConstraint(self.tau_F1_1[k] == cross_prod)
+
+                cross_prod = cross_product_2d_as_convex_concave(
+                    self.prog,
+                    self.p_BF1_2W[k],
+                    self.f_F1_2W[k],
+                    cs_for_knot_point,
+                    slack_vars_for_knot_point,
+                )
+                c = self.prog.AddLinearConstraint(self.tau_F1_2[k] == cross_prod)
+
+                if self.two_feet:
+                    cross_prod = cross_product_2d_as_convex_concave(
+                        self.prog,
+                        self.p_BF2_1W[k],
+                        self.f_F2_1W[k],
+                        cs_for_knot_point,
+                        slack_vars_for_knot_point,
+                    )
+                    c = self.prog.AddLinearConstraint(self.tau_F2_1[k] == cross_prod)
+
+                    cross_prod = cross_product_2d_as_convex_concave(
+                        self.prog,
+                        self.p_BF2_2W[k],
+                        self.f_F2_2W[k],
+                        cs_for_knot_point,
+                        slack_vars_for_knot_point,
+                    )
+                    c = self.prog.AddLinearConstraint(self.tau_F2_2[k] == cross_prod)
+
+                self.convex_concave_slack_vars.append(slack_vars_for_knot_point)
+
+            else:  # add quadratic equality constraints
+                cs_for_knot_point = []
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
+                )
+                cs_for_knot_point.append(c)
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
+                )
+                cs_for_knot_point.append(c)
+                if self.two_feet:
+                    c = self.prog.AddQuadraticConstraint(
+                        self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]),
+                        0,
+                        0,
+                    )
+                    cs_for_knot_point.append(c)
+                    c = self.prog.AddQuadraticConstraint(
+                        self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]),
+                        0,
+                        0,
+                    )
+                    cs_for_knot_point.append(c)
+
+            self.non_convex_constraints.append(cs_for_knot_point)
 
         # Stay on the stepping stone
         for k in range(self.num_inputs):
@@ -498,7 +519,7 @@ class FootstepPlanSegment:
             f = self.get_dynamics(k)
             # forward euler
             dynamics = s_next - (s_curr + dt * f)
-            self.prog.AddLinearConstraint(eq(dynamics[[0, 1, 3, 4]], 0))
+            self.prog.AddLinearConstraint(eq(dynamics, 0))
 
             temp = dynamics[[1, 4]]
 
@@ -537,63 +558,66 @@ class FootstepPlanSegment:
         # cost_nominal_pose = 1.0
 
         # squared forces
-        # for k in range(self.num_steps):
-        #     f1 = self.f_F1_1W[k]
-        #     f2 = self.f_F1_2W[k]
-        #     sq_forces = f1.T @ f1 + f2.T @ f2
-        #     if self.two_feet:
-        #         f1 = self.f_F2_1W[k]
-        #         f2 = self.f_F2_2W[k]
-        #         sq_forces += f1.T @ f1 + f2.T @ f2
-        #     c = self.prog.AddQuadraticCost(cost_force * sq_forces)
-        #     self.costs["sq_forces"].append(c)
+        for k in range(self.num_inputs):
+            f1 = self.f_F1_1W[k]
+            f2 = self.f_F1_2W[k]
+            sq_forces = f1.T @ f1 + f2.T @ f2
+            if self.two_feet:
+                f1 = self.f_F2_1W[k]
+                f2 = self.f_F2_2W[k]
+                sq_forces += f1.T @ f1 + f2.T @ f2
+            c = self.prog.AddQuadraticCost(cost_force * sq_forces)
+            self.costs["sq_forces"].append(c)
+
+        # Note: This cost term enforces the convex concave slack variables
+        # to be equal (because of tau = Q+ - Q-), causing a relaxation gap.
+        if False:
+            # squared torques
+            for k in range(self.num_inputs):
+                tau1 = self.tau_F1_1[k]
+                tau2 = self.tau_F1_2[k]
+                sq_torques = tau1**2 + tau2**2
+                if self.two_feet:
+                    tau3 = self.tau_F2_1[k]
+                    tau4 = self.tau_F2_2[k]
+                    sq_torques += tau3**2 + tau4**2
+                c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
+                self.costs["sq_torques"].append(c)
         #
-        # # squared torques
-        # for k in range(self.num_steps):
-        #     tau1 = self.tau_F1_1[k]
-        #     tau2 = self.tau_F1_2[k]
-        #     sq_torques = tau1**2 + tau2**2
-        #     if self.two_feet:
-        #         tau3 = self.tau_F2_1[k]
-        #         tau4 = self.tau_F2_2[k]
-        #         sq_torques += tau3**2 + tau4**2
-        #     c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
-        #     self.costs["sq_torques"].append(c)
-        #
-        # # TODO: do we need these? Potentially remove
-        # # squared accelerations
-        # for k in range(self.num_steps):
-        #     sq_acc = self.a_WB[k].T @ self.a_WB[k]
-        #     c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
-        #     self.costs["sq_acc_lin"].append(c)
-        #
-        # for k in range(self.num_steps):
-        #     sq_rot_acc = self.omega_dot_WB[k] ** 2
-        #     c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
-        #     self.costs["sq_acc_rot"].append(c)
-        #
-        # # squared robot velocity
-        # for k in range(self.num_steps):
-        #     v = self.v_WB[k]
-        #     sq_lin_vel = v.T @ v
-        #     c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
-        #     self.costs["sq_lin_vel"].append(c)
-        #
-        #     sq_rot_vel = self.omega_WB[k] ** 2
-        #     c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
-        #     self.costs["sq_rot_vel"].append(c)
-        #
-        # # squared distance from nominal pose
-        # # TODO: Use the mean stone height?
-        # pose_offset = np.array(
-        #     [0, self.stone_first.height, 0]
-        # )  # offset the stone height
-        # for k in range(self.num_steps):
-        #     pose = self.get_robot_pose(k) - pose_offset
-        #     diff = pose - robot.get_nominal_pose()
-        #     sq_diff = diff.T @ diff
-        #     c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
-        #     self.costs["sq_nominal_pose"].append(c)
+        # TODO: do we need these? Potentially remove
+        # squared accelerations
+        for k in range(self.num_inputs):
+            sq_acc = self.a_WB[k].T @ self.a_WB[k]
+            c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
+            self.costs["sq_acc_lin"].append(c)
+
+        for k in range(self.num_inputs):
+            sq_rot_acc = self.omega_dot_WB[k] ** 2
+            c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
+            self.costs["sq_acc_rot"].append(c)
+
+        # squared robot velocity
+        for k in range(self.num_inputs):
+            v = self.v_WB[k]
+            sq_lin_vel = v.T @ v
+            c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
+            self.costs["sq_lin_vel"].append(c)
+
+            sq_rot_vel = self.omega_WB[k] ** 2
+            c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
+            self.costs["sq_rot_vel"].append(c)
+
+        # squared distance from nominal pose
+        # TODO: Use the mean stone height?
+        pose_offset = np.array(
+            [0, self.stone_first.height, 0]
+        )  # offset the stone height
+        for k in range(self.num_inputs):
+            pose = self.get_robot_pose(k) - pose_offset
+            diff = pose - robot.get_nominal_pose()
+            sq_diff = diff.T @ diff
+            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
+            self.costs["sq_nominal_pose"].append(c)
 
     @property
     def dt(self) -> float:
