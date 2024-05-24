@@ -1,7 +1,7 @@
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -21,6 +21,10 @@ from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxat
 )
 from planning_through_contact.convex_relaxation.convex_concave import (
     cross_product_2d_as_convex_concave,
+)
+from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
+    LinTrajSegment,
+    TrajType,
 )
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.footstep.footstep_plan_config import (
@@ -59,6 +63,7 @@ def get_X_from_psd_constraint(binding) -> npt.NDArray:
 
 @dataclass
 class FootstepPlanKnotPoints:
+    dt: float
     p_WB: npt.NDArray[np.float64]
     theta_WB: npt.NDArray[np.float64]
     p_WF1: npt.NDArray[np.float64]
@@ -68,20 +73,28 @@ class FootstepPlanKnotPoints:
     f_F2_1W: Optional[npt.NDArray[np.float64]] = None
     f_F2_2W: Optional[npt.NDArray[np.float64]] = None
 
-    def __post_init__(self) -> None:
-        assert self.p_WB.shape == (self.num_points, 2)
-        assert self.theta_WB.shape == (self.num_points,)
+    @property
+    def num_inputs(self) -> int:
+        return self.num_points - 1
 
-        assert self.p_WF1.shape == (self.num_points, 2)
-        assert self.f_F1_1W.shape == (self.num_points, 2)
-        assert self.f_F1_2W.shape == (self.num_points, 2)
+    @property
+    def num_states(self) -> int:
+        return self.num_points
+
+    def __post_init__(self) -> None:
+        assert self.p_WB.shape == (self.num_states, 2)
+        assert self.theta_WB.shape == (self.num_states,)
+
+        assert self.p_WF1.shape == (self.num_inputs, 2)
+        assert self.f_F1_1W.shape == (self.num_inputs, 2)
+        assert self.f_F1_2W.shape == (self.num_inputs, 2)
 
         if self.p_WF2 is not None:
-            assert self.p_WF2.shape == (self.num_points, 2)
+            assert self.p_WF2.shape == (self.num_inputs, 2)
         if self.f_F2_1W is not None:
-            assert self.f_F2_1W.shape == (self.num_points, 2)
+            assert self.f_F2_1W.shape == (self.num_inputs, 2)
         if self.f_F2_2W is not None:
-            assert self.f_F2_2W.shape == (self.num_points, 2)
+            assert self.f_F2_2W.shape == (self.num_inputs, 2)
 
         if self.both_feet:
             assert self.f_F2_1W is not None
@@ -94,6 +107,10 @@ class FootstepPlanKnotPoints:
     @property
     def num_points(self) -> int:
         return self.p_WB.shape[0]
+
+    @property
+    def end_time(self) -> float:
+        return self.num_points * self.dt
 
 
 class FootstepTrajectory:
@@ -110,16 +127,52 @@ class FootstepTrajectory:
         self.knot_points = knot_points
         self.dt = dt
 
+        traj_segments: Dict[str, TrajType] = {
+            "p_WB": "first_order_hold",
+            "theta_WB": "first_order_hold",
+            "p_WF1": "zero_order_hold",
+            "f_F1_1W": "zero_order_hold",
+            "f_F1_2W": "zero_order_hold",
+            "p_WF2": "zero_order_hold",
+            "f_F2_1W": "zero_order_hold",
+            "f_F2_2W": "zero_order_hold",
+        }
+
+        for attr, traj_type in traj_segments.items():
+            knot_point_value = getattr(knot_points, attr, None)
+            if knot_point_value is not None:
+                setattr(
+                    self,
+                    attr,
+                    LinTrajSegment.from_knot_points(
+                        knot_point_value.T,  # this function expects the transpose of what we have
+                        start_time=0,
+                        end_time=knot_points.end_time,
+                        traj_type=traj_type,
+                    ),
+                )
+
+    def get(self, time: float, traj: str) -> Union[float, np.ndarray]:
+        traj_segment = getattr(self, traj, None)
+
+        if traj_segment is None:
+            raise ValueError(
+                f"Trajectory '{traj}' is not defined in the FootstepTrajectory."
+            )
+
+        return traj_segment.eval(time)
+
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
+            data = (self.knot_points, self.dt)
             # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
-            pickle.dump(self, file)
+            pickle.dump(data, file)
 
     @classmethod
     def load(cls, filename: str) -> "FootstepTrajectory":
         with open(Path(filename), "rb") as file:
-            traj = pickle.load(file)
-            return traj
+            data = pickle.load(file)
+            return cls(*data)
 
     @property
     def end_time(self) -> float:
@@ -213,7 +266,7 @@ class FootstepTrajectory:
         f_F2_2Ws = np.vstack(f_F2_2Ws)
 
         merged_knot_points = FootstepPlanKnotPoints(
-            p_WBs, theta_WBs, p_WF1s, f_F1_1Ws, f_F1_2Ws, p_WF2s, f_F2_1Ws, f_F2_2Ws
+            dt, p_WBs, theta_WBs, p_WF1s, f_F1_1Ws, f_F1_2Ws, p_WF2s, f_F2_1Ws, f_F2_2Ws
         )
 
         return cls(merged_knot_points, dt)
@@ -237,6 +290,8 @@ class FootstepPlanSegment:
         @param stones_per_foot: If passed, each foot is restriced to be in contact with their
         respective stone, in the order (L,R). If passed, stone is disregarded.
         """
+        self.robot = robot
+
         if stone_for_last_foot:
             stone_first, stone_last = stone, stone_for_last_foot
             self.name = f"{stone_first.name}_and_{stone_last.name}"
@@ -258,25 +313,26 @@ class FootstepPlanSegment:
         self.prog = MathematicalProgram()
 
         # declare states
-        self.p_WB = self.prog.NewContinuousVariables(self.num_steps, 2, "p_WB")
-        self.v_WB = self.prog.NewContinuousVariables(self.num_steps, 2, "v_WB")
-        self.theta_WB = self.prog.NewContinuousVariables(self.num_steps, "theta_WB")
-        self.omega_WB = self.prog.NewContinuousVariables(self.num_steps, "omega_WB")
+        self.num_states = self.num_steps
+        self.p_WB = self.prog.NewContinuousVariables(self.num_states, 2, "p_WB")
+        self.v_WB = self.prog.NewContinuousVariables(self.num_states, 2, "v_WB")
+        self.theta_WB = self.prog.NewContinuousVariables(self.num_states, "theta_WB")
+        self.omega_WB = self.prog.NewContinuousVariables(self.num_states, "omega_WB")
 
-        # declare inputs
-
+        ### declare inputs
         # first foot
-        self.p_WF1_x = self.prog.NewContinuousVariables(self.num_steps, "p_WF1_x")
-        self.f_F1_1W = self.prog.NewContinuousVariables(self.num_steps, 2, "f_F1_1W")
-        self.f_F1_2W = self.prog.NewContinuousVariables(self.num_steps, 2, "f_F1_2W")
+        self.num_inputs = self.num_steps - 1
+        self.p_WF1_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF1_x")
+        self.f_F1_1W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_1W")
+        self.f_F1_2W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_2W")
         if self.two_feet:
             # second foot
-            self.p_WF2_x = self.prog.NewContinuousVariables(self.num_steps, "p_WF2_x")
+            self.p_WF2_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF2_x")
             self.f_F2_1W = self.prog.NewContinuousVariables(
-                self.num_steps, 2, "f_F2_1W"
+                self.num_inputs, 2, "f_F2_1W"
             )
             self.f_F2_2W = self.prog.NewContinuousVariables(
-                self.num_steps, 2, "f_F2_2W"
+                self.num_inputs, 2, "f_F2_2W"
             )
 
         self.p_WF1 = np.vstack(
@@ -288,18 +344,22 @@ class FootstepPlanSegment:
             ).T  # (num_steps, 2)
 
         # compute the foot position
-        self.p_BF1_W = self.p_WF1 - self.p_WB
+        self.p_BF1_W = self.p_WF1 - self.p_WB[: self.num_inputs]
         if self.two_feet:
-            self.p_BF2_W = self.p_WF2 - self.p_WB
+            self.p_BF2_W = self.p_WF2 - self.p_WB[: self.num_inputs]
 
         # auxilliary vars
         # TODO(bernhardpg): we might be able to get around this once we
         # have SDP constraints over the edges
-        self.tau_F1_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F1_1")
-        self.tau_F1_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_F1_2")
+        self.tau_F1_1 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_1")
+        self.tau_F1_2 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_2")
         if self.two_feet:
-            self.tau_F2_1 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_1")
-            self.tau_F2_2 = self.prog.NewContinuousVariables(self.num_steps, "tau_F2_2")
+            self.tau_F2_1 = self.prog.NewContinuousVariables(
+                self.num_inputs, "tau_F2_1"
+            )
+            self.tau_F2_2 = self.prog.NewContinuousVariables(
+                self.num_inputs, "tau_F2_2"
+            )
 
         # linear acceleration
         g = np.array([0, -9.81])
@@ -740,10 +800,20 @@ class FootstepPlanSegment:
             )
 
             return FootstepPlanKnotPoints(
-                p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W, p_WF2, f_F2_1W, f_F2_2W
+                self.dt,
+                p_WB,
+                theta_WB,
+                p_WF1,
+                f_F1_1W,
+                f_F1_2W,
+                p_WF2,
+                f_F2_1W,
+                f_F2_2W,
             )
         else:
-            return FootstepPlanKnotPoints(p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W)
+            return FootstepPlanKnotPoints(
+                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
+            )
 
     def round_with_result(
         self, result: MathematicalProgramResult
@@ -767,13 +837,23 @@ class FootstepPlanSegment:
 
             return (
                 FootstepPlanKnotPoints(
-                    p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W, p_WF1, f_F1_1W, f_F1_2W
+                    self.dt,
+                    p_WB,
+                    theta_WB,
+                    p_WF1,
+                    f_F1_1W,
+                    f_F1_2W,
+                    p_WF1,
+                    f_F1_1W,
+                    f_F1_2W,
                 ),
                 rounded_result,
             )
         else:
             return (
-                FootstepPlanKnotPoints(p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W),
+                FootstepPlanKnotPoints(
+                    self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
+                ),
                 rounded_result,
             )
 
@@ -802,10 +882,20 @@ class FootstepPlanSegment:
             f_F2_2W = rounded_result.GetSolution(self.f_F2_2W)
 
             return FootstepPlanKnotPoints(
-                p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W, p_WF2, f_F2_1W, f_F2_2W
+                self.dt,
+                p_WB,
+                theta_WB,
+                p_WF1,
+                f_F1_1W,
+                f_F1_2W,
+                p_WF2,
+                f_F2_1W,
+                f_F2_2W,
             )
         else:
-            return FootstepPlanKnotPoints(p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W)
+            return FootstepPlanKnotPoints(
+                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
+            )
 
     def evaluate_with_result(
         self, result: MathematicalProgramResult
@@ -822,10 +912,20 @@ class FootstepPlanSegment:
             f_F2_2W = result.GetSolution(self.f_F2_2W)
 
             return FootstepPlanKnotPoints(
-                p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W, p_WF2, f_F2_1W, f_F2_2W
+                self.dt,
+                p_WB,
+                theta_WB,
+                p_WF1,
+                f_F1_1W,
+                f_F1_2W,
+                p_WF2,
+                f_F2_1W,
+                f_F2_2W,
             )
         else:
-            return FootstepPlanKnotPoints(p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W)
+            return FootstepPlanKnotPoints(
+                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
+            )
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult
