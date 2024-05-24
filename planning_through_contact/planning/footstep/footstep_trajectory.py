@@ -19,6 +19,9 @@ from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, V
 from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxation import (
     BandSparseSemidefiniteRelaxation,
 )
+from planning_through_contact.convex_relaxation.convex_concave import (
+    cross_product_2d_as_convex_concave,
+)
 from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
@@ -316,31 +319,55 @@ class FootstepPlanSegment:
             self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
             self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
 
+        # torque = arm x force
         self.non_convex_constraints = []
         for k in range(self.num_steps):
-            # torque = arm x force
-            cs_for_knot_point = []
-            c = self.prog.AddQuadraticConstraint(
-                self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
-            )
-            cs_for_knot_point.append(c)
-            c = self.prog.AddQuadraticConstraint(
-                self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
-            )
-            cs_for_knot_point.append(c)
-            if self.two_feet:
+            if config.use_convex_concave:
+                cs_for_knot_point = []
+                cross_prod = cross_product_2d_as_convex_concave(
+                    self.prog, self.p_BF1_1W[k], self.f_F1_1W[k], cs_for_knot_point
+                )
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]), 0, 0
+                    self.tau_F1_1[k] - cross_prod, 0, 0
+                )
+
+                cross_prod = cross_product_2d_as_convex_concave(
+                    self.prog, self.p_BF1_2W[k], self.f_F1_2W[k], cs_for_knot_point
+                )
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_F1_2[k] - cross_prod, 0, 0
+                )
+
+                if self.two_feet:
+                    raise NotImplementedError()
+            else:  # add quadratic equality constraints
+                cs_for_knot_point = []
+                c = self.prog.AddQuadraticConstraint(
+                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
                 )
                 cs_for_knot_point.append(c)
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]), 0, 0
+                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
                 )
                 cs_for_knot_point.append(c)
+                if self.two_feet:
+                    c = self.prog.AddQuadraticConstraint(
+                        self.tau_F2_1[k] - cross_2d(self.p_BF2_1W[k], self.f_F2_1W[k]),
+                        0,
+                        0,
+                    )
+                    cs_for_knot_point.append(c)
+                    c = self.prog.AddQuadraticConstraint(
+                        self.tau_F2_2[k] - cross_2d(self.p_BF2_2W[k], self.f_F2_2W[k]),
+                        0,
+                        0,
+                    )
+                    cs_for_knot_point.append(c)
 
             self.non_convex_constraints.append(cs_for_knot_point)
 
-            # Stay on the stepping stone
+        # Stay on the stepping stone
+        for k in range(self.num_steps):
             self.prog.AddLinearConstraint(
                 self.stone_first.x_min <= self.p_WF1[k][0] - robot.foot_length / 2
             )
@@ -355,7 +382,8 @@ class FootstepPlanSegment:
                     self.p_WF2[k][0] + robot.foot_length / 2 <= self.stone_last.x_max
                 )
 
-            # Don't move the feet too far from the robot
+        # Don't move the feet too far from the robot
+        for k in range(self.num_steps):
             self.prog.AddLinearConstraint(
                 self.p_WB[k][0] - self.p_WF1[k][0] <= robot.max_step_dist_from_robot
             )
@@ -371,7 +399,8 @@ class FootstepPlanSegment:
                     >= -robot.max_step_dist_from_robot
                 )
 
-            # constrain feet to not move too far from each other:
+        # constrain feet to not move too far from each other:
+        for k in range(self.num_steps):
             if self.two_feet:
                 first_last_foot_distance = self.p_WF1_x[k] - self.p_WF2_x[k]
                 self.prog.AddLinearConstraint(
@@ -381,6 +410,8 @@ class FootstepPlanSegment:
                     first_last_foot_distance >= -robot.step_span
                 )
 
+        # Friction cones
+        for k in range(self.num_steps):
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
@@ -412,8 +443,6 @@ class FootstepPlanSegment:
                 const = eq(self.p_WF2[k], self.p_WF2[k + 1])
                 for c in const:
                     self.prog.AddLinearEqualityConstraint(c)
-
-        # TODO(bernhardpg): Step span limit
 
         self.costs = {
             "sq_forces": [],

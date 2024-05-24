@@ -42,6 +42,7 @@ class FootstepPlanningConfig:
     period: float = 1.0
     period_steps: int = 3
     use_lp_approx: bool = False
+    use_convex_concave: bool = False
 
     @property
     def dt(self) -> float:

@@ -24,7 +24,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = False
+DEBUG = True
 
 
 def test_trajectory_segment_one_foot() -> None:
@@ -60,14 +60,16 @@ def test_trajectory_segment_one_foot() -> None:
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    result = mosek.Solve(segment.make_relaxed_prog(), solver_options=solver_options)
+    relaxed_result = mosek.Solve(
+        segment.make_relaxed_prog(), solver_options=solver_options  # type: ignore
+    )
     # NOTE: We are getting UNKNOWN, but the solution looks good.
     assert (
-        result.is_success()
-        or result.get_solution_result() == SolutionResult.kSolverSpecificError
+        relaxed_result.is_success()
+        or relaxed_result.get_solution_result() == SolutionResult.kSolverSpecificError
     )
 
-    segment_value = segment.evaluate_with_result(result)
+    segment_value = segment.evaluate_with_result(relaxed_result)
 
     traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
     assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
@@ -77,8 +79,21 @@ def test_trajectory_segment_one_foot() -> None:
     assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps, 2)
 
     if DEBUG:
-        a_WB = evaluate_np_expressions_array(segment.a_WB, result)
-        cost_vals = segment.evaluate_costs_with_result(result)
+        a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+        cost_vals = segment.evaluate_costs_with_result(relaxed_result)
+
+        cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
+        for key, val in cost_vals_sums.items():
+            print(f"Cost {key}: {val}")
+
+        print(f"Total cost: {relaxed_result.get_optimal_cost()}")
+
+        non_convex_constraint_violation = (
+            segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+        )
+        print(
+            f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+        )
 
     if DEBUG:
         output_file = "debug_one_foot"
@@ -87,7 +102,73 @@ def test_trajectory_segment_one_foot() -> None:
     animate_footstep_plan(robot, terrain, traj, output_file=output_file)
 
 
-def test_trajectory_segment_two_feet() -> None:
+def test_traj_segment_convex_concave_decomposition() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot, use_convex_concave=True)
+
+    segment = FootstepPlanSegment(stone, "one_foot", robot, cfg, name="First step")
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
+
+    segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
+    segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+
+    solver_options = SolverOptions()
+    if DEBUG:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(segment.prog, solver_options=solver_options)
+    # NOTE: We are getting UNKNOWN, but the solution looks good.
+    assert (
+        relaxed_result.is_success()
+        or relaxed_result.get_solution_result() == SolutionResult.kSolverSpecificError
+    )
+
+    if DEBUG:
+        a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
+        cost_vals = segment.evaluate_costs_with_result(relaxed_result)
+        cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
+        for key, val in cost_vals_sums.items():
+            print(f"Cost {key}: {val}")
+
+        print(f"Total cost: {relaxed_result.get_optimal_cost()}")
+
+        non_convex_constraint_violation = (
+            segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+        )
+        print(
+            f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+        )
+
+    segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
+    traj_relaxed = FootstepTrajectory.from_segments([segment_value_relaxed], cfg.dt)
+
+    segment_value, rounded_result = segment.round_with_result(relaxed_result)
+
+    if DEBUG:
+        c_round = rounded_result.get_optimal_cost()
+        c_relax = relaxed_result.get_optimal_cost()
+        ub_optimality_gap = (c_round - c_relax) / c_relax
+        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+
+    traj_rounded = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+
+    if DEBUG:
+        output_file_relaxed = "debug_convex_concave_relaxed"
+        output_file_rounded = "debug_convex_concave_rounded"
+    else:
+        output_file_relaxed = None
+        output_file_rounded = None
+    animate_footstep_plan(robot, terrain, traj_rounded, output_file=output_file_rounded)
+    animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file_relaxed)
+
+
+def test_trajectory_segment_two_feet_one_stone() -> None:
     """
     Tests a single segment with two feet in contact. Tests both
     convex relaxation (SDP) and the nonlinear rounding.
@@ -119,7 +200,7 @@ def test_trajectory_segment_two_feet() -> None:
     target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
 
     segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
-    segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 1.0)  # type: ignore
+    segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
 
     solver_options = SolverOptions()
     if DEBUG:
@@ -149,6 +230,7 @@ def test_trajectory_segment_two_feet() -> None:
         print(
             f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
         )
+        breakpoint()
 
     segment_value, rounded_result = segment.round_with_result(relaxed_result)
 
@@ -249,6 +331,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
             print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
         traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+        breakpoint()
 
         if DEBUG:
             output_file = f"debug_different_stones_{segment.name}"
