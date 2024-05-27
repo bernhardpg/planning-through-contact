@@ -868,31 +868,45 @@ class FootstepPlanSegment:
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 
-    def evaluate_with_vertex_result(
+    def get_solution(
+        self,
+        vars: np.ndarray,
+        result: MathematicalProgramResult,
+        vertex_vars: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        if vertex_vars is None:
+            return result.GetSolution(vars)
+        return result.GetSolution(self.get_vars_in_vertex(vars, vertex_vars))
+
+    def evaluate_expressions(
+        self,
+        exprs: np.ndarray,
+        result: MathematicalProgramResult,
+        vertex_vars: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        if vertex_vars is None:
+            return evaluate_np_expressions_array(exprs, result)
+        return evaluate_np_expressions_array(
+            self.get_lin_exprs_in_vertex(exprs, vertex_vars), result
+        )
+
+    def evaluate_with_result(
         self,
         result: MathematicalProgramResult,
-        vertex_vars: npt.NDArray,
+        vertex_vars: Optional[np.ndarray] = None,
     ) -> FootstepPlanKnotPoints:
-        p_WB = result.GetSolution(self.get_vars_in_vertex(self.p_WB, vertex_vars))
-        theta_WB = result.GetSolution(
-            self.get_vars_in_vertex(self.theta_WB, vertex_vars)
-        )
-        p_WF1 = evaluate_np_expressions_array(
-            self.get_lin_exprs_in_vertex(self.p_WF1, vertex_vars), result
-        )
-        f_F1_1W = result.GetSolution(self.get_vars_in_vertex(self.f_F1_1W, vertex_vars))
-        f_F1_2W = result.GetSolution(self.get_vars_in_vertex(self.f_F1_2W, vertex_vars))
+        p_WB = self.get_solution(self.p_WB, result, vertex_vars)
+        theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
+        p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
+        f_F1_1W, f_F1_2W = self.get_solution(
+            self.f_F1_1W, result, vertex_vars
+        ), self.get_solution(self.f_F1_2W, result, vertex_vars)
 
         if self.two_feet:
-            p_WF2 = evaluate_np_expressions_array(
-                self.get_lin_exprs_in_vertex(self.p_WF2, vertex_vars), result
-            )
-            f_F2_1W = result.GetSolution(
-                self.get_vars_in_vertex(self.f_F2_1W, vertex_vars)
-            )
-            f_F2_2W = result.GetSolution(
-                self.get_vars_in_vertex(self.f_F2_2W, vertex_vars)
-            )
+            p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
+            f_F2_1W, f_F2_2W = self.get_solution(
+                self.f_F2_1W, result, vertex_vars
+            ), self.get_solution(self.f_F2_2W, result, vertex_vars)
 
             return FootstepPlanKnotPoints(
                 self.dt,
@@ -905,19 +919,22 @@ class FootstepPlanSegment:
                 f_F2_1W,
                 f_F2_2W,
             )
-        else:
-            return FootstepPlanKnotPoints(
-                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
-            )
 
-    def round_with_result(
+        return FootstepPlanKnotPoints(self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W)
+
+    def evaluate_with_vertex_result(
+        self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
+    ) -> FootstepPlanKnotPoints:
+        return self.evaluate_with_result(result, vertex_vars=vertex_vars)
+
+    def round_result(
         self, result: MathematicalProgramResult
-    ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
+    ) -> MathematicalProgramResult:
         x = result.GetSolution(self.prog.decision_variables())
 
         if self.config.use_convex_concave:
             for c in self.prog.rotated_lorentz_cone_constraints():
-                self.prog.RemoveConstraint(c)
+                self.prog.RemoveConstraint(c)  # type: ignore
 
             for c in sum(self.non_convex_constraints, []):
                 self.prog.AddConstraint(c.evaluator(), c.variables())
@@ -926,108 +943,25 @@ class FootstepPlanSegment:
         rounded_result = snopt.Solve(self.prog, initial_guess=x)  # type: ignore
         assert rounded_result.is_success()
 
-        p_WB = rounded_result.GetSolution(self.p_WB)
-        theta_WB = rounded_result.GetSolution(self.theta_WB)
-        p_WF1 = evaluate_np_expressions_array(self.p_WF1, rounded_result)
-        f_F1_1W = rounded_result.GetSolution(self.f_F1_1W)
-        f_F1_2W = rounded_result.GetSolution(self.f_F1_2W)
+        return rounded_result
 
-        if self.two_feet:
-            p_WF2 = evaluate_np_expressions_array(self.p_WF2, rounded_result)
-            f_F1_1W = rounded_result.GetSolution(self.f_F2_1W)
-            f_F1_2W = rounded_result.GetSolution(self.f_F2_2W)
-
-            return (
-                FootstepPlanKnotPoints(
-                    self.dt,
-                    p_WB,
-                    theta_WB,
-                    p_WF1,
-                    f_F1_1W,
-                    f_F1_2W,
-                    p_WF2,
-                    f_F1_1W,
-                    f_F1_2W,
-                ),
-                rounded_result,
-            )
-        else:
-            return (
-                FootstepPlanKnotPoints(
-                    self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
-                ),
-                rounded_result,
-            )
+    def round_with_result(
+        self, result: MathematicalProgramResult
+    ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
+        rounded_result = self.round_result(result)
+        knot_points = self.evaluate_with_result(rounded_result)
+        return knot_points, rounded_result
 
     def round_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
     ) -> FootstepPlanKnotPoints:
         X_var = get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
-        X = result.GetSolution(self.get_lin_exprs_in_vertex(X_var, vertex_vars))
-        x = result.GetSolution(
-            self.get_vars_in_vertex(self.prog.decision_variables(), vertex_vars)
-        )
+        X = self.evaluate_expressions(X_var, result, vertex_vars)
+        x = self.get_solution(self.prog.decision_variables(), result, vertex_vars)
 
-        snopt = SnoptSolver()
-        rounded_result = snopt.Solve(self.prog, initial_guess=x)  # type: ignore
-        assert rounded_result.is_success()
+        rounded_result = self.round_result(result)
 
-        p_WB = rounded_result.GetSolution(self.p_WB)
-        theta_WB = rounded_result.GetSolution(self.theta_WB)
-        p_WF1 = evaluate_np_expressions_array(self.p_WF1, rounded_result)
-        f_F1_1W = rounded_result.GetSolution(self.f_F1_1W)
-        f_F1_2W = rounded_result.GetSolution(self.f_F1_2W)
-
-        if self.two_feet:
-            p_WF2 = evaluate_np_expressions_array(self.p_WF2, rounded_result)
-            f_F2_1W = rounded_result.GetSolution(self.f_F2_1W)
-            f_F2_2W = rounded_result.GetSolution(self.f_F2_2W)
-
-            return FootstepPlanKnotPoints(
-                self.dt,
-                p_WB,
-                theta_WB,
-                p_WF1,
-                f_F1_1W,
-                f_F1_2W,
-                p_WF2,
-                f_F2_1W,
-                f_F2_2W,
-            )
-        else:
-            return FootstepPlanKnotPoints(
-                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
-            )
-
-    def evaluate_with_result(
-        self, result: MathematicalProgramResult
-    ) -> FootstepPlanKnotPoints:
-        p_WB = result.GetSolution(self.p_WB)
-        theta_WB = result.GetSolution(self.theta_WB)
-        p_WF1 = evaluate_np_expressions_array(self.p_WF1, result)
-        f_F1_1W = result.GetSolution(self.f_F1_1W)
-        f_F1_2W = result.GetSolution(self.f_F1_2W)
-
-        if self.two_feet:
-            p_WF2 = evaluate_np_expressions_array(self.p_WF2, result)
-            f_F2_1W = result.GetSolution(self.f_F2_1W)
-            f_F2_2W = result.GetSolution(self.f_F2_2W)
-
-            return FootstepPlanKnotPoints(
-                self.dt,
-                p_WB,
-                theta_WB,
-                p_WF1,
-                f_F1_1W,
-                f_F1_2W,
-                p_WF2,
-                f_F2_1W,
-                f_F2_2W,
-            )
-        else:
-            return FootstepPlanKnotPoints(
-                self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, f_F1_2W
-            )
+        return self.evaluate_with_result(rounded_result)
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult
