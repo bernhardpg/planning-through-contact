@@ -102,8 +102,8 @@ def inner_product_as_convex_concave(
     # “A convex model of humanoid momentum dynamics for multi-contact motion generation,” in 2016 IEEE-RAS
     # adding this cost is sufficient to make the relaxation tight.
     # TODO: Move?
-    prog.AddQuadraticCost(1e-5 * Q_pos**2, is_convex=True)
-    prog.AddQuadraticCost(1e-5 * Q_neg**2, is_convex=True)
+    prog.AddQuadraticCost(1e-8 * Q_pos**2, is_convex=True)
+    prog.AddQuadraticCost(1e-8 * Q_neg**2, is_convex=True)
 
     return Q_pos - Q_neg
 

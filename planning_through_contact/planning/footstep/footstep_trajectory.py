@@ -383,6 +383,7 @@ class FootstepPlanSegment:
         # torque = arm x force
         self.non_convex_constraints = []
         self.convex_concave_slack_vars = []
+        self.convex_concave_relaxations = []
         for k in range(self.num_inputs):
             if config.use_convex_concave:
                 cs_for_knot_point = []
@@ -395,6 +396,7 @@ class FootstepPlanSegment:
                     slack_vars_for_knot_point,
                 )
                 c = self.prog.AddLinearConstraint(self.tau_F1_1[k] == cross_prod)
+                self.convex_concave_relaxations.append(c)
 
                 cross_prod = cross_product_2d_as_convex_concave(
                     self.prog,
@@ -404,6 +406,7 @@ class FootstepPlanSegment:
                     slack_vars_for_knot_point,
                 )
                 c = self.prog.AddLinearConstraint(self.tau_F1_2[k] == cross_prod)
+                self.convex_concave_relaxations.append(c)
 
                 if self.two_feet:
                     cross_prod = cross_product_2d_as_convex_concave(
@@ -414,6 +417,7 @@ class FootstepPlanSegment:
                         slack_vars_for_knot_point,
                     )
                     c = self.prog.AddLinearConstraint(self.tau_F2_1[k] == cross_prod)
+                    self.convex_concave_relaxations.append(c)
 
                     cross_prod = cross_product_2d_as_convex_concave(
                         self.prog,
@@ -423,6 +427,7 @@ class FootstepPlanSegment:
                         slack_vars_for_knot_point,
                     )
                     c = self.prog.AddLinearConstraint(self.tau_F2_2[k] == cross_prod)
+                    self.convex_concave_relaxations.append(c)
 
                 self.convex_concave_slack_vars.append(slack_vars_for_knot_point)
 
@@ -521,8 +526,6 @@ class FootstepPlanSegment:
             dynamics = s_next - (s_curr + dt * f)
             self.prog.AddLinearConstraint(eq(dynamics, 0))
 
-            temp = dynamics[[1, 4]]
-
         # feet can't move during segment
         for k in range(self.num_inputs - 1):
             const = eq(self.p_WF1[k], self.p_WF1[k + 1])
@@ -583,7 +586,6 @@ class FootstepPlanSegment:
                     sq_torques += tau3**2 + tau4**2
                 c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
                 self.costs["sq_torques"].append(c)
-        #
         # TODO: do we need these? Potentially remove
         # squared accelerations
         for k in range(self.num_inputs):
@@ -656,8 +658,8 @@ class FootstepPlanSegment:
         else:  # last
             p_WF = self.p_WF2
 
-        for k in range(self.num_steps):
-            self.prog.AddLinearConstraint(p_WF[k][0] + self.robot.foot_length / 2 >= x)
+        for k in range(self.num_inputs):
+            self.prog.AddLinearConstraint(p_WF[k][0] >= x)
 
     def constrain_foot_pos_le(self, foot: Literal["first", "last"], x: float) -> None:
         """
@@ -668,8 +670,8 @@ class FootstepPlanSegment:
         else:  # last
             p_WF = self.p_WF2
 
-        for k in range(self.num_steps):
-            self.prog.AddLinearConstraint(p_WF[k][0] + self.robot.foot_length / 2 <= x)
+        for k in range(self.num_inputs):
+            self.prog.AddLinearConstraint(p_WF[k][0] <= x)
 
     def get_foot_pos(self, foot: Literal["first", "last"], k: int) -> Variable:
         """
@@ -803,7 +805,7 @@ class FootstepPlanSegment:
         Enforce that all accelerations are 0 for knot point k.
         """
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.config.period_steps - 2  # N - 1 inputs, i.e. N - 1 accelerations!
         self.add_spatial_acc_constraint(k, np.zeros((2,)), 0)
 
     def make_relaxed_prog(
@@ -814,8 +816,11 @@ class FootstepPlanSegment:
         if use_groups:
             variable_groups = [
                 Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
-                for k in range(self.num_steps - 1)
+                for k in range(self.num_steps - 2)  # Only N - 1 inputs
             ]
+            variable_groups.append(
+                Variables(self.get_state(self.num_states - 1))
+            )  # add the last state
             self.relaxed_prog = MakeSemidefiniteRelaxation(
                 self.prog, variable_groups=variable_groups
             )
@@ -892,6 +897,13 @@ class FootstepPlanSegment:
     ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
         x = result.GetSolution(self.prog.decision_variables())
 
+        if self.config.use_convex_concave:
+            for c in self.prog.rotated_lorentz_cone_constraints():
+                self.prog.RemoveConstraint(c)
+
+            for c in sum(self.non_convex_constraints, []):
+                self.prog.AddConstraint(c.evaluator(), c.variables())
+
         snopt = SnoptSolver()
         rounded_result = snopt.Solve(self.prog, initial_guess=x)  # type: ignore
         assert rounded_result.is_success()
@@ -903,7 +915,7 @@ class FootstepPlanSegment:
         f_F1_2W = rounded_result.GetSolution(self.f_F1_2W)
 
         if self.two_feet:
-            p_WF1 = evaluate_np_expressions_array(self.p_WF2, rounded_result)
+            p_WF2 = evaluate_np_expressions_array(self.p_WF2, rounded_result)
             f_F1_1W = rounded_result.GetSolution(self.f_F2_1W)
             f_F1_2W = rounded_result.GetSolution(self.f_F2_2W)
 
@@ -915,7 +927,7 @@ class FootstepPlanSegment:
                     p_WF1,
                     f_F1_1W,
                     f_F1_2W,
-                    p_WF1,
+                    p_WF2,
                     f_F1_1W,
                     f_F1_2W,
                 ),

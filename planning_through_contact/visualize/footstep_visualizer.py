@@ -18,7 +18,7 @@ def animate_footstep_plan(
     plan: FootstepTrajectory,
     title: Optional[str] = None,
     output_file: Optional[str] = None,
-) -> None:
+) -> FuncAnimation:
     # Initialize figure for animation
     fig, ax = plt.subplots()
 
@@ -150,7 +150,9 @@ def animate_footstep_plan(
             force_r2.set_visible(False)
 
     # Create and display animation
-    n_steps = plan.num_steps
+    n_steps = plan.num_steps + 1
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
     if output_file is not None:
         ani.save(f"{output_file}.mp4", writer="ffmpeg")
+
+    return ani
