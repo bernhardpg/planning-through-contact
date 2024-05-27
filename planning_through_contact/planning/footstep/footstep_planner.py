@@ -382,6 +382,7 @@ class FootstepPlanner:
                         self.robot,
                         self.config,
                         name=f"step_{step_idx}_one_foot",
+                        eq_num_input_state=True,  # we need the N-th input for the next segment!
                     )
                     segments_for_stone.append(lift_step)
                 else:
@@ -391,6 +392,7 @@ class FootstepPlanner:
                         self.robot,
                         self.config,
                         name=f"step_{step_idx}_two_feet",
+                        eq_num_input_state=True,  # We need the N-th input for the next segment
                     )
                     segments_for_stone.append(stance_step)
 
@@ -403,6 +405,7 @@ class FootstepPlanner:
             self.robot,
             self.config,
             name=f"start_stance",
+            eq_num_input_state=True,
         )
         segments[0].insert(0, stance_step)
 
@@ -413,6 +416,7 @@ class FootstepPlanner:
             self.robot,
             self.config,
             name=f"final_stance",
+            eq_num_input_state=True,
         )
         segments[-1].append(stance_step)
 
@@ -451,6 +455,7 @@ class FootstepPlanner:
                 self.config,
                 name=f"transition",
                 stone_for_last_foot=stone_v,
+                eq_num_input_state=True,
             )
             transition_segments.append(transition_step)
 
@@ -660,7 +665,10 @@ class FootstepPlanner:
         return solver_options
 
     def plan(
-        self, print_flows: bool = False, print_solver_output: bool = False
+        self,
+        print_flows: bool = False,
+        print_solver_output: bool = False,
+        print_debug: bool = False,
     ) -> FootstepTrajectory:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
@@ -686,7 +694,8 @@ class FootstepPlanner:
         #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
         # )
 
-        print("Solving GCS problem")
+        if print_debug:
+            print("Solving GCS problem")
 
         options.preprocessing = True
         # We want to solve only the convex relaxation first
@@ -697,7 +706,7 @@ class FootstepPlanner:
         assert gcs_result.is_success()
         # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
-        if print_flows:
+        if print_flows or print_debug:
             flows = [
                 (e.name(), gcs_result.GetSolution(e.phi())) for e in self.gcs.Edges()
             ]
@@ -713,7 +722,8 @@ class FootstepPlanner:
         rounded_results = []
 
         rounding_times = []
-        print(f"Rounding {len(paths)} possible GCS paths...")
+        if print_debug:
+            print(f"Rounding {len(paths)} possible GCS paths...")
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
@@ -728,9 +738,10 @@ class FootstepPlanner:
             rounding_times.append(elapsed_time)
             rounded_results.append(rounded_result)
             rounders.append(self.plan_rounder)
-            print(
-                f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s, cost: {rounded_result.get_optimal_cost():.3f}"
-            )
+            if print_debug:
+                print(
+                    f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s, cost: {rounded_result.get_optimal_cost():.3f}"
+                )
 
         rounded_costs = [
             res.get_optimal_cost() if res.is_success() else np.inf
@@ -745,16 +756,18 @@ class FootstepPlanner:
         assert self.rounded_result.is_success()
 
         active_edge_names = [e.name() for e in self.plan_rounder.active_edges]
-        print(f"Best path: {' -> '.join(active_edge_names)}")
+        if print_debug:
+            print(f"Best path: {' -> '.join(active_edge_names)}")
 
-        c_round = self.rounded_result.get_optimal_cost()
-        c_relax = gcs_result.get_optimal_cost()
-        ub_optimality_gap = ((c_round - c_relax) / c_relax) * 100
-        print(
-            f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}, gcs_restriction_cost: {self.plan_rounder.relaxed_result.get_optimal_cost():.4f}"
-        )
-        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
-        print(f"Rounding time: {self.rounding_time:.3f} s")
+        if print_debug:
+            c_round = self.rounded_result.get_optimal_cost()
+            c_relax = gcs_result.get_optimal_cost()
+            ub_optimality_gap = ((c_round - c_relax) / c_relax) * 100
+            print(
+                f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}, gcs_restriction_cost: {self.plan_rounder.relaxed_result.get_optimal_cost():.4f}"
+            )
+            print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+            print(f"Rounding time: {self.rounding_time:.3f} s")
 
         plan = self.plan_rounder.get_plan(self.rounded_result)
 
