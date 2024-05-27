@@ -74,14 +74,6 @@ class FootstepPlanKnotPoints:
     f_F2_1W: Optional[npt.NDArray[np.float64]] = None
     f_F2_2W: Optional[npt.NDArray[np.float64]] = None
 
-    @property
-    def num_inputs(self) -> int:
-        return self.num_points - 1
-
-    @property
-    def num_states(self) -> int:
-        return self.num_points
-
     def __post_init__(self) -> None:
         assert self.p_WB.shape == (self.num_states, 2)
         assert self.theta_WB.shape == (self.num_states,)
@@ -106,8 +98,16 @@ class FootstepPlanKnotPoints:
         return self.p_WF2 is not None
 
     @property
-    def num_points(self) -> int:
+    def num_states(self) -> int:
         return self.p_WB.shape[0]
+
+    @property
+    def num_inputs(self) -> int:
+        return self.p_WF1.shape[0]
+
+    @property
+    def num_points(self) -> int:
+        return self.num_states
 
     @property
     def end_time(self) -> float:
@@ -223,7 +223,7 @@ class FootstepTrajectory:
         f_F2_2Ws = []
 
         # NOTE: This assumes that all the segments have the same lengths!
-        empty_shape = segments[0].p_WB.shape
+        empty_shape = segments[0].p_WF1.shape
 
         for segment, (first_active, last_active) in zip(segments, gait_schedule):
             both_active = first_active and last_active
@@ -283,13 +283,17 @@ class FootstepPlanSegment:
         config: FootstepPlanningConfig,
         name: Optional[str] = None,
         stone_for_last_foot: Optional[InPlaneSteppingStone] = None,
+        eq_num_input_state: bool = False,
     ) -> None:
         """
         A wrapper class for constructing a nonlinear optimization program for the
         motion within a specified mode.
 
         @param stones_per_foot: If passed, each foot is restriced to be in contact with their
-        respective stone, in the order (L,R). If passed, stone is disregarded.
+                                respective stone, in the order (L,R). If passed, stone is disregarded.
+        @param eq_num_input_state: Normally, we have N states and N - 1 inputs (due to
+                                   Forward Euler). However, when chaining multiple segments together
+                                   one often wants N states as well, which this flag accomplishes.
         """
         self.robot = robot
 
@@ -315,6 +319,7 @@ class FootstepPlanSegment:
 
         # declare states
         self.num_states = self.num_steps
+
         self.p_WB = self.prog.NewContinuousVariables(self.num_states, 2, "p_WB")
         self.v_WB = self.prog.NewContinuousVariables(self.num_states, 2, "v_WB")
         self.theta_WB = self.prog.NewContinuousVariables(self.num_states, "theta_WB")
@@ -322,7 +327,11 @@ class FootstepPlanSegment:
 
         ### declare inputs
         # first foot
-        self.num_inputs = self.num_steps - 1
+        if eq_num_input_state:
+            self.num_inputs = self.num_states
+        else:
+            self.num_inputs = self.num_states - 1
+
         self.p_WF1_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF1_x")
         self.f_F1_1W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_1W")
         self.f_F1_2W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_2W")
@@ -679,7 +688,7 @@ class FootstepPlanSegment:
         If the segment has only one foot contact, it returns that one foot always.
         """
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_inputs - 1
         if self.two_feet:
             if foot == "first":
                 return self.p_WF1_x[k]
@@ -690,7 +699,7 @@ class FootstepPlanSegment:
 
     def get_dynamics(self, k: int) -> npt.NDArray:
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_inputs - 1
         return np.concatenate(
             [self.v_WB[k], [self.omega_WB[k]], self.a_WB[k], [self.omega_dot_WB[k]]]
         )
@@ -726,8 +735,8 @@ class FootstepPlanSegment:
                 raise RuntimeError("Unknown type")
         vars = list(vars)
 
-        A, b = DecomposeAffineExpressions(exprs, vars)
-        idxs = self.relaxed_prog.FindDecisionVariableIndices(vars)
+        A, b = DecomposeAffineExpressions(exprs, vars)  # type: ignore
+        idxs = self.relaxed_prog.FindDecisionVariableIndices(vars)  # type: ignore
 
         x = vertex_vars[idxs]
 
@@ -738,22 +747,22 @@ class FootstepPlanSegment:
 
     def get_robot_pose(self, k: int) -> npt.NDArray:
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_states - 1
         return np.concatenate([self.p_WB[k], [self.theta_WB[k]]])
 
     def get_robot_spatial_vel(self, k: int) -> npt.NDArray:
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_states - 1
         return np.concatenate([self.v_WB[k], [self.omega_WB[k]]])
 
     def get_robot_spatial_acc(self, k: int) -> npt.NDArray:
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_inputs - 1
         return np.concatenate([self.a_WB[k], [self.omega_dot_WB[k]]])
 
     def get_vars(self, k: int) -> npt.NDArray:
         if k == -1:
-            k = self.config.period_steps - 1
+            k = self.num_inputs - 1
         if self.two_feet:
             return np.concatenate(
                 (
@@ -814,13 +823,22 @@ class FootstepPlanSegment:
         use_groups: bool = True,
     ) -> MathematicalProgram:
         if use_groups:
-            variable_groups = [
-                Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
-                for k in range(self.num_steps - 2)  # Only N - 1 inputs
-            ]
-            variable_groups.append(
-                Variables(self.get_state(self.num_states - 1))
-            )  # add the last state
+            if self.num_states == self.num_inputs:
+                variable_groups = [
+                    Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
+                    for k in range(self.num_states - 1)
+                ]
+            else:
+                # TODO(bernhardpg): Make sure that this grouping is the correct one!
+
+                # We have N states and N - 1 inputs
+                variable_groups = [
+                    Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
+                    for k in range(self.num_inputs - 1)
+                ]
+                variable_groups.append(
+                    Variables(self.get_state(self.num_states - 1))
+                )  # add the last state
             self.relaxed_prog = MakeSemidefiniteRelaxation(
                 self.prog, variable_groups=variable_groups
             )
