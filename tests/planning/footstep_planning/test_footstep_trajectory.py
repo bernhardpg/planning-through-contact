@@ -82,12 +82,14 @@ def test_trajectory_segment_one_foot() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
-    assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
-    assert traj.knot_points.p_WF1.shape == (cfg.period_steps - 1, 2)
-    assert traj.knot_points.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps - 1, 2)
+    traj = FootstepPlanKnotPoints.merge([segment_value])
+    assert traj.p_WB.shape == (cfg.period_steps, 2)
+    assert traj.theta_WB.shape == (cfg.period_steps,)
+
+    for foot in traj.feet_knot_points:
+        assert foot.p_WF.shape == (cfg.period_steps - 1, 2)
+        for f in foot.f_F_Ws:
+            assert f.shape == (cfg.period_steps - 1, 2)
 
     if DEBUG:
         a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
@@ -162,12 +164,14 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
-    assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
-    assert traj.knot_points.p_WF1.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_F1_1W.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps, 2)
+    traj = FootstepPlanKnotPoints.merge([segment_value])
+    assert traj.p_WB.shape == (cfg.period_steps, 2)
+    assert traj.theta_WB.shape == (cfg.period_steps,)
+
+    for foot in traj.feet_knot_points:
+        assert foot.p_WF.shape == (cfg.period_steps, 2)
+        for f in foot.f_F_Ws:
+            assert f.shape == (cfg.period_steps, 2)
 
     if DEBUG:
         output_file = "debug_one_foot_extra_inputs"
@@ -251,7 +255,7 @@ def test_traj_segment_convex_concave_decomposition() -> None:
     assert relaxed_result.get_solver_id().name() == "Mosek"
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
-    traj_relaxed = FootstepTrajectory.from_segments([segment_value_relaxed], cfg.dt)
+    traj_relaxed = FootstepPlanKnotPoints.merge([segment_value_relaxed])
 
     if DEBUG:
         # Check quality of convex-concave relaxation
@@ -328,7 +332,7 @@ def test_traj_segment_convex_concave_decomposition() -> None:
         segment_value, rounded_result = segment.round_with_result(relaxed_result)
 
         assert rounded_result.get_solver_id().name() == "SNOPT"
-        traj_rounded = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+        traj_rounded = FootstepPlanKnotPoints.merge([segment_value])
         if DEBUG:
             output_file_rounded = "debug_convex_concave_rounded"
         else:
@@ -413,7 +417,6 @@ def test_trajectory_segment_two_feet_one_stone() -> None:
         print(
             f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
         )
-        breakpoint()
 
     segment_value, rounded_result = segment.round_with_result(relaxed_result)
 
@@ -424,13 +427,7 @@ def test_trajectory_segment_two_feet_one_stone() -> None:
         ub_optimality_gap = (c_round - c_relax) / c_relax
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-    traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
-
-    assert traj.knot_points.p_WB.shape == (cfg.period_steps, 2)
-    assert traj.knot_points.theta_WB.shape == (cfg.period_steps,)
-    assert traj.knot_points.p_WF1.shape == (cfg.period_steps - 1, 2)
-    assert traj.knot_points.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert traj.knot_points.f_F1_2W.shape == (cfg.period_steps - 1, 2)
+    traj = FootstepPlanKnotPoints.merge([segment_value])
 
     if DEBUG:
         output_file = "debug_two_feet"
@@ -513,7 +510,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
             ub_optimality_gap = (c_round - c_relax) / c_relax
             print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-        traj = FootstepTrajectory.from_segments([segment_value], cfg.dt)
+        traj = FootstepPlanKnotPoints.merge([segment_value])
 
         if DEBUG:
             output_file = f"debug_different_stones_{segment.name}"
@@ -557,6 +554,7 @@ def test_merging_two_trajectory_segments() -> None:
     segment_second = FootstepPlanSegment(
         stone, "two_feet", robot, cfg, name="second step"
     )
+
     segment_second.add_pose_constraint(0, target_pos, 0)  # type: ignore
     segment_second.add_pose_constraint(cfg.period_steps - 1, target_pos_2, 0)  # type: ignore
 
@@ -569,9 +567,7 @@ def test_merging_two_trajectory_segments() -> None:
     )
     segment_val_second = segment_second.evaluate_with_result(result_second)
 
-    traj = FootstepTrajectory.from_segments(
-        [segment_val_first, segment_val_second], cfg.dt
-    )
+    traj = FootstepPlanKnotPoints.merge([segment_val_first, segment_val_second])
 
     if DEBUG:
         output_file = "debug_merge_two_segments"
@@ -629,7 +625,5 @@ def test_tightness_eval() -> None:
         output_file = "debug_tightness_eval"
     else:
         output_file = None
-
-    # breakpoint()
 
     animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file)

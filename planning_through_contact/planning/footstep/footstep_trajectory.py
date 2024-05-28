@@ -156,8 +156,8 @@ class FootKnotPoints:
         ]
 
         return FootKnotPoints(
-            dt=self.dt,
             foot_width=self.foot_width,
+            dt=self.dt,
             p_WF=new_p_WF,
             f_F_Ws=new_f_F_Ws,
             tau_F_Ws=new_tau_F_Ws,
@@ -175,7 +175,7 @@ class FootKnotPoints:
 
     @classmethod
     def create_empty(
-        cls, dt: float, foot_width: float, num_knot_points: int, num_forces: int
+        cls, foot_width: float, dt: float, num_knot_points: int, num_forces: int
     ) -> "FootKnotPoints":
         oned_shape = (num_knot_points,)
         twod_shape = (num_knot_points, 2)
@@ -184,12 +184,12 @@ class FootKnotPoints:
         f_F_Ws = [np.full(twod_shape, np.nan) for _ in range(num_forces)]
         tau_F_Ws = [np.full(oned_shape, np.nan) for _ in range(num_forces)]
 
-        return cls(dt, foot_width, p_WF, f_F_Ws, tau_F_Ws)
+        return cls(foot_width, dt, p_WF, f_F_Ws, tau_F_Ws)
 
     @classmethod
     def empty_like(cls, other: "FootKnotPoints") -> "FootKnotPoints":
         return cls.create_empty(
-            other.dt, other.foot_width, other.num_knot_points, other.num_forces
+            other.foot_width, other.dt, other.num_knot_points, other.num_forces
         )
 
     def get(
@@ -1184,8 +1184,8 @@ class FootstepPlanSegment:
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
 
         first_foot = FootKnotPoints(
-            self.dt,
             self.robot.foot_length,
+            self.dt,
             p_WF1,
             [f_F1_1W, f_F1_2W],
             [tau_F1_1, tau_F1_2],
@@ -1201,8 +1201,8 @@ class FootstepPlanSegment:
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
 
             second_foot = FootKnotPoints(
-                self.dt,
                 self.robot.foot_length,
+                self.dt,
                 p_WF2,
                 [f_F2_1W, f_F2_2W],
                 [tau_F2_1, tau_F2_2],
