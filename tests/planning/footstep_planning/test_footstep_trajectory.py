@@ -28,9 +28,12 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
-from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
+from planning_through_contact.visualize.footstep_visualizer import (
+    animate_footstep_plan,
+    plot_relaxation_errors,
+)
 
-DEBUG = False
+DEBUG = True
 
 
 def test_trajectory_segment_one_foot() -> None:
@@ -578,23 +581,9 @@ def test_tightness_eval() -> None:
     stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot)
+    cfg = FootstepPlanningConfig(robot=robot, period_steps=5)
 
     segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
-
-    assert segment.p_WF1.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_2W.shape == (cfg.period_steps - 1, 2)
-
-    assert segment.tau_F1_1.shape == (cfg.period_steps - 1,)
-    assert segment.tau_F1_2.shape == (cfg.period_steps - 1,)
-
-    assert segment.p_WF2.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F2_2W.shape == (cfg.period_steps - 1, 2)
-
-    assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)
-    assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
@@ -603,24 +592,45 @@ def test_tightness_eval() -> None:
     segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
 
-    segment.constrain_foot_pos_le("first", stone.x_pos - 0.3)
-    segment.constrain_foot_pos_ge("last", stone.x_pos + 0.1)
+    segment.add_equilibrium_constraint(0)
+    segment.add_equilibrium_constraint(-1)
 
     solver_options = SolverOptions()
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
     relaxed_result = Solve(
-        segment.make_relaxed_prog(trace_cost=False), solver_options=solver_options
+        segment.make_relaxed_prog(trace_cost=True, use_groups=False),
+        solver_options=solver_options,
     )
     assert relaxed_result.is_success()
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
     traj_relaxed = FootstepPlan.merge([segment_value_relaxed])
 
-    if DEBUG:
-        output_file = "debug_tightness_eval"
-    else:
-        output_file = None
+    segment_value, rounded_result = segment.round_with_result(relaxed_result)
+    traj_rounded = FootstepPlan.merge([segment_value])
 
-    animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file)
+    if DEBUG:
+        c_round = rounded_result.get_optimal_cost()
+        c_relax = relaxed_result.get_optimal_cost()
+        ub_optimality_gap = (c_round - c_relax) / c_relax
+        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+
+        non_convex_constraint_violation = (
+            segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+        )
+        print(
+            f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+        )
+
+    if DEBUG:
+        output_file_relaxed = "debug_tightness_eval_relaxed"
+        output_file_rounded = "debug_tightness_eval_rounded"
+    else:
+        output_file_relaxed = None
+        output_file_rounded = None
+
+    animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file_relaxed)
+    animate_footstep_plan(robot, terrain, traj_rounded, output_file=output_file_rounded)
+    plot_relaxation_errors(traj_relaxed, output_file=output_file_relaxed)

@@ -125,3 +125,51 @@ def animate_footstep_plan(
         ani.save(f"{output_file}.mp4", writer="ffmpeg")
 
     return ani
+
+
+def plot_relaxation_errors(
+    plan: FootstepPlan,
+    title: Optional[str] = None,
+    output_file: Optional[str] = None,
+) -> None:
+    # Assuming compute_torques method is defined in FootstepPlan
+    planned_torques = plan.tau_F_Ws  # List of Lists of np.ndarray
+    true_torques = plan.compute_torques()  # List of Lists of np.ndarray
+
+    num_feet = len(planned_torques)
+    num_forces = len(planned_torques[0]) if num_feet > 0 else 0
+
+    # Determine global y-axis limits
+    all_torques = [torque for sublist in planned_torques for torque in sublist] + [
+        torque for sublist in true_torques for torque in sublist
+    ]
+    y_min = min(torque.min() for torque in all_torques)
+    y_max = max(torque.max() for torque in all_torques)
+
+    fig, axs = plt.subplots(
+        num_feet, num_forces, figsize=(12, 3.5 * num_feet), squeeze=False
+    )
+
+    for i in range(num_feet):
+        for j in range(num_forces):
+            ax = axs[i, j]
+            planned_torque = planned_torques[i][j]
+            true_torque = true_torques[i][j]
+            N = planned_torque.shape[0]
+            x = np.arange(N)
+
+            ax.plot(x, planned_torque, label="Planned Torque")
+            ax.plot(x, true_torque, label="True Torque", linestyle="--")
+            ax.set_xlabel("N")
+            ax.set_ylabel("Torque")
+            ax.set_title(f"Foot {i + 1} - Force {j + 1}")
+            ax.legend()
+            ax.set_ylim(y_min, y_max)
+
+    if title:
+        fig.suptitle(title)
+    plt.tight_layout()
+
+    if output_file:
+        plt.savefig(output_file)
+        plt.close()

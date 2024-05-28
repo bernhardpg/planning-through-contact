@@ -212,6 +212,39 @@ class FootPlan:
             return [t.eval(time) for t in trajectory]
         return trajectory.eval(time)
 
+    def compute_torques(
+        self, p_WB: npt.NDArray[np.float64]
+    ) -> List[npt.NDArray[np.float64]]:
+
+        if not p_WB.shape[0] in (self.num_knot_points, self.num_knot_points + 1):
+            raise RuntimeError(
+                f"p_WB has length N = {p_WB.shape[0]}, but num_knot_points for foot is {self.num_knot_points} (should be N-1)"
+            )
+
+        if p_WB.shape[0] == self.num_knot_points + 1:
+            p_WB = p_WB[:-1, :]  # remove the last knot point (we only have N-1 points)
+
+        # compute arm (i.e. position of contact point relative to CoM)
+        p_BFc_Ws = [p_WFc - p_WB for p_WFc in self.p_WFcs]
+        tau_F_Ws = [
+            np.array([cross_2d(p, f) for p, f in zip(ps, fs)])
+            for ps, fs in zip(p_BFc_Ws, self.f_F_Ws)
+        ]
+        return tau_F_Ws
+
+    def get_torque_errors(
+        self, p_WB: npt.NDArray[np.float64]
+    ) -> List[npt.NDArray[np.float64]]:
+        if self.tau_F_Ws is None:
+            raise RuntimeError("Cannot compute torque error when torques are not saved")
+
+        true_tau_F_Ws = self.compute_torques(p_WB)
+        errors = [
+            np.abs(true_tau - tau)
+            for true_tau, tau in zip(true_tau_F_Ws, self.tau_F_Ws)
+        ]
+        return errors
+
 
 @dataclass
 class FootstepPlan:
@@ -291,13 +324,23 @@ class FootstepPlan:
     def end_time(self) -> float:
         return self.num_knot_points * self.dt
 
-    def evaluate_tightness(self) -> None:
+    @property
+    def tau_F_Ws(self) -> List[List[npt.NDArray[np.float64]]]:
+        torques = [foot.tau_F_Ws for foot in self.feet_knot_points]
+        return torques
+
+    def compute_torques(self) -> List[List[npt.NDArray[np.float64]]]:
+        torques = [foot.compute_torques(self.p_WB) for foot in self.feet_knot_points]
+        return torques
+
+    def get_torque_errors(self) -> List[List[npt.NDArray[np.float64]]]:
         """
         Compares the computed torques p ⊗ f with the planned torques τ.
         Returns an array (num_steps, num_forces) with entries equal to
-        the constraint violation τ - p ⊗ f for each force and timestep.
+        the absolute constraint violation |τ - p ⊗ f| for each force and timestep.
         """
-        ...
+        errors = [foot.get_torque_errors(self.p_WB) for foot in self.feet_knot_points]
+        return errors
 
     def _interpolate_segment(
         self, data: npt.NDArray[np.float64], interpolation: TrajType
@@ -535,7 +578,7 @@ class FootstepPlanSegment:
         if self.two_feet:
             self.omega_dot_WB += (1 / robot.inertia) * (self.tau_F2_1 + self.tau_F2_2)
 
-        # contact points positions
+        # contact points positions relative to CoM
         self.p_BF1_1W = self.p_BF1_W + np.array([robot.foot_length / 2, 0])
         self.p_BF1_2W = self.p_BF1_W - np.array([robot.foot_length / 2, 0])
         if self.two_feet:
@@ -622,34 +665,33 @@ class FootstepPlanSegment:
         # Stay on the stepping stone
         for k in range(self.num_inputs):
             self.prog.AddLinearConstraint(
-                self.stone_first.x_min <= self.p_WF1[k][0] - robot.foot_length / 2
+                self.stone_first.x_min <= self.p_WF1_x[k] - robot.foot_length / 2
             )
             self.prog.AddLinearConstraint(
-                self.p_WF1[k][0] + robot.foot_length / 2 <= self.stone_first.x_max
+                self.p_WF1_x[k] + robot.foot_length / 2 <= self.stone_first.x_max
             )
             if self.two_feet:
                 self.prog.AddLinearConstraint(
-                    self.stone_last.x_min <= self.p_WF2[k][0] - robot.foot_length / 2
+                    self.stone_last.x_min <= self.p_WF2_x[k] - robot.foot_length / 2
                 )
                 self.prog.AddLinearConstraint(
-                    self.p_WF2[k][0] + robot.foot_length / 2 <= self.stone_last.x_max
+                    self.p_WF2_x[k] + robot.foot_length / 2 <= self.stone_last.x_max
                 )
 
         # Don't move the feet too far from the robot
         for k in range(self.num_inputs):
             self.prog.AddLinearConstraint(
-                self.p_WB[k][0] - self.p_WF1[k][0] <= robot.max_step_dist_from_robot
+                self.p_WB[k][0] - self.p_WF1_x[k] <= robot.max_step_dist_from_robot
             )
             self.prog.AddLinearConstraint(
-                self.p_WB[k][0] - self.p_WF1[k][0] >= -robot.max_step_dist_from_robot
+                self.p_WB[k][0] - self.p_WF1_x[k] >= -robot.max_step_dist_from_robot
             )
             if self.two_feet:
                 self.prog.AddLinearConstraint(
-                    self.p_WB[k][0] - self.p_WF2[k][0] <= robot.max_step_dist_from_robot
+                    self.p_WB[k][0] - self.p_WF2_x[k] <= robot.max_step_dist_from_robot
                 )
                 self.prog.AddLinearConstraint(
-                    self.p_WB[k][0] - self.p_WF2[k][0]
-                    >= -robot.max_step_dist_from_robot
+                    self.p_WB[k][0] - self.p_WF2_x[k] >= -robot.max_step_dist_from_robot
                 )
 
         # constrain feet to not move too far from each other:
@@ -708,8 +750,8 @@ class FootstepPlanSegment:
             "sq_nominal_pose": [],
         }
 
-        cost_force = 1e-6
-        cost_torque = 1.0
+        cost_force = 1e-2
+        cost_torque = 0.2
         cost_acc_lin = 100.0
         cost_acc_rot = 1.0
         cost_lin_vel = 10
@@ -734,20 +776,26 @@ class FootstepPlanSegment:
             c = self.prog.AddQuadraticCost(cost_force * sq_forces)
             self.costs["sq_forces"].append(c)
 
-        # Note: This cost term enforces the convex concave slack variables
-        # to be equal (because of tau = Q+ - Q-), causing a relaxation gap.
-        if False:
-            # squared torques
-            for k in range(self.num_inputs):
-                tau1 = self.tau_F1_1[k]
-                tau2 = self.tau_F1_2[k]
-                sq_torques = tau1**2 + tau2**2
-                if self.two_feet:
-                    tau3 = self.tau_F2_1[k]
-                    tau4 = self.tau_F2_2[k]
-                    sq_torques += tau3**2 + tau4**2
-                c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
-                self.costs["sq_torques"].append(c)
+        if True:  # this causes the relaxation gap to be high
+            pass
+        else:
+            # Note: This cost term enforces the convex concave slack variables
+            # to be equal (because of tau = Q+ - Q-), causing a relaxation gap.
+            if self.config.use_convex_concave:
+                pass
+            else:
+                # squared torques
+                for k in range(self.num_inputs):
+                    tau1 = self.tau_F1_1[k]
+                    tau2 = self.tau_F1_2[k]
+                    sq_torques = tau1**2 + tau2**2
+                    if self.two_feet:
+                        tau3 = self.tau_F2_1[k]
+                        tau4 = self.tau_F2_2[k]
+                        sq_torques += tau3**2 + tau4**2
+                    c = self.prog.AddQuadraticCost(cost_torque * sq_torques)
+                    self.costs["sq_torques"].append(c)
+
         # TODO: do we need these? Potentially remove
         # squared accelerations
         for k in range(self.num_inputs):
@@ -975,6 +1023,11 @@ class FootstepPlanSegment:
         trace_cost: bool = False,
         use_groups: bool = True,
     ) -> MathematicalProgram:
+        # Already convex
+        if self.config.use_convex_concave:
+            self.relaxed_prog = self.prog
+            return self.relaxed_prog
+
         if use_groups:
             if self.num_states == self.num_inputs:
                 variable_groups = [
