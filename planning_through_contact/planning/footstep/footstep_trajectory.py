@@ -64,7 +64,7 @@ def get_X_from_psd_constraint(binding) -> npt.NDArray:
 
 
 @dataclass
-class FootKnotPoints:
+class FootPlan:
     """
     A class to represent the knot points of a foot in a footstep plan.
 
@@ -135,11 +135,11 @@ class FootKnotPoints:
         ]  # contact positions
         return [self.p_WF + p_Fc for p_Fc in p_Fcs]
 
-    def __add__(self, other: Optional["FootKnotPoints"]) -> "FootKnotPoints":
+    def __add__(self, other: Optional["FootPlan"]) -> "FootPlan":
         if other is None:
             return self
 
-        if not isinstance(other, FootKnotPoints):
+        if not isinstance(other, FootPlan):
             return NotImplemented
 
         if self.foot_width != other.foot_width:
@@ -155,7 +155,7 @@ class FootKnotPoints:
             for self_tau, other_tau in zip(self.tau_F_Ws, other.tau_F_Ws)
         ]
 
-        return FootKnotPoints(
+        return FootPlan(
             foot_width=self.foot_width,
             dt=self.dt,
             p_WF=new_p_WF,
@@ -176,7 +176,7 @@ class FootKnotPoints:
     @classmethod
     def create_empty(
         cls, foot_width: float, dt: float, num_knot_points: int, num_forces: int
-    ) -> "FootKnotPoints":
+    ) -> "FootPlan":
         oned_shape = (num_knot_points,)
         twod_shape = (num_knot_points, 2)
 
@@ -187,7 +187,7 @@ class FootKnotPoints:
         return cls(foot_width, dt, p_WF, f_F_Ws, tau_F_Ws)
 
     @classmethod
-    def empty_like(cls, other: "FootKnotPoints") -> "FootKnotPoints":
+    def empty_like(cls, other: "FootPlan") -> "FootPlan":
         return cls.create_empty(
             other.foot_width, other.dt, other.num_knot_points, other.num_forces
         )
@@ -205,7 +205,7 @@ class FootKnotPoints:
 
 
 @dataclass
-class FootstepPlanKnotPoints:
+class FootstepPlan:
     """
     A class to represent the knot points of a footstep plan including the robot body pose.
 
@@ -223,7 +223,7 @@ class FootstepPlanKnotPoints:
     dt: float
     p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
     theta_WB: npt.NDArray[np.float64]  # (num_steps, )
-    feet_knot_points: List[FootKnotPoints]  # [num_feet]
+    feet_knot_points: List[FootPlan]  # [num_feet]
 
     def __post_init__(self) -> None:
         self._validate_shapes()
@@ -258,11 +258,11 @@ class FootstepPlanKnotPoints:
         return len(self.feet_knot_points) == 2
 
     @property
-    def first_foot(self) -> FootKnotPoints:
+    def first_foot(self) -> FootPlan:
         return self.feet_knot_points[0]
 
     @property
-    def second_foot(self) -> FootKnotPoints:
+    def second_foot(self) -> FootPlan:
         assert self.both_feet, "Only one foot knot point available"
         return self.feet_knot_points[1]
 
@@ -301,9 +301,7 @@ class FootstepPlanKnotPoints:
         )
 
     @classmethod
-    def merge(
-        cls, segments: List["FootstepPlanKnotPoints"]
-    ) -> "FootstepPlanKnotPoints":
+    def merge(cls, segments: List["FootstepPlan"]) -> "FootstepPlan":
         both_feet = np.array([s.both_feet for s in segments])
         # This is a quick way to check that the bool value changes for each element in the array
         feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
@@ -352,15 +350,15 @@ class FootstepPlanKnotPoints:
                         else first_foot + segment.first_foot
                     )
                     second_foot = (
-                        FootKnotPoints.empty_like(segment.first_foot)
+                        FootPlan.empty_like(segment.first_foot)
                         if second_foot is None
-                        else second_foot + FootKnotPoints.empty_like(segment.first_foot)
+                        else second_foot + FootPlan.empty_like(segment.first_foot)
                     )
                 else:
                     first_foot = (
-                        FootKnotPoints.empty_like(segment.first_foot)
+                        FootPlan.empty_like(segment.first_foot)
                         if first_foot is None
-                        else first_foot + FootKnotPoints.empty_like(segment.first_foot)
+                        else first_foot + FootPlan.empty_like(segment.first_foot)
                     )
                     second_foot = (
                         segment.first_foot
@@ -383,7 +381,7 @@ class FootstepPlanKnotPoints:
             pickle.dump(self, file)
 
     @classmethod
-    def load(cls, filename: str) -> "FootstepPlanKnotPoints":
+    def load(cls, filename: str) -> "FootstepPlan":
         with open(Path(filename), "rb") as file:
             return pickle.load(file)
 
@@ -403,152 +401,6 @@ class FootstepPlanKnotPoints:
     ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
         assert foot <= self.num_feet - 1
         return self.feet_knot_points[foot].get(time, traj)
-
-
-class FootstepTrajectory:
-    """
-    state = [p_WB; theta_WB]
-    input = [[p_BF_W; f_F_1W; f_F_2W] for each foot]
-
-    Assuming linear state movement between knot points, and constant inputs.
-
-    Note: If provided, the last knot point of the inputs will not be used.
-    """
-
-    def __init__(self, knot_points: FootstepPlanKnotPoints, dt: float) -> None:
-        self.knot_points = knot_points
-        self.dt = dt
-
-        traj_segments: Dict[str, TrajType] = {
-            "p_WB": "first_order_hold",
-            "theta_WB": "first_order_hold",
-        }
-
-        for attr, traj_type in traj_segments.items():
-            knot_point_value = getattr(knot_points, attr, None)
-            if knot_point_value is not None:
-                setattr(
-                    self,
-                    attr,
-                    LinTrajSegment.from_knot_points(
-                        knot_point_value.T,  # this function expects the transpose of what we have
-                        start_time=0,
-                        end_time=knot_points.end_time,
-                        traj_type=traj_type,
-                    ),
-                )
-
-    def get(self, time: float, traj: str) -> Union[float, np.ndarray]:
-        traj_segment = getattr(self, traj, None)
-
-        if traj_segment is None:
-            raise ValueError(
-                f"Trajectory '{traj}' is not defined in the FootstepTrajectory."
-            )
-
-        return traj_segment.eval(time)
-
-    def save(self, filename: str) -> None:
-        with open(Path(filename), "wb") as file:
-            data = (self.knot_points, self.dt)
-            # NOTE: We save the config and path knot points, not this object, as some Drake objects are not serializable
-            pickle.dump(data, file)
-
-    @classmethod
-    def load(cls, filename: str) -> "FootstepTrajectory":
-        with open(Path(filename), "rb") as file:
-            data = pickle.load(file)
-            return cls(*data)
-
-    @property
-    def end_time(self) -> float:
-        return self.num_steps * self.dt
-
-    @property
-    def num_steps(self) -> int:
-        return self.knot_points.p_WB.shape[0]
-
-    @classmethod
-    def from_segments(
-        cls,
-        segments: List[FootstepPlanKnotPoints],
-        dt: float,
-    ) -> "FootstepTrajectory":
-        both_feet = np.vstack([s.both_feet for s in segments])
-        # This is a quick way to check that the bool value changes for each element in the array
-        feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
-        if not feet_are_alternating:
-            raise RuntimeError(
-                "The provided segments do not have alternating modes and do not form a coherent footstep plan."
-            )
-
-        # NOTE: Here we just pick that we start with the left foot. Could just as well have picked the other foot
-        gait_pattern = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
-        gait_schedule = []
-        if segments[0].both_feet:
-            start_idx = 0
-        else:
-            start_idx = 1
-
-        gait_idx = start_idx
-        for _ in segments:
-            gait_schedule.append(gait_pattern[gait_idx % len(gait_pattern)])
-            gait_idx += 1
-
-        gait_schedule = np.array(gait_schedule)
-
-        p_WBs = np.vstack([k.p_WB for k in segments])
-        theta_WBs = np.vstack([k.theta_WB for k in segments]).flatten()
-
-        first_foot: Optional[FootKnotPoints] = None
-        second_foot: Optional[FootKnotPoints] = None
-
-        for segment, (first_active, last_active) in zip(segments, gait_schedule):
-            both_active = bool(first_active and last_active)
-            if both_active:
-                if first_foot is None:
-                    first_foot = segment.first_foot
-                else:
-                    first_foot += segment.first_foot
-
-                if second_foot is None:
-                    second_foot = segment.second_foot
-                else:
-                    second_foot += segment.second_foot
-            else:
-                # NOTE: These next lines look like they have a typo, but they don't.
-                # When there is only one foot active, the values for this foot is
-                # always stored in the "first" foot values (to avoid unecessary optimization
-                # variables)
-                if first_active:
-                    if first_foot is None:
-                        first_foot = segment.first_foot
-                    else:
-                        first_foot += segment.first_foot
-
-                    if second_foot is None:
-                        second_foot = FootKnotPoints.empty_like(segment.first_foot)
-                    else:
-                        second_foot += FootKnotPoints.empty_like(segment.first_foot)
-                else:  # right_active
-                    if first_foot is None:
-                        first_foot = FootKnotPoints.empty_like(segment.first_foot)
-                    else:
-                        first_foot += FootKnotPoints.empty_like(segment.first_foot)
-
-                    if second_foot is None:
-                        second_foot = segment.first_foot
-                    else:
-                        second_foot += segment.first_foot
-
-        assert first_foot is not None
-        assert second_foot is not None
-
-        merged_knot_points = FootstepPlanKnotPoints(
-            dt, p_WBs, theta_WBs, [first_foot, second_foot]
-        )
-
-        return cls(merged_knot_points, dt)
 
 
 @dataclass
@@ -1172,7 +1024,7 @@ class FootstepPlanSegment:
         self,
         result: MathematicalProgramResult,
         vertex_vars: Optional[np.ndarray] = None,
-    ) -> FootstepPlanKnotPoints:
+    ) -> FootstepPlan:
         p_WB = self.get_solution(self.p_WB, result, vertex_vars)
         theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
         p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
@@ -1183,7 +1035,7 @@ class FootstepPlanSegment:
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
 
-        first_foot = FootKnotPoints(
+        first_foot = FootPlan(
             self.robot.foot_length,
             self.dt,
             p_WF1,
@@ -1200,7 +1052,7 @@ class FootstepPlanSegment:
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
 
-            second_foot = FootKnotPoints(
+            second_foot = FootPlan(
                 self.robot.foot_length,
                 self.dt,
                 p_WF2,
@@ -1208,15 +1060,13 @@ class FootstepPlanSegment:
                 [tau_F2_1, tau_F2_2],
             )
 
-            return FootstepPlanKnotPoints(
-                self.dt, p_WB, theta_WB, [first_foot, second_foot]
-            )
+            return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot, second_foot])
 
-        return FootstepPlanKnotPoints(self.dt, p_WB, theta_WB, [first_foot])
+        return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot])
 
     def evaluate_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
-    ) -> FootstepPlanKnotPoints:
+    ) -> FootstepPlan:
         return self.evaluate_with_result(result, vertex_vars=vertex_vars)
 
     def round_result(
@@ -1239,14 +1089,14 @@ class FootstepPlanSegment:
 
     def round_with_result(
         self, result: MathematicalProgramResult
-    ) -> Tuple[FootstepPlanKnotPoints, MathematicalProgramResult]:
+    ) -> Tuple[FootstepPlan, MathematicalProgramResult]:
         rounded_result = self.round_result(result)
         knot_points = self.evaluate_with_result(rounded_result)
         return knot_points, rounded_result
 
     def round_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
-    ) -> FootstepPlanKnotPoints:
+    ) -> FootstepPlan:
         X_var = get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
         X = self.evaluate_expressions(X_var, result, vertex_vars)
         x = self.get_solution(self.prog.decision_variables(), result, vertex_vars)

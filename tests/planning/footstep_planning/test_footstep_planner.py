@@ -57,7 +57,7 @@ def test_footstep_planning_one_stone() -> None:
 
     if DEBUG:
         planner.create_graph_diagram("test_one_stone_diagram")
-    plan = planner.plan(print_flows=DEBUG, print_solver_output=DEBUG)
+    plan = planner.plan(print_flows=DEBUG, print_solver_output=DEBUG, print_debug=DEBUG)
 
     if DEBUG:
         plan.save("test_one_stone_plan.pkl")

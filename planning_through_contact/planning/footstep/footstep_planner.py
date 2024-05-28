@@ -29,9 +29,8 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
 )
 from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanKnotPoints,
+    FootstepPlan,
     FootstepPlanSegment,
-    FootstepTrajectory,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
@@ -60,9 +59,7 @@ class VertexSegmentPair(NamedTuple):
     def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
 
-    def get_knot_point_vals(
-        self, result: MathematicalProgramResult
-    ) -> FootstepPlanKnotPoints:
+    def get_knot_point_vals(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
 
     def add_cost_to_vertex(self) -> None:
@@ -276,13 +273,13 @@ class FootstepPlanRounder:
         self.rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess, solver_options=solver_options)  # type: ignore
         return self.rounded_result
 
-    def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
+    def get_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
         dt = self.active_segments[0].dt
-        plan = FootstepTrajectory.from_segments(knot_points, dt)
+        plan = FootstepPlan.merge(knot_points)
         return plan
 
-    def get_relaxed_plan(self) -> FootstepTrajectory:
+    def get_relaxed_plan(self) -> FootstepPlan:
         """
         WARNING: This currently ruins the MathematicalProgramResult.
         """
@@ -669,7 +666,7 @@ class FootstepPlanner:
         print_flows: bool = False,
         print_solver_output: bool = False,
         print_debug: bool = False,
-    ) -> FootstepTrajectory:
+    ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         MAX_ROUNDED_PATHS = 3
@@ -773,7 +770,7 @@ class FootstepPlanner:
 
         return plan
 
-    def get_relaxed_plan(self) -> FootstepTrajectory:
+    def get_relaxed_plan(self) -> FootstepPlan:
         assert self.plan_rounder is not None
         assert self.rounded_result is not None
 

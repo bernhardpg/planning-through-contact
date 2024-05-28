@@ -6,16 +6,14 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, FancyArrowPatch, Polygon
 
 from planning_through_contact.planning.footstep.footstep_plan_config import PotatoRobot
-from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanKnotPoints,
-)
+from planning_through_contact.planning.footstep.footstep_trajectory import FootstepPlan
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
 
 def animate_footstep_plan(
     robot: PotatoRobot,
     terrain: InPlaneTerrain,
-    plan: FootstepPlanKnotPoints,
+    plan: FootstepPlan,
     title: Optional[str] = None,
     output_file: Optional[str] = None,
 ) -> FuncAnimation:

@@ -22,18 +22,15 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
     PotatoRobot,
 )
-from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanKnotPoints,
+    FootstepPlan,
     FootstepPlanSegment,
-    FootstepTrajectory,
-    get_X_from_semidefinite_relaxation,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
 def test_trajectory_segment_one_foot() -> None:
@@ -82,7 +79,7 @@ def test_trajectory_segment_one_foot() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepPlanKnotPoints.merge([segment_value])
+    traj = FootstepPlan.merge([segment_value])
     assert traj.p_WB.shape == (cfg.period_steps, 2)
     assert traj.theta_WB.shape == (cfg.period_steps,)
 
@@ -164,7 +161,7 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepPlanKnotPoints.merge([segment_value])
+    traj = FootstepPlan.merge([segment_value])
     assert traj.p_WB.shape == (cfg.period_steps, 2)
     assert traj.theta_WB.shape == (cfg.period_steps,)
 
@@ -255,7 +252,7 @@ def test_traj_segment_convex_concave_decomposition() -> None:
     assert relaxed_result.get_solver_id().name() == "Mosek"
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
-    traj_relaxed = FootstepPlanKnotPoints.merge([segment_value_relaxed])
+    traj_relaxed = FootstepPlan.merge([segment_value_relaxed])
 
     if DEBUG:
         # Check quality of convex-concave relaxation
@@ -332,7 +329,7 @@ def test_traj_segment_convex_concave_decomposition() -> None:
         segment_value, rounded_result = segment.round_with_result(relaxed_result)
 
         assert rounded_result.get_solver_id().name() == "SNOPT"
-        traj_rounded = FootstepPlanKnotPoints.merge([segment_value])
+        traj_rounded = FootstepPlan.merge([segment_value])
         if DEBUG:
             output_file_rounded = "debug_convex_concave_rounded"
         else:
@@ -427,7 +424,7 @@ def test_trajectory_segment_two_feet_one_stone() -> None:
         ub_optimality_gap = (c_round - c_relax) / c_relax
         print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-    traj = FootstepPlanKnotPoints.merge([segment_value])
+    traj = FootstepPlan.merge([segment_value])
 
     if DEBUG:
         output_file = "debug_two_feet"
@@ -510,7 +507,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
             ub_optimality_gap = (c_round - c_relax) / c_relax
             print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
 
-        traj = FootstepPlanKnotPoints.merge([segment_value])
+        traj = FootstepPlan.merge([segment_value])
 
         if DEBUG:
             output_file = f"debug_different_stones_{segment.name}"
@@ -567,7 +564,7 @@ def test_merging_two_trajectory_segments() -> None:
     )
     segment_val_second = segment_second.evaluate_with_result(result_second)
 
-    traj = FootstepPlanKnotPoints.merge([segment_val_first, segment_val_second])
+    traj = FootstepPlan.merge([segment_val_first, segment_val_second])
 
     if DEBUG:
         output_file = "debug_merge_two_segments"
@@ -619,7 +616,7 @@ def test_tightness_eval() -> None:
     assert relaxed_result.is_success()
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
-    traj_relaxed = FootstepPlanKnotPoints.merge([segment_value_relaxed])
+    traj_relaxed = FootstepPlan.merge([segment_value_relaxed])
 
     if DEBUG:
         output_file = "debug_tightness_eval"
