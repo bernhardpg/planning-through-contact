@@ -91,6 +91,15 @@ class FootPlan:
         self._validate_shapes()
         self._initialize_trajectories()
 
+    def __getstate__(self):
+        # Exclude the trajectories that are not serializable
+        state = {k: v for k, v in self.__dict__.items() if k != "trajectories"}
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._initialize_trajectories()
+
     def _validate_shapes(self) -> None:
         assert self.p_WF.shape == (self.num_knot_points, 2), "p_WF shape mismatch"
         for f, tau in zip(self.f_F_Ws, self.tau_F_Ws):
@@ -376,14 +385,28 @@ class FootstepPlan:
 
         return cls(dt, p_WBs, theta_WBs, [first_foot, second_foot])
 
+    def __getstate__(self):
+        # Exclude the trajectories that are not serializable
+        state = {k: v for k, v in self.__dict__.items() if k != "trajectories"}
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._initialize_trajectories()
+
     def save(self, filename: str) -> None:
         with open(Path(filename), "wb") as file:
-            pickle.dump(self, file)
+            pickle.dump(self.__getstate__(), file)
 
     @classmethod
     def load(cls, filename: str) -> "FootstepPlan":
         with open(Path(filename), "rb") as file:
-            return pickle.load(file)
+            state = pickle.load(file)
+            instance = cls.__new__(
+                cls
+            )  # Create a new instance without calling __init__
+            instance.__setstate__(state)
+            return instance
 
     def get(
         self, time: float, traj: str
