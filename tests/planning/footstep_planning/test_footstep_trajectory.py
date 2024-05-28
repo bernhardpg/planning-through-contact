@@ -577,3 +577,55 @@ def test_merging_two_trajectory_segments() -> None:
     else:
         output_file = None
     animate_footstep_plan(robot, terrain, traj, output_file=output_file)
+
+
+def test_tightness_eval() -> None:
+    terrain = InPlaneTerrain()
+    stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
+
+    robot = PotatoRobot()
+    cfg = FootstepPlanningConfig(robot=robot)
+
+    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+
+    assert segment.p_WF1.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_2W.shape == (cfg.period_steps - 1, 2)
+
+    assert segment.tau_F1_1.shape == (cfg.period_steps - 1,)
+    assert segment.tau_F1_2.shape == (cfg.period_steps - 1,)
+
+    assert segment.p_WF2.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F2_2W.shape == (cfg.period_steps - 1, 2)
+
+    assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)
+    assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)
+
+    desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
+    initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
+    target_pos = np.array([stone.x_pos + 0.2, 0.0]) + desired_robot_pos
+
+    segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
+    segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
+
+    solver_options = SolverOptions()
+    if DEBUG:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(
+        segment.make_relaxed_prog(trace_cost=False), solver_options=solver_options
+    )
+    assert relaxed_result.is_success()
+
+    segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
+    traj_relaxed = FootstepTrajectory.from_segments([segment_value_relaxed], cfg.dt)
+
+    if DEBUG:
+        output_file = "debug_tightness_eval"
+    else:
+        output_file = None
+
+    breakpoint()
+
+    animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file)
