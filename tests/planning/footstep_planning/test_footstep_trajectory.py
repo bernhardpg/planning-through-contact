@@ -24,6 +24,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
+    FootstepPlanKnotPoints,
     FootstepPlanSegment,
     FootstepTrajectory,
     get_X_from_semidefinite_relaxation,
@@ -32,7 +33,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = False
+DEBUG = True
 
 
 def test_trajectory_segment_one_foot() -> None:
@@ -609,6 +610,9 @@ def test_tightness_eval() -> None:
     segment.add_pose_constraint(0, initial_pos, 0)  # type: ignore
     segment.add_pose_constraint(cfg.period_steps - 1, target_pos, 0)  # type: ignore
 
+    segment.constrain_foot_pos_le("first", stone.x_pos - 0.3)
+    segment.constrain_foot_pos_ge("last", stone.x_pos + 0.1)
+
     solver_options = SolverOptions()
     if DEBUG:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
@@ -619,13 +623,13 @@ def test_tightness_eval() -> None:
     assert relaxed_result.is_success()
 
     segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
-    traj_relaxed = FootstepTrajectory.from_segments([segment_value_relaxed], cfg.dt)
+    traj_relaxed = FootstepPlanKnotPoints.merge([segment_value_relaxed])
 
     if DEBUG:
         output_file = "debug_tightness_eval"
     else:
         output_file = None
 
-    breakpoint()
+    # breakpoint()
 
     animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file)

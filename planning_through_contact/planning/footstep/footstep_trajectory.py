@@ -1,5 +1,6 @@
 import pickle
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
@@ -63,43 +64,207 @@ def get_X_from_psd_constraint(binding) -> npt.NDArray:
 
 
 @dataclass
-class FootstepPlanKnotPoints:
+class FootKnotPoints:
+    """
+    A class to represent the knot points of a foot in a footstep plan.
+
+    Attributes:
+    foot_width: float
+        The width of the foot.
     dt: float
-    p_WB: npt.NDArray[np.float64]
-    theta_WB: npt.NDArray[np.float64]
-    p_WF1: npt.NDArray[np.float64]
-    f_F1_1W: npt.NDArray[np.float64]
-    tau_F1_1: npt.NDArray[np.float64]
-    f_F1_2W: npt.NDArray[np.float64]
-    tau_F1_2: npt.NDArray[np.float64]
-    p_WF2: Optional[npt.NDArray[np.float64]] = None
-    f_F2_1W: Optional[npt.NDArray[np.float64]] = None
-    tau_F2_1: Optional[npt.NDArray[np.float64]] = None
-    f_F2_2W: Optional[npt.NDArray[np.float64]] = None
-    tau_F2_2: Optional[npt.NDArray[np.float64]] = None
+        Time interval between knot points.
+    p_WF: npt.NDArray[np.float64]
+        Planned foot position in world frame. Shape: (num_knot_points, 2)
+    f_F_Ws: List[npt.NDArray[np.float64]]
+        Planned contact forces in world frame. List of arrays with shape: (num_knot_points, 2)
+    tau_F_Ws: List[npt.NDArray[np.float64]]
+        Planned contact torques in world frame. List of arrays with shape: (num_knot_points, )
+    """
+
+    foot_width: float
+    dt: float
+    p_WF: npt.NDArray[np.float64]  # (num_knot_points, 2)
+    f_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, 2)]
+    tau_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, )]
 
     def __post_init__(self) -> None:
-        assert self.p_WB.shape == (self.num_states, 2)
-        assert self.theta_WB.shape == (self.num_states,)
+        self._validate_shapes()
+        self._initialize_trajectories()
 
-        assert self.p_WF1.shape == (self.num_inputs, 2)
-        assert self.f_F1_1W.shape == (self.num_inputs, 2)
-        assert self.f_F1_2W.shape == (self.num_inputs, 2)
+    def _validate_shapes(self) -> None:
+        assert self.p_WF.shape == (self.num_knot_points, 2), "p_WF shape mismatch"
+        for f, tau in zip(self.f_F_Ws, self.tau_F_Ws):
+            assert f.shape == (self.num_knot_points, 2), "f_F_W shape mismatch"
+            assert tau.shape == (self.num_knot_points,), "tau_F_W shape mismatch"
 
-        if self.p_WF2 is not None:
-            assert self.p_WF2.shape == (self.num_inputs, 2)
-        if self.f_F2_1W is not None:
-            assert self.f_F2_1W.shape == (self.num_inputs, 2)
-        if self.f_F2_2W is not None:
-            assert self.f_F2_2W.shape == (self.num_inputs, 2)
+    def _initialize_trajectories(self) -> None:
+        interpolation = "zero_order_hold"
+        self.trajectories = {
+            "p_WF": self._interpolate_segment(self.p_WF, interpolation),
+            "p_WFcs": [
+                self._interpolate_segment(p, interpolation) for p in self.p_WFcs
+            ],
+            "f_F_Ws": [
+                self._interpolate_segment(f, interpolation) for f in self.f_F_Ws
+            ],
+            "tau_F_Ws": [
+                self._interpolate_segment(tau, interpolation) for tau in self.tau_F_Ws
+            ],
+        }
 
-        if self.both_feet:
-            assert self.f_F2_1W is not None
-            assert self.f_F2_2W is not None
+    @property
+    def num_knot_points(self) -> int:
+        return self.p_WF.shape[0]
+
+    @property
+    def num_forces(self) -> int:
+        return len(self.f_F_Ws)
+
+    @property
+    def end_time(self) -> float:
+        return self.num_knot_points * self.dt
+
+    @cached_property
+    def p_WFcs(self) -> List[npt.NDArray[np.float64]]:
+        """
+        Planned contact force positions in world frame.
+        """
+        p_Fcs = [
+            np.array([-self.foot_width / 2, 0]),
+            np.array([self.foot_width / 2, 0]),
+        ]  # contact positions
+        return [self.p_WF + p_Fc for p_Fc in p_Fcs]
+
+    def __add__(self, other: Optional["FootKnotPoints"]) -> "FootKnotPoints":
+        if other is None:
+            return self
+
+        if not isinstance(other, FootKnotPoints):
+            return NotImplemented
+
+        if self.foot_width != other.foot_width:
+            raise ValueError("Cannot add FootKnotPoints with different foot widths")
+
+        new_p_WF = np.vstack((self.p_WF, other.p_WF))
+        new_f_F_Ws = [
+            np.vstack((self_f, other_f))
+            for self_f, other_f in zip(self.f_F_Ws, other.f_F_Ws)
+        ]
+        new_tau_F_Ws = [
+            np.hstack((self_tau, other_tau))
+            for self_tau, other_tau in zip(self.tau_F_Ws, other.tau_F_Ws)
+        ]
+
+        return FootKnotPoints(
+            dt=self.dt,
+            foot_width=self.foot_width,
+            p_WF=new_p_WF,
+            f_F_Ws=new_f_F_Ws,
+            tau_F_Ws=new_tau_F_Ws,
+        )
+
+    def _interpolate_segment(
+        self, data: npt.NDArray[np.float64], interpolation: TrajType
+    ) -> "LinTrajSegment":
+        return LinTrajSegment.from_knot_points(
+            data.T,
+            start_time=0,
+            end_time=self.end_time,
+            traj_type=interpolation,
+        )
+
+    @classmethod
+    def create_empty(
+        cls, dt: float, foot_width: float, num_knot_points: int, num_forces: int
+    ) -> "FootKnotPoints":
+        oned_shape = (num_knot_points,)
+        twod_shape = (num_knot_points, 2)
+
+        p_WF = np.full(twod_shape, np.nan)
+        f_F_Ws = [np.full(twod_shape, np.nan) for _ in range(num_forces)]
+        tau_F_Ws = [np.full(oned_shape, np.nan) for _ in range(num_forces)]
+
+        return cls(dt, foot_width, p_WF, f_F_Ws, tau_F_Ws)
+
+    @classmethod
+    def empty_like(cls, other: "FootKnotPoints") -> "FootKnotPoints":
+        return cls.create_empty(
+            other.dt, other.foot_width, other.num_knot_points, other.num_forces
+        )
+
+    def get(
+        self, time: float, traj: str
+    ) -> Union[npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
+        if traj not in self.trajectories:
+            raise NotImplementedError(f"Trajectory {traj} not implemented")
+
+        trajectory = self.trajectories[traj]
+        if isinstance(trajectory, list):
+            return [t.eval(time) for t in trajectory]
+        return trajectory.eval(time)
+
+
+@dataclass
+class FootstepPlanKnotPoints:
+    """
+    A class to represent the knot points of a footstep plan including the robot body pose.
+
+    Attributes:
+    dt: float
+        Time interval between steps.
+    p_WB: npt.NDArray[np.float64]
+        Planned robot body position in world frame. Shape: (num_steps, 2)
+    theta_WB: npt.NDArray[np.float64]
+        Planned robot body orientation in world frame. Shape: (num_steps, )
+    feet_knot_points: List[FootKnotPoints]
+        Knot points for the feet. List length can be 1 or 2.
+    """
+
+    dt: float
+    p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
+    theta_WB: npt.NDArray[np.float64]  # (num_steps, )
+    feet_knot_points: List[FootKnotPoints]  # [num_feet]
+
+    def __post_init__(self) -> None:
+        self._validate_shapes()
+        self._initialize_trajectories()
+
+    def _validate_shapes(self) -> None:
+        assert self.p_WB.shape == (self.num_states, 2), "p_WB shape mismatch"
+        assert self.theta_WB.shape == (self.num_states,), "theta_WB shape mismatch"
+        assert self.num_feet in [
+            1,
+            2,
+        ], "Invalid number of feet knot points"
+        if len(self.feet_knot_points) == 2:
+            assert (
+                self.feet_knot_points[0].num_knot_points
+                == self.feet_knot_points[1].num_knot_points
+            ), "Feet knot points mismatch"
+
+    def _initialize_trajectories(self) -> None:
+        interpolation = "first_order_hold"
+        self.trajectories = {
+            "p_WB": self._interpolate_segment(self.p_WB, interpolation),
+            "theta_WB": self._interpolate_segment(self.theta_WB, interpolation),
+        }
+
+    @property
+    def num_feet(self) -> int:
+        return len(self.feet_knot_points)
 
     @property
     def both_feet(self) -> bool:
-        return self.p_WF2 is not None
+        return len(self.feet_knot_points) == 2
+
+    @property
+    def first_foot(self) -> FootKnotPoints:
+        return self.feet_knot_points[0]
+
+    @property
+    def second_foot(self) -> FootKnotPoints:
+        assert self.both_feet, "Only one foot knot point available"
+        return self.feet_knot_points[1]
 
     @property
     def num_states(self) -> int:
@@ -107,21 +272,143 @@ class FootstepPlanKnotPoints:
 
     @property
     def num_inputs(self) -> int:
-        return self.p_WF1.shape[0]
+        return self.feet_knot_points[0].num_knot_points
 
     @property
-    def num_points(self) -> int:
+    def num_knot_points(self) -> int:
         return self.num_states
 
     @property
     def end_time(self) -> float:
-        return self.num_points * self.dt
+        return self.num_knot_points * self.dt
+
+    def evaluate_tightness(self) -> None:
+        """
+        Compares the computed torques p ⊗ f with the planned torques τ.
+        Returns an array (num_steps, num_forces) with entries equal to
+        the constraint violation τ - p ⊗ f for each force and timestep.
+        """
+        ...
+
+    def _interpolate_segment(
+        self, data: npt.NDArray[np.float64], interpolation: TrajType
+    ) -> "LinTrajSegment":
+        return LinTrajSegment.from_knot_points(
+            data.T,  # this function expects the transpose of what we have
+            start_time=0,
+            end_time=self.end_time,
+            traj_type=interpolation,
+        )
+
+    @classmethod
+    def merge(
+        cls, segments: List["FootstepPlanKnotPoints"]
+    ) -> "FootstepPlanKnotPoints":
+        both_feet = np.array([s.both_feet for s in segments])
+        # This is a quick way to check that the bool value changes for each element in the array
+        feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
+        if not feet_are_alternating:
+            raise RuntimeError(
+                "The provided segments do not have alternating modes and do not form a coherent footstep plan."
+            )
+
+        # NOTE: Here we just arbitrarily pick that we start with the left foot. Could just as well have picked the other foot
+        gait_pattern = np.array([[1, 1], [1, 0], [1, 1], [0, 1]])
+        start_idx = 0 if segments[0].both_feet else 1
+        gait_schedule = np.array(
+            [
+                gait_pattern[(start_idx + i) % len(gait_pattern)]
+                for i in range(len(segments))
+            ]
+        )
+
+        p_WBs = np.vstack([k.p_WB for k in segments])
+        theta_WBs = np.hstack([k.theta_WB for k in segments])
+
+        first_foot, second_foot = None, None
+
+        for segment, (first_active, last_active) in zip(segments, gait_schedule):
+            both_active = bool(first_active and last_active)
+            if both_active:
+                first_foot = (
+                    segment.first_foot
+                    if first_foot is None
+                    else first_foot + segment.first_foot
+                )
+                second_foot = (
+                    segment.second_foot
+                    if second_foot is None
+                    else second_foot + segment.second_foot
+                )
+            else:
+                # NOTE: These next lines look like they have a typo, but they don't.
+                # When there is only one foot active, the values for this foot are
+                # always stored in the "first" foot values (to avoid unnecessary optimization
+                # variables)
+                if first_active:
+                    first_foot = (
+                        segment.first_foot
+                        if first_foot is None
+                        else first_foot + segment.first_foot
+                    )
+                    second_foot = (
+                        FootKnotPoints.empty_like(segment.first_foot)
+                        if second_foot is None
+                        else second_foot + FootKnotPoints.empty_like(segment.first_foot)
+                    )
+                else:
+                    first_foot = (
+                        FootKnotPoints.empty_like(segment.first_foot)
+                        if first_foot is None
+                        else first_foot + FootKnotPoints.empty_like(segment.first_foot)
+                    )
+                    second_foot = (
+                        segment.first_foot
+                        if second_foot is None
+                        else second_foot + segment.first_foot
+                    )
+
+        assert (
+            first_foot is not None and second_foot is not None
+        ), "Foot knot points cannot be None"
+
+        dt = segments[0].dt
+        for s in segments:
+            assert s.dt == dt, "dt must match between segments"
+
+        return cls(dt, p_WBs, theta_WBs, [first_foot, second_foot])
+
+    def save(self, filename: str) -> None:
+        with open(Path(filename), "wb") as file:
+            pickle.dump(self, file)
+
+    @classmethod
+    def load(cls, filename: str) -> "FootstepPlanKnotPoints":
+        with open(Path(filename), "rb") as file:
+            return pickle.load(file)
+
+    def get(
+        self, time: float, traj: str
+    ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
+        if traj not in self.trajectories:
+            raise NotImplementedError(f"Trajectory {traj} not implemented")
+
+        trajectory = self.trajectories[traj]
+        if isinstance(trajectory, list):
+            return [t.eval(time) for t in trajectory]
+        return trajectory.eval(time)
+
+    def get_foot(
+        self, foot: int, time: float, traj: str
+    ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
+        assert foot <= self.num_feet - 1
+        return self.feet_knot_points[foot].get(time, traj)
 
 
 class FootstepTrajectory:
     """
     state = [p_WB; theta_WB]
-    input = [p_BF_W; f_F_1W; f_F_2W]
+    input = [[p_BF_W; f_F_1W; f_F_2W] for each foot]
 
     Assuming linear state movement between knot points, and constant inputs.
 
@@ -135,12 +422,6 @@ class FootstepTrajectory:
         traj_segments: Dict[str, TrajType] = {
             "p_WB": "first_order_hold",
             "theta_WB": "first_order_hold",
-            "p_WF1": "zero_order_hold",
-            "f_F1_1W": "zero_order_hold",
-            "f_F1_2W": "zero_order_hold",
-            "p_WF2": "zero_order_hold",
-            "f_F2_1W": "zero_order_hold",
-            "f_F2_2W": "zero_order_hold",
         }
 
         for attr, traj_type in traj_segments.items():
@@ -195,8 +476,8 @@ class FootstepTrajectory:
     ) -> "FootstepTrajectory":
         both_feet = np.vstack([s.both_feet for s in segments])
         # This is a quick way to check that the bool value changes for each element in the array
-        modes_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
-        if not modes_are_alternating:
+        feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
+        if not feet_are_alternating:
             raise RuntimeError(
                 "The provided segments do not have alternating modes and do not form a coherent footstep plan."
             )
@@ -219,92 +500,52 @@ class FootstepTrajectory:
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.vstack([k.theta_WB for k in segments]).flatten()
 
-        p_WF1s = []
-        f_F1_1Ws = []
-        tau_F1_1s = []
-        f_F1_2Ws = []
-        tau_F1_2s = []
-        p_WF2s = []
-        f_F2_1Ws = []
-        tau_F2_1s = []
-        f_F2_2Ws = []
-        tau_F2_2s = []
-
-        # NOTE: This assumes that all the segments have the same lengths!
-        empty_1d_shape = segments[0].tau_F1_1.shape
-        empty_2d_shape = segments[0].p_WF1.shape
+        first_foot: Optional[FootKnotPoints] = None
+        second_foot: Optional[FootKnotPoints] = None
 
         for segment, (first_active, last_active) in zip(segments, gait_schedule):
-            both_active = first_active and last_active
+            both_active = bool(first_active and last_active)
             if both_active:
-                p_WF1s.append(segment.p_WF1)
-                f_F1_1Ws.append(segment.f_F1_1W)
-                tau_F1_1s.append(segment.tau_F1_1)
-                f_F1_2Ws.append(segment.f_F1_2W)
-                tau_F1_2s.append(segment.tau_F1_2)
+                if first_foot is None:
+                    first_foot = segment.first_foot
+                else:
+                    first_foot += segment.first_foot
 
-                p_WF2s.append(segment.p_WF2)
-                f_F2_1Ws.append(segment.f_F2_1W)
-                tau_F2_1s.append(segment.tau_F2_1)
-                f_F2_2Ws.append(segment.f_F2_2W)
-                tau_F2_2s.append(segment.tau_F2_2)
+                if second_foot is None:
+                    second_foot = segment.second_foot
+                else:
+                    second_foot += segment.second_foot
             else:
                 # NOTE: These next lines look like they have a typo, but they don't.
                 # When there is only one foot active, the values for this foot is
                 # always stored in the "first" foot values (to avoid unecessary optimization
                 # variables)
                 if first_active:
-                    p_WF1s.append(segment.p_WF1)
-                    f_F1_1Ws.append(segment.f_F1_1W)
-                    tau_F1_1s.append(segment.tau_F1_1)
-                    f_F1_2Ws.append(segment.f_F1_2W)
-                    tau_F1_2s.append(segment.tau_F1_2)
+                    if first_foot is None:
+                        first_foot = segment.first_foot
+                    else:
+                        first_foot += segment.first_foot
 
-                    p_WF2s.append(np.full(empty_2d_shape, np.nan))
-                    f_F2_1Ws.append(np.full(empty_2d_shape, np.nan))
-                    tau_F2_1s.append(np.full(empty_1d_shape, np.nan))
-                    f_F2_2Ws.append(np.full(empty_2d_shape, np.nan))
-                    tau_F2_2s.append(np.full(empty_1d_shape, np.nan))
+                    if second_foot is None:
+                        second_foot = FootKnotPoints.empty_like(segment.first_foot)
+                    else:
+                        second_foot += FootKnotPoints.empty_like(segment.first_foot)
                 else:  # right_active
-                    p_WF1s.append(np.full(empty_2d_shape, np.nan))
-                    f_F1_1Ws.append(np.full(empty_2d_shape, np.nan))
-                    tau_F1_1s.append(np.full(empty_1d_shape, np.nan))
-                    f_F1_2Ws.append(np.full(empty_2d_shape, np.nan))
-                    tau_F1_2s.append(np.full(empty_1d_shape, np.nan))
+                    if first_foot is None:
+                        first_foot = FootKnotPoints.empty_like(segment.first_foot)
+                    else:
+                        first_foot += FootKnotPoints.empty_like(segment.first_foot)
 
-                    # Notice that here we pick from the "first" values
-                    p_WF2s.append(segment.p_WF1)
-                    f_F2_1Ws.append(segment.f_F1_1W)
-                    tau_F2_1s.append(segment.tau_F1_1)
-                    f_F2_2Ws.append(segment.f_F1_2W)
-                    tau_F2_2s.append(segment.tau_F1_2)
+                    if second_foot is None:
+                        second_foot = segment.first_foot
+                    else:
+                        second_foot += segment.first_foot
 
-        p_WF1s = np.vstack(p_WF1s)
-        f_F1_1Ws = np.vstack(f_F1_1Ws)
-        tau_F1_1s = np.vstack(tau_F1_1s)
-        f_F1_2Ws = np.vstack(f_F1_2Ws)
-        tau_F1_2s = np.vstack(tau_F1_2s)
-
-        p_WF2s = np.vstack(p_WF2s)
-        f_F2_1Ws = np.vstack(f_F2_1Ws)
-        tau_F2_1s = np.vstack(tau_F2_1s)
-        f_F2_2Ws = np.vstack(f_F2_2Ws)
-        tau_F2_2s = np.vstack(tau_F2_2s)
+        assert first_foot is not None
+        assert second_foot is not None
 
         merged_knot_points = FootstepPlanKnotPoints(
-            dt,
-            p_WBs,
-            theta_WBs,
-            p_WF1s,
-            f_F1_1Ws,
-            tau_F1_1s,
-            f_F1_2Ws,
-            tau_F1_2s,
-            p_WF2s,
-            f_F2_1Ws,
-            tau_F2_1s,
-            f_F2_2Ws,
-            tau_F2_2s,
+            dt, p_WBs, theta_WBs, [first_foot, second_foot]
         )
 
         return cls(merged_knot_points, dt)
@@ -942,6 +1183,14 @@ class FootstepPlanSegment:
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
 
+        first_foot = FootKnotPoints(
+            self.dt,
+            self.robot.foot_length,
+            p_WF1,
+            [f_F1_1W, f_F1_2W],
+            [tau_F1_1, tau_F1_2],
+        )
+
         if self.two_feet:
             p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
             f_F2_1W, f_F2_2W = self.get_solution(
@@ -951,25 +1200,19 @@ class FootstepPlanSegment:
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
 
-            return FootstepPlanKnotPoints(
+            second_foot = FootKnotPoints(
                 self.dt,
-                p_WB,
-                theta_WB,
-                p_WF1,
-                f_F1_1W,
-                tau_F1_1,
-                f_F1_2W,
-                tau_F1_2,
+                self.robot.foot_length,
                 p_WF2,
-                f_F2_1W,
-                tau_F2_1,
-                f_F2_2W,
-                tau_F2_2,
+                [f_F2_1W, f_F2_2W],
+                [tau_F2_1, tau_F2_2],
             )
 
-        return FootstepPlanKnotPoints(
-            self.dt, p_WB, theta_WB, p_WF1, f_F1_1W, tau_F1_1, f_F1_2W, tau_F1_2
-        )
+            return FootstepPlanKnotPoints(
+                self.dt, p_WB, theta_WB, [first_foot, second_foot]
+            )
+
+        return FootstepPlanKnotPoints(self.dt, p_WB, theta_WB, [first_foot])
 
     def evaluate_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
