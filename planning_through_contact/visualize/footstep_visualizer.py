@@ -142,11 +142,23 @@ def plot_relaxation_errors(
     num_forces = len(planned_torques[0]) if num_feet > 0 else 0
 
     # Determine global y-axis limits
-    all_torques = [torque for sublist in planned_torques for torque in sublist] + [
-        torque for sublist in true_torques for torque in sublist
+    all_torques = [
+        torque
+        for sublist in planned_torques
+        for torque in sublist
+        if not np.isnan(torque).all()
+    ] + [
+        torque
+        for sublist in true_torques
+        for torque in sublist
+        if not np.isnan(torque).all()
     ]
-    y_min = min(torque.min() for torque in all_torques)
-    y_max = max(torque.max() for torque in all_torques)
+
+    if all_torques:
+        y_min = min(torque[np.isfinite(torque)].min() for torque in all_torques)
+        y_max = max(torque[np.isfinite(torque)].max() for torque in all_torques)
+    else:
+        y_min, y_max = 0, 1  # Default values if all torques contain NaNs
 
     fig, axs = plt.subplots(
         num_feet, num_forces, figsize=(12, 3.5 * num_feet), squeeze=False
@@ -157,11 +169,16 @@ def plot_relaxation_errors(
             ax = axs[i, j]
             planned_torque = planned_torques[i][j]
             true_torque = true_torques[i][j]
+
             N = planned_torque.shape[0]
             x = np.arange(N)
 
-            ax.plot(x, planned_torque, label="Planned Torque")
-            ax.plot(x, true_torque, label="True Torque", linestyle="--")
+            # Mask NaN values
+            planned_torque_masked = np.ma.masked_invalid(planned_torque)
+            true_torque_masked = np.ma.masked_invalid(true_torque)
+
+            ax.plot(x, planned_torque_masked, label="Planned Torque")
+            ax.plot(x, true_torque_masked, label="True Torque", linestyle="--")
             ax.set_xlabel("N")
             ax.set_ylabel("Torque")
             ax.set_title(f"Foot {i + 1} - Force {j + 1}")
@@ -175,3 +192,5 @@ def plot_relaxation_errors(
     if output_file:
         plt.savefig(output_file)
         plt.close()
+    else:
+        plt.show()

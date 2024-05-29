@@ -478,14 +478,24 @@ class PlanMetrics:
     success: bool
 
     @classmethod
-    def from_result(cls, result: MathematicalProgramResult) -> "PlanMetrics":
+    def from_result(
+        cls, result: MathematicalProgramResult, snopt_solve_time: Optional[float] = None
+    ) -> "PlanMetrics":
         solver_name = result.get_solver_id().name()
         solver_details = result.get_solver_details()
         if solver_name == "Mosek":
             solve_time = solver_details.optimizer_time
+        elif solver_name == "SNOPT":
+            assert (
+                snopt_solve_time is not None
+            ), "Must provide SNOPT solve time manually"
+            solve_time = snopt_solve_time
         else:
-            solve_time = np.nan  # TODO: How to get SNOPT solve time?
-        return cls(result.get_optimal_cost(), solve_time, result.is_success())
+            raise NotImplementedError
+
+        cost = result.get_optimal_cost() if result.is_success() else np.inf
+
+        return cls(cost, solve_time, result.is_success())
 
     def __str__(self) -> str:
         return f"cost: {self.cost:.4f}, solve_time: {self.solve_time:.2f} s, success: {self.success}"
@@ -505,8 +515,9 @@ class FootstepPlanResult:
     config: FootstepPlanningConfig
     relaxed_plan: FootstepPlan
     relaxed_metrics: PlanMetrics
-    rounded_plan: FootstepPlan
+    rounded_plan: FootstepPlan  # TODO(bernhardpg): It would not be hard to extend this with multiple rounded results
     rounded_metrics: PlanMetrics
+    gcs_edge_flows: Optional[Dict[str, float]] = None
 
     @property
     def ub_relaxation_gap_pct(self) -> float:
@@ -524,9 +535,13 @@ class FootstepPlanResult:
         relaxed_plan: FootstepPlan,
         rounded_res: MathematicalProgramResult,
         rounded_plan: FootstepPlan,
+        snopt_time: float,
+        gcs_edge_flows: Optional[Dict[str, float]] = None,
     ) -> "FootstepPlanResult":
         relaxed_metrics = PlanMetrics.from_result(relaxed_res)
-        rounded_metrics = PlanMetrics.from_result(rounded_res)
+        rounded_metrics = PlanMetrics.from_result(
+            rounded_res, snopt_solve_time=snopt_time
+        )
         return cls(
             terrain,
             config,
@@ -534,10 +549,12 @@ class FootstepPlanResult:
             relaxed_metrics,
             rounded_plan,
             rounded_metrics,
+            gcs_edge_flows,
         )
 
     def to_metrics_dict(self) -> dict:
         return {
+            "gcs_edge_flows": self.gcs_edge_flows,
             "relaxed_metrics": self.relaxed_metrics.to_dict(),
             "rounded_metrics": self.rounded_metrics.to_dict(),
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
@@ -545,7 +562,7 @@ class FootstepPlanResult:
 
     def save_metrics_to_yaml(self, file_path: str) -> None:
         with open(file_path, "w") as yaml_file:
-            yaml.dump(self.to_metrics_dict(), yaml_file, indent=4, sort_keys=True)
+            yaml.dump(self.to_metrics_dict(), yaml_file, indent=4, sort_keys=False)
 
     def _save_anim(self, plan: FootstepPlan, output_file: str) -> None:
         from planning_through_contact.visualize.footstep_visualizer import (
@@ -577,14 +594,18 @@ class FootstepPlanResult:
         path = Path(folder)
         path.mkdir(exist_ok=True, parents=True)
 
-        self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
-        self.save_rounded_animation(str(path / "rounded_traj.mp4"))
-        self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
-        self.rounded_plan.save(str(path / "rounded_plan.pkl"))
-        self.relaxed_plan.save(str(path / "relaxed_plan.pkl"))
         self.save_metrics_to_yaml(str(path / "metrics.yaml"))
         self.config.save(str(path / "config.yaml"))
         self.terrain.save(str(path / "terrain.yaml"))
+
+        if self.relaxed_metrics.success:
+            self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
+            self.relaxed_plan.save(str(path / "relaxed_plan.pkl"))
+            self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
+
+        if self.rounded_metrics.success:
+            self.save_rounded_animation(str(path / "rounded_traj.mp4"))
+            self.rounded_plan.save(str(path / "rounded_plan.pkl"))
 
 
 @dataclass
