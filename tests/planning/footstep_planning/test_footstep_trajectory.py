@@ -24,7 +24,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlan,
-    FootstepPlanSegment,
+    FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
@@ -43,7 +43,9 @@ def test_trajectory_segment_one_foot() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, "one_foot", robot, cfg, name="First step")
+    segment = FootstepPlanSegmentProgram(
+        stone, "one_foot", robot, cfg, name="First step"
+    )
 
     # N states
     assert segment.p_WB.shape == (cfg.period_steps, 2)
@@ -122,7 +124,7 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(
+    segment = FootstepPlanSegmentProgram(
         stone, "one_foot", robot, cfg, name="First step", eq_num_input_state=True
     )
 
@@ -187,7 +189,9 @@ def test_traj_segment_convex_concave_decomposition() -> None:
     robot = PotatoRobot(max_step_dist_from_robot=0.6, step_span=0.7)
     cfg = FootstepPlanningConfig(robot=robot, use_convex_concave=True, period_steps=8)
 
-    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+    segment = FootstepPlanSegmentProgram(
+        stone, "two_feet", robot, cfg, name="First step"
+    )
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos, 0.0]) + desired_robot_pos
@@ -366,7 +370,9 @@ def test_trajectory_segment_two_feet_one_stone() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+    segment = FootstepPlanSegmentProgram(
+        stone, "two_feet", robot, cfg, name="First step"
+    )
 
     assert segment.p_WF1.shape == (cfg.period_steps - 1, 2)
     assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
@@ -454,7 +460,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment_step_up = FootstepPlanSegment(
+    segment_step_up = FootstepPlanSegmentProgram(
         stone_1_low,
         "two_feet",
         robot,
@@ -466,7 +472,7 @@ def test_trajectory_segment_two_feet_different_stones() -> None:
     assert segment_step_up.p_WF1[0, 1] == stone_1_low.z_pos
     assert segment_step_up.p_WF2[0, 1] == stone_1_high.z_pos
 
-    segment_step_down = FootstepPlanSegment(
+    segment_step_down = FootstepPlanSegmentProgram(
         stone_2_high,
         "two_feet",
         robot,
@@ -535,7 +541,7 @@ def test_merging_two_trajectory_segments() -> None:
     target_pos = np.array([stone.x_pos + 0.15, 0.0]) + desired_robot_pos
     target_pos_2 = np.array([stone.x_pos + 0.18, 0.0]) + desired_robot_pos
 
-    segment_first = FootstepPlanSegment(
+    segment_first = FootstepPlanSegmentProgram(
         stone, "one_foot", robot, cfg, name="First step"
     )
     segment_first.add_pose_constraint(0, initial_pos, 0)  # type: ignore
@@ -551,7 +557,7 @@ def test_merging_two_trajectory_segments() -> None:
 
     segment_val_first = segment_first.evaluate_with_result(result_first)
 
-    segment_second = FootstepPlanSegment(
+    segment_second = FootstepPlanSegmentProgram(
         stone, "two_feet", robot, cfg, name="second step"
     )
 
@@ -583,7 +589,9 @@ def test_tightness_eval() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot, period_steps=5)
 
-    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+    segment = FootstepPlanSegmentProgram(
+        stone, "two_feet", robot, cfg, name="First step"
+    )
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = np.array([stone.x_pos - 0.2, 0.0]) + desired_robot_pos
@@ -633,4 +641,3 @@ def test_tightness_eval() -> None:
 
     animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file_relaxed)
     animate_footstep_plan(robot, terrain, traj_rounded, output_file=output_file_rounded)
-    plot_relaxation_errors(traj_relaxed, output_file=output_file_relaxed)

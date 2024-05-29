@@ -16,7 +16,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanSegment,
+    FootstepPlanSegmentProgram,
     get_X_from_semidefinite_relaxation,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
@@ -206,7 +206,9 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot)
 
-    segment = FootstepPlanSegment(stone, "two_feet", robot, cfg, name="First step")
+    segment = FootstepPlanSegmentProgram(
+        stone, "two_feet", robot, cfg, name="First step"
+    )
 
     assert segment.p_WF1.shape == (cfg.period_steps, 2)
     assert segment.f_F1_1W.shape == (cfg.period_steps, 2)

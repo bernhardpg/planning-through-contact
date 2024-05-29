@@ -30,7 +30,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlan,
-    FootstepPlanSegment,
+    FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
@@ -40,7 +40,7 @@ GcsEdge = GraphOfConvexSets.Edge
 
 class VertexSegmentPair(NamedTuple):
     v: GcsVertex
-    s: FootstepPlanSegment
+    s: FootstepPlanSegmentProgram
 
     def get_var_in_vertex(self, var: Variable) -> Variable:
         return self.s.get_var_in_vertex(var, self.v.x())
@@ -357,7 +357,7 @@ class FootstepPlanner:
     def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
         return int(np.floor(width / step_span) + 2)
 
-    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegment]]:
+    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegmentProgram]]:
         num_steps_required_per_stone = [
             self._calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
             for stone in self.stones
@@ -373,7 +373,7 @@ class FootstepPlanner:
                 step_idx = int(gait_idx / 2)
                 one_foot_segment = (gait_idx + 1) % 2 == 1
                 if one_foot_segment:
-                    lift_step = FootstepPlanSegment(
+                    lift_step = FootstepPlanSegmentProgram(
                         stone,
                         "one_foot",
                         self.robot,
@@ -383,7 +383,7 @@ class FootstepPlanner:
                     )
                     segments_for_stone.append(lift_step)
                 else:
-                    stance_step = FootstepPlanSegment(
+                    stance_step = FootstepPlanSegmentProgram(
                         stone,
                         "two_feet",
                         self.robot,
@@ -396,7 +396,7 @@ class FootstepPlanner:
             segments.append(segments_for_stone)
 
         # Append one stance segment to the start of the first segment on the first stone
-        stance_step = FootstepPlanSegment(
+        stance_step = FootstepPlanSegmentProgram(
             self.stones[0],
             "two_feet",
             self.robot,
@@ -407,7 +407,7 @@ class FootstepPlanner:
         segments[0].insert(0, stance_step)
 
         # Append one stance segment to the end of the last segment on the last stone
-        stance_step = FootstepPlanSegment(
+        stance_step = FootstepPlanSegmentProgram(
             self.stones[-1],
             "two_feet",
             self.robot,
@@ -422,7 +422,7 @@ class FootstepPlanner:
     def _add_segments_as_vertices(
         self,
         gcs: GraphOfConvexSets,
-        segments: List[FootstepPlanSegment],
+        segments: List[FootstepPlanSegmentProgram],
         use_lp_approx: bool = False,
     ) -> Dict[str, VertexSegmentPair]:
         vertices = [
@@ -445,7 +445,7 @@ class FootstepPlanner:
         # Edges and transitions between stones
         transition_segments = []
         for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
-            transition_step = FootstepPlanSegment(
+            transition_step = FootstepPlanSegmentProgram(
                 stone_u,
                 "two_feet",
                 self.robot,

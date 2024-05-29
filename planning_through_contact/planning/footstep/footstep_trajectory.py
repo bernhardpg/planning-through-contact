@@ -470,7 +470,7 @@ class FootstepPlan:
 
 
 @dataclass
-class FootstepPlanSegment:
+class FootstepPlanSegmentProgram:
     def __init__(
         self,
         stone: InPlaneSteppingStone,

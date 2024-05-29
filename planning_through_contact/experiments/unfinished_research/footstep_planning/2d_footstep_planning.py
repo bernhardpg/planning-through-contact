@@ -13,7 +13,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanSegment,
+    FootstepPlanSegmentProgram,
     FootstepTrajectory,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
