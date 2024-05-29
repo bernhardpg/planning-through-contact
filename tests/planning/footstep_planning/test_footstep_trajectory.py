@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pydrake.solvers import (  # CommonSolverOption,
@@ -582,7 +584,7 @@ def test_merging_two_trajectory_segments() -> None:
     animate_footstep_plan(robot, terrain, traj, output_file=output_file)
 
 
-def test_tightness_eval() -> None:
+def test_saving_analysis() -> None:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=0.5, width=1.5, z_pos=0.2, name="initial")
 
@@ -613,31 +615,20 @@ def test_tightness_eval() -> None:
     )
     assert relaxed_result.is_success()
 
-    segment_value_relaxed = segment.evaluate_with_result(relaxed_result)
-    traj_relaxed = FootstepPlan.merge([segment_value_relaxed])
+    res = segment.evaluate_and_round_with_result(relaxed_result)
+    folder = "debug_test_analysis_save"
+    res.save_analysis_to_folder(folder)
 
-    segment_value, rounded_result = segment.round_with_result(relaxed_result)
-    traj_rounded = FootstepPlan.merge([segment_value])
+    if not DEBUG:  # delete the folder again
+        import shutil
 
-    if DEBUG:
-        c_round = rounded_result.get_optimal_cost()
-        c_relax = relaxed_result.get_optimal_cost()
-        ub_optimality_gap = (c_round - c_relax) / c_relax
-        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
+        dir_path = Path(folder)
+        shutil.rmtree(dir_path)
 
-        non_convex_constraint_violation = (
-            segment.evaluate_non_convex_constraints_with_result(relaxed_result)
-        )
-        print(
-            f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
-        )
-
-    if DEBUG:
-        output_file_relaxed = "debug_tightness_eval_relaxed"
-        output_file_rounded = "debug_tightness_eval_rounded"
-    else:
-        output_file_relaxed = None
-        output_file_rounded = None
-
-    animate_footstep_plan(robot, terrain, traj_relaxed, output_file=output_file_relaxed)
-    animate_footstep_plan(robot, terrain, traj_rounded, output_file=output_file_rounded)
+    # if DEBUG:
+    #     non_convex_constraint_violation = (
+    #         segment.evaluate_non_convex_constraints_with_result(relaxed_result)
+    #     )
+    #     print(
+    #         f"Maximum constraint violation: {max(non_convex_constraint_violation.flatten()):.6f}"
+    #     )

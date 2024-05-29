@@ -122,6 +122,8 @@ def animate_footstep_plan(
     n_steps = plan.num_knot_points + 1
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
     if output_file is not None:
+        if "mp4" in output_file:
+            output_file = output_file.split(".")[0]
         ani.save(f"{output_file}.mp4", writer="ffmpeg")
 
     return ani

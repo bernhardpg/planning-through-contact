@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Tuple
 
 import numpy as np
@@ -47,3 +47,34 @@ class FootstepPlanningConfig:
     @property
     def dt(self) -> float:
         return self.period / self.period_steps
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["robot"] = asdict(self.robot)  # Ensure robot is also converted to dict
+        return data
+
+    def save(self, file_path: str) -> None:
+        import yaml
+
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(
+                self.to_dict(),
+                yaml_file,
+                default_flow_style=False,
+                sort_keys=True,
+            )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "FootstepPlanningConfig":
+        robot_data = data.pop("robot")
+        robot = PotatoRobot(**robot_data)
+        config = cls(robot=robot, **data)
+        return config
+
+    @classmethod
+    def load(cls, file_path: str) -> "FootstepPlanningConfig":
+        import yaml
+
+        with open(file_path, "r") as yaml_file:
+            data = yaml.safe_load(yaml_file)
+        return cls.from_dict(data)

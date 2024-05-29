@@ -1,11 +1,12 @@
 import pickle
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
+import yaml
 from pydrake.geometry.optimization import GraphOfConvexSets, Spectrahedron
 from pydrake.math import eq
 from pydrake.solvers import (
@@ -35,6 +36,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import (
     InPlaneSteppingStone,
+    InPlaneTerrain,
 )
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
@@ -467,6 +469,122 @@ class FootstepPlan:
     ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
         assert foot <= self.num_feet - 1
         return self.feet_knot_points[foot].get(time, traj)
+
+
+@dataclass
+class PlanMetrics:
+    cost: float
+    solve_time: float
+    success: bool
+
+    @classmethod
+    def from_result(cls, result: MathematicalProgramResult) -> "PlanMetrics":
+        solver_name = result.get_solver_id().name()
+        solver_details = result.get_solver_details()
+        if solver_name == "Mosek":
+            solve_time = solver_details.optimizer_time
+        else:
+            solve_time = np.nan  # TODO: How to get SNOPT solve time?
+        return cls(result.get_optimal_cost(), solve_time, result.is_success())
+
+    def __str__(self) -> str:
+        return f"cost: {self.cost:.4f}, solve_time: {self.solve_time:.2f} s, success: {self.success}"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class FootstepPlanResult:
+    """
+    A data structure that contains both the relaxed and rounded trajectory, as well as the metrics for each,
+    and some helper functions for quickly evaluating the plans.
+    """
+
+    terrain: InPlaneTerrain
+    config: FootstepPlanningConfig
+    relaxed_plan: FootstepPlan
+    relaxed_metrics: PlanMetrics
+    rounded_plan: FootstepPlan
+    rounded_metrics: PlanMetrics
+
+    @property
+    def ub_relaxation_gap_pct(self) -> float:
+        return (
+            (self.rounded_metrics.cost - self.relaxed_metrics.cost)
+            / self.relaxed_metrics.cost
+        ) * 100
+
+    @classmethod
+    def from_results(
+        cls,
+        terrain: InPlaneTerrain,
+        config: FootstepPlanningConfig,
+        relaxed_res: MathematicalProgramResult,
+        relaxed_plan: FootstepPlan,
+        rounded_res: MathematicalProgramResult,
+        rounded_plan: FootstepPlan,
+    ) -> "FootstepPlanResult":
+        relaxed_metrics = PlanMetrics.from_result(relaxed_res)
+        rounded_metrics = PlanMetrics.from_result(rounded_res)
+        return cls(
+            terrain,
+            config,
+            relaxed_plan,
+            relaxed_metrics,
+            rounded_plan,
+            rounded_metrics,
+        )
+
+    def to_metrics_dict(self) -> dict:
+        return {
+            "relaxed_metrics": self.relaxed_metrics.to_dict(),
+            "rounded_metrics": self.rounded_metrics.to_dict(),
+            "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
+        }
+
+    def save_metrics_to_yaml(self, file_path: str) -> None:
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(self.to_metrics_dict(), yaml_file, indent=4, sort_keys=True)
+
+    def _save_anim(self, plan: FootstepPlan, output_file: str) -> None:
+        from planning_through_contact.visualize.footstep_visualizer import (
+            animate_footstep_plan,
+        )
+
+        animate_footstep_plan(
+            self.config.robot, self.terrain, plan, output_file=output_file
+        )
+
+    def save_relaxed_animation(self, output_file: str) -> None:
+        self._save_anim(self.relaxed_plan, output_file)
+
+    def save_rounded_animation(self, output_file: str) -> None:
+        self._save_anim(self.rounded_plan, output_file)
+
+    def save_relaxation_error_plot(self, output_file: str) -> None:
+        from planning_through_contact.visualize.footstep_visualizer import (
+            plot_relaxation_errors,
+        )
+
+        plot_relaxation_errors(self.relaxed_plan, output_file=output_file)
+
+    def save_analysis_to_folder(self, folder: str) -> None:
+        """
+        Saves all the analysis data and the plans themselves, as well as animations,
+        to the given folder
+        """
+        path = Path(folder)
+        path.mkdir(exist_ok=True, parents=True)
+
+        self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
+        self.save_rounded_animation(str(path / "rounded_traj.mp4"))
+        self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
+        self.rounded_plan.save(str(path / "rounded_plan.pkl"))
+        self.relaxed_plan.save(str(path / "relaxed_plan.pkl"))
+        self.save_metrics_to_yaml(str(path / "metrics.yaml"))
+        self.config.save(str(path / "config.yaml"))
+        self.terrain.save(str(path / "terrain.yaml"))
 
 
 @dataclass
@@ -1170,16 +1288,26 @@ class FootstepPlanSegmentProgram:
         knot_points = self.evaluate_with_result(rounded_result)
         return knot_points, rounded_result
 
-    def round_with_vertex_result(
-        self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
-    ) -> FootstepPlan:
-        X_var = get_X_from_semidefinite_relaxation(self.relaxed_prog)[:-1, :-1]
-        X = self.evaluate_expressions(X_var, result, vertex_vars)
-        x = self.get_solution(self.prog.decision_variables(), result, vertex_vars)
-
-        rounded_result = self.round_result(result)
-
-        return self.evaluate_with_result(rounded_result)
+    def evaluate_and_round_with_result(
+        self, relaxed_result: MathematicalProgramResult
+    ) -> FootstepPlanResult:
+        """
+        Creates a FootstepPlanResult for this segment only. Makes a terrain with the stone for this segment.
+        """
+        one_stone_terrain = InPlaneTerrain()
+        one_stone_terrain.stepping_stones.append(self.stone_first)
+        one_stone_terrain.stepping_stones.append(self.stone_last)
+        relaxed_plan = self.evaluate_with_result(relaxed_result)
+        rounded_plan, rounded_result = self.round_with_result(relaxed_result)
+        plan_result = FootstepPlanResult.from_results(
+            one_stone_terrain,
+            self.config,
+            relaxed_result,
+            relaxed_plan,
+            rounded_result,
+            rounded_plan,
+        )
+        return plan_result
 
     def evaluate_costs_with_result(
         self, result: MathematicalProgramResult

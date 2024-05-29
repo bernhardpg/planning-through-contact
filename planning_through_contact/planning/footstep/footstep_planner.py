@@ -775,3 +775,6 @@ class FootstepPlanner:
         assert self.rounded_result is not None
 
         return self.plan_rounder.get_relaxed_plan()
+
+    def save_analysis(self, output_dir: str) -> None:
+        breakpoint()
