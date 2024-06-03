@@ -515,7 +515,7 @@ class FootstepPlanResult:
     config: FootstepPlanningConfig
     relaxed_plan: FootstepPlan
     relaxed_metrics: PlanMetrics
-    rounded_plan: FootstepPlan  # TODO(bernhardpg): It would not be hard to extend this with multiple rounded results
+    rounded_plan: FootstepPlan  # NOTE(bernhardpg): It would not be hard to extend this with multiple rounded results
     rounded_metrics: PlanMetrics
     gcs_edge_flows: Optional[Dict[str, float]] = None
 
@@ -889,31 +889,20 @@ class FootstepPlanSegmentProgram:
             "sq_nominal_pose": [],
         }
 
-        cost_force = 1e-2
-        cost_torque = 0.2
-        cost_acc_lin = 100.0
-        cost_acc_rot = 1.0
-        cost_lin_vel = 10
-        cost_ang_vel = 1.0
-        cost_nominal_pose = 5
-
-        # cost_force = 1e-5
-        # cost_torque = 1e-3
-        # cost_lin_vel = 10.0
-        # cost_ang_vel = 0.1
-        # cost_nominal_pose = 1.0
+        cost = config.cost
 
         # squared forces
-        for k in range(self.num_inputs):
-            f1 = self.f_F1_1W[k]
-            f2 = self.f_F1_2W[k]
-            sq_forces = f1.T @ f1 + f2.T @ f2
-            if self.two_feet:
-                f1 = self.f_F2_1W[k]
-                f2 = self.f_F2_2W[k]
-                sq_forces += f1.T @ f1 + f2.T @ f2
-            c = self.prog.AddQuadraticCost(cost_force * sq_forces)
-            self.costs["sq_forces"].append(c)
+        if cost.sq_force is not None:
+            for k in range(self.num_inputs):
+                f1 = self.f_F1_1W[k]
+                f2 = self.f_F1_2W[k]
+                sq_forces = f1.T @ f1 + f2.T @ f2
+                if self.two_feet:
+                    f1 = self.f_F2_1W[k]
+                    f2 = self.f_F2_2W[k]
+                    sq_forces += f1.T @ f1 + f2.T @ f2
+                c = self.prog.AddQuadraticCost(cost.sq_force * sq_forces)
+                self.costs["sq_forces"].append(c)
 
         if True:  # this causes the relaxation gap to be high
             pass
@@ -937,38 +926,44 @@ class FootstepPlanSegmentProgram:
 
         # TODO: do we need these? Potentially remove
         # squared accelerations
-        for k in range(self.num_inputs):
-            sq_acc = self.a_WB[k].T @ self.a_WB[k]
-            c = self.prog.AddQuadraticCost(cost_acc_lin * sq_acc)
-            self.costs["sq_acc_lin"].append(c)
+        if cost.sq_acc_lin is not None:
+            for k in range(self.num_inputs):
+                sq_acc = self.a_WB[k].T @ self.a_WB[k]
+                c = self.prog.AddQuadraticCost(cost.sq_acc_lin * sq_acc)
+                self.costs["sq_acc_lin"].append(c)
 
-        for k in range(self.num_inputs):
-            sq_rot_acc = self.omega_dot_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_acc_rot * sq_rot_acc)
-            self.costs["sq_acc_rot"].append(c)
+        if cost.sq_acc_rot is not None:
+            for k in range(self.num_inputs):
+                sq_rot_acc = self.omega_dot_WB[k] ** 2
+                c = self.prog.AddQuadraticCost(cost.sq_acc_rot * sq_rot_acc)
+                self.costs["sq_acc_rot"].append(c)
 
         # squared robot velocity
-        for k in range(self.num_inputs):
-            v = self.v_WB[k]
-            sq_lin_vel = v.T @ v
-            c = self.prog.AddQuadraticCost(cost_lin_vel * sq_lin_vel)
-            self.costs["sq_lin_vel"].append(c)
+        if cost.sq_vel_lin is not None:
+            for k in range(self.num_inputs):
+                v = self.v_WB[k]
+                sq_lin_vel = v.T @ v
+                c = self.prog.AddQuadraticCost(cost.sq_vel_lin * sq_lin_vel)
+                self.costs["sq_lin_vel"].append(c)
 
-            sq_rot_vel = self.omega_WB[k] ** 2
-            c = self.prog.AddQuadraticCost(cost_ang_vel * sq_rot_vel)
-            self.costs["sq_rot_vel"].append(c)
+        if cost.sq_vel_rot is not None:
+            for k in range(self.num_inputs):
+                sq_rot_vel = self.omega_WB[k] ** 2
+                c = self.prog.AddQuadraticCost(cost.sq_vel_rot * sq_rot_vel)
+                self.costs["sq_rot_vel"].append(c)
 
         # squared distance from nominal pose
         # TODO: Use the mean stone height?
-        pose_offset = np.array(
-            [0, self.stone_first.height, 0]
-        )  # offset the stone height
-        for k in range(self.num_inputs):
-            pose = self.get_robot_pose(k) - pose_offset
-            diff = pose - robot.get_nominal_pose()
-            sq_diff = diff.T @ diff
-            c = self.prog.AddQuadraticCost(cost_nominal_pose * sq_diff)  # type: ignore
-            self.costs["sq_nominal_pose"].append(c)
+        if cost.sq_nominal_pose:
+            pose_offset = np.array(
+                [0, self.stone_first.height, 0]
+            )  # offset the stone height
+            for k in range(self.num_inputs):
+                pose = self.get_robot_pose(k) - pose_offset
+                diff = pose - robot.get_nominal_pose()
+                sq_diff = diff.T @ diff
+                c = self.prog.AddQuadraticCost(cost.sq_nominal_pose * sq_diff)  # type: ignore
+                self.costs["sq_nominal_pose"].append(c)
 
     @property
     def dt(self) -> float:

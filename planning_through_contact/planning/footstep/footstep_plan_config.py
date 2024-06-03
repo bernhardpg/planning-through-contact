@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass, field
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -37,7 +37,19 @@ class PotatoRobot:
 
 
 @dataclass
+class FootstepCost:
+    sq_force: Optional[float] = 1e-5
+    sq_torque: Optional[float] = 1e-3
+    sq_vel_lin: Optional[float] = 10.0
+    sq_vel_rot: Optional[float] = 0.1
+    sq_acc_lin: Optional[float] = 100.0
+    sq_acc_rot: Optional[float] = 1.0
+    sq_nominal_pose: Optional[float] = 5.0
+
+
+@dataclass
 class FootstepPlanningConfig:
+    cost: FootstepCost = field(default_factory=lambda: FootstepCost())
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
     period_steps: int = 3
