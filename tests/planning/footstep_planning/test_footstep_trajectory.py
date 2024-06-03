@@ -30,12 +30,9 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
-from planning_through_contact.visualize.footstep_visualizer import (
-    animate_footstep_plan,
-    plot_relaxation_errors,
-)
+from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
 def test_trajectory_segment_one_foot() -> None:

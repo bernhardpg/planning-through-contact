@@ -1319,7 +1319,13 @@ class FootstepPlanSegmentProgram:
         one_stone_terrain.stepping_stones.append(self.stone_first)
         one_stone_terrain.stepping_stones.append(self.stone_last)
         relaxed_plan = self.evaluate_with_result(relaxed_result)
+
+        import time
+
+        curr_time = time.time()
         rounded_plan, rounded_result = self.round_with_result(relaxed_result)
+        elapsed_time = time.time() - curr_time
+
         plan_result = FootstepPlanResult.from_results(
             one_stone_terrain,
             self.config,
@@ -1327,6 +1333,7 @@ class FootstepPlanSegmentProgram:
             relaxed_plan,
             rounded_result,
             rounded_plan,
+            elapsed_time,
         )
         return plan_result
 
