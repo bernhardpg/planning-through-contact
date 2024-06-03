@@ -23,7 +23,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneT
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import animate_footstep_plan
 
-DEBUG = True
+DEBUG = False
 
 
 def test_footstep_planning_one_stone() -> None:
@@ -54,18 +54,10 @@ def test_footstep_planning_one_stone() -> None:
         target_stone_name=stone.name,
     )
 
-    if DEBUG:
-        planner.create_graph_diagram("test_one_stone_diagram")
-    plan = planner.plan(print_flows=DEBUG, print_solver_output=DEBUG, print_debug=DEBUG)
+    planner.plan(print_flows=DEBUG, print_solver_output=DEBUG, print_debug=DEBUG)
 
     if DEBUG:
-        plan.save("test_one_stone_plan.pkl")
-
-    if DEBUG:
-        output_file = "debug_plan_one_stone"
-    else:
-        output_file = None
-    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+        planner.save_analysis("test_one_stone")
 
 
 def test_footstep_planning_two_stones() -> None:
@@ -93,16 +85,10 @@ def test_footstep_planning_two_stones() -> None:
         target_stone_name=target_stone.name,
     )
 
-    if DEBUG:
-        planner.create_graph_diagram("test_two_stones_diagram")
-
-    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+    planner.plan(print_flows=DEBUG, print_solver_output=DEBUG, print_debug=DEBUG)
 
     if DEBUG:
-        output_file = "debug_plan_two_stones"
-    else:
-        output_file = None
-    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
+        planner.save_analysis("test_two_stones")
 
 
 def test_footstep_planning_one_long_stone_lp_approx() -> None:
@@ -163,24 +149,10 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
         target_stone_name=target_stone.name,
     )
 
-    if DEBUG:
-        planner.create_graph_diagram("test_many_stones_lp_approx_diagram")
-
-    plan = planner.plan(print_flows=True, print_solver_output=DEBUG)
+    planner.plan(print_flows=DEBUG, print_solver_output=DEBUG, print_debug=DEBUG)
 
     if DEBUG:
-        output_file = "debug_plan_many_stones_lp_approx_rounded"
-    else:
-        output_file = None
-    animate_footstep_plan(robot, terrain, plan, output_file=output_file)
-
-    if DEBUG:
-        output_file = "debug_plan_many_stones_lp_approx_relaxation"
-    else:
-        output_file = None
-    animate_footstep_plan(
-        robot, terrain, planner.get_relaxed_plan(), output_file=output_file
-    )
+        planner.save_analysis("test_many_stones_lp_relax")
 
 
 # Unfinished! This is meant to be a WIP on a cutting-plane algorithm on
@@ -316,7 +288,6 @@ def test_make_segments_per_terrain() -> None:
         target_stone_name="initial",
     )
     segments = planner._make_segments_for_terrain()
-    DEBUG = True
 
     if DEBUG:
         planner.create_graph_diagram("test_make_segments_diagram")
