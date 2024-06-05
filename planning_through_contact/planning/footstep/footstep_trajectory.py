@@ -518,13 +518,17 @@ class FootstepPlanResult:
     rounded_plan: FootstepPlan  # NOTE(bernhardpg): It would not be hard to extend this with multiple rounded results
     rounded_metrics: PlanMetrics
     gcs_edge_flows: Optional[Dict[str, float]] = None
+    gcs_metrics: Optional[PlanMetrics] = None
 
     @property
-    def ub_relaxation_gap_pct(self) -> float:
-        return (
-            (self.rounded_metrics.cost - self.relaxed_metrics.cost)
-            / self.relaxed_metrics.cost
-        ) * 100
+    def ub_relaxation_gap_pct(self) -> Optional[float]:
+        if self.gcs_metrics is None:
+            return None
+        else:
+            return (
+                (self.rounded_metrics.cost - self.gcs_metrics.cost)
+                / self.gcs_metrics.cost
+            ) * 100
 
     @classmethod
     def from_results(
@@ -537,11 +541,13 @@ class FootstepPlanResult:
         rounded_plan: FootstepPlan,
         snopt_time: float,
         gcs_edge_flows: Optional[Dict[str, float]] = None,
+        gcs_res: Optional[MathematicalProgramResult] = None,
     ) -> "FootstepPlanResult":
         relaxed_metrics = PlanMetrics.from_result(relaxed_res)
         rounded_metrics = PlanMetrics.from_result(
             rounded_res, snopt_solve_time=snopt_time
         )
+        gcs_metrics = PlanMetrics.from_result(gcs_res) if gcs_res is not None else None
         return cls(
             terrain,
             config,
@@ -550,11 +556,13 @@ class FootstepPlanResult:
             rounded_plan,
             rounded_metrics,
             gcs_edge_flows,
+            gcs_metrics,
         )
 
     def to_metrics_dict(self) -> dict:
         return {
             "gcs_edge_flows": self.gcs_edge_flows,
+            "gcs_metrics": self.gcs_metrics,
             "relaxed_metrics": self.relaxed_metrics.to_dict(),
             "rounded_metrics": self.rounded_metrics.to_dict(),
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,

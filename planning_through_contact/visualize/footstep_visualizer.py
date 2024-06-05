@@ -205,6 +205,8 @@ def plot_relaxation_vs_rounding_bar_plot(
     filename: Optional[str] = None,
 ) -> None:
     # Plot histogram over costs
+    gcs_times = [res.gcs_metrics.solve_time for res in plan_results]
+    gcs_costs = [res.gcs_metrics.cost for res in plan_results]
     relaxed_costs = [res.relaxed_metrics.cost for res in plan_results]
     relaxed_times = [res.relaxed_metrics.solve_time for res in plan_results]
 
@@ -215,20 +217,23 @@ def plot_relaxation_vs_rounding_bar_plot(
 
     fig, axs = plt.subplots(2, 1, figsize=(6, 8))
 
-    def _plot_bar_plot_pair(ax, categories, values_1, values_2):
+    def _plot_bar_plot_pair(ax, categories, values):
 
         # Number of categories
-        n = len(values_1)
+        n = len(values[0])
 
         # Positions of the bars on the x-axis
         ind = np.arange(n)
 
+        num_categories = len(categories)
         # Width of a bar
-        width = 0.35
+        width = 0.8 / num_categories  # Total width divided by number of categories
 
         # Plotting the bars
-        ax.bar(ind - width / 2, values_1, width, label=categories[0])
-        ax.bar(ind + width / 2, values_2, width, label=categories[1])
+        for i, (category, value) in enumerate(zip(categories, values)):
+            # Calculate the position for each category's bars
+            position = ind - (0.8 - width) / 2 + i * width
+            ax.bar(position, value, width, label=category)
 
         # Adding labels and titles
         ax.legend()
@@ -237,11 +242,15 @@ def plot_relaxation_vs_rounding_bar_plot(
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
     axs[0].set_title("Costs")
-    _plot_bar_plot_pair(axs[0], ["relaxed", "rounded"], relaxed_costs, rounded_costs)
+    _plot_bar_plot_pair(
+        axs[0], ["gcs", "relaxed", "rounded"], [gcs_costs, relaxed_costs, rounded_costs]
+    )
 
     axs[1].set_title("Solve times")
     axs[1].set_ylabel("Time [s]")
-    _plot_bar_plot_pair(axs[1], ["relaxed", "rounded"], relaxed_times, rounded_times)
+    _plot_bar_plot_pair(
+        axs[1], ["gcs", "relaxed", "rounded"], [gcs_times, relaxed_times, rounded_times]
+    )
 
     fig.tight_layout()
 

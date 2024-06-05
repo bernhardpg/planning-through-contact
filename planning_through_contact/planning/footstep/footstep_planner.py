@@ -758,6 +758,7 @@ class FootstepPlanner:
                 rounded_plan,
                 elapsed_time,
                 edge_flows,
+                gcs_result,
             )
             plan_results.append(res)
 
