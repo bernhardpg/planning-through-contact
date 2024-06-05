@@ -66,10 +66,8 @@ def make_default_logger(
     file_handler.setLevel(logging.DEBUG)
 
     # Create a formatter and set it for both handlers
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    console_formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    console_formatter = logging.Formatter("%(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
     file_handler.setFormatter(file_formatter)
 

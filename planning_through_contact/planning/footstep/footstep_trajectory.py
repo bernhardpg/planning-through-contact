@@ -571,6 +571,13 @@ class FootstepPlanResult:
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
         }
 
+    @property
+    def num_modes(self) -> int:
+        if self.gcs_edge_flows is None:
+            raise RuntimeError("Cannot get num_modes when there is no gcs result")
+
+        return len(self.gcs_edge_flows)
+
     def save_metrics_to_yaml(self, file_path: str) -> None:
         with open(file_path, "w") as yaml_file:
             yaml.dump(self.to_metrics_dict(), yaml_file, indent=4, sort_keys=False)
