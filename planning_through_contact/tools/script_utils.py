@@ -1,13 +1,27 @@
 import argparse
+import inspect
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
 
 
+def get_main_script_path() -> Optional[Path]:
+    # Traverse the stack
+    for frame in inspect.stack():
+        # Check if the frame is the main script
+        if (
+            Path(frame.filename).resolve()
+            == Path(inspect.stack()[-1].filename).resolve()
+        ):
+            return Path(frame.filename)
+    return None
+
+
 def make_output_folder() -> Path:
-    curr_name = Path(__file__).name.split(".")[0]
+    main_script_path = get_main_script_path()
+    assert main_script_path is not None
     high_level_output_dir = Path("SCRIPT_OUTPUTS")
-    output_dir = high_level_output_dir / curr_name
+    output_dir = high_level_output_dir / main_script_path.name.split(".")[0]
 
     from datetime import datetime
 
