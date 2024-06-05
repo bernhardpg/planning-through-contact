@@ -6,19 +6,17 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, FancyArrowPatch, Polygon
 
 from planning_through_contact.planning.footstep.footstep_plan_config import PotatoRobot
-from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepTrajectory,
-)
+from planning_through_contact.planning.footstep.footstep_trajectory import FootstepPlan
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
 
 def animate_footstep_plan(
     robot: PotatoRobot,
     terrain: InPlaneTerrain,
-    plan: FootstepTrajectory,
+    plan: FootstepPlan,
     title: Optional[str] = None,
     output_file: Optional[str] = None,
-) -> None:
+) -> FuncAnimation:
     # Initialize figure for animation
     fig, ax = plt.subplots()
 
@@ -44,12 +42,13 @@ def animate_footstep_plan(
             [0, robot.foot_height],
         ]
     )
-    foot_left = Polygon(base_foot_vertices, closed=True, fill="blue", edgecolor="black")
-    ax.add_patch(foot_left)
-    foot_right = Polygon(
-        base_foot_vertices, closed=True, fill="green", edgecolor="black"
-    )
-    ax.add_patch(foot_right)
+    NUM_FEET = 2
+    feet = [
+        Polygon(base_foot_vertices, closed=True, fill="blue", edgecolor="black")
+        for _ in range(NUM_FEET)
+    ]
+    for foot in feet:
+        ax.add_patch(foot)
 
     # Forces
     FORCE_SCALE = 1e-3
@@ -63,84 +62,135 @@ def animate_footstep_plan(
         )
         return force
 
-    force_l1 = _create_force_patch()
-    ax.add_patch(force_l1)
-    force_l2 = _create_force_patch()
-    ax.add_patch(force_l2)
-    force_r1 = _create_force_patch()
-    ax.add_patch(force_r1)
-    force_r2 = _create_force_patch()
-    ax.add_patch(force_r2)
+    NUM_FORCES_PER_FOOT = 2
+    foot_forces = [  # forces for each contact point on each foot
+        [_create_force_patch() for _ in range(NUM_FORCES_PER_FOOT)]
+        for _ in range(NUM_FEET)
+    ]
+    for f1, f2 in foot_forces:
+        ax.add_patch(f1)
+        ax.add_patch(f2)
 
-    # Initial position of the feet
     p_WB = ax.scatter(0, 0, color="r", zorder=3, label="CoM")
 
     # Misc settings
     plt.close()
     ax.legend(loc="upper left", bbox_to_anchor=(0, 1.3), ncol=2)
 
-    def animate(n_steps: int) -> None:
+    def animate(step: int) -> None:
+        time = step * plan.dt
+
         # Robot position and orientation
-        if not np.isnan(plan.knot_points.p_WB[n_steps]).any():
-            p_WB.set_offsets(plan.knot_points.p_WB[n_steps])
-            robot_body.set_center(plan.knot_points.p_WB[n_steps])
-            robot_body.angle = plan.knot_points.theta_WB[n_steps] * 180 / np.pi
+        p_WB_val = plan.get(time, "p_WB").flatten()  # type: ignore
+        theta_WB_val = plan.get(time, "theta_WB")
+        if not np.isnan(p_WB_val).any():
+            p_WB.set_offsets(p_WB_val)
+            robot_body.set_center(p_WB_val)  # type: ignore
+            robot_body.angle = theta_WB_val * 180 / np.pi
             p_WB.set_visible(True)
             robot_body.set_visible(True)
         else:
             p_WB.set_visible(False)
             robot_body.set_visible(False)
 
-        # Left foot
-        if not np.isnan(plan.knot_points.p_WF1[n_steps]).any():
-            foot_left.set_xy(base_foot_vertices + plan.knot_points.p_WF1[n_steps])
-            foot_left.set_visible(True)
-        else:
-            foot_left.set_visible(False)
+        # Feet position
+        for foot_idx in range(NUM_FEET):
+            p_WF_val = plan.get_foot(foot_idx, time, "p_WF").flatten()  # type: ignore
+            if not np.isnan(p_WF_val).any():
+                feet[foot_idx].set_xy(base_foot_vertices + p_WF_val)
+                feet[foot_idx].set_visible(True)
+            else:
+                feet[foot_idx].set_visible(False)
 
-        # Right foot
-        if not np.isnan(plan.knot_points.p_WF2[n_steps]).any():  # type: ignore
-            foot_right.set_xy(base_foot_vertices + plan.knot_points.p_WF2[n_steps])  # type: ignore
-            foot_right.set_visible(True)
-        else:
-            foot_right.set_visible(False)
+        # Feet forces
+        for foot_idx in range(NUM_FEET):
+            f_F_Ws_val = plan.get_foot(foot_idx, time, "f_F_Ws")
+            p_WFcs_val = plan.get_foot(foot_idx, time, "p_WFcs")
 
-        # Forces for left foot
-        if not np.isnan(plan.knot_points.f_F1_1W[n_steps]).any():
-            f_l1_pos = plan.knot_points.p_WF1[n_steps] + base_foot_vertices[0]
-            f_l1_val = plan.knot_points.f_F1_1W[n_steps] * FORCE_SCALE
-            force_l1.set_positions(posA=f_l1_pos, posB=(f_l1_pos + f_l1_val))
-            force_l1.set_visible(True)
-        else:
-            force_l1.set_visible(False)
+            forces = foot_forces[foot_idx]
 
-        if not np.isnan(plan.knot_points.f_F1_1W[n_steps]).any():
-            f_l2_pos = plan.knot_points.p_WF1[n_steps] + base_foot_vertices[1]
-            f_l2_val = plan.knot_points.f_F1_2W[n_steps] * FORCE_SCALE
-            force_l2.set_positions(posA=f_l2_pos, posB=(f_l2_pos + f_l2_val))
-            force_l2.set_visible(True)
-        else:
-            force_l2.set_visible(False)
-
-        # Forces for right foot
-        if not np.isnan(plan.knot_points.f_F2_1W[n_steps]).any():  # type: ignore
-            f_r1_pos = plan.knot_points.p_WF2[n_steps] + base_foot_vertices[0]  # type: ignore
-            f_r1_val = plan.knot_points.f_F2_1W[n_steps] * FORCE_SCALE  # type: ignore
-            force_r1.set_positions(posA=f_r1_pos, posB=(f_r1_pos + f_r1_val))
-            force_r1.set_visible(True)
-        else:
-            force_r1.set_visible(False)
-
-        if not np.isnan(plan.knot_points.f_F2_2W[n_steps]).any():  # type: ignore
-            f_r2_pos = plan.knot_points.p_WF2[n_steps] + base_foot_vertices[1]  # type: ignore
-            f_r2_val = plan.knot_points.f_F2_2W[n_steps] * FORCE_SCALE  # type: ignore
-            force_r2.set_positions(posA=f_r2_pos, posB=(f_r2_pos + f_r2_val))
-            force_r2.set_visible(True)
-        else:
-            force_r2.set_visible(False)
+            for force_idx, (f, p) in enumerate(zip(f_F_Ws_val, p_WFcs_val)):
+                f = f.flatten()
+                p = p.flatten()
+                if not np.isnan(f).any():
+                    forces[force_idx].set_positions(posA=p, posB=(p + f * FORCE_SCALE))
+                    forces[force_idx].set_visible(True)
+                else:
+                    forces[force_idx].set_visible(False)
 
     # Create and display animation
-    n_steps = plan.num_steps
+    n_steps = plan.num_knot_points + 1
     ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
     if output_file is not None:
+        if "mp4" in output_file:
+            output_file = output_file.split(".")[0]
         ani.save(f"{output_file}.mp4", writer="ffmpeg")
+
+    return ani
+
+
+def plot_relaxation_errors(
+    plan: FootstepPlan,
+    title: Optional[str] = None,
+    output_file: Optional[str] = None,
+) -> None:
+    # Assuming compute_torques method is defined in FootstepPlan
+    planned_torques = plan.tau_F_Ws  # List of Lists of np.ndarray
+    true_torques = plan.compute_torques()  # List of Lists of np.ndarray
+
+    num_feet = len(planned_torques)
+    num_forces = len(planned_torques[0]) if num_feet > 0 else 0
+
+    # Determine global y-axis limits
+    all_torques = [
+        torque
+        for sublist in planned_torques
+        for torque in sublist
+        if not np.isnan(torque).all()
+    ] + [
+        torque
+        for sublist in true_torques
+        for torque in sublist
+        if not np.isnan(torque).all()
+    ]
+
+    if all_torques:
+        y_min = min(torque[np.isfinite(torque)].min() for torque in all_torques)
+        y_max = max(torque[np.isfinite(torque)].max() for torque in all_torques)
+    else:
+        y_min, y_max = 0, 1  # Default values if all torques contain NaNs
+
+    fig, axs = plt.subplots(
+        num_feet, num_forces, figsize=(12, 3.5 * num_feet), squeeze=False
+    )
+
+    for i in range(num_feet):
+        for j in range(num_forces):
+            ax = axs[i, j]
+            planned_torque = planned_torques[i][j]
+            true_torque = true_torques[i][j]
+
+            N = planned_torque.shape[0]
+            x = np.arange(N)
+
+            # Mask NaN values
+            planned_torque_masked = np.ma.masked_invalid(planned_torque)
+            true_torque_masked = np.ma.masked_invalid(true_torque)
+
+            ax.plot(x, planned_torque_masked, label="Planned Torque")
+            ax.plot(x, true_torque_masked, label="True Torque", linestyle="--")
+            ax.set_xlabel("N")
+            ax.set_ylabel("Torque")
+            ax.set_title(f"Foot {i + 1} - Force {j + 1}")
+            ax.legend()
+            ax.set_ylim(y_min, y_max)
+
+    if title:
+        fig.suptitle(title)
+    plt.tight_layout()
+
+    if output_file:
+        plt.savefig(output_file)
+        plt.close()
+    else:
+        plt.show()

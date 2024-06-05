@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -89,3 +89,28 @@ class InPlaneTerrain:
 
         if max_height:
             ax.set_ylim((0.0, max_height))
+
+    def to_dict(self) -> dict:
+        return {"stepping_stones": [asdict(stone) for stone in self.stepping_stones]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "InPlaneTerrain":
+        terrain = cls()
+        for stone_data in data["stepping_stones"]:
+            stone = InPlaneSteppingStone(**stone_data)
+            terrain.stepping_stones.append(stone)
+        return terrain
+
+    def save(self, file_path: str) -> None:
+        import yaml
+
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(self.to_dict(), yaml_file, default_flow_style=False)
+
+    @classmethod
+    def load(cls, file_path: str) -> "InPlaneTerrain":
+        import yaml
+
+        with open(file_path, "r") as yaml_file:
+            data = yaml.safe_load(yaml_file)
+        return cls.from_dict(data)

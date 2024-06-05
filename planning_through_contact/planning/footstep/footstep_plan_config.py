@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import Tuple
+from dataclasses import asdict, dataclass, field
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -37,12 +37,56 @@ class PotatoRobot:
 
 
 @dataclass
+class FootstepCost:
+    sq_force: Optional[float] = 1e-5
+    sq_torque: Optional[float] = 1e-3
+    sq_vel_lin: Optional[float] = 10.0
+    sq_vel_rot: Optional[float] = 0.1
+    sq_acc_lin: Optional[float] = 100.0
+    sq_acc_rot: Optional[float] = 1.0
+    sq_nominal_pose: Optional[float] = 5.0
+
+
+@dataclass
 class FootstepPlanningConfig:
+    cost: FootstepCost = field(default_factory=lambda: FootstepCost())
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
     period_steps: int = 3
     use_lp_approx: bool = False
+    use_convex_concave: bool = False
 
     @property
     def dt(self) -> float:
         return self.period / self.period_steps
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["robot"] = asdict(self.robot)  # Ensure robot is also converted to dict
+        return data
+
+    def save(self, file_path: str) -> None:
+        import yaml
+
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(
+                self.to_dict(),
+                yaml_file,
+                default_flow_style=False,
+                sort_keys=True,
+            )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "FootstepPlanningConfig":
+        robot_data = data.pop("robot")
+        robot = PotatoRobot(**robot_data)
+        config = cls(robot=robot, **data)
+        return config
+
+    @classmethod
+    def load(cls, file_path: str) -> "FootstepPlanningConfig":
+        import yaml
+
+        with open(file_path, "r") as yaml_file:
+            data = yaml.safe_load(yaml_file)
+        return cls.from_dict(data)

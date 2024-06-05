@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import numpy as np
@@ -29,9 +30,9 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
 )
 from planning_through_contact.planning.footstep.footstep_trajectory import (
-    FootstepPlanKnotPoints,
-    FootstepPlanSegment,
-    FootstepTrajectory,
+    FootstepPlan,
+    FootstepPlanResult,
+    FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
@@ -41,7 +42,7 @@ GcsEdge = GraphOfConvexSets.Edge
 
 class VertexSegmentPair(NamedTuple):
     v: GcsVertex
-    s: FootstepPlanSegment
+    s: FootstepPlanSegmentProgram
 
     def get_var_in_vertex(self, var: Variable) -> Variable:
         return self.s.get_var_in_vertex(var, self.v.x())
@@ -60,9 +61,7 @@ class VertexSegmentPair(NamedTuple):
     def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
 
-    def get_knot_point_vals(
-        self, result: MathematicalProgramResult
-    ) -> FootstepPlanKnotPoints:
+    def get_knot_point_vals(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
 
     def add_cost_to_vertex(self) -> None:
@@ -242,7 +241,7 @@ class FootstepPlanRounder:
         return vertex_var_vals
 
     def round(
-        self, save_output: bool = True, use_custom_tolerance: bool = False
+        self, save_output: bool = False, use_custom_tolerance: bool = False
     ) -> MathematicalProgramResult:
         snopt = SnoptSolver()
 
@@ -276,13 +275,12 @@ class FootstepPlanRounder:
         self.rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess, solver_options=solver_options)  # type: ignore
         return self.rounded_result
 
-    def get_plan(self, result: MathematicalProgramResult) -> FootstepTrajectory:
+    def get_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         knot_points = [s.evaluate_with_result(result) for s in self.active_segments]
-        dt = self.active_segments[0].dt
-        plan = FootstepTrajectory.from_segments(knot_points, dt)
+        plan = FootstepPlan.merge(knot_points)
         return plan
 
-    def get_relaxed_plan(self) -> FootstepTrajectory:
+    def get_relaxed_plan(self) -> FootstepPlan:
         """
         WARNING: This currently ruins the MathematicalProgramResult.
         """
@@ -302,6 +300,7 @@ class FootstepPlanner:
         target_stone_name: str = "target",
     ) -> None:
         self.config = config
+        self.terrain = terrain
         self.stones = terrain.stepping_stones
         self.robot = config.robot
 
@@ -360,7 +359,7 @@ class FootstepPlanner:
     def _calc_num_steps_required_per_stone(width: float, step_span: float) -> int:
         return int(np.floor(width / step_span) + 2)
 
-    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegment]]:
+    def _make_segments_for_terrain(self) -> List[List[FootstepPlanSegmentProgram]]:
         num_steps_required_per_stone = [
             self._calc_num_steps_required_per_stone(stone.width, self.robot.step_span)
             for stone in self.stones
@@ -376,43 +375,47 @@ class FootstepPlanner:
                 step_idx = int(gait_idx / 2)
                 one_foot_segment = (gait_idx + 1) % 2 == 1
                 if one_foot_segment:
-                    lift_step = FootstepPlanSegment(
+                    lift_step = FootstepPlanSegmentProgram(
                         stone,
                         "one_foot",
                         self.robot,
                         self.config,
                         name=f"step_{step_idx}_one_foot",
+                        eq_num_input_state=True,  # we need the N-th input for the next segment!
                     )
                     segments_for_stone.append(lift_step)
                 else:
-                    stance_step = FootstepPlanSegment(
+                    stance_step = FootstepPlanSegmentProgram(
                         stone,
                         "two_feet",
                         self.robot,
                         self.config,
                         name=f"step_{step_idx}_two_feet",
+                        eq_num_input_state=True,  # We need the N-th input for the next segment
                     )
                     segments_for_stone.append(stance_step)
 
             segments.append(segments_for_stone)
 
         # Append one stance segment to the start of the first segment on the first stone
-        stance_step = FootstepPlanSegment(
+        stance_step = FootstepPlanSegmentProgram(
             self.stones[0],
             "two_feet",
             self.robot,
             self.config,
             name=f"start_stance",
+            eq_num_input_state=True,
         )
         segments[0].insert(0, stance_step)
 
         # Append one stance segment to the end of the last segment on the last stone
-        stance_step = FootstepPlanSegment(
+        stance_step = FootstepPlanSegmentProgram(
             self.stones[-1],
             "two_feet",
             self.robot,
             self.config,
             name=f"final_stance",
+            eq_num_input_state=True,
         )
         segments[-1].append(stance_step)
 
@@ -421,7 +424,7 @@ class FootstepPlanner:
     def _add_segments_as_vertices(
         self,
         gcs: GraphOfConvexSets,
-        segments: List[FootstepPlanSegment],
+        segments: List[FootstepPlanSegmentProgram],
         use_lp_approx: bool = False,
     ) -> Dict[str, VertexSegmentPair]:
         vertices = [
@@ -444,13 +447,14 @@ class FootstepPlanner:
         # Edges and transitions between stones
         transition_segments = []
         for stone_u, stone_v in zip(self.stones[:-1], self.stones[1:]):
-            transition_step = FootstepPlanSegment(
+            transition_step = FootstepPlanSegmentProgram(
                 stone_u,
                 "two_feet",
                 self.robot,
                 self.config,
                 name=f"transition",
                 stone_for_last_foot=stone_v,
+                eq_num_input_state=True,
             )
             transition_segments.append(transition_step)
 
@@ -630,7 +634,9 @@ class FootstepPlanner:
 
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filename is not None:
-            data.write_png(filename + ".png")
+            if "pdf" in filename:
+                filename = filename.split(".")[0]
+            data.write_pdf(filename + ".pdf")
 
         return data
 
@@ -660,8 +666,11 @@ class FootstepPlanner:
         return solver_options
 
     def plan(
-        self, print_flows: bool = False, print_solver_output: bool = False
-    ) -> FootstepTrajectory:
+        self,
+        print_flows: bool = False,
+        print_solver_output: bool = False,
+        print_debug: bool = False,
+    ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
         MAX_ROUNDED_PATHS = 3
@@ -686,7 +695,8 @@ class FootstepPlanner:
         #     mosek.solver_id(), "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", tolerance
         # )
 
-        print("Solving GCS problem")
+        if print_debug:
+            print("Solving GCS problem")
 
         options.preprocessing = True
         # We want to solve only the convex relaxation first
@@ -697,7 +707,7 @@ class FootstepPlanner:
         assert gcs_result.is_success()
         # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
-        if print_flows:
+        if print_flows or print_debug:
             flows = [
                 (e.name(), gcs_result.GetSolution(e.phi())) for e in self.gcs.Edges()
             ]
@@ -709,59 +719,60 @@ class FootstepPlanner:
         relaxed_results = [
             self.gcs.SolveConvexRestriction(path, options) for path in paths
         ]
-        rounders = []
-        rounded_results = []
 
-        rounding_times = []
-        print(f"Rounding {len(paths)} possible GCS paths...")
+        plan_results = []
+        if print_debug:
+            print(f"Rounding {len(paths)} possible GCS paths...")
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
             if idx >= MAX_ROUNDED_PATHS:
                 break
-            self.plan_rounder = FootstepPlanRounder(
+            curr_plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
+
             start_time = time.time()
-            rounded_result = self.plan_rounder.round()
+            rounded_result = curr_plan_rounder.round()
             elapsed_time = time.time() - start_time
-            rounding_times.append(elapsed_time)
-            rounded_results.append(rounded_result)
-            rounders.append(self.plan_rounder)
-            print(
-                f"Rounding_step {idx}: is_success: {rounded_result.is_success()}, elapsed_time: {elapsed_time:.3f} s, cost: {rounded_result.get_optimal_cost():.3f}"
+            rounded_plan = curr_plan_rounder.get_plan(rounded_result)
+
+            relaxed_plan = (
+                curr_plan_rounder.get_relaxed_plan()
+            )  # NOTE: This ruins the mathprogresult and must be called last!
+
+            edge_flows = {
+                e.name(): gcs_result.GetSolution(e.phi()) for e in active_edges
+            }
+
+            res = FootstepPlanResult.from_results(
+                self.terrain,
+                self.config,
+                relaxed_result,
+                relaxed_plan,
+                rounded_result,
+                rounded_plan,
+                elapsed_time,
+                edge_flows,
             )
+            plan_results.append(res)
 
-        rounded_costs = [
-            res.get_optimal_cost() if res.is_success() else np.inf
-            for res in rounded_results
-        ]
-        best_idx = np.argmin(rounded_costs)
-        self.plan_rounder, self.rounded_result = (
-            rounders[best_idx],
-            rounded_results[best_idx],
-        )
-        self.rounding_time = rounding_times[best_idx]
-        assert self.rounded_result.is_success()
+        self.best_idx = np.argmin([res.rounded_metrics.cost for res in plan_results])
+        self.plan_results = plan_results
+        self.best_result = self.plan_results[self.best_idx]
 
-        active_edge_names = [e.name() for e in self.plan_rounder.active_edges]
-        print(f"Best path: {' -> '.join(active_edge_names)}")
+        return self.best_result.rounded_plan
 
-        c_round = self.rounded_result.get_optimal_cost()
-        c_relax = gcs_result.get_optimal_cost()
-        ub_optimality_gap = ((c_round - c_relax) / c_relax) * 100
-        print(
-            f"feasible_cost: {c_round:.4f}, gcs_cost: {c_relax:.4f}, gcs_restriction_cost: {self.plan_rounder.relaxed_result.get_optimal_cost():.4f}"
-        )
-        print(f"UB optimality gap: {ub_optimality_gap:.5f} %")
-        print(f"Rounding time: {self.rounding_time:.3f} s")
+    def save_analysis(self, output_dir: str) -> None:
+        output_dir_path = Path(output_dir)
+        output_dir_path.mkdir(exist_ok=True, parents=True)
+        self.create_graph_diagram(output_dir + "/" + "gcs.pdf")
 
-        plan = self.plan_rounder.get_plan(self.rounded_result)
+        assert self.plan_results is not None
 
-        return plan
+        for idx, res in enumerate(self.plan_results):
+            res_output_dir = output_dir + "/" + str(idx)
+            if idx == self.best_idx:
+                res_output_dir += "_BEST"
 
-    def get_relaxed_plan(self) -> FootstepTrajectory:
-        assert self.plan_rounder is not None
-        assert self.rounded_result is not None
-
-        return self.plan_rounder.get_relaxed_plan()
+            res.save_analysis_to_folder(res_output_dir)
