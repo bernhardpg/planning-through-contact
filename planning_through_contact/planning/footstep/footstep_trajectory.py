@@ -562,7 +562,9 @@ class FootstepPlanResult:
     def to_metrics_dict(self) -> dict:
         return {
             "gcs_edge_flows": self.gcs_edge_flows,
-            "gcs_metrics": self.gcs_metrics,
+            "gcs_metrics": (
+                self.gcs_metrics.to_dict() if self.gcs_metrics is not None else None
+            ),
             "relaxed_metrics": self.relaxed_metrics.to_dict(),
             "rounded_metrics": self.rounded_metrics.to_dict(),
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
