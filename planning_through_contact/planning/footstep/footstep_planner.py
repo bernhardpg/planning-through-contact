@@ -5,6 +5,7 @@ from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import pydot
+from matplotlib.ticker import MaxNLocator
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
     GraphOfConvexSetsOptions,
@@ -35,6 +36,9 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
+from planning_through_contact.visualize.footstep_visualizer import (
+    plot_relaxation_vs_rounding_bar_plot,
+)
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
@@ -790,3 +794,7 @@ class FootstepPlanner:
                 res_output_dir += "_BEST"
 
             res.save_analysis_to_folder(res_output_dir)
+
+        plot_relaxation_vs_rounding_bar_plot(
+            self.plan_results, str(Path(output_dir) / "paths_cost_and_solve_times.pdf")
+        )

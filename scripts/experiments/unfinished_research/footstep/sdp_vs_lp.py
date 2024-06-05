@@ -145,11 +145,13 @@ def plan_with_one_stone(
 
 def main(output_dir: Path, debug: bool = False) -> None:
     result_lp = plan_with_one_stone(True, output_dir, debug)
-    logger.info(f"LP relaxed solve time: {result_lp.relaxed_metrics.solve_time}")
-    logger.info(f"LP rounding time: {result_lp.rounded_metrics.solve_time}")
+    logger.info(f"LP relaxed solve time: {result_lp.relaxed_metrics.solve_time:.3f} s")
+    logger.info(f"LP rounding time: {result_lp.rounded_metrics.solve_time:.3f} s")
     result_sdp = plan_with_one_stone(False, output_dir, debug)
-    logger.info(f"SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time}")
-    logger.info(f"SDP rounding time: {result_sdp.rounded_metrics.solve_time}")
+    logger.info(
+        f"SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time:.3f} s"
+    )
+    logger.info(f"SDP rounding time: {result_sdp.rounded_metrics.solve_time:.3f} s")
 
 
 if __name__ == "__main__":

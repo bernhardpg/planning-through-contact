@@ -1,12 +1,16 @@
-from typing import Optional
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, FancyArrowPatch, Polygon
+from matplotlib.ticker import MaxNLocator
 
 from planning_through_contact.planning.footstep.footstep_plan_config import PotatoRobot
-from planning_through_contact.planning.footstep.footstep_trajectory import FootstepPlan
+from planning_through_contact.planning.footstep.footstep_trajectory import (
+    FootstepPlan,
+    FootstepPlanResult,
+)
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 
 
@@ -194,3 +198,54 @@ def plot_relaxation_errors(
         plt.close()
     else:
         plt.show()
+
+
+def plot_relaxation_vs_rounding_bar_plot(
+    plan_results: List[FootstepPlanResult],
+    filename: Optional[str] = None,
+) -> None:
+    # Plot histogram over costs
+    relaxed_costs = [res.relaxed_metrics.cost for res in plan_results]
+    relaxed_times = [res.relaxed_metrics.solve_time for res in plan_results]
+
+    rounded_costs = [res.rounded_metrics.cost for res in plan_results]
+    rounded_times = [res.rounded_metrics.solve_time for res in plan_results]
+
+    import matplotlib.pyplot as plt
+
+    fig, axs = plt.subplots(2, 1, figsize=(6, 8))
+
+    def _plot_bar_plot_pair(ax, categories, values_1, values_2):
+
+        # Number of categories
+        n = len(values_1)
+
+        # Positions of the bars on the x-axis
+        ind = np.arange(n)
+
+        # Width of a bar
+        width = 0.35
+
+        # Plotting the bars
+        ax.bar(ind - width / 2, values_1, width, label=categories[0])
+        ax.bar(ind + width / 2, values_2, width, label=categories[1])
+
+        # Adding labels and titles
+        ax.legend()
+
+        # Set x-axis to be integer
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+    axs[0].set_title("Costs")
+    _plot_bar_plot_pair(axs[0], ["relaxed", "rounded"], relaxed_costs, rounded_costs)
+
+    axs[1].set_title("Solve times")
+    axs[1].set_ylabel("Time [s]")
+    _plot_bar_plot_pair(axs[1], ["relaxed", "rounded"], relaxed_times, rounded_times)
+
+    fig.tight_layout()
+
+    if filename is not None:
+        fig.savefig(filename.split(".")[0] + ".pdf")
+
+    plt.close()
