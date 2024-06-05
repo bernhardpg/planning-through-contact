@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 
@@ -10,26 +11,53 @@ from planning_through_contact.planning.footstep.footstep_planner import Footstep
 from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanResult,
 )
-from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
+from planning_through_contact.planning.footstep.in_plane_terrain import (
+    InPlaneSteppingStone,
+    InPlaneTerrain,
+)
 from planning_through_contact.tools.script_utils import default_script_setup
 
+TerrainStoneTuple = Tuple[InPlaneTerrain, InPlaneSteppingStone, InPlaneSteppingStone]
 
-def plan_with_one_stone(
-    use_lp: bool, output_dir: Path, debug: bool = False
-) -> FootstepPlanResult:
+
+def get_one_stone_terrain() -> TerrainStoneTuple:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.2, name="initial")
+    return terrain, stone, stone
+
+
+def get_complex_terrain() -> TerrainStoneTuple:
+    terrain = InPlaneTerrain()
+    initial_stone = terrain.add_stone(x_pos=0.25, width=0.5, z_pos=0.2, name="initial")
+    terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.5, name="stone_2")
+    terrain.add_stone(x_pos=2.0, width=1.0, z_pos=0.7, name="stone_3")
+    terrain.add_stone(x_pos=2.75, width=0.5, z_pos=0.9, name="stone_4")
+    terrain.add_stone(x_pos=3.25, width=0.5, z_pos=0.7, name="stone_5")
+    target_stone = terrain.add_stone(x_pos=3.75, width=0.5, z_pos=0.5, name="target")
+    return terrain, initial_stone, target_stone
+
+
+def plan(
+    terrain_and_stones: TerrainStoneTuple,
+    use_lp: bool,
+    output_dir: Path,
+    debug: bool = False,
+) -> FootstepPlanResult:
 
     robot = PotatoRobot()
     cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=use_lp)
 
+    terrain, initial_stone, target_stone = terrain_and_stones
+
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     desired_displacement = 0.2
     initial_pos = (
-        np.array([stone.x_pos - desired_displacement, stone.z_pos]) + desired_robot_pos
+        np.array([initial_stone.x_pos - desired_displacement, initial_stone.z_pos])
+        + desired_robot_pos
     )
     target_pos = (
-        np.array([stone.x_pos + desired_displacement, stone.z_pos]) + desired_robot_pos
+        np.array([target_stone.x_pos + desired_displacement, target_stone.z_pos])
+        + desired_robot_pos
     )
 
     initial_pose = np.concatenate([initial_pos, [0]])
@@ -40,8 +68,8 @@ def plan_with_one_stone(
         terrain,
         initial_pose,
         target_pose,
-        initial_stone_name=stone.name,
-        target_stone_name=stone.name,
+        initial_stone_name=initial_stone.name,
+        target_stone_name=target_stone.name,
     )
 
     planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug)
@@ -57,18 +85,30 @@ def plan_with_one_stone(
 
 
 def main(output_dir: Path, debug: bool = False) -> None:
-    result_lp = plan_with_one_stone(True, output_dir, debug)
-    assert result_lp.gcs_metrics is not None
-    logger.info(f"LP GCS time: {result_lp.gcs_metrics.solve_time:.3f} s")
-    logger.info(f"LP relaxed solve time: {result_lp.relaxed_metrics.solve_time:.3f} s")
-    logger.info(f"LP rounding time: {result_lp.rounded_metrics.solve_time:.3f} s")
-    result_sdp = plan_with_one_stone(False, output_dir, debug)
-    assert result_sdp.gcs_metrics is not None
-    logger.info(f"SDP GCS time: {result_sdp.gcs_metrics.solve_time :.3f} s")
-    logger.info(
-        f"SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time:.3f} s"
-    )
-    logger.info(f"SDP rounding time: {result_sdp.rounded_metrics.solve_time:.3f} s")
+    terrains = [get_one_stone_terrain(), get_complex_terrain()]
+    names = ["one_stone", "complex"]
+
+    for terrain, name in zip(terrains, names):
+        logger.info(f"## Terrain: {name} ##")
+        result_lp = plan(terrain, True, output_dir / name, debug)
+        assert result_lp.gcs_metrics is not None
+        logger.info(f" - LP GCS time: {result_lp.gcs_metrics.solve_time:.3f} s")
+        logger.info(
+            f" - LP relaxed solve time: {result_lp.relaxed_metrics.solve_time:.3f} s"
+        )
+        logger.info(
+            f" - LP rounding time: {result_lp.rounded_metrics.solve_time:.3f} s"
+        )
+
+        result_sdp = plan(terrain, False, output_dir / name, debug)
+        assert result_sdp.gcs_metrics is not None
+        logger.info(f" - SDP GCS time: {result_sdp.gcs_metrics.solve_time :.3f} s")
+        logger.info(
+            f" - SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time:.3f} s"
+        )
+        logger.info(
+            f" - SDP rounding time: {result_sdp.rounded_metrics.solve_time:.3f} s"
+        )
 
 
 if __name__ == "__main__":

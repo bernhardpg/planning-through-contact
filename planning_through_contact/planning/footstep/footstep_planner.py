@@ -677,7 +677,6 @@ class FootstepPlanner:
     ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
-        MAX_ROUNDED_PATHS = 3
 
         mosek = MosekSolver()
         options.solver = mosek
@@ -718,7 +717,7 @@ class FootstepPlanner:
             flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
-        options.max_rounded_paths = MAX_ROUNDED_PATHS
+        options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
         relaxed_results = [
             self.gcs.SolveConvexRestriction(path, options) for path in paths
@@ -730,7 +729,7 @@ class FootstepPlanner:
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
-            if idx >= MAX_ROUNDED_PATHS:
+            if idx >= self.config.max_rounded_paths:
                 break
             curr_plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
@@ -786,6 +785,9 @@ class FootstepPlanner:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
         self.create_graph_diagram(output_dir + "/" + "graph_of_convex_sets.pdf")
+
+        self.config.save(str(output_dir_path / "config.yaml"))
+        self.terrain.save(str(output_dir_path / "terrain.yaml"))
 
         assert self.plan_results is not None
 
