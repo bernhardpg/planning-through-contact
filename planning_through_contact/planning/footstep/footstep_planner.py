@@ -308,6 +308,7 @@ class FootstepPlanner:
         self.stones = terrain.stepping_stones
         self.robot = config.robot
 
+        self.gcs_result = None
         self.segments_per_stone = self._make_segments_for_terrain()
 
         self.gcs = GraphOfConvexSets()
@@ -706,6 +707,7 @@ class FootstepPlanner:
         options.max_rounded_paths = 0
 
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
+        self.gcs_result = gcs_result
 
         assert gcs_result.is_success()
         # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
@@ -781,10 +783,17 @@ class FootstepPlanner:
             )
         return self.best_result
 
-    def save_analysis(self, output_dir: str) -> None:
+    def save_analysis(self, output_dir: str, plot_result: bool = True) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
-        self.create_graph_diagram(output_dir + "/" + "graph_of_convex_sets.pdf")
+        if plot_result:
+            assert self.gcs_result is not None
+            self.create_graph_diagram(
+                output_dir + "/" + "graph.pdf", result=self.gcs_result
+            )
+            self.create_graph_diagram(
+                output_dir + "/" + "graph_result.pdf", result=self.gcs_result
+            )
 
         self.config.save(str(output_dir_path / "config.yaml"))
         self.terrain.save(str(output_dir_path / "terrain.yaml"))
