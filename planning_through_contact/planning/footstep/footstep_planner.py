@@ -770,6 +770,13 @@ class FootstepPlanner:
             )
         return self.plan_results
 
+    def get_best_result(self) -> FootstepPlanResult:
+        if self.best_result is None:
+            raise RuntimeError(
+                "Need to first generate plans before getting results. Run planner.plan()"
+            )
+        return self.best_result
+
     def save_analysis(self, output_dir: str) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)

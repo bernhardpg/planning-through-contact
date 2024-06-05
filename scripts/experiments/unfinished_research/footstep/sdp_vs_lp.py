@@ -1,5 +1,7 @@
 import argparse
+import logging
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -19,6 +21,7 @@ from planning_through_contact.planning.footstep.footstep_plan_config import (
 )
 from planning_through_contact.planning.footstep.footstep_planner import FootstepPlanner
 from planning_through_contact.planning.footstep.footstep_trajectory import (
+    FootstepPlanResult,
     FootstepPlanSegmentProgram,
     get_X_from_semidefinite_relaxation,
 )
@@ -54,7 +57,53 @@ def parse_debug_flag() -> bool:
     return debug
 
 
-def plan_with_one_stone(use_lp: bool, output_dir: Path, debug: bool = False) -> None:
+def make_default_logger(
+    output_dir: Optional[Path] = None, test_logger: bool = False
+) -> logging.Logger:
+    # Create a custom logger
+    logger = logging.getLogger(__name__)
+
+    # Set the default log level (could be DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    logger.setLevel(logging.DEBUG)
+
+    # Create handlers for both console and file logging
+    console_handler = logging.StreamHandler()
+    if output_dir is not None:
+        name = str(output_dir / "script.log")
+    else:
+        name = "script.log"
+    file_handler = logging.FileHandler(name)
+
+    # Set the log level for each handler
+    console_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.DEBUG)
+
+    # Create a formatter and set it for both handlers
+    file_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    console_formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+    console_handler.setFormatter(console_formatter)
+    file_handler.setFormatter(file_formatter)
+
+    # Add the handlers to the logger
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    # Log messages
+    if test_logger:
+        logger.debug("This is a debug message")
+        logger.info("This is an info message")
+        logger.warning("This is a warning message")
+        logger.error("This is an error message")
+        logger.critical("This is a critical message")
+
+    return logger
+
+
+def plan_with_one_stone(
+    use_lp: bool, output_dir: Path, debug: bool = False
+) -> FootstepPlanResult:
     terrain = InPlaneTerrain()
     stone = terrain.add_stone(x_pos=1.0, width=1.0, z_pos=0.2, name="initial")
 
@@ -83,7 +132,6 @@ def plan_with_one_stone(use_lp: bool, output_dir: Path, debug: bool = False) -> 
     )
 
     planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug)
-    results = planner.get_results()
     if use_lp:
         name = "lp"
     else:
@@ -91,13 +139,21 @@ def plan_with_one_stone(use_lp: bool, output_dir: Path, debug: bool = False) -> 
 
     planner.save_analysis(str(output_dir / name))
 
+    best_result = planner.get_best_result()
+    return best_result
+
 
 def main(output_dir: Path, debug: bool = False) -> None:
-    plan_with_one_stone(True, output_dir, debug)
-    plan_with_one_stone(False, output_dir, debug)
+    result_lp = plan_with_one_stone(True, output_dir, debug)
+    logger.info(f"LP relaxed solve time: {result_lp.relaxed_metrics.solve_time}")
+    logger.info(f"LP rounding time: {result_lp.rounded_metrics.solve_time}")
+    result_sdp = plan_with_one_stone(False, output_dir, debug)
+    logger.info(f"SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time}")
+    logger.info(f"SDP rounding time: {result_sdp.rounded_metrics.solve_time}")
 
 
 if __name__ == "__main__":
     debug = parse_debug_flag()
     output_dir = make_output_folder()
+    logger = make_default_logger(output_dir)
     main(output_dir, debug)
