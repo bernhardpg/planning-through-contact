@@ -15,6 +15,7 @@ from pydrake.solvers import (
     MathematicalProgramResult,
     PositiveSemidefiniteConstraint,
     QuadraticConstraint,
+    SemidefiniteRelaxationOptions,
     SnoptSolver,
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
@@ -1166,11 +1167,16 @@ class FootstepPlanSegmentProgram:
         self,
         trace_cost: bool = False,
         use_groups: bool = True,
+        no_implied_constraints: bool = True,  # TODO(bernhardpg)
     ) -> MathematicalProgram:
         # Already convex
         if self.config.use_convex_concave:
             self.relaxed_prog = self.prog
             return self.relaxed_prog
+
+        options = SemidefiniteRelaxationOptions()
+        if no_implied_constraints:
+            options.set_to_weakest()
 
         if use_groups:
             if self.num_states == self.num_inputs:
@@ -1188,14 +1194,17 @@ class FootstepPlanSegmentProgram:
                     Variables(self.get_state(self.num_states - 1))
                 )  # add the last state
                 # TODO(bernhardpg): Make sure that this grouping is the correct one!
-                raise NotImplementedError("Variable grouping with N states and N-1 inputs is not yet supported (needs to be verified)")
+                raise NotImplementedError(
+                    "Variable grouping with N states and N-1 inputs is not yet supported (needs to be verified)"
+                )
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(
-                self.prog, variable_groups=variable_groups
+                self.prog, variable_groups=variable_groups, options=options
             )
             assert len(self.relaxed_prog.positive_semidefinite_constraints()) == len(
                 variable_groups
             )
+
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         if trace_cost:
