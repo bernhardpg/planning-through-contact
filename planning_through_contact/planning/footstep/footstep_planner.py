@@ -763,10 +763,17 @@ class FootstepPlanner:
 
         return self.best_result.rounded_plan
 
+    def get_results(self) -> List[FootstepPlanResult]:
+        if self.plan_results is None:
+            raise RuntimeError(
+                "Need to first generate plans before getting results. Run planner.plan()"
+            )
+        return self.plan_results
+
     def save_analysis(self, output_dir: str) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
-        self.create_graph_diagram(output_dir + "/" + "gcs.pdf")
+        self.create_graph_diagram(output_dir + "/" + "graph_of_convex_sets.pdf")
 
         assert self.plan_results is not None
 
