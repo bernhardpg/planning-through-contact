@@ -258,6 +258,10 @@ def plot_relaxation_vs_rounding_bar_plot(
         # Add text annotations with height of bars for the categories
         for category in categories:
             cat_idx = categories.index(category)
+            if len(bars) > 5:
+                fontsize = 5
+            else:
+                fontsize = 10  # matplotlib default
             for bar in bars[cat_idx]:
                 height = bar.get_height()
                 ax.text(
@@ -268,6 +272,7 @@ def plot_relaxation_vs_rounding_bar_plot(
                     va="bottom",
                     rotation=45,
                     color=bar.get_facecolor(),
+                    fontsize=fontsize,
                 )
 
     axs[0].set_title("Costs")
