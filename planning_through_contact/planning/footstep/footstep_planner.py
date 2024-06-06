@@ -629,14 +629,14 @@ class FootstepPlanner:
         self,
         filename: Optional[str] = None,
         result: Optional[MathematicalProgramResult] = None,
+        active_path: Optional[List[GcsEdge]] = None,
     ) -> pydot.Dot:
         """
         Optionally saves the graph to file if a string is given for the 'filepath' argument.
         """
         graphviz = self.gcs.GetGraphvizString(
-            precision=2, result=result, show_slacks=False
+            precision=2, result=result, show_slacks=False, active_path=active_path
         )
-
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filename is not None:
             if "pdf" in filename:
@@ -763,7 +763,9 @@ class FootstepPlanner:
             )
             plan_results.append(res)
 
-        self.best_idx = np.argmin([res.rounded_metrics.cost for res in plan_results])
+        self.best_idx = int(
+            np.argmin([res.rounded_metrics.cost for res in plan_results])
+        )
         self.plan_results = plan_results
         self.best_result = self.plan_results[self.best_idx]
 
@@ -783,17 +785,15 @@ class FootstepPlanner:
             )
         return self.best_result
 
-    def save_analysis(self, output_dir: str, plot_result: bool = True) -> None:
+    def save_analysis(self, output_dir: str) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
-        if plot_result:
-            assert self.gcs_result is not None
-            self.create_graph_diagram(
-                output_dir + "/" + "graph.pdf", result=self.gcs_result
-            )
-            self.create_graph_diagram(
-                output_dir + "/" + "graph_result.pdf", result=self.gcs_result
-            )
+
+        assert self.gcs_result is not None
+        self.create_graph_diagram(output_dir + "/" + "graph.pdf")
+        self.create_graph_diagram(
+            output_dir + "/" + "graph_with_flows.pdf", result=self.gcs_result
+        )
 
         self.config.save(str(output_dir_path / "config.yaml"))
         self.terrain.save(str(output_dir_path / "terrain.yaml"))
@@ -807,6 +807,21 @@ class FootstepPlanner:
 
             res.save_analysis_to_folder(res_output_dir)
 
+            def _find_edge_from_name(name: str) -> GcsEdge:
+                return next(e for e in self.gcs.Edges() if e.name() == name)
+
+            active_path = [
+                _find_edge_from_name(e_name) for e_name in res.gcs_active_edges
+            ]
+
+            self.create_graph_diagram(
+                res_output_dir + "/" + "graph_path.pdf",
+                result=self.gcs_result,
+                active_path=active_path,
+            )
+
         plot_relaxation_vs_rounding_bar_plot(
-            self.plan_results, str(Path(output_dir) / "paths_cost_and_solve_times.pdf")
+            self.plan_results,
+            str(Path(output_dir) / "paths_cost_and_solve_times.pdf"),
+            self.best_idx,
         )

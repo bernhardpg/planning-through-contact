@@ -514,8 +514,8 @@ class FootstepPlanResult:
 
     terrain: InPlaneTerrain
     config: FootstepPlanningConfig
-    relaxed_plan: FootstepPlan
-    relaxed_metrics: PlanMetrics
+    restriction_plan: FootstepPlan
+    restriction_metrics: PlanMetrics
     rounded_plan: FootstepPlan  # NOTE(bernhardpg): It would not be hard to extend this with multiple rounded results
     rounded_metrics: PlanMetrics
     gcs_edge_flows: Optional[Dict[str, float]] = None
@@ -536,15 +536,15 @@ class FootstepPlanResult:
         cls,
         terrain: InPlaneTerrain,
         config: FootstepPlanningConfig,
-        relaxed_res: MathematicalProgramResult,
-        relaxed_plan: FootstepPlan,
+        restriction_res: MathematicalProgramResult,
+        restriction_plan: FootstepPlan,
         rounded_res: MathematicalProgramResult,
         rounded_plan: FootstepPlan,
         snopt_time: float,
         gcs_edge_flows: Optional[Dict[str, float]] = None,
         gcs_res: Optional[MathematicalProgramResult] = None,
     ) -> "FootstepPlanResult":
-        relaxed_metrics = PlanMetrics.from_result(relaxed_res)
+        restriction_metrics = PlanMetrics.from_result(restriction_res)
         rounded_metrics = PlanMetrics.from_result(
             rounded_res, snopt_solve_time=snopt_time
         )
@@ -552,8 +552,8 @@ class FootstepPlanResult:
         return cls(
             terrain,
             config,
-            relaxed_plan,
-            relaxed_metrics,
+            restriction_plan,
+            restriction_metrics,
             rounded_plan,
             rounded_metrics,
             gcs_edge_flows,
@@ -566,10 +566,17 @@ class FootstepPlanResult:
             "gcs_metrics": (
                 self.gcs_metrics.to_dict() if self.gcs_metrics is not None else None
             ),
-            "relaxed_metrics": self.relaxed_metrics.to_dict(),
+            "restriction_metrics": self.restriction_metrics.to_dict(),
             "rounded_metrics": self.rounded_metrics.to_dict(),
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
         }
+
+    @property
+    def gcs_active_edges(self) -> Optional[List[str]]:
+        if self.gcs_edge_flows is None:
+            return None
+        else:
+            return list(self.gcs_edge_flows.keys())
 
     @property
     def num_modes(self) -> int:
@@ -592,7 +599,7 @@ class FootstepPlanResult:
         )
 
     def save_relaxed_animation(self, output_file: str) -> None:
-        self._save_anim(self.relaxed_plan, output_file)
+        self._save_anim(self.restriction_plan, output_file)
 
     def save_rounded_animation(self, output_file: str) -> None:
         self._save_anim(self.rounded_plan, output_file)
@@ -602,7 +609,7 @@ class FootstepPlanResult:
             plot_relaxation_errors,
         )
 
-        plot_relaxation_errors(self.relaxed_plan, output_file=output_file)
+        plot_relaxation_errors(self.restriction_plan, output_file=output_file)
 
     def save_analysis_to_folder(self, folder: str) -> None:
         """
@@ -616,9 +623,9 @@ class FootstepPlanResult:
         self.config.save(str(path / "config.yaml"))
         self.terrain.save(str(path / "terrain.yaml"))
 
-        if self.relaxed_metrics.success:
+        if self.restriction_metrics.success:
             self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
-            self.relaxed_plan.save(str(path / "relaxed_plan.pkl"))
+            self.restriction_plan.save(str(path / "relaxed_plan.pkl"))
             self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
 
         if self.rounded_metrics.success:

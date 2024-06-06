@@ -203,12 +203,16 @@ def plot_relaxation_errors(
 def plot_relaxation_vs_rounding_bar_plot(
     plan_results: List[FootstepPlanResult],
     filename: Optional[str] = None,
+    best_idx: Optional[int] = None,
 ) -> None:
     # Plot histogram over costs
-    gcs_times = [res.gcs_metrics.solve_time for res in plan_results]
-    gcs_costs = [res.gcs_metrics.cost for res in plan_results]
-    relaxed_costs = [res.relaxed_metrics.cost for res in plan_results]
-    relaxed_times = [res.relaxed_metrics.solve_time for res in plan_results]
+    for res in plan_results:
+        assert res.gcs_metrics is not None
+
+    gcs_times = [res.gcs_metrics.solve_time for res in plan_results]  # type: ignore
+    gcs_costs = [res.gcs_metrics.cost for res in plan_results]  # type: ignore
+    relaxed_costs = [res.restriction_metrics.cost for res in plan_results]
+    relaxed_times = [res.restriction_metrics.solve_time for res in plan_results]
 
     rounded_costs = [res.rounded_metrics.cost for res in plan_results]
     rounded_times = [res.rounded_metrics.solve_time for res in plan_results]
@@ -217,7 +221,7 @@ def plot_relaxation_vs_rounding_bar_plot(
 
     fig, axs = plt.subplots(2, 1, figsize=(6, 8))
 
-    def _plot_bar_plot_pair(ax, categories, values):
+    def _plot_bar_plot_pair(ax, categories, values, best_idx):
 
         # Number of categories
         n = len(values[0])
@@ -230,10 +234,11 @@ def plot_relaxation_vs_rounding_bar_plot(
         width = 0.8 / num_categories  # Total width divided by number of categories
 
         # Plotting the bars
+        bars = []
         for i, (category, value) in enumerate(zip(categories, values)):
             # Calculate the position for each category's bars
             position = ind - (0.8 - width) / 2 + i * width
-            ax.bar(position, value, width, label=category)
+            bars.append(ax.bar(position, value, width, label=category))
 
         # Adding labels and titles
         ax.legend()
@@ -241,15 +246,48 @@ def plot_relaxation_vs_rounding_bar_plot(
         # Set x-axis to be integer
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
+        # Set x-ticks to match the number of bars
+        ax.set_xticks(ind)
+        ax.set_xticklabels([str(i) for i in range(n)])
+
+        # Highlight the best index label
+        if best_idx is not None:
+            xticklabels = ax.get_xticklabels()
+            for label in xticklabels:
+                if label.get_text() == str(best_idx):
+                    label.set_color("green")
+                    label.set_fontweight("bold")
+
+        # Add text annotations with height of bars for the categories
+        for category in categories:
+            cat_idx = categories.index(category)
+            for bar in bars[cat_idx]:
+                height = bar.get_height()
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    height,
+                    f"{height:.2f}",
+                    ha="center",
+                    va="bottom",
+                    rotation=45,
+                    color=bar.get_facecolor(),
+                )
+
     axs[0].set_title("Costs")
     _plot_bar_plot_pair(
-        axs[0], ["gcs", "relaxed", "rounded"], [gcs_costs, relaxed_costs, rounded_costs]
+        axs[0],
+        ["gcs", "relaxed", "rounded"],
+        [gcs_costs, relaxed_costs, rounded_costs],
+        best_idx,
     )
 
     axs[1].set_title("Solve times")
     axs[1].set_ylabel("Time [s]")
     _plot_bar_plot_pair(
-        axs[1], ["gcs", "relaxed", "rounded"], [gcs_times, relaxed_times, rounded_times]
+        axs[1],
+        ["gcs", "relaxed", "rounded"],
+        [gcs_times, relaxed_times, rounded_times],
+        best_idx,
     )
 
     fig.tight_layout()

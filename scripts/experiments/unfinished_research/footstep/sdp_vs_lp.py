@@ -42,12 +42,10 @@ def plan(
     use_lp: bool,
     output_dir: Path,
     debug: bool = False,
-) -> Tuple[FootstepPlanResult, List[FootstepPlanResult]]:
+) -> Tuple[FootstepPlanResult, List[FootstepPlanResult], int]:
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(
-        robot=robot, use_lp_approx=use_lp, max_rounded_paths=10
-    )
+    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=use_lp, max_rounded_paths=5)
 
     terrain, initial_stone, target_stone = terrain_and_stones
 
@@ -84,7 +82,7 @@ def plan(
 
     best_result = planner.get_best_result()
     results = planner.get_results()
-    return best_result, results
+    return best_result, results, planner.best_idx
 
 
 def main(output_dir: Path, debug: bool = False) -> None:
@@ -93,14 +91,21 @@ def main(output_dir: Path, debug: bool = False) -> None:
 
     for terrain, name in zip(terrains, names):
         logger.info(f"## Terrain: {name} ##")
-        result_lp, results_lp = plan(terrain, True, output_dir / name, debug)
+        result_lp, results_lp, best_idx_lp = plan(
+            terrain, True, output_dir / name, debug
+        )
         assert result_lp.gcs_metrics is not None
 
-        result_sdp, results_sdp = plan(terrain, False, output_dir / name, debug)
+        result_sdp, results_sdp, best_idx_sdp = plan(
+            terrain, False, output_dir / name, debug
+        )
         assert result_sdp.gcs_metrics is not None
 
         logger.info(f" - LP num found paths: {len(results_lp)}")
         logger.info(f" - SDP num found paths: {len(results_sdp)}\n")
+
+        logger.info(f" - LP best path: {best_idx_lp}")
+        logger.info(f" - SDP best path: {best_idx_sdp}\n")
 
         logger.info(f" - LP best path length: {result_lp.num_modes}")
         logger.info(f" - SDP best path length: {result_sdp.num_modes}\n")
@@ -109,10 +114,10 @@ def main(output_dir: Path, debug: bool = False) -> None:
         logger.info(f" - SDP GCS time: {result_sdp.gcs_metrics.solve_time :.3f} s\n")
 
         logger.info(
-            f" - LP relaxed solve time: {result_lp.relaxed_metrics.solve_time:.3f} s"
+            f" - LP restriction solve time: {result_lp.restriction_metrics.solve_time:.3f} s"
         )
         logger.info(
-            f" - SDP relaxed solve time: {result_sdp.relaxed_metrics.solve_time:.3f} s\n"
+            f" - SDP restriction solve time: {result_sdp.restriction_metrics.solve_time:.3f} s\n"
         )
 
         logger.info(
@@ -120,6 +125,16 @@ def main(output_dir: Path, debug: bool = False) -> None:
         )
         logger.info(
             f" - SDP rounding time: {result_sdp.rounded_metrics.solve_time:.3f} s\n"
+        )
+
+        logger.info(f" - LP GCS cost: {result_lp.gcs_metrics.cost :.3f}")
+        logger.info(f" - SDP GCS cost: {result_lp.gcs_metrics.cost :.3f}\n")
+
+        logger.info(
+            f" - LP restriction cost: {result_lp.restriction_metrics.cost :.3f}"
+        )
+        logger.info(
+            f" - SDP restriction cost: {result_lp.restriction_metrics.cost :.3f}\n"
         )
 
         logger.info(f" - LP rounded cost: {result_lp.rounded_metrics.cost :.3f}")
