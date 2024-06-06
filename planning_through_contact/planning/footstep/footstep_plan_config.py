@@ -55,6 +55,7 @@ class FootstepPlanningConfig:
     period_steps: int = 3
     use_lp_approx: bool = False
     use_convex_concave: bool = False
+    max_rounded_paths: int = 10
 
     @property
     def dt(self) -> float:

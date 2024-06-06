@@ -15,6 +15,7 @@ from pydrake.solvers import (
     MathematicalProgramResult,
     PositiveSemidefiniteConstraint,
     QuadraticConstraint,
+    SemidefiniteRelaxationOptions,
     SnoptSolver,
 )
 from pydrake.symbolic import DecomposeAffineExpressions, Expression, Variable, Variables
@@ -513,52 +514,76 @@ class FootstepPlanResult:
 
     terrain: InPlaneTerrain
     config: FootstepPlanningConfig
-    relaxed_plan: FootstepPlan
-    relaxed_metrics: PlanMetrics
+    restriction_plan: FootstepPlan
+    restriction_metrics: PlanMetrics
     rounded_plan: FootstepPlan  # NOTE(bernhardpg): It would not be hard to extend this with multiple rounded results
     rounded_metrics: PlanMetrics
     gcs_edge_flows: Optional[Dict[str, float]] = None
+    gcs_metrics: Optional[PlanMetrics] = None
 
     @property
-    def ub_relaxation_gap_pct(self) -> float:
-        return (
-            (self.rounded_metrics.cost - self.relaxed_metrics.cost)
-            / self.relaxed_metrics.cost
-        ) * 100
+    def ub_relaxation_gap_pct(self) -> Optional[float]:
+        if self.gcs_metrics is None:
+            return None
+        else:
+            return (
+                (self.rounded_metrics.cost - self.gcs_metrics.cost)
+                / self.gcs_metrics.cost
+            ) * 100
 
     @classmethod
     def from_results(
         cls,
         terrain: InPlaneTerrain,
         config: FootstepPlanningConfig,
-        relaxed_res: MathematicalProgramResult,
-        relaxed_plan: FootstepPlan,
+        restriction_res: MathematicalProgramResult,
+        restriction_plan: FootstepPlan,
         rounded_res: MathematicalProgramResult,
         rounded_plan: FootstepPlan,
         snopt_time: float,
         gcs_edge_flows: Optional[Dict[str, float]] = None,
+        gcs_res: Optional[MathematicalProgramResult] = None,
     ) -> "FootstepPlanResult":
-        relaxed_metrics = PlanMetrics.from_result(relaxed_res)
+        restriction_metrics = PlanMetrics.from_result(restriction_res)
         rounded_metrics = PlanMetrics.from_result(
             rounded_res, snopt_solve_time=snopt_time
         )
+        gcs_metrics = PlanMetrics.from_result(gcs_res) if gcs_res is not None else None
         return cls(
             terrain,
             config,
-            relaxed_plan,
-            relaxed_metrics,
+            restriction_plan,
+            restriction_metrics,
             rounded_plan,
             rounded_metrics,
             gcs_edge_flows,
+            gcs_metrics,
         )
 
     def to_metrics_dict(self) -> dict:
         return {
             "gcs_edge_flows": self.gcs_edge_flows,
-            "relaxed_metrics": self.relaxed_metrics.to_dict(),
+            "gcs_metrics": (
+                self.gcs_metrics.to_dict() if self.gcs_metrics is not None else None
+            ),
+            "restriction_metrics": self.restriction_metrics.to_dict(),
             "rounded_metrics": self.rounded_metrics.to_dict(),
             "ub_relaxation_gap_pct": self.ub_relaxation_gap_pct,
         }
+
+    @property
+    def gcs_active_edges(self) -> Optional[List[str]]:
+        if self.gcs_edge_flows is None:
+            return None
+        else:
+            return list(self.gcs_edge_flows.keys())
+
+    @property
+    def num_modes(self) -> int:
+        if self.gcs_edge_flows is None:
+            raise RuntimeError("Cannot get num_modes when there is no gcs result")
+
+        return len(self.gcs_edge_flows)
 
     def save_metrics_to_yaml(self, file_path: str) -> None:
         with open(file_path, "w") as yaml_file:
@@ -574,7 +599,7 @@ class FootstepPlanResult:
         )
 
     def save_relaxed_animation(self, output_file: str) -> None:
-        self._save_anim(self.relaxed_plan, output_file)
+        self._save_anim(self.restriction_plan, output_file)
 
     def save_rounded_animation(self, output_file: str) -> None:
         self._save_anim(self.rounded_plan, output_file)
@@ -584,7 +609,7 @@ class FootstepPlanResult:
             plot_relaxation_errors,
         )
 
-        plot_relaxation_errors(self.relaxed_plan, output_file=output_file)
+        plot_relaxation_errors(self.restriction_plan, output_file=output_file)
 
     def save_analysis_to_folder(self, folder: str) -> None:
         """
@@ -598,14 +623,43 @@ class FootstepPlanResult:
         self.config.save(str(path / "config.yaml"))
         self.terrain.save(str(path / "terrain.yaml"))
 
-        if self.relaxed_metrics.success:
+        if self.restriction_metrics.success:
             self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
-            self.relaxed_plan.save(str(path / "relaxed_plan.pkl"))
+            self.restriction_plan.save(str(path / "relaxed_plan.pkl"))
             self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
 
         if self.rounded_metrics.success:
             self.save_rounded_animation(str(path / "rounded_traj.mp4"))
             self.rounded_plan.save(str(path / "rounded_plan.pkl"))
+
+    def get_unique_gcs_name(self) -> str:
+        """
+        Assigns this result a unique name based on the GCS Edges that it traverses.
+        Every path with the same sequence of edges will be given this name.
+        """
+
+        def _hash_edges(edge_list: List[str]) -> str:
+            import hashlib
+
+            # Convert the list to a string
+            edge_string = ",".join(edge_list)
+
+            # Create a hash object
+            hash_object = hashlib.md5(edge_string.encode())
+
+            # Get the hexadecimal digest of the hash
+            hash_hex = hash_object.hexdigest()
+
+            # Optionally, shorten the hash to use as a unique name
+            unique_name = hash_hex[:8]  # Using the first 8 characters for brevity
+
+            return unique_name
+
+        if self.gcs_active_edges is None:
+            raise RuntimeError("Cannot assign name when GCS edges are not provided.")
+
+        hash = _hash_edges(self.gcs_active_edges)
+        return hash
 
 
 @dataclass
@@ -1156,11 +1210,16 @@ class FootstepPlanSegmentProgram:
         self,
         trace_cost: bool = False,
         use_groups: bool = True,
+        no_implied_constraints: bool = True,  # TODO(bernhardpg)
     ) -> MathematicalProgram:
         # Already convex
         if self.config.use_convex_concave:
             self.relaxed_prog = self.prog
             return self.relaxed_prog
+
+        options = SemidefiniteRelaxationOptions()
+        if no_implied_constraints:
+            options.set_to_weakest()
 
         if use_groups:
             if self.num_states == self.num_inputs:
@@ -1169,8 +1228,6 @@ class FootstepPlanSegmentProgram:
                     for k in range(self.num_states - 1)
                 ]
             else:
-                # TODO(bernhardpg): Make sure that this grouping is the correct one!
-
                 # We have N states and N - 1 inputs
                 variable_groups = [
                     Variables(np.concatenate([self.get_vars(k), self.get_vars(k + 1)]))
@@ -1179,9 +1236,13 @@ class FootstepPlanSegmentProgram:
                 variable_groups.append(
                     Variables(self.get_state(self.num_states - 1))
                 )  # add the last state
+
+            assert self.num_states - 1 == len(variable_groups)
+
             self.relaxed_prog = MakeSemidefiniteRelaxation(
-                self.prog, variable_groups=variable_groups
+                self.prog, variable_groups=variable_groups, options=options
             )
+
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
         if trace_cost:

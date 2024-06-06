@@ -5,6 +5,7 @@ from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import pydot
+from matplotlib.ticker import MaxNLocator
 from pydrake.geometry.optimization import (
     GraphOfConvexSets,
     GraphOfConvexSetsOptions,
@@ -35,6 +36,9 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
+from planning_through_contact.visualize.footstep_visualizer import (
+    plot_relaxation_vs_rounding_bar_plot,
+)
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
@@ -304,6 +308,7 @@ class FootstepPlanner:
         self.stones = terrain.stepping_stones
         self.robot = config.robot
 
+        self.gcs_result = None
         self.segments_per_stone = self._make_segments_for_terrain()
 
         self.gcs = GraphOfConvexSets()
@@ -624,14 +629,20 @@ class FootstepPlanner:
         self,
         filename: Optional[str] = None,
         result: Optional[MathematicalProgramResult] = None,
+        active_path: Optional[List[GcsEdge]] = None,
     ) -> pydot.Dot:
         """
         Optionally saves the graph to file if a string is given for the 'filepath' argument.
         """
         graphviz = self.gcs.GetGraphvizString(
-            precision=2, result=result, show_slacks=False
+            precision=2,
+            result=result,
+            show_slacks=False,
+            active_path=active_path,
+            show_vars=False,
+            show_costs=True,
+            show_flows=True,
         )
-
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filename is not None:
             if "pdf" in filename:
@@ -673,7 +684,6 @@ class FootstepPlanner:
     ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
-        MAX_ROUNDED_PATHS = 3
 
         mosek = MosekSolver()
         options.solver = mosek
@@ -703,6 +713,7 @@ class FootstepPlanner:
         options.max_rounded_paths = 0
 
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
+        self.gcs_result = gcs_result
 
         assert gcs_result.is_success()
         # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
@@ -714,7 +725,7 @@ class FootstepPlanner:
             flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
-        options.max_rounded_paths = MAX_ROUNDED_PATHS
+        options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
         relaxed_results = [
             self.gcs.SolveConvexRestriction(path, options) for path in paths
@@ -726,7 +737,7 @@ class FootstepPlanner:
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
-            if idx >= MAX_ROUNDED_PATHS:
+            if idx >= self.config.max_rounded_paths:
                 break
             curr_plan_rounder = FootstepPlanRounder(
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
@@ -754,25 +765,71 @@ class FootstepPlanner:
                 rounded_plan,
                 elapsed_time,
                 edge_flows,
+                gcs_result,
             )
             plan_results.append(res)
 
-        self.best_idx = np.argmin([res.rounded_metrics.cost for res in plan_results])
+        self.best_idx = int(
+            np.argmin([res.rounded_metrics.cost for res in plan_results])
+        )
         self.plan_results = plan_results
         self.best_result = self.plan_results[self.best_idx]
 
         return self.best_result.rounded_plan
 
+    def get_results(self) -> List[FootstepPlanResult]:
+        if self.plan_results is None:
+            raise RuntimeError(
+                "Need to first generate plans before getting results. Run planner.plan()"
+            )
+        return self.plan_results
+
+    def get_best_result(self) -> FootstepPlanResult:
+        if self.best_result is None:
+            raise RuntimeError(
+                "Need to first generate plans before getting results. Run planner.plan()"
+            )
+        return self.best_result
+
     def save_analysis(self, output_dir: str) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
-        self.create_graph_diagram(output_dir + "/" + "gcs.pdf")
+
+        assert self.gcs_result is not None
+        self.create_graph_diagram(output_dir + "/" + "graph.pdf")
+        self.create_graph_diagram(
+            output_dir + "/" + "graph_with_flows.pdf", result=self.gcs_result
+        )
+
+        self.config.save(str(output_dir_path / "config.yaml"))
+        self.terrain.save(str(output_dir_path / "terrain.yaml"))
 
         assert self.plan_results is not None
 
         for idx, res in enumerate(self.plan_results):
-            res_output_dir = output_dir + "/" + str(idx)
+            # Use the unique name to save paths, so we can easily identify
+            # equal paths between different methods
+            res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
             if idx == self.best_idx:
                 res_output_dir += "_BEST"
 
             res.save_analysis_to_folder(res_output_dir)
+
+            def _find_edge_from_name(name: str) -> GcsEdge:
+                return next(e for e in self.gcs.Edges() if e.name() == name)
+
+            active_path = [
+                _find_edge_from_name(e_name) for e_name in res.gcs_active_edges
+            ]
+
+            self.create_graph_diagram(
+                res_output_dir + "/" + "graph_path.pdf",
+                result=self.gcs_result,
+                active_path=active_path,
+            )
+
+        plot_relaxation_vs_rounding_bar_plot(
+            self.plan_results,
+            str(Path(output_dir) / "paths_cost_and_solve_times.pdf"),
+            self.best_result.get_unique_gcs_name(),
+        )
