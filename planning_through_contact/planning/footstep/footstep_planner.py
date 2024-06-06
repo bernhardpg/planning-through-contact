@@ -36,6 +36,7 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
+from planning_through_contact.tools.gcs_tools import hash_gcs_edges
 from planning_through_contact.visualize.footstep_visualizer import (
     plot_relaxation_vs_rounding_bar_plot,
 )
@@ -245,15 +246,24 @@ class FootstepPlanRounder:
         return vertex_var_vals
 
     def round(
-        self, save_output: bool = False, use_custom_tolerance: bool = False
+        self,
+        save_solver_output: bool = False,
+        use_custom_tolerance: bool = False,
+        output_dir: Optional[Path] = None,
     ) -> MathematicalProgramResult:
         snopt = SnoptSolver()
 
         solver_options = SolverOptions()
-        if save_output:
+        if save_solver_output:
+
+            if output_dir is None:
+                raise RuntimeError(
+                    "Output dir must not be none when saving SNOPT output."
+                )
+
             import os
 
-            snopt_log_path = "footstep_snopt_log.txt"
+            snopt_log_path = str(output_dir / "rounding_snopt_log.log")
             # Delete log file if it already exists as Snopt just keeps writing to the same file
             if os.path.exists(snopt_log_path):
                 os.remove(snopt_log_path)
@@ -322,7 +332,10 @@ class FootstepPlanner:
         for stone, segments_for_stone in zip(self.stones, self.segments_per_stone):
             self.segment_vertex_pairs_per_stone[stone.name] = (
                 self._add_segments_as_vertices(
-                    self.gcs, segments_for_stone, self.config.use_lp_approx
+                    self.gcs,
+                    segments_for_stone,
+                    self.config.use_lp_approx,
+                    self.config.use_implied_constraints,
                 )
             )
 
@@ -431,9 +444,16 @@ class FootstepPlanner:
         gcs: GraphOfConvexSets,
         segments: List[FootstepPlanSegmentProgram],
         use_lp_approx: bool = False,
+        use_implied_constraints: bool = False,
     ) -> Dict[str, VertexSegmentPair]:
         vertices = [
-            gcs.AddVertex(s.get_convex_set(use_lp_approx=use_lp_approx), name=s.name)
+            gcs.AddVertex(
+                s.get_convex_set(
+                    use_lp_approx=use_lp_approx,
+                    use_implied_constraints=use_implied_constraints,
+                ),
+                name=s.name,
+            )
             for s in segments
         ]
         pairs = {s.name: VertexSegmentPair(v, s) for v, s in zip(vertices, segments)}
@@ -738,22 +758,28 @@ class FootstepPlanner:
         options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
 
+        def _make_path_output_dir(output_dir, active_edges):
+            # We change the options so we can change the mosek output for each path to its name
+            unique_path_name = hash_gcs_edges([e.name() for e in active_edges])
+            path_output_dir = output_dir / unique_path_name
+            path_output_dir.mkdir(exist_ok=True, parents=True)
+            return path_output_dir
+
         relaxed_results = []
-        for path in paths:
+        for active_edges in paths:
             if save_solver_output:
                 assert output_dir is not None
 
-                # We change the options so we can change the mosek output for each path to its name
-                unique_path_name = hash_gcs_edges([e.name() for e in path])
-                path_output_dir = output_dir / unique_path_name
-                path_output_dir.mkdir(exist_ok=True, parents=True)
+                path_output_dir = _make_path_output_dir(output_dir, active_edges)
                 options.solver_options.SetOption(CommonSolverOption.kPrintFileName, str(path_output_dir / "restriction_mosek_log.log"))  # type: ignore
 
-            relaxed_result = self.gcs.SolveConvexRestriction(path, options)
+            relaxed_result = self.gcs.SolveConvexRestriction(active_edges, options)
+            relaxed_results.append(relaxed_result)
 
         plan_results = []
         if print_debug:
             print(f"Rounding {len(paths)} possible GCS paths...")
+
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
@@ -763,8 +789,12 @@ class FootstepPlanner:
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
 
+            path_output_dir = _make_path_output_dir(output_dir, active_edges)
+
             start_time = time.time()
-            rounded_result = curr_plan_rounder.round()
+            rounded_result = curr_plan_rounder.round(
+                save_solver_output=True, output_dir=path_output_dir
+            )
             elapsed_time = time.time() - start_time
             rounded_plan = curr_plan_rounder.get_plan(rounded_result)
 
@@ -830,8 +860,6 @@ class FootstepPlanner:
             # Use the unique name to save paths, so we can easily identify
             # equal paths between different methods
             res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
-            if idx == self.best_idx:
-                res_output_dir += "_BEST"
 
             res.save_analysis_to_folder(res_output_dir)
 
@@ -847,6 +875,10 @@ class FootstepPlanner:
                 result=self.gcs_result,
                 active_path=active_path,
             )
+
+            # Rename best directory with _BEST appended
+            if idx == self.best_idx:
+                Path(res_output_dir).rename(res_output_dir + "_BEST")
 
         plot_relaxation_vs_rounding_bar_plot(
             self.plan_results,

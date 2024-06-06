@@ -42,10 +42,15 @@ def plan(
     use_lp: bool,
     output_dir: Path,
     debug: bool = False,
-) -> Tuple[FootstepPlanResult, List[FootstepPlanResult], int]:
+) -> Tuple[FootstepPlanResult, List[FootstepPlanResult]]:
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=use_lp, max_rounded_paths=5)
+    cfg = FootstepPlanningConfig(
+        robot=robot,
+        use_lp_approx=use_lp,
+        max_rounded_paths=10,
+        use_implied_constraints=False,
+    )
 
     terrain, initial_stone, target_stone = terrain_and_stones
 

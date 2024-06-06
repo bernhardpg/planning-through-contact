@@ -1194,7 +1194,7 @@ class FootstepPlanSegmentProgram:
         self,
         trace_cost: bool = False,
         use_groups: bool = True,
-        no_implied_constraints: bool = True,  # TODO(bernhardpg)
+        use_implied_constraints: bool = False,
     ) -> MathematicalProgram:
         # Already convex
         if self.config.use_convex_concave:
@@ -1202,7 +1202,7 @@ class FootstepPlanSegmentProgram:
             return self.relaxed_prog
 
         options = SemidefiniteRelaxationOptions()
-        if no_implied_constraints:
+        if not use_implied_constraints:
             options.set_to_weakest()
 
         if use_groups:
@@ -1236,8 +1236,10 @@ class FootstepPlanSegmentProgram:
 
         return self.relaxed_prog
 
-    def get_convex_set(self, use_lp_approx: bool = False) -> Spectrahedron:
-        relaxed_prog = self.make_relaxed_prog()
+    def get_convex_set(
+        self, use_lp_approx: bool = False, use_implied_constraints: bool = False
+    ) -> Spectrahedron:
+        relaxed_prog = self.make_relaxed_prog(use_implied_constraints)
 
         if use_lp_approx:
             for psd_constraint in relaxed_prog.positive_semidefinite_constraints():

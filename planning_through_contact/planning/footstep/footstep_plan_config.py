@@ -56,6 +56,7 @@ class FootstepPlanningConfig:
     use_lp_approx: bool = False
     use_convex_concave: bool = False
     max_rounded_paths: int = 10
+    use_implied_constraints: bool = False
 
     @property
     def dt(self) -> float:
