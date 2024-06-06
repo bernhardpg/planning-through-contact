@@ -632,6 +632,35 @@ class FootstepPlanResult:
             self.save_rounded_animation(str(path / "rounded_traj.mp4"))
             self.rounded_plan.save(str(path / "rounded_plan.pkl"))
 
+    def get_unique_gcs_name(self) -> str:
+        """
+        Assigns this result a unique name based on the GCS Edges that it traverses.
+        Every path with the same sequence of edges will be given this name.
+        """
+
+        def _hash_edges(edge_list: List[str]) -> str:
+            import hashlib
+
+            # Convert the list to a string
+            edge_string = ",".join(edge_list)
+
+            # Create a hash object
+            hash_object = hashlib.md5(edge_string.encode())
+
+            # Get the hexadecimal digest of the hash
+            hash_hex = hash_object.hexdigest()
+
+            # Optionally, shorten the hash to use as a unique name
+            unique_name = hash_hex[:8]  # Using the first 8 characters for brevity
+
+            return unique_name
+
+        if self.gcs_active_edges is None:
+            raise RuntimeError("Cannot assign name when GCS edges are not provided.")
+
+        hash = _hash_edges(self.gcs_active_edges)
+        return hash
+
 
 @dataclass
 class FootstepPlanSegmentProgram:

@@ -203,7 +203,7 @@ def plot_relaxation_errors(
 def plot_relaxation_vs_rounding_bar_plot(
     plan_results: List[FootstepPlanResult],
     filename: Optional[str] = None,
-    best_idx: Optional[int] = None,
+    best_res: Optional[str] = None,
 ) -> None:
     # Plot histogram over costs
     for res in plan_results:
@@ -217,11 +217,11 @@ def plot_relaxation_vs_rounding_bar_plot(
     rounded_costs = [res.rounded_metrics.cost for res in plan_results]
     rounded_times = [res.rounded_metrics.solve_time for res in plan_results]
 
-    import matplotlib.pyplot as plt
-
     fig, axs = plt.subplots(2, 1, figsize=(6, 8))
 
-    def _plot_bar_plot_pair(ax, categories, values, best_idx):
+    unique_names = [res.get_unique_gcs_name() for res in plan_results]
+
+    def _plot_bar_plot_pair(ax, categories, values, best_res):
 
         # Number of categories
         n = len(values[0])
@@ -243,18 +243,15 @@ def plot_relaxation_vs_rounding_bar_plot(
         # Adding labels and titles
         ax.legend()
 
-        # Set x-axis to be integer
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-
         # Set x-ticks to match the number of bars
         ax.set_xticks(ind)
-        ax.set_xticklabels([str(i) for i in range(n)])
+        ax.set_xticklabels(unique_names, rotation=45, ha="right")
 
         # Highlight the best index label
-        if best_idx is not None:
+        if best_res is not None:
             xticklabels = ax.get_xticklabels()
             for label in xticklabels:
-                if label.get_text() == str(best_idx):
+                if label.get_text() == best_res:
                     label.set_color("green")
                     label.set_fontweight("bold")
 
@@ -278,7 +275,7 @@ def plot_relaxation_vs_rounding_bar_plot(
         axs[0],
         ["gcs", "relaxed", "rounded"],
         [gcs_costs, relaxed_costs, rounded_costs],
-        best_idx,
+        best_res,
     )
 
     axs[1].set_title("Solve times")
@@ -287,7 +284,7 @@ def plot_relaxation_vs_rounding_bar_plot(
         axs[1],
         ["gcs", "relaxed", "rounded"],
         [gcs_times, relaxed_times, rounded_times],
-        best_idx,
+        best_res,
     )
 
     fig.tight_layout()

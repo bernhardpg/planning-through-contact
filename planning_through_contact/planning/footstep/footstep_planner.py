@@ -801,7 +801,9 @@ class FootstepPlanner:
         assert self.plan_results is not None
 
         for idx, res in enumerate(self.plan_results):
-            res_output_dir = output_dir + "/" + str(idx)
+            # Use the unique name to save paths, so we can easily identify
+            # equal paths between different methods
+            res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
             if idx == self.best_idx:
                 res_output_dir += "_BEST"
 
@@ -823,5 +825,5 @@ class FootstepPlanner:
         plot_relaxation_vs_rounding_bar_plot(
             self.plan_results,
             str(Path(output_dir) / "paths_cost_and_solve_times.pdf"),
-            self.best_idx,
+            self.best_result.get_unique_gcs_name(),
         )
