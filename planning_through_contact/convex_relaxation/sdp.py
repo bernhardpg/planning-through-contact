@@ -10,7 +10,13 @@ from pydrake.solvers import (
     Binding,
     LinearConstraint,
     LinearEqualityConstraint,
+    MakeSemidefiniteRelaxation,
     MathematicalProgram,
+    MathematicalProgramResult,
+    PositiveSemidefiniteConstraint,
+    QuadraticConstraint,
+    SemidefiniteRelaxationOptions,
+    SnoptSolver,
     Solve,
 )
 
@@ -404,6 +410,8 @@ def eliminate_equality_constraints(
     return new_prog, get_x_from_z
 
 
+# WARNING: This is no longer used. Instead, we use the builtin Drake function
+# `MakeSemidefiniteRelaxation`.
 def create_sdp_relaxation(
     prog: MathematicalProgram,
     use_linear_relaxation: bool = False,
@@ -564,3 +572,42 @@ def create_sdp_relaxation(
                 relaxed_prog.AddLinearConstraint(c)
 
     return relaxed_prog, X, basis
+
+
+def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
+    assert len(relaxation.positive_semidefinite_constraints()) == 1
+    X = relaxation.positive_semidefinite_constraints()[0].variables()
+    N = np.sqrt(len(X))
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+
+    return X
+
+
+def get_X_from_psd_constraint(binding) -> npt.NDArray:
+    assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
+    X = binding.variables()
+    N = np.sqrt(len(X))
+    assert int(N) == N
+    X = X.reshape((int(N), int(N)))
+
+    return X
+
+
+def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
+    """
+    Iterates through all the PSD constraints on `prog` and replaces the PSD cone constraints
+    X ≽ 0 with with the constraints X_ii ≥ 0 for i = 1, …, N (which must be true for all PSD matrices)
+    """
+
+    for psd_constraint in prog.positive_semidefinite_constraints():
+        # TODO remove
+        # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
+        X = get_X_from_psd_constraint(psd_constraint)
+        prog.RemoveConstraint(psd_constraint)  # type: ignore
+        N = X.shape[0]
+        for i in range(N):
+            X_i = X[i, i]
+            # if i == N - 1:
+            #     continue  # skip 'one' == 1
+            prog.AddLinearConstraint(X_i >= 0)

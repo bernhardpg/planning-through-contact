@@ -26,6 +26,10 @@ from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxat
 from planning_through_contact.convex_relaxation.convex_concave import (
     cross_product_2d_as_convex_concave,
 )
+from planning_through_contact.convex_relaxation.sdp import (
+    approximate_sdp_cones_with_linear_cones,
+    get_X_from_semidefinite_relaxation,
+)
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     LinTrajSegment,
     TrajType,
@@ -44,27 +48,6 @@ from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
-
-
-# TODO move this to a utils file
-def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
-    assert len(relaxation.positive_semidefinite_constraints()) == 1
-    X = relaxation.positive_semidefinite_constraints()[0].variables()
-    N = np.sqrt(len(X))
-    assert int(N) == N
-    X = X.reshape((int(N), int(N)))
-
-    return X
-
-
-def get_X_from_psd_constraint(binding) -> npt.NDArray:
-    assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
-    X = binding.variables()
-    N = np.sqrt(len(X))
-    assert int(N) == N
-    X = X.reshape((int(N), int(N)))
-
-    return X
 
 
 @dataclass
@@ -526,6 +509,8 @@ class FootstepPlanResult:
     def ub_relaxation_gap_pct(self) -> Optional[float]:
         if self.gcs_metrics is None:
             return None
+        elif self.gcs_metrics.cost == 0:
+            return np.NaN
         else:
             return (
                 (self.rounded_metrics.cost - self.gcs_metrics.cost)
@@ -1192,6 +1177,7 @@ class FootstepPlanSegmentProgram:
 
     def make_relaxed_prog(
         self,
+        use_lp_approx: bool = False,
         trace_cost: bool = False,
         use_groups: bool = True,
         use_implied_constraints: bool = False,
@@ -1229,28 +1215,34 @@ class FootstepPlanSegmentProgram:
 
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
+
         if trace_cost:
+            # TODO: Move to PSD relaxation script
             X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
             EPS = 1e-6
             self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
+
+        if use_lp_approx:
+            approximate_sdp_cones_with_linear_cones(self.relaxed_prog)
 
         return self.relaxed_prog
 
     def get_convex_set(
         self, use_lp_approx: bool = False, use_implied_constraints: bool = False
     ) -> Spectrahedron:
-        relaxed_prog = self.make_relaxed_prog(use_implied_constraints)
+        relaxed_prog = self.make_relaxed_prog(
+            use_lp_approx=use_lp_approx, use_implied_constraints=use_implied_constraints
+        )
 
-        if use_lp_approx:
-            for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
-                # TODO remove
-                # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
-                X = get_X_from_psd_constraint(psd_constraint)
-                relaxed_prog.RemoveConstraint(psd_constraint)  # type: ignore
-                N = X.shape[0]
-                for i in range(N):
-                    X_i = X[i, i]
-                    relaxed_prog.AddLinearConstraint(X_i >= 0)
+        # TODO(bernhardpg): Remove
+        # for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
+        #     # TODO remove
+        #     # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
+        #     X = get_X_from_psd_constraint(psd_constraint)
+        #     N = X.shape[0]
+        #     for i in range(N):
+        #         X_i = X[i, i]
+        #         relaxed_prog.AddLinearConstraint(X_i >= 0)
 
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
