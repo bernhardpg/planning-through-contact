@@ -635,7 +635,13 @@ class FootstepPlanner:
         Optionally saves the graph to file if a string is given for the 'filepath' argument.
         """
         graphviz = self.gcs.GetGraphvizString(
-            precision=2, result=result, show_slacks=False, active_path=active_path
+            precision=2,
+            result=result,
+            show_slacks=False,
+            active_path=active_path,
+            show_vars=False,
+            show_costs=True,
+            show_flows=True,
         )
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         if filename is not None:
