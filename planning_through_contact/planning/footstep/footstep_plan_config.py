@@ -46,6 +46,18 @@ class FootstepCost:
     sq_acc_rot: Optional[float] = 1.0
     sq_nominal_pose: Optional[float] = 5.0
 
+    @classmethod
+    def with_none(cls) -> "FootstepCost":
+        return cls(
+            sq_force=None,
+            sq_torque=None,
+            sq_vel_lin=None,
+            sq_vel_rot=None,
+            sq_acc_lin=None,
+            sq_acc_rot=None,
+            sq_nominal_pose=None,
+        )
+
 
 @dataclass
 class FootstepPlanningConfig:

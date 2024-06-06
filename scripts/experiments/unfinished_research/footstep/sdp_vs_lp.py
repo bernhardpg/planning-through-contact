@@ -4,6 +4,7 @@ from typing import List, Tuple
 import numpy as np
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
+    FootstepCost,
     FootstepPlanningConfig,
     PotatoRobot,
 )
@@ -45,7 +46,9 @@ def plan(
 ) -> Tuple[FootstepPlanResult, List[FootstepPlanResult]]:
 
     robot = PotatoRobot()
+    cost = FootstepCost.with_none()
     cfg = FootstepPlanningConfig(
+        cost=cost,
         robot=robot,
         use_lp_approx=use_lp,
         max_rounded_paths=10,
