@@ -680,7 +680,9 @@ class FootstepPlanner:
         self,
         print_flows: bool = False,
         print_solver_output: bool = False,
+        save_solver_output: bool = False,
         print_debug: bool = False,
+        output_dir: Optional[Path] = None,
     ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
         options.convex_relaxation = True
@@ -691,6 +693,15 @@ class FootstepPlanner:
 
         if print_solver_output:
             options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+        if save_solver_output:
+            if output_dir is None:
+                raise RuntimeError(
+                    "Needs an output directory when saving solver output"
+                )
+
+            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 0)  # type: ignore
+            options.solver_options.SetOption(CommonSolverOption.kPrintFileName, str(output_dir / "gcs_mosek_log.log"))  # type: ignore
 
         # tolerance = 1e-6
         # mosek = MosekSolver()
@@ -716,7 +727,6 @@ class FootstepPlanner:
         self.gcs_result = gcs_result
 
         assert gcs_result.is_success()
-        # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
         if print_flows or print_debug:
             flows = [
@@ -727,9 +737,19 @@ class FootstepPlanner:
 
         options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
-        relaxed_results = [
-            self.gcs.SolveConvexRestriction(path, options) for path in paths
-        ]
+
+        relaxed_results = []
+        for path in paths:
+            if save_solver_output:
+                assert output_dir is not None
+
+                # We change the options so we can change the mosek output for each path to its name
+                unique_path_name = hash_gcs_edges([e.name() for e in path])
+                path_output_dir = output_dir / unique_path_name
+                path_output_dir.mkdir(exist_ok=True, parents=True)
+                options.solver_options.SetOption(CommonSolverOption.kPrintFileName, str(path_output_dir / "restriction_mosek_log.log"))  # type: ignore
+
+            relaxed_result = self.gcs.SolveConvexRestriction(path, options)
 
         plan_results = []
         if print_debug:

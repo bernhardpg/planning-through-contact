@@ -39,6 +39,7 @@ from planning_through_contact.planning.footstep.in_plane_terrain import (
     InPlaneSteppingStone,
     InPlaneTerrain,
 )
+from planning_through_contact.tools.gcs_tools import hash_gcs_edges
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
@@ -638,27 +639,10 @@ class FootstepPlanResult:
         Every path with the same sequence of edges will be given this name.
         """
 
-        def _hash_edges(edge_list: List[str]) -> str:
-            import hashlib
-
-            # Convert the list to a string
-            edge_string = ",".join(edge_list)
-
-            # Create a hash object
-            hash_object = hashlib.md5(edge_string.encode())
-
-            # Get the hexadecimal digest of the hash
-            hash_hex = hash_object.hexdigest()
-
-            # Optionally, shorten the hash to use as a unique name
-            unique_name = hash_hex[:8]  # Using the first 8 characters for brevity
-
-            return unique_name
-
         if self.gcs_active_edges is None:
             raise RuntimeError("Cannot assign name when GCS edges are not provided.")
 
-        hash = _hash_edges(self.gcs_active_edges)
+        hash = hash_gcs_edges(self.gcs_active_edges)
         return hash
 
 
