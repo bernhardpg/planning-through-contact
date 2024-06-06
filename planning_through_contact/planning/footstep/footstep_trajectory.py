@@ -1236,16 +1236,11 @@ class FootstepPlanSegmentProgram:
                 variable_groups.append(
                     Variables(self.get_state(self.num_states - 1))
                 )  # add the last state
-                # TODO(bernhardpg): Make sure that this grouping is the correct one!
-                raise NotImplementedError(
-                    "Variable grouping with N states and N-1 inputs is not yet supported (needs to be verified)"
-                )
+
+            assert self.num_states - 1 == len(variable_groups)
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(
                 self.prog, variable_groups=variable_groups, options=options
-            )
-            assert len(self.relaxed_prog.positive_semidefinite_constraints()) == len(
-                variable_groups
             )
 
         else:
