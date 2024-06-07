@@ -309,6 +309,95 @@ class FootstepPlanRounder:
             self.rounded_result.SetSolution(var, val)
         return self.get_plan(self.rounded_result)
 
+    def save_tightness_analysis(self, output_dir: Path) -> None:
+        import matplotlib.pyplot as plt
+
+        def _eval_X(constraint, p):
+            X = get_X_from_psd_constraint(constraint)
+            X_res = p.evaluate_vars_with_result(X, self.relaxed_result)
+            return X_res
+
+        Xs = {
+            p.s.name: [
+                _eval_X(constraint, p)
+                for constraint in p.s.relaxed_prog.positive_semidefinite_constraints()
+            ]
+            for p in self.active_pairs
+        }
+
+        eigvals_per_segment = {
+            name: [list(reversed(sorted(np.linalg.eigvals(X)))) for X in X_list]
+            for name, X_list in Xs.items()
+        }
+
+        eigs_output_dir = output_dir / "eigenvalues"
+        eigs_output_dir.mkdir(exist_ok=True, parents=True)
+
+        for name, eigs in eigvals_per_segment.items():
+            # If we don't have PSD constraints (i.e. with LP relaxation) we will not have any eigenvalues
+            if len(eigs) == 0:
+                continue
+
+            data = [
+                [eig[i] if i < len(eig) else 0 for eig in eigs]
+                for i in range(len(eigs[0]))
+            ]
+
+            means = [np.mean(sublist) for sublist in data]
+            std_devs = [np.std(sublist) for sublist in data]
+
+            fig = plt.figure()
+
+            plt.bar(range(len(means)), means, yerr=std_devs)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Eigenvalues")
+            plt.title("Eigenvalues of the Matrix")
+            fig.savefig(eigs_output_dir / f"eigvals_mode_{name}.pdf")
+            plt.close()
+
+        # fig = plt.figure()
+        xs = {
+            name: [X[-1, :] for X in Xs_for_segment]
+            for name, Xs_for_segment in Xs.items()
+        }
+
+        Xs_maxs = {
+            name: np.max([np.max(X) for X in Xs_per_segment])
+            for name, Xs_per_segment in Xs.items()
+        }
+        xs_maxs = {
+            name: np.max([np.max(x) for x in xs_per_segment])
+            for name, xs_per_segment in xs.items()
+        }
+
+        # Create subplots stacked horizontally
+        fig, axs = plt.subplots(2, 1, figsize=(14, 10))
+
+        def create_bar_subplot(ax, data, title):
+            names = list(data.keys())
+            values = list(data.values())
+
+            ax.bar(names, values, color="blue")
+            ax.set_xlabel("Segment")
+            ax.set_ylabel("Max Value")
+            ax.set_xticklabels(names, rotation=45, ha="right")
+            ax.set_title(title)
+
+        # Plot for Xs_maxs
+        create_bar_subplot(axs[0], Xs_maxs, "Max Values for Xs")
+
+        # Plot for xs_maxs
+        create_bar_subplot(axs[1], xs_maxs, "Max Values for xs")
+
+        # Ensure the y-axis limits are equal
+        y_max = max(axs[0].get_ylim()[1], axs[1].get_ylim()[1])
+        axs[0].set_ylim(0, y_max)
+        axs[1].set_ylim(0, y_max)
+
+        # Adjust layout
+        plt.tight_layout()
+        fig.savefig(output_dir / "segment_values.pdf")
+
 
 class FootstepPlanner:
     def __init__(
@@ -800,9 +889,11 @@ class FootstepPlanner:
 
             path_output_dir = _make_path_output_dir(output_dir, active_edges)
 
+            curr_plan_rounder.save_tightness_analysis(path_output_dir)
+
             start_time = time.time()
             rounded_result = curr_plan_rounder.round(
-                save_solver_output=True, output_dir=path_output_dir
+                save_solver_output=save_solver_output, output_dir=path_output_dir
             )
             elapsed_time = time.time() - start_time
             rounded_plan = curr_plan_rounder.get_plan(rounded_result)
