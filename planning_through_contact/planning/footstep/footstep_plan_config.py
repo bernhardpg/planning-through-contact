@@ -69,6 +69,7 @@ class FootstepPlanningConfig:
     use_convex_concave: bool = False
     max_rounded_paths: int = 10
     use_implied_constraints: bool = False
+    relaxation_trace_cost: Optional[float] = None
 
     @property
     def dt(self) -> float:

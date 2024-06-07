@@ -27,6 +27,7 @@ from planning_through_contact.convex_relaxation.convex_concave import (
     cross_product_2d_as_convex_concave,
 )
 from planning_through_contact.convex_relaxation.sdp import (
+    add_trace_cost_on_psd_cones,
     approximate_sdp_cones_with_linear_cones,
     get_X_from_semidefinite_relaxation,
 )
@@ -1178,9 +1179,9 @@ class FootstepPlanSegmentProgram:
     def make_relaxed_prog(
         self,
         use_lp_approx: bool = False,
-        trace_cost: bool = False,
         use_groups: bool = True,
         use_implied_constraints: bool = False,
+        trace_cost: Optional[float] = False,
     ) -> MathematicalProgram:
         # Already convex
         if self.config.use_convex_concave:
@@ -1216,11 +1217,8 @@ class FootstepPlanSegmentProgram:
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
-        if trace_cost:
-            # TODO: Move to PSD relaxation script
-            X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
-            EPS = 1e-6
-            self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
+        if trace_cost is not None:
+            add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
 
         if use_lp_approx:
             approximate_sdp_cones_with_linear_cones(self.relaxed_prog)
@@ -1231,7 +1229,9 @@ class FootstepPlanSegmentProgram:
         self, use_lp_approx: bool = False, use_implied_constraints: bool = False
     ) -> Spectrahedron:
         relaxed_prog = self.make_relaxed_prog(
-            use_lp_approx=use_lp_approx, use_implied_constraints=use_implied_constraints
+            use_lp_approx=use_lp_approx,
+            use_implied_constraints=use_implied_constraints,
+            trace_cost=self.config.relaxation_trace_cost,
         )
 
         # TODO(bernhardpg): Remove
@@ -1372,18 +1372,22 @@ class FootstepPlanSegmentProgram:
         return plan_result
 
     def evaluate_costs_with_result(
-        self, result: MathematicalProgramResult
+        self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
     ) -> Dict[str, List[float]]:
         cost_vals = {}
         for key, val in self.costs.items():
             cost_vals[key] = []
 
             for binding in val:
-                vars = result.GetSolution(binding.variables())
+                vars = self.get_solution(
+                    binding.variables(), result, vertex_vars=vertex_vars
+                )
                 cost_vals[key].append(binding.evaluator().Eval(vars))
 
         for key in cost_vals:
             cost_vals[key] = np.array(cost_vals[key])
+
+        cost_vals["sum"] = np.sum([np.sum(vals) for vals in cost_vals.values()])
 
         return cost_vals
 

@@ -27,6 +27,7 @@ from pydrake.solvers import (
 from pydrake.symbolic import Variable, Variables
 from tqdm import tqdm
 
+from planning_through_contact.convex_relaxation.sdp import get_X_from_psd_constraint
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
 )
@@ -66,8 +67,19 @@ class VertexSegmentPair(NamedTuple):
     def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
 
-    def get_plan_for_segment(self, result: MathematicalProgramResult) -> FootstepPlan:
+    def get_segment_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
+
+    def evaluate_vars_with_result(
+        self, vars: npt.NDArray, result: MathematicalProgramResult
+    ) -> npt.NDArray:
+        vars_res = self.s.get_solution(vars, result, self.v.x())
+        return vars_res
+
+    def evaluate_costs(
+        self, result: MathematicalProgramResult
+    ) -> Dict[str, List[float]]:
+        return self.s.evaluate_costs_with_result(result, self.v.x())
 
     def add_cost_to_vertex(self) -> None:
         for binding in self.s.prog.GetAllCosts():
@@ -740,9 +752,10 @@ class FootstepPlanner:
             print("Solving GCS problem")
 
         options.preprocessing = True
-        # We want to solve only the convex relaxation first
-        options.max_rounded_paths = 0
 
+        # Set this to 0 to only solve the convex relaxation
+        options.max_rounded_paths = 0
+        options.convex_relaxation = True
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
         self.gcs_result = gcs_result
 

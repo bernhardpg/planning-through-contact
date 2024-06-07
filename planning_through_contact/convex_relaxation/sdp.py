@@ -601,8 +601,6 @@ def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
     """
 
     for psd_constraint in prog.positive_semidefinite_constraints():
-        # TODO remove
-        # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
         X = get_X_from_psd_constraint(psd_constraint)
         prog.RemoveConstraint(psd_constraint)  # type: ignore
         N = X.shape[0]
@@ -611,3 +609,9 @@ def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
             # if i == N - 1:
             #     continue  # skip 'one' == 1
             prog.AddLinearConstraint(X_i >= 0)
+
+
+def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) -> None:
+    for psd_constraint in prog.positive_semidefinite_constraints():
+        X = get_X_from_psd_constraint(psd_constraint)
+        prog.AddLinearCost(eps * np.trace(X))

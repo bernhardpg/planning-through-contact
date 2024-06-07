@@ -53,6 +53,7 @@ def plan(
         use_lp_approx=use_lp,
         max_rounded_paths=10,
         use_implied_constraints=False,
+        relaxation_trace_cost=1.0,
     )
 
     terrain, initial_stone, target_stone = terrain_and_stones

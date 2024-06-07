@@ -18,6 +18,7 @@ from pydrake.solvers import (
 from planning_through_contact.convex_relaxation.sdp import (
     _collect_bounding_box_constraints,
     _linear_bindings_to_affine_terms,
+    add_trace_cost_on_psd_cones,
     approximate_sdp_cones_with_linear_cones,
     create_sdp_relaxation,
     eliminate_equality_constraints,
@@ -448,6 +449,19 @@ def test_eq_elimination_with_relaxation(
     assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
     assert np.allclose(x_val_true, x, atol=1e-5)
+
+
+def test_add_trace_cost(so_2_prog: MathematicalProgram):
+    original_num_costs = len(so_2_prog.GetAllCosts())
+    relaxed_prog = MakeSemidefiniteRelaxation(so_2_prog)
+    num_psd_cones = len(relaxed_prog.positive_semidefinite_constraints())
+    add_trace_cost_on_psd_cones(relaxed_prog)
+
+    assert len(relaxed_prog.GetAllCosts()) == original_num_costs + num_psd_cones
+
+    for b in relaxed_prog.GetAllCosts():
+        const = b.evaluator()
+        assert type(const) == LinearCost
 
 
 def test_approx_psd_cone_with_linear_cone(so_2_prog: MathematicalProgram):
