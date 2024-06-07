@@ -656,6 +656,9 @@ class FootstepPlanSegmentProgram:
         """
         self.robot = robot
 
+        # Save the costs that we want to add to GCS/relaxation
+        self.costs_to_use_for_gcs = []
+
         if stone_for_last_foot:
             stone_first, stone_last = stone, stone_for_last_foot
             self.name = f"{stone_first.name}_and_{stone_last.name}"
@@ -1183,7 +1186,10 @@ class FootstepPlanSegmentProgram:
         use_implied_constraints: bool = False,
         trace_cost: Optional[float] = False,
     ) -> MathematicalProgram:
-        # Already convex
+        # We add all the original quadratic costs to GCS
+        self.costs_to_use_for_gcs.extend(self.prog.GetAllCosts())
+
+        # When we use the convex-concave procedure we already have a convex program
         if self.config.use_convex_concave:
             self.relaxed_prog = self.prog
             return self.relaxed_prog
@@ -1218,7 +1224,8 @@ class FootstepPlanSegmentProgram:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
         if trace_cost is not None:
-            add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
+            trace_costs = add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
+            self.costs_to_use_for_gcs.extend(trace_costs)
 
         if use_lp_approx:
             approximate_sdp_cones_with_linear_cones(self.relaxed_prog)

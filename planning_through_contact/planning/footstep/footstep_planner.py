@@ -82,7 +82,7 @@ class VertexSegmentPair(NamedTuple):
         return self.s.evaluate_costs_with_result(result, self.v.x())
 
     def add_cost_to_vertex(self) -> None:
-        for binding in self.s.prog.GetAllCosts():
+        for binding in self.s.costs_to_use_for_gcs:
             vertex_vars = self.s.get_vars_in_vertex(binding.variables(), self.v.x())
             new_binding = Binding[type(binding.evaluator())](
                 binding.evaluator(), vertex_vars
@@ -717,7 +717,6 @@ class FootstepPlanner:
         output_dir: Optional[Path] = None,
     ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
-        options.convex_relaxation = True
 
         mosek = MosekSolver()
         options.solver = mosek

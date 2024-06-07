@@ -611,7 +611,11 @@ def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
             prog.AddLinearConstraint(X_i >= 0)
 
 
-def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) -> None:
+def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) -> List:
+    added_costs = []
     for psd_constraint in prog.positive_semidefinite_constraints():
         X = get_X_from_psd_constraint(psd_constraint)
-        prog.AddLinearCost(eps * np.trace(X))
+        c = prog.AddLinearCost(eps * np.trace(X))
+        added_costs.append(c)
+
+    return added_costs
