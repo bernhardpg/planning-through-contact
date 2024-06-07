@@ -735,9 +735,15 @@ class FootstepPlanSegmentProgram:
 
         # linear acceleration
         g = np.array([0, -9.81])
-        self.a_WB = (1 / robot.mass) * (self.f_F1_1W + self.f_F1_2W) + g
+        self.a_WB = (1 / robot.mass) * self.config.force_scale * (
+            self.f_F1_1W + self.f_F1_2W
+        ) + g
         if self.two_feet:
-            self.a_WB += (1 / robot.mass) * (self.f_F2_1W + self.f_F2_2W)
+            self.a_WB += (
+                (1 / robot.mass)
+                * self.config.force_scale
+                * (self.f_F2_1W + self.f_F2_2W)
+            )
 
         # angular acceleration
         self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F1_2)
@@ -928,7 +934,9 @@ class FootstepPlanSegmentProgram:
                     f1 = self.f_F2_1W[k]
                     f2 = self.f_F2_2W[k]
                     sq_forces += f1.T @ f1 + f2.T @ f2
-                c = self.prog.AddQuadraticCost(cost.sq_force * sq_forces)
+                c = self.prog.AddQuadraticCost(
+                    cost.sq_force * self.config.force_scale**2 * sq_forces
+                )
                 self.costs["sq_forces"].append(c)
 
         if True:  # this causes the relaxation gap to be high
@@ -1275,9 +1283,11 @@ class FootstepPlanSegmentProgram:
         p_WB = self.get_solution(self.p_WB, result, vertex_vars)
         theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
         p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
-        f_F1_1W, f_F1_2W = self.get_solution(
+        f_F1_1W, f_F1_2W = self.config.force_scale * self.get_solution(
             self.f_F1_1W, result, vertex_vars
-        ), self.get_solution(self.f_F1_2W, result, vertex_vars)
+        ), self.config.force_scale * self.get_solution(
+            self.f_F1_2W, result, vertex_vars
+        )
         tau_F1_1, tau_F1_2 = self.get_solution(
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
@@ -1292,9 +1302,11 @@ class FootstepPlanSegmentProgram:
 
         if self.two_feet:
             p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
-            f_F2_1W, f_F2_2W = self.get_solution(
+            f_F2_1W, f_F2_2W = self.config.force_scale * self.get_solution(
                 self.f_F2_1W, result, vertex_vars
-            ), self.get_solution(self.f_F2_2W, result, vertex_vars)
+            ), self.config.force_scale * self.get_solution(
+                self.f_F2_2W, result, vertex_vars
+            )
             tau_F2_1, tau_F2_2 = self.get_solution(
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)

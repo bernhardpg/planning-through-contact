@@ -54,7 +54,8 @@ def plan(
         max_rounded_paths=10,
         use_implied_constraints=False,
         use_variable_grouping=True,
-        relaxation_trace_cost=1.0,
+        relaxation_trace_cost=1e-6,
+        force_scale=1e2,
     )
 
     terrain, initial_stone, target_stone = terrain_and_stones

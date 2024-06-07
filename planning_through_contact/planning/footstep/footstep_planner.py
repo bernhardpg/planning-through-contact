@@ -136,11 +136,6 @@ class FootstepPlanRounder:
             for c in s.prog.GetAllCosts():
                 self.prog.AddCost(c.evaluator(), c.variables())
 
-            if not len(s.prog.GetAllCosts()) == len(v.GetCosts()):
-                raise RuntimeError(
-                    "Vertex and segment should have the same number of costs! Something must be wrong"
-                )
-
         # Add all the edge constraints from the graph
         # (which may couple the variables from individual nonlinear programs)
         for e in active_edges:

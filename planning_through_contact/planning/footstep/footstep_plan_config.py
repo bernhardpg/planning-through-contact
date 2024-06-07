@@ -71,6 +71,7 @@ class FootstepPlanningConfig:
     use_implied_constraints: bool = False
     relaxation_trace_cost: Optional[float] = None
     use_variable_grouping: bool = True
+    force_scale: float = 1
 
     @property
     def dt(self) -> float:
