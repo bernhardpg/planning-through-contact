@@ -139,7 +139,7 @@ class FootPlan:
             return NotImplemented
 
         if self.foot_width != other.foot_width:
-            raise ValueError("Cannot add FootKnotPoints with different foot widths")
+            raise ValueError("Cannot add FootPlan with different foot widths")
 
         new_p_WF = np.vstack((self.p_WF, other.p_WF))
         new_f_F_Ws = [
@@ -245,7 +245,7 @@ class FootstepPlan:
         Planned robot body position in world frame. Shape: (num_steps, 2)
     theta_WB: npt.NDArray[np.float64]
         Planned robot body orientation in world frame. Shape: (num_steps, )
-    feet_knot_points: List[FootKnotPoints]
+    feet_knot_points: List[FootPlan]
         Knot points for the feet. List length can be 1 or 2.
     """
 
