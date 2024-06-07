@@ -53,6 +53,7 @@ def plan(
         use_lp_approx=use_lp,
         max_rounded_paths=10,
         use_implied_constraints=False,
+        use_variable_grouping=True,
         relaxation_trace_cost=1.0,
     )
 

@@ -1182,7 +1182,7 @@ class FootstepPlanSegmentProgram:
     def make_relaxed_prog(
         self,
         use_lp_approx: bool = False,
-        use_groups: bool = True,
+        use_groups: bool = False,
         use_implied_constraints: bool = False,
         trace_cost: Optional[float] = False,
     ) -> MathematicalProgram:
@@ -1239,6 +1239,7 @@ class FootstepPlanSegmentProgram:
             use_lp_approx=use_lp_approx,
             use_implied_constraints=use_implied_constraints,
             trace_cost=self.config.relaxation_trace_cost,
+            use_groups=self.config.use_variable_grouping,
         )
 
         spectrahedron = Spectrahedron(relaxed_prog)

@@ -70,6 +70,7 @@ class FootstepPlanningConfig:
     max_rounded_paths: int = 10
     use_implied_constraints: bool = False
     relaxation_trace_cost: Optional[float] = None
+    use_variable_grouping: bool = True
 
     @property
     def dt(self) -> float:
