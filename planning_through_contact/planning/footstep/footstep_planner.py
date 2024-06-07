@@ -66,7 +66,7 @@ class VertexSegmentPair(NamedTuple):
     def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
 
-    def get_knot_point_vals(self, result: MathematicalProgramResult) -> FootstepPlan:
+    def get_plan_for_segment(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
 
     def add_cost_to_vertex(self) -> None:
