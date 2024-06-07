@@ -1234,16 +1234,6 @@ class FootstepPlanSegmentProgram:
             trace_cost=self.config.relaxation_trace_cost,
         )
 
-        # TODO(bernhardpg): Remove
-        # for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
-        #     # TODO remove
-        #     # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
-        #     X = get_X_from_psd_constraint(psd_constraint)
-        #     N = X.shape[0]
-        #     for i in range(N):
-        #         X_i = X[i, i]
-        #         relaxed_prog.AddLinearConstraint(X_i >= 0)
-
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
 
