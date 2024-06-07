@@ -648,9 +648,10 @@ class FootstepPlanner:
         #     e.AddConstraint(c)
 
         # Enforce that we start and end in an equilibrium position
-        constraint = eq(spatial_acc, 0)
-        for c in constraint:
-            e.AddConstraint(c)
+        if self.config.initial_is_equilibrium:
+            constraint = eq(spatial_acc, 0)
+            for c in constraint:
+                e.AddConstraint(c)
 
     def create_graph_diagram(
         self,
@@ -762,10 +763,11 @@ class FootstepPlanner:
             flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
+        # Now we set the max_rounded_paths back to our desired value, to use it for rounding
         options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
 
-        def _make_path_output_dir(output_dir, active_edges):
+        def _make_path_output_dir(output_dir, active_edges) -> Path:
             # We change the options so we can change the mosek output for each path to its name
             unique_path_name = hash_gcs_edges([e.name() for e in active_edges])
             path_output_dir = output_dir / unique_path_name

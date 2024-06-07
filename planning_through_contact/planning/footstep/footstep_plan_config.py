@@ -65,6 +65,7 @@ class FootstepPlanningConfig:
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
     period_steps: int = 3
+    initial_is_equilibrium: bool = False
     use_lp_approx: bool = False
     use_convex_concave: bool = False
     max_rounded_paths: int = 10

@@ -54,7 +54,8 @@ def plan(
         max_rounded_paths=10,
         use_implied_constraints=False,
         use_variable_grouping=True,
-        relaxation_trace_cost=1e-6,
+        initial_is_equilibrium=True,
+        relaxation_trace_cost=1e-5,
         force_scale=1e2,
     )
 
