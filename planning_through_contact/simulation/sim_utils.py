@@ -1,10 +1,5 @@
 import copy
 import os
-from typing import List, Literal
-
-import numpy as np
-from lxml import etree
-from pydrake.all import Box as DrakeBox
 import time
 from typing import List, Literal
 
@@ -18,13 +13,6 @@ from pydrake.all import (
     LoadModelDirectives,
     MakePhongIllustrationProperties,
     ModelInstanceIndex,
-    MultibodyPlant,
-    Parser,
-    ProcessModelDirectives,
-    Rgba,
-    RigidTransform,
-    Transform,
-    RollPitchYaw,
     MultibodyPlant,
     Parser,
     ProcessModelDirectives,
@@ -142,10 +130,10 @@ def get_slider_sdf_path(sim_config, models_folder: str) -> str:
 
 def AddRandomizedSliderAndConfigureContact(
     sim_config,
-    plant, 
-    scene_graph, 
-    default_color = [0.2, 0.2, 0.2],
-    color_range = 0.02,
+    plant,
+    scene_graph,
+    default_color=[0.2, 0.2, 0.2],
+    color_range=0.02,
 ) -> ModelInstanceIndex:
     parser = Parser(plant, scene_graph)
     ConfigureParser(parser)

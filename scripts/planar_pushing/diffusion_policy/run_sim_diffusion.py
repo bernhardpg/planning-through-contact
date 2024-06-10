@@ -1,8 +1,5 @@
 import importlib
 import logging
-import pathlib
-
-import hydra
 import os
 import pathlib
 
@@ -31,7 +28,6 @@ from planning_through_contact.tools.utils import (
     create_processed_mesh_primitive_sdf_file,
     load_primitive_info,
 )
-
 
 
 @hydra.main(
