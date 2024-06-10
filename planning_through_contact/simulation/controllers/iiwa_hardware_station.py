@@ -410,7 +410,7 @@ class IiwaHardwareStation(RobotSystemBase):
         """The name of the robot model."""
         if self._sim_config.slider.name == "box":
             return "box"
-        elif self._sim_config.slider.name == "tee":
+        elif self._sim_config.slider.name in ["tee", "t_pusher"]:
             return "t_pusher"
         elif self._sim_config.slider.name == "arbitrary":
             return "arbitrary"

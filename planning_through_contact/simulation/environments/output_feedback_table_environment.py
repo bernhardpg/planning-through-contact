@@ -86,7 +86,9 @@ class OutputFeedbackTableEnvironment:
                 ),
             )
             self._plan_config = get_default_plan_config(
-                slider_type=sim_config.slider.name,
+                slider_type=sim_config.slider.name
+                if sim_config.slider.name != "t_pusher"
+                else "tee",
                 arbitrary_shape_pickle_path=arbitrary_shape_pickle_path,
                 pusher_radius=0.015,
                 hardware=False,

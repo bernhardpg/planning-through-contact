@@ -119,9 +119,17 @@ class DiffusionPolicyController(LeafSystem):
         workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
         # get normalizer: this might be expensive for larger datasets
-        zarr_configs = self._cfg.task.dataset.zarr_configs
-        for config in zarr_configs:
-            config["path"] = self._diffusion_policy_path.joinpath(config["path"])
+        COTRAIN_DATASET = "diffusion_policy.dataset.drake_cotrain_planar_pushing_hybrid_dataset.DrakeCotrainPlanarPushingHybridDataset"
+        if self._cfg.task.dataset._target_ == COTRAIN_DATASET:
+            zarr_configs = self._cfg.task.dataset.zarr_configs
+            for config in zarr_configs:
+                config["path"] = self._diffusion_policy_path.joinpath(config["path"])
+        else:
+            self._cfg.task.dataset.zarr_path = self._diffusion_policy_path.joinpath(
+                self._cfg.task.dataset.zarr_path
+            )
+            print(f"Zarr path: {self._cfg.task.dataset.zarr_path}")
+
         dataset: BaseImageDataset = hydra.utils.instantiate(self._cfg.task.dataset)
         self._normalizer = dataset.get_normalizer()  # TODO: this might not be needed
 

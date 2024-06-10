@@ -1,9 +1,10 @@
 import pickle
+
 import numpy as np
 
 
 def main():
-    output_file = "data/arbitrary_shape.pickle"
+    output_file = "arbitrary_shape_pickles/arbitrary_shape.pkl"
     boxes = [
         {
             "name": "box",

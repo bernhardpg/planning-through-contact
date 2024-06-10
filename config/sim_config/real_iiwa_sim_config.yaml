@@ -6,7 +6,7 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'arbitrary'
+slider_type: 'tee'
 arbitrary_shape_pickle_path: arbitrary_shape_pickles/single_box.pkl
 arbitrary_shape_visual_mesh_path: null # "hammer/rotated_hammer.obj" # Can be null (collision mesh will be used)
 physical_properties: # Slider physical properties
@@ -40,10 +40,10 @@ delay_before_execution: 3.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
-  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/pretrained_pusher/checkpoints/latest.ckpt'
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/underactuated_random_camera/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
-  diffusion_policy_path: '/home/nepfaff/src/gcs-diffusion'
+  diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
   freq: 10.0
   delay: ${delay_before_execution}
   debug: false
@@ -68,7 +68,7 @@ camera_configs:
     center_y: 244.107
     focal_x: 616.704
     focal_y: 616.777
-    show_rgb: true
+    show_rgb: false
 randomize_camera: false
 domain_randomization: false
 log_dir: 'diffusion_policy_logs'
@@ -109,12 +109,12 @@ robot_station:
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: false
-  render_plans: true
+  render_plans: false
   convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'trajectories/test'
+  plans_dir: 'trajectories/underactuated'
   rendered_plans_dir: 'trajectories_rendered/test'
-  zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr
+  zarr_path: 'trajectories_rendered/underactuated_random_camera'
   policy_freq: 10.0
   state_chunk_length: 1024
   action_chunk_length: 2048
