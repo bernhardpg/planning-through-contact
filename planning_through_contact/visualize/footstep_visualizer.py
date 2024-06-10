@@ -258,10 +258,7 @@ def plot_relaxation_vs_rounding_bar_plot(
         # Add text annotations with height of bars for the categories
         for category in categories:
             cat_idx = categories.index(category)
-            if len(bars) > 5:
-                fontsize = 3
-            else:
-                fontsize = 3  # matplotlib default
+            fontsize = 5  # matplotlib default
             for bar in bars[cat_idx]:
                 height = bar.get_height()
                 ax.text(
