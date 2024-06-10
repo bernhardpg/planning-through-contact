@@ -1262,22 +1262,27 @@ class FootstepPlanSegmentProgram:
         if use_lp_approx:
             approximate_sdp_cones_with_linear_cones(self.relaxed_prog)
 
-            original_vars = self.prog.decision_variables()
+            # Constrain all the square expressions from the cost to be nonnegative so the
+            # naive LP relaxation is not unbounded
+            if not self.config.use_linearized_cost:
+                original_vars = self.prog.decision_variables()
 
-            def _pure_square(cost):
-                vars = Variables(cost.variables())
-                for var in original_vars:
-                    if var in vars:
-                        return False
-                return True
+                def _pure_square(cost):
+                    vars = Variables(cost.variables())
+                    for var in original_vars:
+                        if var in vars:
+                            return False
+                    return True
 
-            for cost in self.relaxed_prog.GetAllCosts():
-                if type(cost.evaluator()) is not LinearCost:
-                    raise NotImplementedError("We do not yet support nonlinear costs")
+                for cost in self.relaxed_prog.GetAllCosts():
+                    if type(cost.evaluator()) is not LinearCost:
+                        raise NotImplementedError(
+                            "We do not yet support nonlinear costs"
+                        )
 
-                if not _pure_square(cost):
-                    expr = (cost.evaluator().Eval(cost.variables())).item()
-                    self.relaxed_prog.AddLinearConstraint(expr >= 0)
+                    if not _pure_square(cost):
+                        expr = (cost.evaluator().Eval(cost.variables())).item()
+                        self.relaxed_prog.AddLinearConstraint(expr >= 0)
 
             if False:
                 # TODO: remove if no longer needed

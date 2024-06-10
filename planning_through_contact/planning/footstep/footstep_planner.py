@@ -907,9 +907,11 @@ class FootstepPlanner:
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
 
-            path_output_dir = _make_path_output_dir(output_dir, active_edges)
-
-            curr_plan_rounder.save_tightness_analysis(path_output_dir)
+            if output_dir:
+                path_output_dir = _make_path_output_dir(output_dir, active_edges)
+                curr_plan_rounder.save_tightness_analysis(path_output_dir)
+            else:
+                path_output_dir = None
 
             start_time = time.time()
             rounded_result = curr_plan_rounder.round(
