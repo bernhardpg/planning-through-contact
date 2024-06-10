@@ -2,6 +2,20 @@ from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
+from pydrake.math import ToSymmetricMatrixFromLowerTriangularColumns, eq
+from pydrake.solvers import (
+    Binding,
+    ClarabelSolver,
+    CommonSolverOption,
+    MathematicalProgram,
+    MathematicalProgramResult,
+    MosekSolver,
+    QuadraticConstraint,
+    SnoptSolver,
+    SolutionResult,
+    Solve,
+    SolverOptions,
+)
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepCost,

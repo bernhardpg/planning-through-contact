@@ -1,6 +1,6 @@
 from enum import Enum
 from itertools import permutations
-from typing import Callable, List, Tuple
+from typing import Any, Callable, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -619,3 +619,29 @@ def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) ->
         added_costs.append(c)
 
     return added_costs
+
+
+def to_symmetric_matrix_from_lower_triangular_columns(
+    vec: npt.NDArray[Any],
+) -> npt.NDArray[Any]:
+    # Determine the size of the matrix
+    n = int(np.sqrt(2 * len(vec) + 0.25) - 0.5)
+
+    if len(vec) != (n * (n + 1)) // 2:
+        raise ValueError(
+            "The length of the vector is not appropriate for forming a symmetric matrix."
+        )
+
+    # Create an empty symmetric matrix
+    symm_matrix = np.zeros((n, n), dtype=vec.dtype)
+
+    # Fill the lower triangle and diagonal
+    index = 0
+    for j in range(n):
+        for i in range(j, n):
+            symm_matrix[i, j] = vec[index]
+            if i != j:
+                symm_matrix[j, i] = vec[index]
+            index += 1
+
+    return symm_matrix

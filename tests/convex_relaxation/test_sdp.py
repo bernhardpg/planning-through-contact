@@ -24,6 +24,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     eliminate_equality_constraints,
     find_solution,
     get_nullspace_matrix,
+    to_symmetric_matrix_from_lower_triangular_columns,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
@@ -482,3 +483,12 @@ def test_approx_psd_cone_with_linear_cone(so_2_prog: MathematicalProgram):
     for b in relaxed_prog.GetAllCosts():
         const = b.evaluator()
         assert type(const) == LinearCost
+
+
+def test_to_symmetric_from_tril_columns():
+    prog = MathematicalProgram()
+    X = prog.NewSymmetricContinuousVariables(3, "X")
+
+    new_X = to_symmetric_matrix_from_lower_triangular_columns(prog.decision_variables())
+    entries_equal = np.vectorize(lambda x: x.Evaluate())(eq(X, new_X))
+    assert np.all(entries_equal)
