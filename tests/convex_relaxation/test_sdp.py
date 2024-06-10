@@ -5,15 +5,26 @@ import numpy.typing as npt
 import pydrake.symbolic as sym
 import pytest
 from pydrake.math import eq
-from pydrake.solvers import MakeSemidefiniteRelaxation, MathematicalProgram, Solve
+from pydrake.solvers import (
+    BoundingBoxConstraint,
+    LinearConstraint,
+    LinearCost,
+    LinearEqualityConstraint,
+    MakeSemidefiniteRelaxation,
+    MathematicalProgram,
+    Solve,
+)
 
 from planning_through_contact.convex_relaxation.sdp import (
     _collect_bounding_box_constraints,
     _linear_bindings_to_affine_terms,
+    add_trace_cost_on_psd_cones,
+    approximate_sdp_cones_with_linear_cones,
     create_sdp_relaxation,
     eliminate_equality_constraints,
     find_solution,
     get_nullspace_matrix,
+    to_symmetric_matrix_from_lower_triangular_columns,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
@@ -439,3 +450,45 @@ def test_eq_elimination_with_relaxation(
     assert np.allclose(rs[:, 0], create_r_vec_from_angle(th_initial))
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
     assert np.allclose(x_val_true, x, atol=1e-5)
+
+
+def test_add_trace_cost(so_2_prog: MathematicalProgram):
+    original_num_costs = len(so_2_prog.GetAllCosts())
+    relaxed_prog = MakeSemidefiniteRelaxation(so_2_prog)
+    num_psd_cones = len(relaxed_prog.positive_semidefinite_constraints())
+    add_trace_cost_on_psd_cones(relaxed_prog)
+
+    assert len(relaxed_prog.GetAllCosts()) == original_num_costs + num_psd_cones
+
+    for b in relaxed_prog.GetAllCosts():
+        const = b.evaluator()
+        assert type(const) == LinearCost
+
+
+def test_approx_psd_cone_with_linear_cone(so_2_prog: MathematicalProgram):
+    relaxed_prog = MakeSemidefiniteRelaxation(so_2_prog)
+    approximate_sdp_cones_with_linear_cones(relaxed_prog)
+
+    def _is_linear_constraint(const) -> bool:
+        return (
+            type(const) == LinearConstraint
+            or type(const) == LinearEqualityConstraint
+            or type(const) == BoundingBoxConstraint
+        )
+
+    for b in relaxed_prog.GetAllConstraints():
+        const = b.evaluator()
+        assert _is_linear_constraint(const)
+
+    for b in relaxed_prog.GetAllCosts():
+        const = b.evaluator()
+        assert type(const) == LinearCost
+
+
+def test_to_symmetric_from_tril_columns():
+    prog = MathematicalProgram()
+    X = prog.NewSymmetricContinuousVariables(3, "X")
+
+    new_X = to_symmetric_matrix_from_lower_triangular_columns(prog.decision_variables())
+    entries_equal = np.vectorize(lambda x: x.Evaluate())(eq(X, new_X))
+    assert np.all(entries_equal)

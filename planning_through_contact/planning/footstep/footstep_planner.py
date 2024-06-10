@@ -19,6 +19,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     MosekSolver,
+    QuadraticConstraint,
     SnoptSolver,
     SolutionResult,
     Solve,
@@ -27,6 +28,7 @@ from pydrake.solvers import (
 from pydrake.symbolic import Variable, Variables
 from tqdm import tqdm
 
+from planning_through_contact.convex_relaxation.sdp import get_X_from_psd_constraint
 from planning_through_contact.planning.footstep.footstep_plan_config import (
     FootstepPlanningConfig,
 )
@@ -36,6 +38,7 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlanSegmentProgram,
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
+from planning_through_contact.tools.gcs_tools import hash_gcs_edges
 from planning_through_contact.visualize.footstep_visualizer import (
     plot_relaxation_vs_rounding_bar_plot,
 )
@@ -65,11 +68,22 @@ class VertexSegmentPair(NamedTuple):
     def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
         return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
 
-    def get_knot_point_vals(self, result: MathematicalProgramResult) -> FootstepPlan:
+    def get_segment_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
 
+    def evaluate_vars_with_result(
+        self, vars: npt.NDArray, result: MathematicalProgramResult
+    ) -> npt.NDArray:
+        vars_res = self.s.get_solution(vars, result, self.v.x())
+        return vars_res
+
+    def evaluate_costs(
+        self, result: MathematicalProgramResult
+    ) -> Dict[str, List[float]]:
+        return self.s.evaluate_costs_with_result(result, self.v.x())
+
     def add_cost_to_vertex(self) -> None:
-        for binding in self.s.prog.GetAllCosts():
+        for binding in self.s.costs_to_use_for_gcs:
             vertex_vars = self.s.get_vars_in_vertex(binding.variables(), self.v.x())
             new_binding = Binding[type(binding.evaluator())](
                 binding.evaluator(), vertex_vars
@@ -122,11 +136,6 @@ class FootstepPlanRounder:
 
             for c in s.prog.GetAllCosts():
                 self.prog.AddCost(c.evaluator(), c.variables())
-
-            if not len(s.prog.GetAllCosts()) == len(v.GetCosts()):
-                raise RuntimeError(
-                    "Vertex and segment should have the same number of costs! Something must be wrong"
-                )
 
         # Add all the edge constraints from the graph
         # (which may couple the variables from individual nonlinear programs)
@@ -245,15 +254,24 @@ class FootstepPlanRounder:
         return vertex_var_vals
 
     def round(
-        self, save_output: bool = False, use_custom_tolerance: bool = False
+        self,
+        save_solver_output: bool = False,
+        use_custom_tolerance: bool = False,
+        output_dir: Optional[Path] = None,
     ) -> MathematicalProgramResult:
         snopt = SnoptSolver()
 
         solver_options = SolverOptions()
-        if save_output:
+        if save_solver_output:
+
+            if output_dir is None:
+                raise RuntimeError(
+                    "Output dir must not be none when saving SNOPT output."
+                )
+
             import os
 
-            snopt_log_path = "footstep_snopt_log.txt"
+            snopt_log_path = str(output_dir / "rounding_snopt_log.log")
             # Delete log file if it already exists as Snopt just keeps writing to the same file
             if os.path.exists(snopt_log_path):
                 os.remove(snopt_log_path)
@@ -292,6 +310,114 @@ class FootstepPlanRounder:
             self.rounded_result.SetSolution(var, val)
         return self.get_plan(self.rounded_result)
 
+    def save_tightness_analysis(self, output_dir: Path) -> None:
+        import matplotlib.pyplot as plt
+
+        def _eval_X(constraint, p):
+            X = get_X_from_psd_constraint(constraint)
+            X_res = p.evaluate_vars_with_result(X, self.relaxed_result)
+            return X_res
+
+        Xs = {
+            p.s.name: [
+                _eval_X(constraint, p)
+                for constraint in p.s.semidefinite_relaxation_constraints
+            ]
+            for p in self.active_pairs
+        }
+
+        def _remove_imaginary_part(z: np.complex128, tol=1e-9) -> float:
+            if abs(z.imag) < tol:
+                return float(z.real)
+            else:
+                raise ValueError(f"The imaginary part is not almost zero: {z.imag}")
+
+        # Make Eigenvalue plot
+        eigvals_per_segment: Dict[str, List[List[float]]] = {
+            name: [
+                list(
+                    reversed(
+                        sorted(
+                            [_remove_imaginary_part(e) for e in np.linalg.eigvals(X)]
+                        )
+                    )
+                )
+                for X in X_list
+            ]
+            for name, X_list in Xs.items()
+        }
+
+        eigs_output_dir = output_dir / "eigenvalues"
+        eigs_output_dir.mkdir(exist_ok=True, parents=True)
+
+        for name, eigs in eigvals_per_segment.items():
+            # If we don't have PSD constraints (i.e. with LP relaxation) we will not have any eigenvalues
+            if len(eigs) == 0:
+                continue
+
+            data = [
+                [eig[i] if i < len(eig) else 0 for eig in eigs]
+                for i in range(len(eigs[0]))
+            ]
+
+            means = [np.mean(sublist) for sublist in data]
+            std_devs = [np.std(sublist) for sublist in data]
+
+            fig = plt.figure()
+
+            plt.bar(range(len(means)), means, yerr=std_devs)
+            plt.xlabel("Index of Eigenvalue")
+            plt.ylabel("Eigenvalues")
+            plt.title("Eigenvalues of the Matrix")
+            fig.savefig(eigs_output_dir / f"eigvals_mode_{name}.pdf")
+            plt.close()
+
+        # Make value magnitude plot
+        xs = {
+            name: [X[-1, :] for X in Xs_for_segment]
+            for name, Xs_for_segment in Xs.items()
+        }
+
+        Xs_maxs = {
+            name: np.max([np.max(np.abs(X)) for X in Xs_per_segment])
+            for name, Xs_per_segment in Xs.items()
+        }
+        xs_maxs = {
+            name: np.max([np.max(np.abs(x)) for x in xs_per_segment])
+            for name, xs_per_segment in xs.items()
+        }
+
+        # Create subplots stacked horizontally
+        fig, axs = plt.subplots(2, 1, figsize=(14, 10))
+
+        def create_bar_subplot(ax, data, title):
+            names = list(data.keys())
+            values = list(data.values())
+
+            ax.bar(names, values, color="blue")
+            ax.set_xlabel("Segment")
+            ax.set_ylabel("Max absolute value")
+
+            # Set the tick positions and labels
+            ax.set_xticks(range(len(names)))
+            ax.set_xticklabels(names, rotation=45, ha="right")
+            ax.set_title(title)
+
+        # Plot for Xs_maxs
+        create_bar_subplot(axs[0], Xs_maxs, "Max Absolute Values for Xs")
+
+        # Plot for xs_maxs
+        create_bar_subplot(axs[1], xs_maxs, "Max Absolute Values for xs")
+
+        # Ensure the y-axis limits are equal
+        y_max = max(axs[0].get_ylim()[1], axs[1].get_ylim()[1])
+        axs[0].set_ylim(0, y_max)
+        axs[1].set_ylim(0, y_max)
+
+        # Adjust layout
+        plt.tight_layout()
+        fig.savefig(output_dir / "segment_values.pdf")
+
 
 class FootstepPlanner:
     def __init__(
@@ -322,7 +448,10 @@ class FootstepPlanner:
         for stone, segments_for_stone in zip(self.stones, self.segments_per_stone):
             self.segment_vertex_pairs_per_stone[stone.name] = (
                 self._add_segments_as_vertices(
-                    self.gcs, segments_for_stone, self.config.use_lp_approx
+                    self.gcs,
+                    segments_for_stone,
+                    self.config.use_lp_approx,
+                    self.config.use_implied_constraints,
                 )
             )
 
@@ -431,9 +560,16 @@ class FootstepPlanner:
         gcs: GraphOfConvexSets,
         segments: List[FootstepPlanSegmentProgram],
         use_lp_approx: bool = False,
+        use_implied_constraints: bool = False,
     ) -> Dict[str, VertexSegmentPair]:
         vertices = [
-            gcs.AddVertex(s.get_convex_set(use_lp_approx=use_lp_approx), name=s.name)
+            gcs.AddVertex(
+                s.get_convex_set(
+                    use_lp_approx=use_lp_approx,
+                    use_implied_constraints=use_implied_constraints,
+                ),
+                name=s.name,
+            )
             for s in segments
         ]
         pairs = {s.name: VertexSegmentPair(v, s) for v, s in zip(vertices, segments)}
@@ -621,9 +757,10 @@ class FootstepPlanner:
         #     e.AddConstraint(c)
 
         # Enforce that we start and end in an equilibrium position
-        constraint = eq(spatial_acc, 0)
-        for c in constraint:
-            e.AddConstraint(c)
+        if self.config.initial_is_equilibrium:
+            constraint = eq(spatial_acc, 0)
+            for c in constraint:
+                e.AddConstraint(c)
 
     def create_graph_diagram(
         self,
@@ -680,10 +817,11 @@ class FootstepPlanner:
         self,
         print_flows: bool = False,
         print_solver_output: bool = False,
+        save_solver_output: bool = False,
         print_debug: bool = False,
+        output_dir: Optional[Path] = None,
     ) -> FootstepPlan:
         options = GraphOfConvexSetsOptions()
-        options.convex_relaxation = True
 
         mosek = MosekSolver()
         options.solver = mosek
@@ -691,6 +829,15 @@ class FootstepPlanner:
 
         if print_solver_output:
             options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+        if save_solver_output:
+            if output_dir is None:
+                raise RuntimeError(
+                    "Needs an output directory when saving solver output"
+                )
+
+            options.solver_options.SetOption(CommonSolverOption.kPrintToConsole, 0)  # type: ignore
+            options.solver_options.SetOption(CommonSolverOption.kPrintFileName, str(output_dir / "gcs_mosek_log.log"))  # type: ignore
 
         # tolerance = 1e-6
         # mosek = MosekSolver()
@@ -709,14 +856,14 @@ class FootstepPlanner:
             print("Solving GCS problem")
 
         options.preprocessing = True
-        # We want to solve only the convex relaxation first
-        options.max_rounded_paths = 0
 
+        # Set this to 0 to only solve the convex relaxation
+        options.max_rounded_paths = 0
+        options.convex_relaxation = True
         gcs_result = self.gcs.SolveShortestPath(self.source, self.target, options)
         self.gcs_result = gcs_result
 
         assert gcs_result.is_success()
-        # gcs_result.set_solution_result(SolutionResult.kSolutionFound)
 
         if print_flows or print_debug:
             flows = [
@@ -725,15 +872,32 @@ class FootstepPlanner:
             flow_strings = [f"{name}: {val:.2f}" for name, val in flows]
             print(f"Graph flows: {', '.join(flow_strings)}")
 
+        # Now we set the max_rounded_paths back to our desired value, to use it for rounding
         options.max_rounded_paths = self.config.max_rounded_paths
         paths = self.gcs.SamplePaths(self.source, self.target, gcs_result, options)
-        relaxed_results = [
-            self.gcs.SolveConvexRestriction(path, options) for path in paths
-        ]
+
+        def _make_path_output_dir(output_dir, active_edges) -> Path:
+            # We change the options so we can change the mosek output for each path to its name
+            unique_path_name = hash_gcs_edges([e.name() for e in active_edges])
+            path_output_dir = output_dir / unique_path_name
+            path_output_dir.mkdir(exist_ok=True, parents=True)
+            return path_output_dir
+
+        relaxed_results = []
+        for active_edges in paths:
+            if save_solver_output:
+                assert output_dir is not None
+
+                path_output_dir = _make_path_output_dir(output_dir, active_edges)
+                options.solver_options.SetOption(CommonSolverOption.kPrintFileName, str(path_output_dir / "restriction_mosek_log.log"))  # type: ignore
+
+            relaxed_result = self.gcs.SolveConvexRestriction(active_edges, options)
+            relaxed_results.append(relaxed_result)
 
         plan_results = []
         if print_debug:
             print(f"Rounding {len(paths)} possible GCS paths...")
+
         for idx, (active_edges, relaxed_result) in enumerate(
             zip(paths, relaxed_results)
         ):
@@ -743,8 +907,16 @@ class FootstepPlanner:
                 active_edges, self.all_segment_vertex_pairs, relaxed_result
             )
 
+            if output_dir:
+                path_output_dir = _make_path_output_dir(output_dir, active_edges)
+                curr_plan_rounder.save_tightness_analysis(path_output_dir)
+            else:
+                path_output_dir = None
+
             start_time = time.time()
-            rounded_result = curr_plan_rounder.round()
+            rounded_result = curr_plan_rounder.round(
+                save_solver_output=save_solver_output, output_dir=path_output_dir
+            )
             elapsed_time = time.time() - start_time
             rounded_plan = curr_plan_rounder.get_plan(rounded_result)
 
@@ -810,8 +982,6 @@ class FootstepPlanner:
             # Use the unique name to save paths, so we can easily identify
             # equal paths between different methods
             res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
-            if idx == self.best_idx:
-                res_output_dir += "_BEST"
 
             res.save_analysis_to_folder(res_output_dir)
 
@@ -827,6 +997,10 @@ class FootstepPlanner:
                 result=self.gcs_result,
                 active_path=active_path,
             )
+
+            # Rename best directory with _BEST appended
+            if idx == self.best_idx:
+                Path(res_output_dir).rename(res_output_dir + "_BEST")
 
         plot_relaxation_vs_rounding_bar_plot(
             self.plan_results,

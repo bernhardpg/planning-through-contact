@@ -46,6 +46,18 @@ class FootstepCost:
     sq_acc_rot: Optional[float] = 1.0
     sq_nominal_pose: Optional[float] = 5.0
 
+    @classmethod
+    def with_none(cls) -> "FootstepCost":
+        return cls(
+            sq_force=None,
+            sq_torque=None,
+            sq_vel_lin=None,
+            sq_vel_rot=None,
+            sq_acc_lin=None,
+            sq_acc_rot=None,
+            sq_nominal_pose=None,
+        )
+
 
 @dataclass
 class FootstepPlanningConfig:
@@ -53,9 +65,15 @@ class FootstepPlanningConfig:
     robot: PotatoRobot = field(default_factory=lambda: PotatoRobot())
     period: float = 1.0
     period_steps: int = 3
+    initial_is_equilibrium: bool = False
     use_lp_approx: bool = False
     use_convex_concave: bool = False
+    use_linearized_cost: bool = True
     max_rounded_paths: int = 10
+    use_implied_constraints: bool = False
+    relaxation_trace_cost: Optional[float] = None
+    use_variable_grouping: bool = True
+    force_scale: float = 1
 
     @property
     def dt(self) -> float:

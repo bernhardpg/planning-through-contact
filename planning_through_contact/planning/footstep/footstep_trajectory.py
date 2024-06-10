@@ -8,13 +8,15 @@ import numpy as np
 import numpy.typing as npt
 import yaml
 from pydrake.geometry.optimization import GraphOfConvexSets, Spectrahedron
-from pydrake.math import eq
+from pydrake.math import eq, ge
 from pydrake.solvers import (
+    LinearCost,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
     PositiveSemidefiniteConstraint,
     QuadraticConstraint,
+    QuadraticCost,
     SemidefiniteRelaxationOptions,
     SnoptSolver,
 )
@@ -25,6 +27,13 @@ from planning_through_contact.convex_relaxation.band_sparse_semidefinite_relaxat
 )
 from planning_through_contact.convex_relaxation.convex_concave import (
     cross_product_2d_as_convex_concave,
+)
+from planning_through_contact.convex_relaxation.sdp import (
+    add_trace_cost_on_psd_cones,
+    approximate_sdp_cones_with_linear_cones,
+    get_X_from_psd_constraint,
+    get_X_from_semidefinite_relaxation,
+    to_symmetric_matrix_from_lower_triangular_columns,
 )
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
     LinTrajSegment,
@@ -39,31 +48,11 @@ from planning_through_contact.planning.footstep.in_plane_terrain import (
     InPlaneSteppingStone,
     InPlaneTerrain,
 )
+from planning_through_contact.tools.gcs_tools import hash_gcs_edges
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
-
-
-# TODO move this to a utils file
-def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
-    assert len(relaxation.positive_semidefinite_constraints()) == 1
-    X = relaxation.positive_semidefinite_constraints()[0].variables()
-    N = np.sqrt(len(X))
-    assert int(N) == N
-    X = X.reshape((int(N), int(N)))
-
-    return X
-
-
-def get_X_from_psd_constraint(binding) -> npt.NDArray:
-    assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
-    X = binding.variables()
-    N = np.sqrt(len(X))
-    assert int(N) == N
-    X = X.reshape((int(N), int(N)))
-
-    return X
 
 
 @dataclass
@@ -155,7 +144,7 @@ class FootPlan:
             return NotImplemented
 
         if self.foot_width != other.foot_width:
-            raise ValueError("Cannot add FootKnotPoints with different foot widths")
+            raise ValueError("Cannot add FootPlan with different foot widths")
 
         new_p_WF = np.vstack((self.p_WF, other.p_WF))
         new_f_F_Ws = [
@@ -261,7 +250,7 @@ class FootstepPlan:
         Planned robot body position in world frame. Shape: (num_steps, 2)
     theta_WB: npt.NDArray[np.float64]
         Planned robot body orientation in world frame. Shape: (num_steps, )
-    feet_knot_points: List[FootKnotPoints]
+    feet_knot_points: List[FootPlan]
         Knot points for the feet. List length can be 1 or 2.
     """
 
@@ -525,6 +514,8 @@ class FootstepPlanResult:
     def ub_relaxation_gap_pct(self) -> Optional[float]:
         if self.gcs_metrics is None:
             return None
+        elif self.gcs_metrics.cost == 0:
+            return np.NaN
         else:
             return (
                 (self.rounded_metrics.cost - self.gcs_metrics.cost)
@@ -638,27 +629,10 @@ class FootstepPlanResult:
         Every path with the same sequence of edges will be given this name.
         """
 
-        def _hash_edges(edge_list: List[str]) -> str:
-            import hashlib
-
-            # Convert the list to a string
-            edge_string = ",".join(edge_list)
-
-            # Create a hash object
-            hash_object = hashlib.md5(edge_string.encode())
-
-            # Get the hexadecimal digest of the hash
-            hash_hex = hash_object.hexdigest()
-
-            # Optionally, shorten the hash to use as a unique name
-            unique_name = hash_hex[:8]  # Using the first 8 characters for brevity
-
-            return unique_name
-
         if self.gcs_active_edges is None:
             raise RuntimeError("Cannot assign name when GCS edges are not provided.")
 
-        hash = _hash_edges(self.gcs_active_edges)
+        hash = hash_gcs_edges(self.gcs_active_edges)
         return hash
 
 
@@ -685,6 +659,9 @@ class FootstepPlanSegmentProgram:
                                    one often wants N states as well, which this flag accomplishes.
         """
         self.robot = robot
+
+        # Save the costs that we want to add to GCS/relaxation
+        self.costs_to_use_for_gcs = []
 
         if stone_for_last_foot:
             stone_first, stone_last = stone, stone_for_last_foot
@@ -762,9 +739,15 @@ class FootstepPlanSegmentProgram:
 
         # linear acceleration
         g = np.array([0, -9.81])
-        self.a_WB = (1 / robot.mass) * (self.f_F1_1W + self.f_F1_2W) + g
+        self.a_WB = (1 / robot.mass) * self.config.force_scale * (
+            self.f_F1_1W + self.f_F1_2W
+        ) + g
         if self.two_feet:
-            self.a_WB += (1 / robot.mass) * (self.f_F2_1W + self.f_F2_2W)
+            self.a_WB += (
+                (1 / robot.mass)
+                * self.config.force_scale
+                * (self.f_F2_1W + self.f_F2_2W)
+            )
 
         # angular acceleration
         self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F1_2)
@@ -955,7 +938,9 @@ class FootstepPlanSegmentProgram:
                     f1 = self.f_F2_1W[k]
                     f2 = self.f_F2_2W[k]
                     sq_forces += f1.T @ f1 + f2.T @ f2
-                c = self.prog.AddQuadraticCost(cost.sq_force * sq_forces)
+                c = self.prog.AddQuadraticCost(
+                    cost.sq_force * self.config.force_scale**2 * sq_forces
+                )
                 self.costs["sq_forces"].append(c)
 
         if True:  # this causes the relaxation gap to be high
@@ -1208,17 +1193,19 @@ class FootstepPlanSegmentProgram:
 
     def make_relaxed_prog(
         self,
-        trace_cost: bool = False,
-        use_groups: bool = True,
-        no_implied_constraints: bool = True,  # TODO(bernhardpg)
+        use_lp_approx: bool = False,
+        use_groups: bool = False,
+        use_implied_constraints: bool = False,
+        trace_cost: Optional[float] = False,
     ) -> MathematicalProgram:
-        # Already convex
+
+        # When we use the convex-concave procedure we already have a convex program
         if self.config.use_convex_concave:
             self.relaxed_prog = self.prog
             return self.relaxed_prog
 
         options = SemidefiniteRelaxationOptions()
-        if no_implied_constraints:
+        if not use_implied_constraints:
             options.set_to_weakest()
 
         if use_groups:
@@ -1245,26 +1232,121 @@ class FootstepPlanSegmentProgram:
 
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
-        if trace_cost:
-            X = get_X_from_semidefinite_relaxation(self.relaxed_prog)
-            EPS = 1e-6
-            self.relaxed_prog.AddLinearCost(EPS * np.trace(X))
+
+        # Save the PSD constraints (i.e. before we remove them with LP approxixation)
+        self.semidefinite_relaxation_constraints = (
+            self.relaxed_prog.positive_semidefinite_constraints()
+        )
+
+        # We add all the original quadratic costs to GCS
+        if self.config.use_linearized_cost:
+            self.costs_to_use_for_gcs.extend(self.relaxed_prog.GetAllCosts())
+        else:
+            self.costs_to_use_for_gcs.extend(self.prog.GetAllCosts())
+
+        if trace_cost is not None:
+            trace_costs = add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
+            self.costs_to_use_for_gcs.extend(trace_costs)
+
+        def _find_correct_psd_constraint(vars):
+            vars = Variables(vars)
+            for c in self.semidefinite_relaxation_constraints:
+                c_vars = Variables(c.variables())
+                if vars.IsSubsetOf(c_vars):
+                    return c
+
+            raise RuntimeError(
+                f"The variables {vars} does not belong to any one PSD constraint"
+            )
+
+        if use_lp_approx:
+            approximate_sdp_cones_with_linear_cones(self.relaxed_prog)
+
+            # Constrain all the square expressions from the cost to be nonnegative so the
+            # naive LP relaxation is not unbounded
+            if not self.config.use_linearized_cost:
+                original_vars = self.prog.decision_variables()
+
+                def _pure_square(cost):
+                    vars = Variables(cost.variables())
+                    for var in original_vars:
+                        if var in vars:
+                            return False
+                    return True
+
+                for cost in self.relaxed_prog.GetAllCosts():
+                    if type(cost.evaluator()) is not LinearCost:
+                        raise NotImplementedError(
+                            "We do not yet support nonlinear costs"
+                        )
+
+                    if not _pure_square(cost):
+                        expr = (cost.evaluator().Eval(cost.variables())).item()
+                        self.relaxed_prog.AddLinearConstraint(expr >= 0)
+
+            if False:
+                # TODO: remove if no longer needed
+                # This code adds the cuts that the used squares in the cost must be positive.
+
+                def _make_homogenous(Q, p, r):
+                    """
+                    Converts 0.5 xᵀQx + pᵀx + r
+                    to 0.5 [x; 1]ᵀ[Q p; pᵀ 2r] [x; 1]
+                    """
+                    # Ensure p is a column vector
+                    p = p.reshape((-1, 1))
+
+                    # Construct the block matrix
+                    Q_bar = np.block([[Q, p], [p.T, 2 * r]])
+
+                    return Q_bar
+
+                def _get_indices_in_vars(subset_vars, vars) -> List[int]:
+                    temp = MathematicalProgram()
+                    temp.AddDecisionVariables(vars)
+                    return temp.FindDecisionVariableIndices(subset_vars)
+
+                # Add the cuts that the squared costs must be nonnegative (otherwise
+                # the LP relaxation is unbounded)
+                for cost in self.prog.GetAllCosts():
+                    e = cost.evaluator()
+                    assert type(e) is QuadraticCost
+
+                    # These cuts are already added
+                    is_simple_square = np.allclose(e.b(), 0) and np.isclose(e.c(), 0)
+                    if not is_simple_square:
+                        vars = cost.variables()
+                        N = len(vars)
+                        psd_constraint = _find_correct_psd_constraint(vars)
+                        Y = get_X_from_psd_constraint(psd_constraint)
+                        # Y = [X x^T; x 1]
+                        x = Y[-1, :]
+
+                        # Retrieve the principal minor in Y corresponding to `vars`,
+                        # i.e. we retrieve the matrix Y_bar = [X_bar vars; vars^T, 1] where
+                        # X_bar corresponds to the higher order terms for `vars`.
+                        indices_in_vars = _get_indices_in_vars(vars, x)
+                        indices = np.concatenate([indices_in_vars, [len(x) - 1]])
+                        Y_bar = Y[np.ix_(indices, indices)]
+
+                        Q_bar = _make_homogenous(e.Q(), e.b(), e.c())
+                        if not Q_bar.shape == Y_bar.shape:
+                            raise RuntimeError("Something must be wrong")
+
+                        sq_must_be_positive = 0.5 * np.sum(Q_bar * Y_bar) >= 0
+                        self.relaxed_prog.AddLinearConstraint(sq_must_be_positive)
 
         return self.relaxed_prog
 
-    def get_convex_set(self, use_lp_approx: bool = False) -> Spectrahedron:
-        relaxed_prog = self.make_relaxed_prog()
-
-        if use_lp_approx:
-            for psd_constraint in relaxed_prog.positive_semidefinite_constraints():
-                # TODO remove
-                # relaxed_prog.RelaxPsdConstraintToDdDualCone(psd_constraint)
-                X = get_X_from_psd_constraint(psd_constraint)
-                relaxed_prog.RemoveConstraint(psd_constraint)  # type: ignore
-                N = X.shape[0]
-                for i in range(N):
-                    X_i = X[i, i]
-                    relaxed_prog.AddLinearConstraint(X_i >= 0)
+    def get_convex_set(
+        self, use_lp_approx: bool = False, use_implied_constraints: bool = False
+    ) -> Spectrahedron:
+        relaxed_prog = self.make_relaxed_prog(
+            use_lp_approx=use_lp_approx,
+            use_implied_constraints=use_implied_constraints,
+            trace_cost=self.config.relaxation_trace_cost,
+            use_groups=self.config.use_variable_grouping,
+        )
 
         spectrahedron = Spectrahedron(relaxed_prog)
         return spectrahedron
@@ -1299,9 +1381,11 @@ class FootstepPlanSegmentProgram:
         p_WB = self.get_solution(self.p_WB, result, vertex_vars)
         theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
         p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
-        f_F1_1W, f_F1_2W = self.get_solution(
+        f_F1_1W, f_F1_2W = self.config.force_scale * self.get_solution(
             self.f_F1_1W, result, vertex_vars
-        ), self.get_solution(self.f_F1_2W, result, vertex_vars)
+        ), self.config.force_scale * self.get_solution(
+            self.f_F1_2W, result, vertex_vars
+        )
         tau_F1_1, tau_F1_2 = self.get_solution(
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
@@ -1316,9 +1400,11 @@ class FootstepPlanSegmentProgram:
 
         if self.two_feet:
             p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
-            f_F2_1W, f_F2_2W = self.get_solution(
+            f_F2_1W, f_F2_2W = self.config.force_scale * self.get_solution(
                 self.f_F2_1W, result, vertex_vars
-            ), self.get_solution(self.f_F2_2W, result, vertex_vars)
+            ), self.config.force_scale * self.get_solution(
+                self.f_F2_2W, result, vertex_vars
+            )
             tau_F2_1, tau_F2_2 = self.get_solution(
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
@@ -1394,18 +1480,22 @@ class FootstepPlanSegmentProgram:
         return plan_result
 
     def evaluate_costs_with_result(
-        self, result: MathematicalProgramResult
+        self, result: MathematicalProgramResult, vertex_vars: npt.NDArray
     ) -> Dict[str, List[float]]:
         cost_vals = {}
         for key, val in self.costs.items():
             cost_vals[key] = []
 
             for binding in val:
-                vars = result.GetSolution(binding.variables())
+                vars = self.get_solution(
+                    binding.variables(), result, vertex_vars=vertex_vars
+                )
                 cost_vals[key].append(binding.evaluator().Eval(vars))
 
         for key in cost_vals:
             cost_vals[key] = np.array(cost_vals[key])
+
+        cost_vals["sum"] = np.sum([np.sum(vals) for vals in cost_vals.values()])
 
         return cost_vals
 

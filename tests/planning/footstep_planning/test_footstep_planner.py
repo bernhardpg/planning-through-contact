@@ -96,7 +96,9 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
     stone = terrain.add_stone(x_pos=1.0, width=2.0, z_pos=0.2, name="initial")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True)
+    cfg = FootstepPlanningConfig(
+        robot=robot, use_lp_approx=True, use_linearized_cost=False, max_rounded_paths=3
+    )
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height + stone.z_pos])
     initial_pos = np.array([stone.x_pos - 0.6, 0.0]) + desired_robot_pos
@@ -114,7 +116,7 @@ def test_footstep_planning_one_long_stone_lp_approx() -> None:
         target_stone_name=stone.name,
     )
 
-    planner.plan(print_flows=True, print_solver_output=DEBUG)
+    planner.plan(print_flows=DEBUG, print_solver_output=DEBUG)
 
     if DEBUG:
         planner.save_analysis("test_one_stone_lp_approx")
@@ -130,7 +132,13 @@ def test_footstep_planning_many_stones_lp_approx() -> None:
     target_stone = terrain.add_stone(x_pos=3.75, width=0.5, z_pos=0.5, name="target")
 
     robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=True, period=0.3)
+    cfg = FootstepPlanningConfig(
+        robot=robot,
+        use_lp_approx=True,
+        period=0.3,
+        use_linearized_cost=False,
+        max_rounded_paths=3,
+    )
 
     desired_robot_pos = np.array([0.0, cfg.robot.desired_com_height])
     initial_pos = initial_stone.com + desired_robot_pos

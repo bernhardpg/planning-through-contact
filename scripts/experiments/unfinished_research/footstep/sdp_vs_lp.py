@@ -2,8 +2,23 @@ from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
+from pydrake.math import ToSymmetricMatrixFromLowerTriangularColumns, eq
+from pydrake.solvers import (
+    Binding,
+    ClarabelSolver,
+    CommonSolverOption,
+    MathematicalProgram,
+    MathematicalProgramResult,
+    MosekSolver,
+    QuadraticConstraint,
+    SnoptSolver,
+    SolutionResult,
+    Solve,
+    SolverOptions,
+)
 
 from planning_through_contact.planning.footstep.footstep_plan_config import (
+    FootstepCost,
     FootstepPlanningConfig,
     PotatoRobot,
 )
@@ -42,10 +57,40 @@ def plan(
     use_lp: bool,
     output_dir: Path,
     debug: bool = False,
-) -> Tuple[FootstepPlanResult, List[FootstepPlanResult], int]:
+) -> Tuple[FootstepPlanResult, List[FootstepPlanResult]]:
 
-    robot = PotatoRobot()
-    cfg = FootstepPlanningConfig(robot=robot, use_lp_approx=use_lp, max_rounded_paths=5)
+    robot = PotatoRobot(mass=50.0)
+    cost = FootstepCost()
+    # cost = FootstepCost.with_none()
+    # cost.sq_acc_lin = None
+    # cost.sq_acc_rot = None
+    # cost.sq_nominal_pose = 1.0
+    # cost.sq_vel_rot = 1.0
+    # cost.sq_vel_lin = 1.0
+    # cost.sq_force = None
+    # cost.sq_torque = None
+    # cost = FootstepCost.with_none()
+    # cost.sq_acc_lin = cost.sq_acc_rot = 100.0
+    # cost.sq_force = 1.0
+    # cost.sq_torque = 1.0
+    # cost.sq_vel_lin = 1.0
+    # cost.sq_vel_rot = 1.0
+    # cost.sq_acc_lin = 1.0
+    # cost.sq_acc_rot = 1.0
+    # cost.sq_nominal_pose = 1.0
+
+    cfg = FootstepPlanningConfig(
+        cost=cost,
+        robot=robot,
+        use_lp_approx=use_lp,
+        max_rounded_paths=5,
+        use_implied_constraints=False,
+        use_variable_grouping=True,
+        initial_is_equilibrium=True,
+        use_linearized_cost=False,
+        relaxation_trace_cost=1e-5,
+        force_scale=1e2,
+    )
 
     terrain, initial_stone, target_stone = terrain_and_stones
 
@@ -72,17 +117,28 @@ def plan(
         target_stone_name=target_stone.name,
     )
 
-    planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug)
     if use_lp:
         name = "lp"
     else:
         name = "sdp"
 
-    planner.save_analysis(str(output_dir / name))
+    path = output_dir / name
+    path.mkdir(exist_ok=True, parents=True)
+
+    # planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug, save_solver_output=True)
+    planner.plan(
+        print_flows=debug,
+        print_solver_output=False,
+        print_debug=debug,
+        save_solver_output=True,
+        output_dir=path,
+    )
+
+    planner.save_analysis(str(path))
 
     best_result = planner.get_best_result()
     results = planner.get_results()
-    return best_result, results, planner.best_idx
+    return best_result, results
 
 
 def main(output_dir: Path, debug: bool = False) -> None:
@@ -91,21 +147,17 @@ def main(output_dir: Path, debug: bool = False) -> None:
 
     for terrain, name in zip(terrains, names):
         logger.info(f"## Terrain: {name} ##")
-        result_lp, results_lp, best_idx_lp = plan(
-            terrain, True, output_dir / name, debug
-        )
+        result_lp, results_lp = plan(terrain, True, output_dir / name, debug)
         assert result_lp.gcs_metrics is not None
 
-        result_sdp, results_sdp, best_idx_sdp = plan(
-            terrain, False, output_dir / name, debug
-        )
+        result_sdp, results_sdp = plan(terrain, False, output_dir / name, debug)
         assert result_sdp.gcs_metrics is not None
 
         logger.info(f" - LP num found paths: {len(results_lp)}")
         logger.info(f" - SDP num found paths: {len(results_sdp)}\n")
 
-        logger.info(f" - LP best path: {best_idx_lp}")
-        logger.info(f" - SDP best path: {best_idx_sdp}\n")
+        logger.info(f" - LP best path: {result_lp.get_unique_gcs_name()}")
+        logger.info(f" - SDP best path: {result_sdp.get_unique_gcs_name()}\n")
 
         logger.info(f" - LP best path length: {result_lp.num_modes}")
         logger.info(f" - SDP best path length: {result_sdp.num_modes}\n")
@@ -128,20 +180,20 @@ def main(output_dir: Path, debug: bool = False) -> None:
         )
 
         logger.info(f" - LP GCS cost: {result_lp.gcs_metrics.cost :.3f}")
-        logger.info(f" - SDP GCS cost: {result_lp.gcs_metrics.cost :.3f}\n")
+        logger.info(f" - SDP GCS cost: {result_sdp.gcs_metrics.cost :.3f}\n")
 
         logger.info(
             f" - LP restriction cost: {result_lp.restriction_metrics.cost :.3f}"
         )
         logger.info(
-            f" - SDP restriction cost: {result_lp.restriction_metrics.cost :.3f}\n"
+            f" - SDP restriction cost: {result_sdp.restriction_metrics.cost :.3f}\n"
         )
 
         logger.info(f" - LP rounded cost: {result_lp.rounded_metrics.cost :.3f}")
-        logger.info(f" - SDP rounded cost: {result_lp.rounded_metrics.cost :.3f}\n")
+        logger.info(f" - SDP rounded cost: {result_sdp.rounded_metrics.cost :.3f}\n")
 
         logger.info(f" - LP opt_gap: {result_lp.ub_relaxation_gap_pct :.3f} %")
-        logger.info(f" - SDP opt_gap: {result_lp.ub_relaxation_gap_pct :.3f} %\n")
+        logger.info(f" - SDP opt_gap: {result_sdp.ub_relaxation_gap_pct :.3f} %\n")
 
 
 if __name__ == "__main__":

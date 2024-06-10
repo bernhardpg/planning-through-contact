@@ -64,3 +64,24 @@ def get_gcs_solution_path_edges(
     ]
     edge_path = _gcs_find_edges_to_target(active_edges, target_vertex, source_vertex)
     return edge_path
+
+
+def hash_gcs_edges(edge_list: List[str]) -> str:
+    """
+    Creates a unique and deterministic id for a path of GCS edges
+    """
+    import hashlib
+
+    # Convert the list to a string
+    edge_string = ",".join(edge_list)
+
+    # Create a hash object
+    hash_object = hashlib.md5(edge_string.encode())
+
+    # Get the hexadecimal digest of the hash
+    hash_hex = hash_object.hexdigest()
+
+    # Optionally, shorten the hash to use as a unique name
+    unique_name = hash_hex[:8]  # Using the first 8 characters for brevity
+
+    return unique_name
