@@ -93,7 +93,7 @@ class StateEstimator(Diagram):
             from pydrake.systems.sensors import ApplyCameraConfig
 
             for camera_config in sim_config.camera_configs:
-                if sim_config.randomize_camera:
+                if sim_config.camera_randomization:
                     camera_config = randomize_camera_config(camera_config)
                 ApplyCameraConfig(
                     config=camera_config,

@@ -32,17 +32,6 @@ from planning_through_contact.simulation.controllers.diffusion_policy_source imp
 )
 from planning_through_contact.simulation.controllers.hybrid_mpc import HybridMpcConfig
 from planning_through_contact.simulation.sim_utils import get_slider_start_poses
-
-from planning_through_contact.simulation.controllers.diffusion_policy_source import DiffusionPolicyConfig
-from planning_through_contact.experiments.utils import (
-    get_box,
-    get_tee,
-    get_default_plan_config,
-    get_arbitrary,
-)
-from planning_through_contact.simulation.sim_utils import (
-    get_slider_start_poses,
-)
 from planning_through_contact.tools.utils import PhysicalProperties
 
 
@@ -164,7 +153,7 @@ class PlanarPushingSimConfig:
     pusher_z_offset: float = 0.05
     camera_configs: List[CameraConfig] = None
     domain_randomization: bool = False
-    randomize_camera: bool = False
+    camera_randomization: bool = False
     log_dir: str = (
         None  # directory for logging rollouts from output_feedback_table_environments
     )
@@ -226,7 +215,7 @@ class PlanarPushingSimConfig:
             pusher_z_offset=cfg.pusher_z_offset,
             log_dir=cfg.log_dir,
             domain_randomization=cfg.domain_randomization,
-            randomize_camera=cfg.randomize_camera,
+            camera_randomization=cfg.camera_randomization,
             slider_physical_properties=slider_physical_properties,
         )
 
@@ -320,7 +309,7 @@ class PlanarPushingSimConfig:
             and self.log_dir == other.log_dir
             and np.allclose(self.default_joint_positions, other.default_joint_positions)
             and self.diffusion_policy_config == other.diffusion_policy_config
-            and self.multi_run_config == other.multi_run_config,
-            self.domain_randomization == other.domain_randomization,
-            self.randomize_camera == other.randomize_camera,
+            and self.multi_run_config == other.multi_run_config
+            and self.domain_randomization == other.domain_randomization
+            and self.camera_randomization == other.camera_randomization
         )

@@ -67,7 +67,7 @@ multi_run_config:
   rot_tol: 4 # degrees
   evaluate_final_pusher_position: false
   evaluate_final_slider_rotation: true
-randomize_camera: false
+camera_randomization: false
 domain_randomization: false
 
 ## Robot specific configs

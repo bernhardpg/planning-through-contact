@@ -69,7 +69,7 @@ camera_configs:
     focal_x: 616.704
     focal_y: 616.777
     show_rgb: false
-randomize_camera: false
+camera_randomization: false
 domain_randomization: false
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
