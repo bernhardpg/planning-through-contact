@@ -68,6 +68,7 @@ class FootstepPlanningConfig:
     initial_is_equilibrium: bool = False
     use_lp_approx: bool = False
     use_convex_concave: bool = False
+    use_linearized_cost: bool = True
     max_rounded_paths: int = 10
     use_implied_constraints: bool = False
     relaxation_trace_cost: Optional[float] = None

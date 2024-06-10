@@ -1231,6 +1231,17 @@ class FootstepPlanSegmentProgram:
         else:
             self.relaxed_prog = MakeSemidefiniteRelaxation(self.prog)
 
+        # Save the PSD constraints (i.e. before we remove them with LP approxixation)
+        self.semidefinite_relaxation_constraints = (
+            self.relaxed_prog.positive_semidefinite_constraints()
+        )
+
+        # We add all the original quadratic costs to GCS
+        if self.config.use_linearized_cost:
+            self.costs_to_use_for_gcs.extend(self.relaxed_prog.GetAllCosts())
+        else:
+            self.costs_to_use_for_gcs.extend(self.prog.GetAllCosts())
+
         if trace_cost is not None:
             trace_costs = add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
             self.costs_to_use_for_gcs.extend(trace_costs)

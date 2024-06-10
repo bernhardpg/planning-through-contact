@@ -320,13 +320,29 @@ class FootstepPlanRounder:
         Xs = {
             p.s.name: [
                 _eval_X(constraint, p)
-                for constraint in p.s.relaxed_prog.positive_semidefinite_constraints()
+                for constraint in p.s.semidefinite_relaxation_constraints
             ]
             for p in self.active_pairs
         }
 
-        eigvals_per_segment = {
-            name: [list(reversed(sorted(np.linalg.eigvals(X)))) for X in X_list]
+        def _remove_imaginary_part(z: np.complex128, tol=1e-9) -> float:
+            if abs(z.imag) < tol:
+                return float(z.real)
+            else:
+                raise ValueError(f"The imaginary part is not almost zero: {z.imag}")
+
+        # Make Eigenvalue plot
+        eigvals_per_segment: Dict[str, List[List[float]]] = {
+            name: [
+                list(
+                    reversed(
+                        sorted(
+                            [_remove_imaginary_part(e) for e in np.linalg.eigvals(X)]
+                        )
+                    )
+                )
+                for X in X_list
+            ]
             for name, X_list in Xs.items()
         }
 
@@ -355,18 +371,18 @@ class FootstepPlanRounder:
             fig.savefig(eigs_output_dir / f"eigvals_mode_{name}.pdf")
             plt.close()
 
-        # fig = plt.figure()
+        # Make value magnitude plot
         xs = {
             name: [X[-1, :] for X in Xs_for_segment]
             for name, Xs_for_segment in Xs.items()
         }
 
         Xs_maxs = {
-            name: np.max([np.max(X) for X in Xs_per_segment])
+            name: np.max([np.max(np.abs(X)) for X in Xs_per_segment])
             for name, Xs_per_segment in Xs.items()
         }
         xs_maxs = {
-            name: np.max([np.max(x) for x in xs_per_segment])
+            name: np.max([np.max(np.abs(x)) for x in xs_per_segment])
             for name, xs_per_segment in xs.items()
         }
 
@@ -379,15 +395,18 @@ class FootstepPlanRounder:
 
             ax.bar(names, values, color="blue")
             ax.set_xlabel("Segment")
-            ax.set_ylabel("Max Value")
+            ax.set_ylabel("Max absolute value")
+
+            # Set the tick positions and labels
+            ax.set_xticks(range(len(names)))
             ax.set_xticklabels(names, rotation=45, ha="right")
             ax.set_title(title)
 
         # Plot for Xs_maxs
-        create_bar_subplot(axs[0], Xs_maxs, "Max Values for Xs")
+        create_bar_subplot(axs[0], Xs_maxs, "Max Absolute Values for Xs")
 
         # Plot for xs_maxs
-        create_bar_subplot(axs[1], xs_maxs, "Max Values for xs")
+        create_bar_subplot(axs[1], xs_maxs, "Max Absolute Values for xs")
 
         # Ensure the y-axis limits are equal
         y_max = max(axs[0].get_ylim()[1], axs[1].get_ylim()[1])
