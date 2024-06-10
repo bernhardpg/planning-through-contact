@@ -19,6 +19,7 @@ from pydrake.solvers import (
     MathematicalProgram,
     MathematicalProgramResult,
     MosekSolver,
+    QuadraticConstraint,
     SnoptSolver,
     SolutionResult,
     Solve,
