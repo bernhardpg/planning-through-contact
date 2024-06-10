@@ -897,14 +897,24 @@ class FootstepPlanSegmentProgram:
                     self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
 
         # dynamics
-        dt = self.config.dt
+        if self.config.use_variable_timing:
+            self.dt = self.prog.NewContinuousVariables(1, "dt").item()
+        else:
+            self.dt = self.config.dt
+
         for k in range(self.num_steps - 1):
             s_next = self.get_state(k + 1)
             s_curr = self.get_state(k)
             f = self.get_dynamics(k)
             # forward euler
-            dynamics = s_next - (s_curr + dt * f)
-            self.prog.AddLinearConstraint(eq(dynamics, 0))
+            dynamics = s_next - (s_curr + self.dt * f)
+
+            if self.config.use_variable_timing:
+                for d in dynamics:
+                    self.prog.AddQuadraticConstraint(d, 0, 0)
+            else:
+                # This constraint is linear if we don't have variable timing
+                self.prog.AddLinearConstraint(eq(dynamics, 0))
 
         # feet can't move during segment
         for k in range(self.num_inputs - 1):
@@ -1003,10 +1013,6 @@ class FootstepPlanSegmentProgram:
                 sq_diff = diff.T @ diff
                 c = self.prog.AddQuadraticCost(cost.sq_nominal_pose * sq_diff)  # type: ignore
                 self.costs["sq_nominal_pose"].append(c)
-
-    @property
-    def dt(self) -> float:
-        return self.config.dt
 
     def get_state(self, k: int) -> npt.NDArray:
         if k == -1:
@@ -1223,6 +1229,12 @@ class FootstepPlanSegmentProgram:
                 variable_groups.append(
                     Variables(self.get_state(self.num_states - 1))
                 )  # add the last state
+
+            # Add dt as a variable in each group
+            if self.config.use_variable_timing:
+                assert type(self.dt) is Variable
+                for v in variable_groups:
+                    v.insert(self.dt)
 
             assert self.num_states - 1 == len(variable_groups)
 

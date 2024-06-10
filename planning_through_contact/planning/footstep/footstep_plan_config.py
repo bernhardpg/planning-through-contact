@@ -71,6 +71,7 @@ class FootstepPlanningConfig:
     use_linearized_cost: bool = True
     max_rounded_paths: int = 10
     use_implied_constraints: bool = False
+    use_variable_timing: bool = False
     relaxation_trace_cost: Optional[float] = None
     use_variable_grouping: bool = True
     force_scale: float = 1

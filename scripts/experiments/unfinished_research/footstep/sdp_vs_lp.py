@@ -61,23 +61,6 @@ def plan(
 
     robot = PotatoRobot(mass=50.0)
     cost = FootstepCost()
-    # cost = FootstepCost.with_none()
-    # cost.sq_acc_lin = None
-    # cost.sq_acc_rot = None
-    # cost.sq_nominal_pose = 1.0
-    # cost.sq_vel_rot = 1.0
-    # cost.sq_vel_lin = 1.0
-    # cost.sq_force = None
-    # cost.sq_torque = None
-    # cost = FootstepCost.with_none()
-    # cost.sq_acc_lin = cost.sq_acc_rot = 100.0
-    # cost.sq_force = 1.0
-    # cost.sq_torque = 1.0
-    # cost.sq_vel_lin = 1.0
-    # cost.sq_vel_rot = 1.0
-    # cost.sq_acc_lin = 1.0
-    # cost.sq_acc_rot = 1.0
-    # cost.sq_nominal_pose = 1.0
 
     cfg = FootstepPlanningConfig(
         cost=cost,
@@ -88,6 +71,7 @@ def plan(
         use_variable_grouping=True,
         initial_is_equilibrium=True,
         use_linearized_cost=False,
+        use_variable_timing=True,
         relaxation_trace_cost=1e-5,
         force_scale=1e2,
     )
