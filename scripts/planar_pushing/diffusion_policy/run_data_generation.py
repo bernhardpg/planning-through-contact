@@ -500,10 +500,7 @@ def convert_to_zarr(
             images[camera_name] = np.array(images[camera_name])
 
         # get target
-        target = np.array(
-            [pusher_desired.x[-1], pusher_desired.y[-1], pusher_desired.theta[-1]]
-        )
-        target = np.array([target for _ in range(len(state))])
+        target = np.array([slider_state[-1] for _ in range(len(state))])
 
         # update concatenated arrays
         concatenated_states.append(state)
