@@ -173,7 +173,6 @@ class DataCollectionTableEnvironment:
         self._data_collection_dir = self._setup_data_collection_dir(
             data_collection_config.rendered_plans_dir
         )
-        self._image_dir = f"{self._data_collection_dir}/images"
         self._log_path = f"{self._data_collection_dir}/log.txt"
         self._diff_ik_time_step = self._get_diff_ik_time_step()
 
@@ -313,11 +312,15 @@ class DataCollectionTableEnvironment:
         # Set up camera logging
         image_writers = []
         for camera_config in sim_config.camera_configs:
+            os.makedirs(
+                f"{self._data_collection_dir}/{camera_config.name}", exist_ok=True
+            )
             image_writers.append(ImageWriter())
             image_writers[-1].DeclareImageInputPort(
                 pixel_type=PixelType.kRgba8U,
                 port_name=f"{camera_config.name}_image",
-                file_name_format=self._image_dir + "/{time_msec}.png",
+                file_name_format=f"{self._data_collection_dir}/{camera_config.name}"
+                + "/{time_msec}.png",
                 publish_period=0.1,
                 start_time=0.0,
             )
@@ -426,14 +429,18 @@ class DataCollectionTableEnvironment:
                 3,
             ]
         )
-        for image_name in os.listdir(self._image_dir):
-            image_path = f"{self._image_dir}/{image_name}"
-            img = Image.open(image_path)
-            img = np.asarray(img)
-            if not np.allclose(img.shape, desired_image_shape):
-                img = cv2.resize(img, (desired_image_shape[1], desired_image_shape[0]))
-                img = Image.fromarray(img)
-                img.save(image_path)
+        for camera_config in self._sim_config.camera_configs:
+            image_dir = f"{self._data_collection_dir}/{camera_config.name}"
+            for image_name in os.listdir(image_dir):
+                image_path = f"{image_dir}/{image_name}"
+                img = Image.open(image_path)
+                img = np.asarray(img)
+                if not np.allclose(img.shape, desired_image_shape):
+                    img = cv2.resize(
+                        img, (desired_image_shape[1], desired_image_shape[0])
+                    )
+                    img = Image.fromarray(img)
+                    img.save(image_path)
 
     def _visualize_desired_slider_pose(self, t):
         # Visualizing the desired slider pose
@@ -466,7 +473,7 @@ class DataCollectionTableEnvironment:
                 traj_idx += 1
 
         # Setup the current directory
-        os.makedirs(f"{data_collection_dir}/{traj_idx}/images")
+        os.makedirs(f"{data_collection_dir}/{traj_idx}")
         open(f"{data_collection_dir}/{traj_idx}/log.txt", "w").close()
         return f"{data_collection_dir}/{traj_idx}"
 

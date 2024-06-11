@@ -105,7 +105,7 @@ def main(cfg: OmegaConf):
         data_collection_config.convert_to_zarr
         or data_collection_config.convert_to_zarr_reduce
     ):
-        convert_to_zarr(data_collection_config, debug=False)
+        convert_to_zarr(sim_config, data_collection_config, debug=False)
 
 
 def save_omegaconf(cfg: OmegaConf, dir: str, config_name: str = "config.yaml"):
@@ -337,7 +337,11 @@ def simulate_plan(
     environment.resize_saved_images()
 
 
-def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = False):
+def convert_to_zarr(
+    sim_config: PlanarPushingSimConfig,
+    data_collection_config: DataCollectionConfig,
+    debug: bool = False,
+):
     """
     Converts the rendered plans to zarr format.
 
@@ -396,10 +400,11 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
                 continue
             traj_dir_list.append(traj_dir)
 
+    camera_names = [camera_config.name for camera_config in sim_config.camera_configs]
     concatenated_states = []
     concatenated_slider_states = []
     concatenated_actions = []
-    concatenated_images = []
+    concatenated_images = {camera_name: [] for camera_name in camera_names}
     concatenated_targets = []
     episode_ends = []
     current_end = 0
@@ -411,7 +416,6 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
     )
 
     for traj_dir in tqdm(traj_dir_list):
-        image_dir = traj_dir.joinpath("images")
         traj_log_path = traj_dir.joinpath("combined_logs.pkl")
         log_path = traj_dir.joinpath("log.txt")
 
@@ -440,7 +444,8 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
         idx = start_idx
         state = []
         slider_state = []
-        images = []
+        images = {camera_name: [] for camera_name in camera_names}
+
         while current_time < total_time:
             # state and action
             idx = _get_closest_index(t, current_time, idx)
@@ -465,21 +470,24 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
             # This line can be simplified but it is clearer this way.
             # Image names are "{time in ms}" rounded to the nearest 100th
             image_name = round((current_time * 1000) / 100) * 100
-            image_path = image_dir.joinpath(f"{int(image_name)}.png")
-            img = Image.open(image_path).convert("RGB")
-            img = np.asarray(img)
-            if not np.allclose(img.shape, desired_image_shape):
-                img = cv2.resize(img, (desired_image_shape[1], desired_image_shape[0]))
-            images.append(img)
-            if debug:
-                from matplotlib import pyplot as plt
+            for camera_name in camera_names:
+                image_path = traj_dir.joinpath(camera_name, f"{int(image_name)}.png")
+                img = Image.open(image_path).convert("RGB")
+                img = np.asarray(img)
+                if not np.allclose(img.shape, desired_image_shape):
+                    img = cv2.resize(
+                        img, (desired_image_shape[1], desired_image_shape[0])
+                    )
+                images[camera_name].append(img)
+                if debug:
+                    from matplotlib import pyplot as plt
 
-                print(f"\nCurrent time: {current_time}")
-                print(f"Current index: {idx}")
-                print(f"Image path: {image_path}")
-                print(f"Current state: {current_state}")
-                plt.imshow(img[6:-6, 6:-6, :])
-                plt.show()
+                    print(f"\nCurrent time: {current_time}")
+                    print(f"Current index: {idx}")
+                    print(f"Image path: {image_path}")
+                    print(f"Current state: {current_state}")
+                    plt.imshow(img[6:-6, 6:-6, :])
+                    plt.show()
 
             # update current time
             current_time = round((current_time + dt) * freq) / freq
@@ -488,7 +496,8 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
         slider_state = np.array(slider_state)  # T x 3
         action = np.array(state)[:, :2]  # T x 2
         action = np.concatenate([action[1:, :], action[-1:, :]], axis=0)  # shift action
-        images = np.array(images)
+        for camera_name in camera_names:
+            images[camera_name] = np.array(images[camera_name])
 
         # get target
         target = np.array(
@@ -500,7 +509,8 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
         concatenated_states.append(state)
         concatenated_slider_states.append(slider_state)
         concatenated_actions.append(action)
-        concatenated_images.append(images)
+        for camera_name in camera_names:
+            concatenated_images[camera_name].append(images[camera_name])
         concatenated_targets.append(target)
         episode_ends.append(current_end + len(state))
         current_end += len(state)
@@ -523,20 +533,30 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
     )
     action_chunk_size = (data_collection_config.action_chunk_length, action.shape[1])
     target_chunk_size = (data_collection_config.target_chunk_length, target.shape[1])
-    image_chunk_size = (data_collection_config.image_chunk_length, *images[0].shape)
+    image_chunk_sizes = {
+        camera_name: (
+            data_collection_config.image_chunk_length,
+            *images[camera_name][0].shape,
+        )
+        for camera_name in camera_names
+    }
 
     # convert to numpy
     concatenated_states = np.concatenate(concatenated_states, axis=0)
     concatenated_slider_states = np.concatenate(concatenated_slider_states, axis=0)
     concatenated_actions = np.concatenate(concatenated_actions, axis=0)
-    concatenated_images = np.concatenate(concatenated_images, axis=0)
+    for camera_name in camera_names:
+        concatenated_images[camera_name] = np.concatenate(
+            concatenated_images[camera_name], axis=0
+        )
     concatenated_targets = np.concatenate(concatenated_targets, axis=0)
     episode_ends = np.array(episode_ends)
 
     assert episode_ends[-1] == concatenated_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_slider_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_actions.shape[0]
-    assert concatenated_states.shape[0] == concatenated_images.shape[0]
+    for camera_name in camera_names:
+        assert concatenated_states.shape[0] == concatenated_images[camera_name].shape[0]
     assert concatenated_states.shape[0] == concatenated_targets.shape[0]
 
     data_group.create_dataset(
@@ -548,10 +568,15 @@ def convert_to_zarr(data_collection_config: DataCollectionConfig, debug: bool = 
     data_group.create_dataset(
         "action", data=concatenated_actions, chunks=action_chunk_size
     )
-    data_group.create_dataset("img", data=concatenated_images, chunks=image_chunk_size)
     data_group.create_dataset(
         "target", data=concatenated_targets, chunks=target_chunk_size
     )
+    for camera_name in camera_names:
+        data_group.create_dataset(
+            camera_name,
+            data=concatenated_images[camera_name],
+            chunks=image_chunk_sizes[camera_name],
+        )
     meta_group.create_dataset("episode_ends", data=episode_ends)
 
 
