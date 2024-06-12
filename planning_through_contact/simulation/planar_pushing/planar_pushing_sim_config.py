@@ -253,6 +253,8 @@ class PlanarPushingSimConfig:
                     X_PB = Transform(
                         RigidTransform(orientation, np.array(camera_config.position))
                     )
+                if "parent_frame" in camera_config:
+                    X_PB.base_frame = camera_config.parent_frame
 
                 camera_configs.append(
                     CameraConfig(
