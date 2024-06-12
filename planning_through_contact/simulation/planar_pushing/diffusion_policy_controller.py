@@ -173,9 +173,9 @@ class DiffusionPolicyController(LeafSystem):
             # Compute new actions
             start_time = pytime.time()
             with torch.no_grad():
-                action_prediction = self._policy.predict_action(obs_dict)[
-                    "action_pred"
-                ][0]
+                action_prediction = self._policy.predict_action(
+                    obs_dict, use_DDIM=True
+                )["action_pred"][0]
             actions = action_prediction[self._start : self._end]
             for action in actions:
                 self._actions.append(action.cpu().numpy())

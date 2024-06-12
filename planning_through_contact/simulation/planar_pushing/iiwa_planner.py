@@ -246,8 +246,8 @@ class IiwaPlanner(LeafSystem):
         logger.debug(f"q_start = {q_start}")
         logger.debug(f"q_goal = {q_goal}")
 
-        vel_limits = 0.1 * np.ones(7)  # 0.15
-        accel_limits = 0.05 * np.ones(7)
+        vel_limits = 1 * np.ones(7)  # 0.15
+        accel_limits = 1 * np.ones(7)
         # Set non-zero h_min for start and goal to enforce zero velocity.
         start = gcs.AddRegions([Point(q_start)], order=1, h_min=0.1)
         goal = gcs.AddRegions([Point(q_goal)], order=1, h_min=0.1)

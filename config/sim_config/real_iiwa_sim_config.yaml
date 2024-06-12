@@ -36,7 +36,7 @@ time_step: 0.001
 closed_loop: false # MPC flag
 draw_frames: true
 use_realtime: false
-delay_before_execution: 3.0
+delay_before_execution: 5.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
