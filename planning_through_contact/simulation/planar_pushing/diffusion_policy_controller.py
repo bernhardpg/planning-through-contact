@@ -63,9 +63,6 @@ class DiffusionPolicyController(LeafSystem):
         self._state_dim = self._cfg.shape_meta.obs.agent_pos.shape[0]
         self._action_dim = self._cfg.shape_meta.action.shape[0]
         self._target_dim = self._cfg.policy.target_dim
-        self._num_image_channels = self._cfg.shape_meta.obs.image.shape[0]
-        self._image_height = self._cfg.shape_meta.obs.image.shape[1]
-        self._image_width = self._cfg.shape_meta.obs.image.shape[2]
         self._B = 1  # batch size is 1
 
         # indexing parameters for action predictions
@@ -75,13 +72,6 @@ class DiffusionPolicyController(LeafSystem):
             print("Using push_tee_v2 slicing for action predictions")
             self._start += 1
         self._end = self._start + self._action_steps
-
-        # observation histories
-        self._pusher_pose_deque = deque(
-            [self._initial_pusher_pose.vector() for _ in range(self._obs_horizon)],
-            maxlen=self._obs_horizon,
-        )
-        self._image_deque = deque([], maxlen=self._obs_horizon)
 
         # variables for DoCalcOutput
         self._actions = deque([], maxlen=self._action_steps)
@@ -97,16 +87,34 @@ class DiffusionPolicyController(LeafSystem):
             "pusher_pose_measured",
             AbstractValue.Make(RigidTransform()),
         )
-        self.camera_port = self.DeclareAbstractInputPort(
-            "camera",
-            Value[Image[PixelType.kRgba8U]].Make(
-                Image[PixelType.kRgba8U](self._image_width, self._image_height)
-            ),
-        )
+
+        # Camera input ports
+        self.camera_port_dict = {}
+        self._camera_shape_dict = {}
+        for key, value in self._cfg.policy.shape_meta.obs.items():
+            if value["type"] == "rgb":
+                shape = value["shape"]
+                self.camera_port_dict[key] = self.DeclareAbstractInputPort(
+                    key,
+                    Value[Image[PixelType.kRgba8U]].Make(
+                        Image[PixelType.kRgba8U](shape[1], shape[2])  # H, W
+                    ),
+                )
+                self._camera_shape_dict[key] = shape  # Shape is C, H, W
 
         self.output = self.DeclareVectorOutputPort(
             "planar_position_command", 2, self.DoCalcOutput
         )
+
+        # observation histories
+        self._pusher_pose_deque = deque(
+            [self._initial_pusher_pose.vector() for _ in range(self._obs_horizon)],
+            maxlen=self._obs_horizon,
+        )
+        self._image_deque_dict = {
+            name: deque([], maxlen=self._obs_horizon)
+            for name in self.camera_port_dict.keys()
+        }
 
     def _load_policy_from_checkpoint(self, checkpoint: str):
         # load checkpoint
@@ -151,10 +159,7 @@ class DiffusionPolicyController(LeafSystem):
             output.set_value(self._current_action)
             return
         # Accumulate new observations after reset
-        if (
-            len(self._pusher_pose_deque) < self._obs_horizon
-            or len(self._image_deque) < self._obs_horizon
-        ):
+        if len(self._pusher_pose_deque) < self._obs_horizon:
             self._update_history(context)
             output.set_value(self._current_action)
             return
@@ -164,9 +169,8 @@ class DiffusionPolicyController(LeafSystem):
 
         obs_dict = self._deque_to_dict(
             self._pusher_pose_deque,
-            self._image_deque,
-            # self._target_slider_pose.vector()
-            self._initial_pusher_pose.vector(),  # Doing this because of bug TODO: fix this
+            self._image_deque_dict,
+            self._target_slider_pose.vector(),
         )
 
         if len(self._actions) == 0:
@@ -187,9 +191,10 @@ class DiffusionPolicyController(LeafSystem):
                 print("Observations:")
                 for state in self._pusher_pose_deque:
                     print(state)
-                for img in self._image_deque:
-                    plt.imshow(img)
-                    plt.show()
+                for image_deque in self._image_deque_dict.values():
+                    for img in image_deque:
+                        plt.imshow(img)
+                        plt.show()
                 print("\nAction Predictions:")
                 print(action_prediction)
                 print("\nActions")
@@ -212,41 +217,54 @@ class DiffusionPolicyController(LeafSystem):
         self._current_action = reset_position
         self._actions.clear()
         self._pusher_pose_deque.clear()
-        self._image_deque.clear()
+        for image_deque in self._image_deque_dict.values():
+            image_deque.clear()
 
     def _deque_to_dict(self, obs_deque: deque, img_deque: deque, target: np.ndarray):
         state_tensor = torch.cat(
             [torch.from_numpy(obs) for obs in obs_deque], dim=0
         ).reshape(self._B, self._obs_horizon, self._state_dim)
-        img_tensor = torch.cat(
-            [torch.from_numpy(np.moveaxis(img, -1, -3) / 255.0) for img in img_deque],
-            dim=0,
-        ).reshape(
-            self._B,
-            self._obs_horizon,
-            self._num_image_channels,
-            self._image_width,
-            self._image_height,
-        )
         target_tensor = torch.from_numpy(target).reshape(1, self._target_dim)  # 1, D_t
-        return {
+
+        data = {
             "obs": {
-                "image": img_tensor.to(self._device),  # 1, T_obs, C, H, W
                 "agent_pos": state_tensor.to(self._device),  # 1, T_obs, D_x
             },
             "target": target_tensor.to(self._device),  # 1, D_t
         }
 
+        # Load images into data dict
+        for camera, image_deque in self._image_deque_dict.items():
+            img_tensor = torch.cat(
+                [
+                    torch.from_numpy(np.moveaxis(img, -1, -3) / 255.0)
+                    for img in image_deque
+                ],
+                dim=0,
+            ).reshape(
+                self._B,
+                self._obs_horizon,
+                self._camera_shape_dict[camera][0],  # C
+                self._camera_shape_dict[camera][1],  # H
+                self._camera_shape_dict[camera][2],  # W
+            )
+            data["obs"][camera] = img_tensor.to(self._device)  # 1, T_obs, C, W, H
+
+        return data
+
     def _update_history(self, context):
         """Update state and image observation history"""
+
+        # Update end effector deque
         pusher_pose: RigidTransform = self.pusher_pose_measured.Eval(context)  # type: ignore
-        image = self.camera_port.Eval(context)
         pusher_planer_pose = PlanarPose.from_pose(pusher_pose).vector()
         self._pusher_pose_deque.append(pusher_planer_pose)
-        if image.shape[0] != self._image_height or image.shape[1] != self._image_width:
-            image = cv2.resize(
-                image.data[:, :, :-1], (self._image_height, self._image_width)
-            )
-            self._image_deque.append(image)
-        else:
-            self._image_deque.append(image.data[:, :, :-1])
+
+        # Update image deques
+        for camera, port in self.camera_port_dict.items():
+            image = port.Eval(context).data
+            image_height = self._camera_shape_dict[camera][1]
+            image_width = self._camera_shape_dict[camera][2]
+            if image.shape[0] != image_height or image.shape[1] != image_width:
+                image = cv2.resize(image, (image_width, image_height))
+            self._image_deque_dict[camera].append(image[:, :, :-1])  # C H W

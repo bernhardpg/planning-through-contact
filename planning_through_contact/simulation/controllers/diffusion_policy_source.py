@@ -96,9 +96,10 @@ class DiffusionPolicySource(DesiredPlanarPositionSourceBase):
             "pusher_pose_measured",
         )
 
-        builder.ExportInput(
-            self._diffusion_policy_controller.GetInputPort("camera"), "camera"
-        )
+        for camera in self._diffusion_policy_controller.camera_port_dict.keys():
+            builder.ExportInput(
+                self._diffusion_policy_controller.GetInputPort(camera), camera
+            )
 
         builder.ExportOutput(
             self._zero_order_hold.get_output_port(), "planar_position_command"
