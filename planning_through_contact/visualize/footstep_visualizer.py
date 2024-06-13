@@ -84,7 +84,7 @@ def animate_footstep_plan(
     # Create and display animation
     end_time = plan.end_time
     animation_dt_ms = 0.01 * 1000
-    num_frames = int(np.floor(end_time * 1000 / animation_dt_ms))
+    num_frames = int(np.ceil(end_time * 1000 / animation_dt_ms))
 
     def animate(step: int) -> None:
         time = step * animation_dt_ms / 1000
@@ -294,6 +294,136 @@ def plot_relaxation_vs_rounding_bar_plot(
     )
 
     fig.tight_layout()
+
+    if filename is not None:
+        fig.savefig(filename.split(".")[0] + ".pdf")
+
+    plt.close()
+
+
+def visualize_footstep_plan_trajectories(
+    robot: PotatoRobot,
+    plan: FootstepPlan,
+    title: Optional[str] = None,
+    filename: Optional[str] = None,
+) -> None:
+    times = np.cumsum(plan.dts)  # Cumulative sum of time intervals to get time points
+
+    p_WB_x = []
+    p_WB_y = []
+    theta_WB = []
+
+    for t in times:
+        p_WB = plan.get(t, "p_WB").flatten()  # type: ignore
+        theta = plan.get(t, "theta_WB")
+
+        if isinstance(p_WB, np.ndarray) and p_WB.shape == (2,):
+            p_WB_x.append(p_WB[0])
+            p_WB_y.append(p_WB[1])
+        else:
+            raise ValueError(
+                f"Unexpected shape for p_WB at time {t}: {p_WB.shape if isinstance(p_WB, np.ndarray) else 'not an array'}"
+            )
+
+        if isinstance(theta, np.ndarray) and theta.shape == ():
+            theta_WB.append(theta)
+        elif isinstance(theta, float):
+            theta_WB.append(theta)
+        else:
+            raise ValueError(
+                f"Unexpected shape for theta_WB at time {t}: {theta.shape if isinstance(theta, np.ndarray) else 'not an array'}"
+            )
+
+    p_WB_x = np.array(p_WB_x)
+    p_WB_y = np.array(p_WB_y)
+    theta_WB = np.array(theta_WB)
+
+    # Feet forces
+    NUM_FEET = 2
+    f_F_Ws_x_sum = []
+    f_F_Ws_y_sum = []
+
+    GRAV_FORCE = robot.mass * 9.81
+
+    for t in times:
+        # First sum is over forces within one foot, second sum is over both feet
+        f_F_Ws_sum_at_t = np.sum(
+            [
+                np.sum(plan.get_foot(foot_idx, t, "f_F_Ws"), axis=0)
+                for foot_idx in range(NUM_FEET)
+            ],
+            axis=0,
+        ).flatten()
+        f_F_Ws_x_sum.append(f_F_Ws_sum_at_t[0])
+        f_F_Ws_y_sum.append(f_F_Ws_sum_at_t[1] - GRAV_FORCE)
+
+    f_F_Ws_x_sum = np.array(f_F_Ws_x_sum)
+    f_F_Ws_y_sum = np.array(f_F_Ws_y_sum)
+
+    GRAV_FORCE = robot.mass * 9.81
+
+    planned_tau_F_Ws_sum = []
+    for t in times:
+        # First sum is over forces within one foot, second sum is over both feet
+        tau_F_Ws_sum_at_t = np.sum(
+            [
+                np.sum(plan.get_foot(foot_idx, t, "tau_F_Ws"))
+                for foot_idx in range(NUM_FEET)
+            ]
+        )
+        planned_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
+
+    planned_tau_F_Ws_sum = np.array(planned_tau_F_Ws_sum)
+
+    actual_tau_F_Ws_sum = []
+    for t in times:
+        tau_F_Ws_sum_at_t = np.sum(
+            [
+                np.sum(plan.get_foot(foot_idx, t, "tau_Fc_Ws"))
+                for foot_idx in range(NUM_FEET)
+            ]
+        )
+        actual_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
+
+    fig, axs = plt.subplots(6, 1, figsize=(5, 10), sharex=True)
+
+    axs[0].plot(times, p_WB_x, label="p_WB x")
+    axs[0].set_ylabel("[m]")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    axs[1].plot(times, p_WB_y, label="p_WB y")
+    axs[1].set_ylabel("[m]")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    axs[2].plot(times, theta_WB * 180 / np.pi, label="theta_WB")
+    axs[2].set_ylabel("[deg]")
+    axs[2].legend()
+    axs[2].grid(True)
+
+    axs[3].plot(times, f_F_Ws_x_sum, label="sum(f_F_Ws)_x")
+    axs[3].set_ylabel("[N]")
+    axs[3].legend()
+    axs[3].grid(True)
+
+    axs[4].plot(times, f_F_Ws_y_sum, label="sum(f_F_Ws)_y")
+    axs[4].set_ylabel("[N]")
+    axs[4].legend()
+    axs[4].grid(True)
+
+    axs[5].plot(times, planned_tau_F_Ws_sum, label="sum(tau_F_Ws) (planned)")
+    axs[5].plot(times, actual_tau_F_Ws_sum, label="sum(tau_F_Ws) (actual)")
+    axs[5].set_ylabel("[Nm]")
+    axs[5].legend()
+    axs[5].grid(True)
+
+    if title:
+        fig.suptitle(title)
+
+    axs[4].set_xlabel("Time (s)")
+
+    plt.tight_layout()
 
     if filename is not None:
         fig.savefig(filename.split(".")[0] + ".pdf")
