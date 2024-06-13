@@ -45,6 +45,7 @@ class FootstepCost:
     sq_acc_lin: Optional[float] = 100.0
     sq_acc_rot: Optional[float] = 1.0
     sq_nominal_pose: Optional[float] = 5.0
+    sq_time: Optional[float] = 1.0
 
     @classmethod
     def with_none(cls) -> "FootstepCost":

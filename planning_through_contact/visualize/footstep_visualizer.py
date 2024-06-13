@@ -81,12 +81,18 @@ def animate_footstep_plan(
     plt.close()
     ax.legend(loc="upper left", bbox_to_anchor=(0, 1.3), ncol=2)
 
+    # Create and display animation
+    end_time = plan.end_time
+    animation_dt_ms = 0.01 * 1000
+    num_frames = int(np.floor(end_time * 1000 / animation_dt_ms))
+
     def animate(step: int) -> None:
-        time = step * plan.dt
+        time = step * animation_dt_ms / 1000
 
         # Robot position and orientation
         p_WB_val = plan.get(time, "p_WB").flatten()  # type: ignore
         theta_WB_val = plan.get(time, "theta_WB")
+        assert type(theta_WB_val) is float
         if not np.isnan(p_WB_val).any():
             p_WB.set_offsets(p_WB_val)
             robot_body.set_center(p_WB_val)  # type: ignore
@@ -122,9 +128,7 @@ def animate_footstep_plan(
                 else:
                     forces[force_idx].set_visible(False)
 
-    # Create and display animation
-    n_steps = plan.num_knot_points + 1
-    ani = FuncAnimation(fig, animate, frames=n_steps, interval=plan.dt * 1000)  # type: ignore
+    ani = FuncAnimation(fig, animate, frames=num_frames, interval=animation_dt_ms)  # type: ignore
     if output_file is not None:
         if "mp4" in output_file:
             output_file = output_file.split(".")[0]

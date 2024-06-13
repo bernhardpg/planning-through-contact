@@ -254,7 +254,7 @@ class FootstepPlan:
         Knot points for the feet. List length can be 1 or 2.
     """
 
-    dt: float
+    dts: npt.NDArray[np.float64]
     p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
     theta_WB: npt.NDArray[np.float64]  # (num_steps, )
     feet_knot_points: List[FootPlan]  # [num_feet]
@@ -314,7 +314,7 @@ class FootstepPlan:
 
     @property
     def end_time(self) -> float:
-        return self.num_knot_points * self.dt
+        return sum(self.dts)
 
     @property
     def tau_F_Ws(self) -> List[List[npt.NDArray[np.float64]]]:
@@ -367,6 +367,8 @@ class FootstepPlan:
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.hstack([k.theta_WB for k in segments])
 
+        dts = np.concatenate([k.dts for k in segments])
+
         first_foot, second_foot = None, None
 
         for segment, (first_active, last_active) in zip(segments, gait_schedule):
@@ -414,11 +416,7 @@ class FootstepPlan:
             first_foot is not None and second_foot is not None
         ), "Foot knot points cannot be None"
 
-        dt = segments[0].dt
-        for s in segments:
-            assert s.dt == dt, "dt must match between segments"
-
-        return cls(dt, p_WBs, theta_WBs, [first_foot, second_foot])
+        return cls(dts, p_WBs, theta_WBs, [first_foot, second_foot])
 
     def __getstate__(self):
         # Exclude the trajectories that are not serializable
@@ -899,6 +897,12 @@ class FootstepPlanSegmentProgram:
         # dynamics
         if self.config.use_variable_timing:
             self.dt = self.prog.NewContinuousVariables(1, "dt").item()
+            self.prog.AddLinearConstraint(self.dt >= 0.1)
+
+            if self.config.cost.sq_time is not None:
+                self.prog.AddQuadraticCost(
+                    self.num_steps * self.config.cost.sq_time * self.dt**2
+                )
         else:
             self.dt = self.config.dt
 
@@ -934,9 +938,17 @@ class FootstepPlanSegmentProgram:
             "sq_lin_vel": [],
             "sq_rot_vel": [],
             "sq_nominal_pose": [],
+            "sq_time": [],
         }
 
         cost = config.cost
+
+        # Squared timej
+        if type(self.dt) is Variable and self.config.cost.sq_time is not None:
+            c = self.prog.AddQuadraticCost(
+                self.num_steps * self.config.cost.sq_time * self.dt**2
+            )
+            self.costs["sq_time"].append(c)
 
         # squared forces
         if cost.sq_force is not None:
@@ -1276,7 +1288,7 @@ class FootstepPlanSegmentProgram:
 
             # Constrain all the square expressions from the cost to be nonnegative so the
             # naive LP relaxation is not unbounded
-            if not self.config.use_linearized_cost:
+            if self.config.use_linearized_cost:
                 original_vars = self.prog.decision_variables()
 
                 def _pure_square(cost):
@@ -1402,9 +1414,17 @@ class FootstepPlanSegmentProgram:
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
 
+        if type(self.dt) is Variable:
+            dt = self.get_solution(np.array([self.dt]), result, vertex_vars).item()
+        else:
+            dt = self.dt
+
+        # Repeat the one timestep length for the entire segment
+        dts = np.array([dt] * len(p_WB))
+
         first_foot = FootPlan(
             self.robot.foot_length,
-            self.dt,
+            dt,
             p_WF1,
             [f_F1_1W, f_F1_2W],
             [tau_F1_1, tau_F1_2],
@@ -1423,15 +1443,15 @@ class FootstepPlanSegmentProgram:
 
             second_foot = FootPlan(
                 self.robot.foot_length,
-                self.dt,
+                dt,
                 p_WF2,
                 [f_F2_1W, f_F2_2W],
                 [tau_F2_1, tau_F2_2],
             )
 
-            return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot, second_foot])
+            return FootstepPlan(dts, p_WB, theta_WB, [first_foot, second_foot])
 
-        return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot])
+        return FootstepPlan(dts, p_WB, theta_WB, [first_foot])
 
     def evaluate_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray

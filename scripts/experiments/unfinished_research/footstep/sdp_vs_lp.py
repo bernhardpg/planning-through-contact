@@ -70,7 +70,7 @@ def plan(
         use_implied_constraints=False,
         use_variable_grouping=True,
         initial_is_equilibrium=True,
-        use_linearized_cost=False,
+        use_linearized_cost=True,
         use_variable_timing=True,
         relaxation_trace_cost=1e-5,
         force_scale=1e2,
