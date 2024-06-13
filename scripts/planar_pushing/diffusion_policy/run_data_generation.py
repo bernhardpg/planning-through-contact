@@ -412,7 +412,7 @@ def convert_to_zarr(
     freq = data_collection_config.policy_freq
     dt = 1 / freq
     desired_image_shape = np.array(
-        [data_collection_config.image_width, data_collection_config.image_height, 3]
+        [data_collection_config.image_height, data_collection_config.image_width, 3]
     )
 
     for traj_dir in tqdm(traj_dir_list):
@@ -475,6 +475,7 @@ def convert_to_zarr(
                 img = Image.open(image_path).convert("RGB")
                 img = np.asarray(img)
                 if not np.allclose(img.shape, desired_image_shape):
+                    # Image size for cv2 is (width, height) instead of (height, width)
                     img = cv2.resize(
                         img, (desired_image_shape[1], desired_image_shape[0])
                     )

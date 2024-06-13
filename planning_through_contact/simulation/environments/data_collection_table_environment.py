@@ -424,8 +424,8 @@ class DataCollectionTableEnvironment:
     def resize_saved_images(self):
         desired_image_shape = np.array(
             [
-                self._data_collection_config.image_width,
                 self._data_collection_config.image_height,
+                self._data_collection_config.image_width,
                 3,
             ]
         )

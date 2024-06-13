@@ -97,10 +97,10 @@ class DiffusionPolicyController(LeafSystem):
                 self.camera_port_dict[key] = self.DeclareAbstractInputPort(
                     key,
                     Value[Image[PixelType.kRgba8U]].Make(
-                        Image[PixelType.kRgba8U](shape[1], shape[2])
+                        Image[PixelType.kRgba8U](shape[1], shape[2])  # H, W
                     ),
                 )
-                self._camera_shape_dict[key] = shape  # Shape is C, W, H
+                self._camera_shape_dict[key] = shape  # Shape is C, H, W
 
         self.output = self.DeclareVectorOutputPort(
             "planar_position_command", 2, self.DoCalcOutput
@@ -245,8 +245,8 @@ class DiffusionPolicyController(LeafSystem):
                 self._B,
                 self._obs_horizon,
                 self._camera_shape_dict[camera][0],  # C
-                self._camera_shape_dict[camera][1],  # W
-                self._camera_shape_dict[camera][2],  # H
+                self._camera_shape_dict[camera][1],  # H
+                self._camera_shape_dict[camera][2],  # W
             )
             data["obs"][camera] = img_tensor.to(self._device)  # 1, T_obs, C, W, H
 
@@ -263,8 +263,8 @@ class DiffusionPolicyController(LeafSystem):
         # Update image deques
         for camera, port in self.camera_port_dict.items():
             image = port.Eval(context).data
-            image_height = self._camera_shape_dict[camera][2]
-            image_width = self._camera_shape_dict[camera][1]
+            image_height = self._camera_shape_dict[camera][1]
+            image_width = self._camera_shape_dict[camera][2]
             if image.shape[0] != image_height or image.shape[1] != image_width:
-                image = cv2.resize(image, (image_height, image_width))
+                image = cv2.resize(image, (image_width, image_height))
             self._image_deque_dict[camera].append(image[:, :, :-1])  # C H W
