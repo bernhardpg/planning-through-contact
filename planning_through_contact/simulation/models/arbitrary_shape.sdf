@@ -1,0 +1,75 @@
+
+        <?xml version="1.0"?>
+        <sdf version="1.7">
+            <model name="arbitrary">
+                <link name="arbitrary">
+                    <inertial>
+                        <inertia>
+                            <ixx>1e-05</ixx>
+                            <ixy>0.0</ixy>
+                            <ixz>0.0</ixz>
+                            <iyy>1e-05</iyy>
+                            <iyz>0.0</iyz>
+                            <izz>1e-05</izz>
+                        </inertia>
+                        <mass>0.1</mass>
+                        <pose>0.0 0.0 0.0 0 0 0</pose>
+                    </inertial>
+        
+                <visual name="visual_0">
+                    <pose>
+                        0.0 0.0 0.0 -0.0 0.0 0.0
+                    </pose>
+                    <geometry>
+                        
+            <box>
+                <size>0.2 0.05 0.05</size>
+            </box>
+        
+                    </geometry>
+            
+                    <material>
+                        <diffuse> 0.0 0.0 0.0 1.0 </diffuse>
+                    </material>
+                
+                </visual>
+            
+            <collision name="collision_0">
+                <pose>
+                    0.0 0.0 0.0 -0.0 0.0 0.0
+                </pose>
+                <geometry>
+                    
+            <box>
+                <size>0.2 0.05 0.05</size>
+            </box>
+        
+                </geometry>
+            
+            <drake:proximity_properties>
+        
+                        <drake:compliant_hydroelastic/>
+                        <drake:hydroelastic_modulus>
+                            1000000.0
+                        </drake:hydroelastic_modulus>
+                
+                    <drake:mesh_resolution_hint>
+                        0.01
+                    </drake:mesh_resolution_hint>
+            
+                    <drake:mu_dynamic>
+                        0.5
+                    </drake:mu_dynamic>
+            
+                    <drake:mu_static>
+                        0.5
+                    </drake:mu_static>
+            
+            </drake:proximity_properties>
+        
+                </collision>
+            
+                    </link>
+                </model>
+            </sdf>
+        

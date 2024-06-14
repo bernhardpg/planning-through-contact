@@ -83,7 +83,7 @@ def main():
     #     },
     # ]
 
-    loaded_boxes = load_primitive_info("arbitrary_shape_pickles/two_boxes1.pkl")
+    loaded_boxes = load_primitive_info("arbitrary_shape_pickles/small_t_pusher.pkl")
 
     width, height = compute_union_dimensions(loaded_boxes)
     print(f"Union dimensions: width={width}, height={height}")
@@ -104,30 +104,30 @@ def main():
 
     outer_vertices = compute_outer_vertices(loaded_boxes)
     print("Number of outer vertices:", len(outer_vertices))
-    # plot_vertices(ax, outer_vertices)
+    plot_vertices(ax, outer_vertices)
 
     outer_edges = compute_outer_edges(outer_vertices, loaded_boxes)
     print("Number of outer edges:", len(outer_edges))
-    # plot_lines(ax, outer_edges)
+    plot_lines(ax, outer_edges)
 
     directed_edges = direct_edges_so_right_points_inside(outer_edges, loaded_boxes)
 
     ordered_edges = order_edges_by_connectivity(directed_edges, loaded_boxes)
-    # plot_lines(ax, ordered_edges)
+    plot_lines(ax, ordered_edges)
     ordered_vertices = extract_ordered_vertices(ordered_edges)
-    # plot_vertices(ax, ordered_vertices)
+    plot_vertices(ax, ordered_vertices)
 
     normal_vecs = compute_normal_vecs_from_edges(ordered_edges, loaded_boxes)
-    # plot_lines(ax, normal_vecs, color="black")
+    plot_lines(ax, normal_vecs, color="black")
 
     planes_per_region, faces_per_region = compute_collision_free_regions(
         loaded_boxes, ordered_edges
     )
-    for planes, faces in zip(planes_per_region, faces_per_region):
-        color = np.random.rand(3)
-        plot_lines(ax, planes, color=color)
-        plot_lines(ax, faces, color=color)
-        plt.pause(2.0)
+    # for planes, faces in zip(planes_per_region, faces_per_region):
+    #     color = np.random.rand(3)
+    #     plot_lines(ax, planes, color=color)
+    #     plot_lines(ax, faces, color=color)
+    #     plt.pause(2.0)
 
     plt.ioff()
     plt.show()

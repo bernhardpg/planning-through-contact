@@ -4,20 +4,20 @@ import numpy as np
 
 
 def main():
-    output_file = "arbitrary_shape_pickles/arbitrary_shape.pkl"
+    output_file = "arbitrary_shape_pickles/small_t_pusher.pkl"
     boxes = [
         {
             "name": "box",
-            "size": [0.3, 0.1, 0.05],
+            "size": [0.2, 0.05, 0.05],
             "transform": np.eye(4),
         },
         {
             "name": "box",
-            "size": [0.15, 0.15001, 0.05],
+            "size": [0.05, 0.15001, 0.05],  # Require a small overlap
             "transform": np.array(
                 [
-                    [1.0, 0.0, 0.0, 0.15],
-                    [0.0, 1.0, 0.0, -0.125],
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, -0.1],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
                 ]
