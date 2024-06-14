@@ -472,7 +472,7 @@ class PlanarPushingPlanner:
             )
             for path, result in zip(paths, results)
         ]
-        print(f"Found {len(paths)} paths after GCS rounding.")
+        # print(f"Found {len(paths)} paths after GCS rounding.")
 
         return paths
 

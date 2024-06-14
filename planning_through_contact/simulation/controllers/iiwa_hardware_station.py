@@ -76,15 +76,17 @@ class IiwaHardwareStation(RobotSystemBase):
             )
 
             table_grey = np.random.uniform(0.3, 0.95)
-            pusher_grey = np.random.uniform(0.1, table_grey)
+            slider_grey = np.random.uniform(0.1, 0.25)
             color_range = 0.025
 
+            # randomize pusher and table
             randomize_pusher()
             randomize_table(
                 default_color=[table_grey, table_grey, table_grey],
                 color_range=color_range,
             )
 
+            # randomize slider
             def add_slider_to_parser(parser):
                 sdf_file = get_slider_sdf_path(sim_config, models_folder)
                 safe_parse = etree.XMLParser(recover=True)
@@ -94,13 +96,13 @@ class IiwaHardwareStation(RobotSystemBase):
                 diffuse_elements = root.xpath("//model/link/visual/material/diffuse")
 
                 R = clamp(
-                    pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
+                    slider_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
                 )
                 G = clamp(
-                    pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
+                    slider_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
                 )
                 B = clamp(
-                    pusher_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
+                    slider_grey + np.random.uniform(-color_range, color_range), 0.0, 1.0
                 )
                 A = 1  # assuming fully opaque
 

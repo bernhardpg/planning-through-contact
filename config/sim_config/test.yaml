@@ -25,7 +25,7 @@ visualize_desired: true
 slider_goal_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
   x: 0.575
-  y: -0.04285714
+  y: -0.0355
   theta: 0.0
 pusher_start_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
@@ -129,7 +129,7 @@ robot_station:
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: true
-  render_plans: true
+  render_plans: false
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
   plans_dir: 'trajectories/test_arbitrary_shape'
@@ -162,7 +162,7 @@ data_collection_config:
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
     noise_final_pose: true
-    num_unique_plans: 2
+    num_unique_plans: 10
     sort_plans: true
   ## Supercloud
   LLSUB_RANK: null

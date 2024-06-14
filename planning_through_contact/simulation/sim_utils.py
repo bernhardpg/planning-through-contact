@@ -176,32 +176,6 @@ def AddRandomizedSliderAndConfigureContact(
     return slider
 
 
-# def randomize_table(
-#     default_color = [0.55, 0.55, 0.55],
-#     color_range = 0.02,
-#     table_urdf: str = "small_table_hydroelastic.urdf"
-# ) -> None:
-#     base_urdf = f'{models_folder}/{table_urdf}'
-#     parser = etree.XMLParser(recover=True)
-#     tree = etree.parse(base_urdf, parser)
-#     root = tree.getroot()
-
-#     R = clamp(default_color[0] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-#     G = clamp(default_color[1] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-#     B = clamp(default_color[2] + np.random.uniform(-color_range, color_range), 0.0, 1.0)
-#     A = 1 # assuming fully opaque
-
-#     new_color_value = f"{R} {G} {B} {A}"
-#     models = root.xpath('//material[@name="LightGrey"]')
-#     for model in models:
-#         for color in model:
-#             color.set("rgba", new_color_value)
-
-#     new_urdf_location = f'{models_folder}/small_table_hydroelastic_randomized.urdf'
-
-#     tree.write(new_urdf_location, pretty_print=True, xml_declaration=True, encoding='UTF-8')
-
-
 def randomize_table(
     default_color=[0.55, 0.55, 0.55],
     color_range=0.02,

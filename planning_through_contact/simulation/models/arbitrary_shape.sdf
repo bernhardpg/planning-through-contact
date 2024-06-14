@@ -18,12 +18,30 @@
         
                 <visual name="visual_0">
                     <pose>
-                        0.0 0.0 0.0 -0.0 0.0 0.0
+                        0.0 0.03548364298787857 0.0 -0.0 0.0 0.0
                     </pose>
                     <geometry>
                         
             <box>
-                <size>0.2 0.05 0.05</size>
+                <size>0.1651 0.04064 0.03175</size>
+            </box>
+        
+                    </geometry>
+            
+                    <material>
+                        <diffuse> 0.0 0.0 0.0 1.0 </diffuse>
+                    </material>
+                
+                </visual>
+            
+                <visual name="visual_1">
+                    <pose>
+                        0.0 -0.047066357012121425 0.0 -0.0 0.0 0.0
+                    </pose>
+                    <geometry>
+                        
+            <box>
+                <size>0.04064 0.12447 0.03175</size>
             </box>
         
                     </geometry>
@@ -36,12 +54,47 @@
             
             <collision name="collision_0">
                 <pose>
-                    0.0 0.0 0.0 -0.0 0.0 0.0
+                    0.0 0.03548364298787857 0.0 -0.0 0.0 0.0
                 </pose>
                 <geometry>
                     
             <box>
-                <size>0.2 0.05 0.05</size>
+                <size>0.1651 0.04064 0.03175</size>
+            </box>
+        
+                </geometry>
+            
+            <drake:proximity_properties>
+        
+                        <drake:compliant_hydroelastic/>
+                        <drake:hydroelastic_modulus>
+                            1000000.0
+                        </drake:hydroelastic_modulus>
+                
+                    <drake:mesh_resolution_hint>
+                        0.01
+                    </drake:mesh_resolution_hint>
+            
+                    <drake:mu_dynamic>
+                        0.5
+                    </drake:mu_dynamic>
+            
+                    <drake:mu_static>
+                        0.5
+                    </drake:mu_static>
+            
+            </drake:proximity_properties>
+        
+                </collision>
+            
+            <collision name="collision_1">
+                <pose>
+                    0.0 -0.047066357012121425 0.0 -0.0 0.0 0.0
+                </pose>
+                <geometry>
+                    
+            <box>
+                <size>0.04064 0.12447 0.03175</size>
             </box>
         
                 </geometry>

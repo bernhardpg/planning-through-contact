@@ -35,7 +35,7 @@
           </cylinder>
         </geometry>
         <material>
-          <diffuse>1.0 0.4654834569706047 0.15119502183430497 1</diffuse>
+          <diffuse>1.0 0.4627614345654485 0.12360426938897756 1</diffuse>
         </material>
       </visual>
 

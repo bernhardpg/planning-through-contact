@@ -72,7 +72,7 @@ class StateEstimator(Diagram):
             )
         else:
             table_grey = np.random.uniform(0.3, 0.95)
-            pusher_grey = np.random.uniform(0.1, min(table_grey, 0.4))
+            slider_grey = np.random.uniform(0.1, 0.25)
             color_range = 0.025
 
             randomize_pusher()
@@ -81,7 +81,7 @@ class StateEstimator(Diagram):
                 color_range=color_range,
             )
             self.slider = AddRandomizedSliderAndConfigureContact(
-                default_color=[pusher_grey, pusher_grey, pusher_grey],
+                default_color=[slider_grey, slider_grey, slider_grey],
                 color_range=color_range,
                 sim_config=sim_config,
                 plant=self._plant,
