@@ -111,7 +111,7 @@ if __name__ == "__main__":
             solver_params,
             output_folder=folder_name,
             debug=debug,
-            output_name=f"hw_demo_{idx}",
+            output_name=f"traj_{idx}",
             save_video=True,
             save_traj=True,
             animation_lims=None,
