@@ -13,6 +13,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     ContactLocation,
     PolytopeContactLocation,
 )
+from planning_through_contact.geometry.collision_geometry.vertex_defined_geometry import (
+    VertexDefinedGeometry,
+)
 from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
@@ -21,7 +24,7 @@ from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 @dataclass(frozen=True)
-class TPusher2d(CollisionGeometry):
+class TPusher2d(VertexDefinedGeometry):
     """
     Constructed such that box 1 stacks on top, and box 2 lies on the bottom:
 
@@ -34,6 +37,26 @@ class TPusher2d(CollisionGeometry):
         |____|
 
     Origin is placed at com_offset from the origin of box_1.
+
+    Vertex ordering:
+
+    v0___________v1
+    |              |
+    v7___v6___v3___v2
+        |    |
+        |    |
+        |    |
+        v5____v4
+
+    Face ordering:
+
+    ______f0________
+    f7              f1
+    |_f6________f2__|
+        |    |
+        f5   f3
+        |    |
+        |_f4_|
 
     """
 
@@ -58,16 +81,6 @@ class TPusher2d(CollisionGeometry):
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
-        """
-        v0___________v1
-        |              |
-        v7___v6___v3___v2
-            |    |
-            |    |
-            |    |
-            v5____v4
-
-        """
         v0 = self.box_1.vertices[0]
         v1 = self.box_1.vertices[1]
         v2 = self.box_1.vertices[2]
@@ -86,34 +99,6 @@ class TPusher2d(CollisionGeometry):
         # Calculated COM for Tee
         vs_offset = [v - self.com_offset for v in vs]
         return vs_offset
-
-    @property
-    def num_vertices(self) -> int:
-        return len(self.vertices)
-
-    @cached_property
-    def faces(self) -> List[Hyperplane]:
-        """
-        ______f0________
-        f7              f1
-        |_f6________f2__|
-            |    |
-            f5   f3
-            |    |
-            |_f4_|
-
-        """
-        wrap_around = lambda num: num % self.num_vertices
-        pairwise_indices = [
-            (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
-        ]
-        hyperplane_points = [
-            (self.vertices[i], self.vertices[j]) for i, j in pairwise_indices
-        ]
-        hyperplanes = [
-            construct_2d_plane_from_points(p1, p2) for p1, p2 in hyperplane_points
-        ]
-        return hyperplanes
 
     def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
         if loc_idx == 0:
@@ -142,16 +127,6 @@ class TPusher2d(CollisionGeometry):
     @property
     def height(self) -> float:
         return self.box_1.height + self.box_2.height
-
-    @property
-    def contact_locations(self) -> List[PolytopeContactLocation]:
-        # TODO(bernhardpg): Only returns FACEs, should ideally return
-        # both vertices and faces
-        locs = [
-            PolytopeContactLocation(pos=ContactLocation.FACE, idx=idx)
-            for idx in range(len(self.faces))
-        ]
-        return locs
 
     def get_contact_plane_idxs(self, idx: int) -> List[int]:
         """
@@ -259,110 +234,6 @@ class TPusher2d(CollisionGeometry):
         else:
             raise NotImplementedError(f"Face {idx} not supported")
 
-    # TODO: Much of the following code is copied straight from equilateralpolytope and should be unified!
-
-    @property
-    def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
-        vertices = np.hstack([self.vertices[idx] for idx in range(self.num_vertices)])
-        return vertices
-
-    def get_proximate_vertices_from_location(
-        self, location: PolytopeContactLocation
-    ) -> List[npt.NDArray[np.float64]]:
-        if location.pos == ContactLocation.FACE:
-            wrap_around = lambda num: num % self.num_vertices
-            return [
-                self.vertices[location.idx],
-                self.vertices[wrap_around(location.idx + 1)],
-            ]
-        elif location.pos == ContactLocation.VERTEX:
-            return [self.vertices[location.idx]]
-        else:
-            raise NotImplementedError(
-                f"Location {location.pos}: {location.idx} not implemented"
-            )
-
-    def get_neighbouring_vertices(
-        self, location: PolytopeContactLocation
-    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.pos == ContactLocation.VERTEX:
-            wrap_around = lambda num: num % self.num_vertices
-            idx_prev = wrap_around(location.idx - 1)
-            idx_next = wrap_around(location.idx + 1)
-
-            return self.vertices[idx_prev], self.vertices[idx_next]
-        else:
-            raise NotImplementedError(
-                f"Location {location.pos}: {location.idx} not implemented"
-            )
-
-    def get_hyperplane_from_location(
-        self, location: PolytopeContactLocation
-    ) -> Hyperplane:
-        if location.pos == ContactLocation.FACE:
-            return self.faces[location.idx]
-        else:
-            raise NotImplementedError(
-                f"Cannot get hyperplane from location {location.pos}: {location.idx}"
-            )
-
-    @cached_property
-    def normal_vecs(self) -> List[npt.NDArray[np.float64]]:
-        normals = [
-            -face.a for face in self.faces
-        ]  # Normal vectors point into the object
-        return normals
-
-    @staticmethod
-    def _get_tangent_vec(v: npt.NDArray[np.float64]):
-        """
-        Returns the 2d tangent vector calculated as the cross product with the z-axis pointing out of the plane.
-        """
-        return np.array([-v[1], v[0]]).reshape((-1, 1))
-
-    @cached_property
-    def tangent_vecs(self) -> List[npt.NDArray[np.float64]]:
-        tangents = [
-            self._get_tangent_vec(self.normal_vecs[idx])
-            for idx in range(self.num_vertices)
-        ]
-        return tangents
-
-    @cached_property
-    def corner_normal_vecs(self) -> List[npt.NDArray[np.float64]]:
-        wrap_around = lambda idx: idx % self.num_vertices
-        indices = [(wrap_around(idx - 1), idx) for idx in range(self.num_vertices)]
-        corner_normals = [
-            normalize_vec(self.normal_vecs[i] + self.normal_vecs[j]) for i, j in indices
-        ]
-        return corner_normals
-
-    @cached_property
-    def corner_tangent_vecs(self) -> List[npt.NDArray[np.float64]]:
-        tangents = [
-            self._get_tangent_vec(self.corner_normal_vecs[idx])
-            for idx in range(self.num_vertices)
-        ]
-        return tangents
-
-    def get_norm_and_tang_vecs_from_location(
-        self, location: PolytopeContactLocation
-    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        if location.pos == ContactLocation.FACE:
-            return self.normal_vecs[location.idx], self.tangent_vecs[location.idx]
-        elif location.pos == ContactLocation.VERTEX:
-            return (
-                self.corner_normal_vecs[location.idx],
-                self.corner_tangent_vecs[location.idx],
-            )
-        else:
-            raise ValueError(
-                f"Cannot get normal and tangent vecs from location {location.pos}"
-            )
-
-    def get_face_length(self, location: PolytopeContactLocation) -> float:
-        raise NotImplementedError("Face length not yet implemented for the TPusher.")
-
     def get_as_boxes(
         self, z_value: float = 0.0
     ) -> Tuple[List[Box2d], List[RigidTransform]]:
@@ -373,7 +244,7 @@ class TPusher2d(CollisionGeometry):
         box_2 = self.box_2
         box_2_center = np.array([0, -self.box_1.height / 2 - self.box_2.height / 2, 0])
         box_2_center[:2] -= self.com_offset.flatten()
-        transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)
+        transform_2 = RigidTransform(RotationMatrix.Identity(), box_2_center)  # type: ignore
 
         return [box_1, box_2], [transform_1, transform_2]
 
@@ -457,8 +328,6 @@ class TPusher2d(CollisionGeometry):
 
         # inside box we just return zero
         return np.zeros((2, 3))
-
-        # raise RuntimeError(f"Position {pos} is not inside any region for the Tee.")
 
     def get_signed_distance(self, pos: npt.NDArray) -> float:
         """
