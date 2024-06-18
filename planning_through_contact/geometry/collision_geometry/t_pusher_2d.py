@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from functools import cached_property
 from typing import Any, List, Tuple
 
 import numpy as np
@@ -23,7 +22,7 @@ from planning_through_contact.geometry.hyperplane import (
 from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
-@dataclass(frozen=True)
+@dataclass
 class TPusher2d(VertexDefinedGeometry):
     """
     Constructed such that box 1 stacks on top, and box 2 lies on the bottom:
@@ -63,24 +62,7 @@ class TPusher2d(VertexDefinedGeometry):
     box_1: Box2d = field(default_factory=lambda: Box2d(0.2, 0.05))
     box_2: Box2d = field(default_factory=lambda: Box2d(0.05, 0.15))
 
-    @property
-    def collision_geometry_names(self) -> List[str]:
-        return [
-            "t_pusher::t_pusher_bottom_collision",
-            "t_pusher::t_pusher_top_collision",
-        ]
-
-    @classmethod
-    def from_drake(cls, drake_shape: DrakeShape):
-        raise NotImplementedError()
-
-    @property
-    def com_offset(self) -> npt.NDArray[np.float64]:
-        y_offset = -0.04285714
-        return np.array([0, y_offset]).reshape((-1, 1))
-
-    @cached_property
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
+    def _calc_vertices_from_boxes(self) -> List[npt.NDArray[np.float64]]:
         v0 = self.box_1.vertices[0]
         v1 = self.box_1.vertices[1]
         v2 = self.box_1.vertices[2]
@@ -99,6 +81,25 @@ class TPusher2d(VertexDefinedGeometry):
         # Calculated COM for Tee
         vs_offset = [v - self.com_offset for v in vs]
         return vs_offset
+
+    def __post_init__(self):
+        super().__init__(self._calc_vertices_from_boxes())
+
+    @property
+    def collision_geometry_names(self) -> List[str]:
+        return [
+            "t_pusher::t_pusher_bottom_collision",
+            "t_pusher::t_pusher_top_collision",
+        ]
+
+    @classmethod
+    def from_drake(cls, drake_shape: DrakeShape):
+        raise NotImplementedError()
+
+    @property
+    def com_offset(self) -> npt.NDArray[np.float64]:
+        y_offset = -0.04285714
+        return np.array([0, y_offset]).reshape((-1, 1))
 
     def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
         if loc_idx == 0:

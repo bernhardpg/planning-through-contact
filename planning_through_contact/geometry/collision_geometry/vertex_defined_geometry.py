@@ -20,9 +20,16 @@ from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 class VertexDefinedGeometry(CollisionGeometry):
+    def __init__(self, vertices: List[npt.NDArray[np.float64]]) -> None:
+        self._vertices = vertices
+
+    @cached_property
+    def vertices(self) -> List[npt.NDArray[np.float64]]:
+        return self._vertices
+
     @property
     def num_vertices(self) -> int:
-        return len(self.vertices)
+        return len(self._vertices)
 
     @cached_property
     def faces(self) -> List[Hyperplane]:
@@ -31,7 +38,7 @@ class VertexDefinedGeometry(CollisionGeometry):
             (idx, wrap_around(idx + 1)) for idx in range(self.num_vertices)
         ]
         hyperplane_points = [
-            (self.vertices[i], self.vertices[j]) for i, j in pairwise_indices
+            (self._vertices[i], self._vertices[j]) for i, j in pairwise_indices
         ]
         hyperplanes = [
             construct_2d_plane_from_points(p1, p2) for p1, p2 in hyperplane_points
@@ -54,7 +61,7 @@ class VertexDefinedGeometry(CollisionGeometry):
 
     @property
     def vertices_for_plotting(self) -> npt.NDArray[np.float64]:
-        vertices = np.hstack([self.vertices[idx] for idx in range(self.num_vertices)])
+        vertices = np.hstack([self._vertices[idx] for idx in range(self.num_vertices)])
         return vertices
 
     def get_proximate_vertices_from_location(
@@ -63,11 +70,11 @@ class VertexDefinedGeometry(CollisionGeometry):
         if location.pos == ContactLocation.FACE:
             wrap_around = lambda num: num % self.num_vertices
             return [
-                self.vertices[location.idx],
-                self.vertices[wrap_around(location.idx + 1)],
+                self._vertices[location.idx],
+                self._vertices[wrap_around(location.idx + 1)],
             ]
         elif location.pos == ContactLocation.VERTEX:
-            return [self.vertices[location.idx]]
+            return [self._vertices[location.idx]]
         else:
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
@@ -81,7 +88,7 @@ class VertexDefinedGeometry(CollisionGeometry):
             idx_prev = wrap_around(location.idx - 1)
             idx_next = wrap_around(location.idx + 1)
 
-            return self.vertices[idx_prev], self.vertices[idx_next]
+            return self._vertices[idx_prev], self._vertices[idx_next]
         else:
             raise NotImplementedError(
                 f"Location {location.pos}: {location.idx} not implemented"
