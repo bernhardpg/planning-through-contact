@@ -221,19 +221,19 @@ class VertexDefinedGeometry(CollisionGeometry):
         v3 --f2--- v2
         """
         planes = []
-        CONST = 1.5
+        wrap_around = lambda num: num % self.num_vertices
+        CONST = 0.2
         planes.append(
             construct_2d_plane_from_points(
-                self.vertices[idx] * CONST, self.vertices[idx]
+                self.vertices[idx],
+                self.vertices[idx] + CONST * self.corner_normal_vecs[idx],
             )
         )
-
-        wrap_around = lambda num: num % self.num_vertices
-
         planes.append(
             construct_2d_plane_from_points(
+                self.vertices[wrap_around(idx + 1)]
+                + CONST * self.corner_normal_vecs[wrap_around(idx + 1)],
                 self.vertices[wrap_around(idx + 1)],
-                self.vertices[wrap_around(idx + 1)] * CONST,
             )
         )
 

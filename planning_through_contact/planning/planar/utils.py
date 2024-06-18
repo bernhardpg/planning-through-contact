@@ -463,7 +463,11 @@ def create_plan(
 
     if debug or save_analysis:
         solve_data, path = do_one_run_get_path(
-            config, solver_params, start_and_goal=start_and_target, save_cost_vals=True
+            config,
+            solver_params,
+            start_and_goal=start_and_target,
+            save_cost_vals=True,
+            graph_filename=f"{folder_name}/graph",
         )
     else:
         planner = PlanarPushingPlanner(config)
