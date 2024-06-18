@@ -68,11 +68,12 @@ def get_sugar_box() -> RigidBody:
     return slider
 
 
-def get_convex_slider_1() -> VertexDefinedGeometry:
+def get_convex_slider_4_corners() -> VertexDefinedGeometry:
     vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
     scale = 1 / 5
     vertices = [np.array(v) * scale for v in vertices]
-    return VertexDefinedGeometry(vertices)
+    geometry = VertexDefinedGeometry(vertices)
+    return RigidBody("convex_4_corners", geometry, mass=0.1)
 
 
 def get_default_contact_cost() -> ContactCost:
@@ -135,7 +136,7 @@ def get_default_plan_config(
     elif slider_type == "sugar_box":
         slider = get_sugar_box()
     elif slider_type == "convex_shape":
-        slider = get_convex_slider_1()
+        slider = get_convex_slider_4_corners()
     elif slider_type == "tee":
         slider = get_tee()
     else:
