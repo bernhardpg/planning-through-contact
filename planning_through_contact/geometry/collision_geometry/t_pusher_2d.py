@@ -87,6 +87,10 @@ class TPusher2d(VertexDefinedGeometry, DrakeCollisionGeometryMixin):
         super().__init__(self._calc_vertices_from_boxes())
 
     @property
+    def max_contact_radius(self) -> float:
+        return np.sqrt((self.width / 2) ** 2 + (self.height) ** 2)
+
+    @property
     def collision_geometry_names(self) -> List[str]:
         return [
             "t_pusher::t_pusher_bottom_collision",
@@ -167,16 +171,16 @@ class TPusher2d(VertexDefinedGeometry, DrakeCollisionGeometryMixin):
         Gets the faces that defines the collision free sets (except for the contact face)
         This function is hand designed for the object geometry.
        
-           \       0      /
-            \____________/
+           \\       0      /
+            \\____________/
         5   |            | 1
             |____________|
-           /    |    |    \
-          /     |    | 2   \
+           /    |    |    \\
+          /     |    | 2   \\
            4    |    |
                 |____|
-               /      \
-              /    3   \
+               /      \\
+              /    3   \\
             
         """
         UL = np.array([-1, 1]).reshape((-1, 1))

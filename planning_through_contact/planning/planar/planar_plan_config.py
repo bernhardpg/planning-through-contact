@@ -81,12 +81,7 @@ class SliderPusherSystemConfig:
     @cached_property
     def max_contact_radius(self) -> float:
         geometry = self.slider.geometry
-        if isinstance(geometry, Box2d) or isinstance(geometry, TPusher2d):
-            return np.sqrt((geometry.width / 2) ** 2 + (geometry.height) ** 2)
-        else:
-            raise NotImplementedError(
-                f"max_contact_radius for {type(geometry)} is not implemented"
-            )
+        return geometry.max_contact_radius
 
     @cached_property
     def tau_max(self) -> float:

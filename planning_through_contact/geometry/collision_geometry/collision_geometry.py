@@ -105,6 +105,11 @@ class CollisionGeometry(ABC):
     def num_collision_free_regions(self) -> int:
         pass
 
+    @property
+    @abstractmethod
+    def max_contact_radius(self) -> float:
+        pass
+
     @abstractmethod
     def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
         pass

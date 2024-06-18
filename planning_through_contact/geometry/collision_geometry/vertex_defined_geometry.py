@@ -39,11 +39,26 @@ class VertexDefinedGeometry(CollisionGeometry):
         |       |
         nc3 -- nc2
         """
+
+        if vertices[0].shape == (2,):
+            vertices = [v.reshape((2, 1)) for v in vertices]
+        elif vertices[0].shape == (2, 1):
+            pass
+        else:
+            raise RuntimeError(f"Vertex shape {vertices[0].shape} is wrong.")
+
         self._vertices = vertices
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
         return self._vertices
+
+    @property
+    def com(self) -> npt.NDArray[np.float64]:
+        """
+        This can easily be extended to account for any Center of Mass (CoM).
+        """
+        return np.zeros((2, 1))
 
     @property
     def num_vertices(self) -> int:
@@ -223,3 +238,8 @@ class VertexDefinedGeometry(CollisionGeometry):
         )
 
         return planes
+
+    @property
+    def max_contact_radius(self) -> float:
+        test = float(np.max([np.linalg.norm(v - self.com) for v in self.vertices]))
+        return test

@@ -213,6 +213,10 @@ class Box2d(CollisionGeometry, DrakeCollisionGeometryMixin):
     def _tc3(self) -> npt.NDArray[np.float64]:
         return self._nc2
 
+    @property
+    def max_contact_radius(self) -> float:
+        return np.sqrt((self.width / 2) ** 2 + (self.height) ** 2)
+
     def get_norm_and_tang_vecs_from_location(
         self, location: PolytopeContactLocation
     ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
