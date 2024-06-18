@@ -9,6 +9,9 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.collision_geometry.vertex_defined_geometry import (
+    VertexDefinedGeometry,
+)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
@@ -63,6 +66,13 @@ def get_sugar_box() -> RigidBody:
     box_geometry = Box2d(width=0.106, height=0.185)
     slider = RigidBody("sugar_box", box_geometry, mass)
     return slider
+
+
+def get_convex_slider_1() -> VertexDefinedGeometry:
+    vertices = [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+    scale = 1 / 5
+    vertices = [np.array(v) * scale for v in vertices]
+    return VertexDefinedGeometry(vertices)
 
 
 def get_default_contact_cost() -> ContactCost:
@@ -124,6 +134,8 @@ def get_default_plan_config(
         slider = get_box()
     elif slider_type == "sugar_box":
         slider = get_sugar_box()
+    elif slider_type == "convex_shape":
+        slider = get_convex_slider_1()
     elif slider_type == "tee":
         slider = get_tee()
     else:

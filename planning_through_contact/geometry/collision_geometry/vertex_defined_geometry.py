@@ -21,6 +21,24 @@ from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 class VertexDefinedGeometry(CollisionGeometry):
     def __init__(self, vertices: List[npt.NDArray[np.float64]]) -> None:
+        """
+        Assumes the following vertex ordering
+        v0 -- v1
+        |     |
+        v3 -- v2
+
+        Faces:
+        v0 - f0 - v1
+        |          |
+        f3         f1
+        |          |
+        v3 --f2--- v2
+
+        Corner normal vectors:
+        nc0 -- nc1
+        |       |
+        nc3 -- nc2
+        """
         self._vertices = vertices
 
     @cached_property
@@ -162,3 +180,46 @@ class VertexDefinedGeometry(CollisionGeometry):
         raise NotImplementedError(
             f"Face length not yet implemented for {self.__name__}."
         )
+
+    def get_collision_free_region_for_loc_idx(self, loc_idx: int) -> int:
+        return loc_idx  # for this class, we assume we have one collision-free region per face
+
+    def get_contact_planes(self, idx: int) -> List[Hyperplane]:
+        # for this class, we assume we have one collision-free region per face
+        return [self.faces[idx]]
+
+    @property
+    def num_collision_free_regions(self) -> int:
+        # for this class, we assume we have one collision-free region per face
+        return len(self.faces)
+
+    def get_planes_for_collision_free_region(self, idx: int) -> List[Hyperplane]:
+        """
+        Get the two planes that defines the collision-free region (not including the
+        contact plane on the slider).
+
+        The region ordering is the same as the face ordering:
+        v0 - f0 - v1
+        |          |
+        f3         f1
+        |          |
+        v3 --f2--- v2
+        """
+        planes = []
+        CONST = 1.5
+        planes.append(
+            construct_2d_plane_from_points(
+                self.vertices[idx] * CONST, self.vertices[idx]
+            )
+        )
+
+        wrap_around = lambda num: num % self.num_vertices
+
+        planes.append(
+            construct_2d_plane_from_points(
+                self.vertices[wrap_around(idx + 1)],
+                self.vertices[wrap_around(idx + 1)] * CONST,
+            )
+        )
+
+        return planes

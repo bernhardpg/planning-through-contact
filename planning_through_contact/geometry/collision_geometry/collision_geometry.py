@@ -30,15 +30,22 @@ class PolytopeContactLocation(NamedTuple):
         return f"{self.pos.name}_{self.idx}"
 
 
+class DrakeCollisionGeometryMixin:
+    @property
+    @abstractmethod
+    def collision_geometry_names(self) -> List[str]: ...
+
+    @classmethod
+    @abstractmethod
+    def from_drake(cls, drake_shape: DrakeShape):
+        pass
+
+
 class CollisionGeometry(ABC):
     """
     Abstract class for all of the collision geometries supported by the contact planner,
     with all of the helper functions required by the planner.
     """
-
-    @property
-    @abstractmethod
-    def collision_geometry_names(self) -> List[str]: ...
 
     @cached_property
     @abstractmethod
@@ -84,11 +91,6 @@ class CollisionGeometry(ABC):
 
     @abstractmethod
     def get_face_length(self, location: PolytopeContactLocation) -> float:
-        pass
-
-    @classmethod
-    @abstractmethod
-    def from_drake(cls, drake_shape: DrakeShape):
         pass
 
     def get_shortest_vec_from_com_to_loc(

@@ -10,6 +10,7 @@ from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     ContactLocation,
+    DrakeCollisionGeometryMixin,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.collision_geometry.vertex_defined_geometry import (
@@ -19,11 +20,11 @@ from planning_through_contact.geometry.hyperplane import (
     Hyperplane,
     construct_2d_plane_from_points,
 )
-from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
+from planning_through_contact.geometry.utilities import cross_2d
 
 
 @dataclass
-class TPusher2d(VertexDefinedGeometry):
+class TPusher2d(VertexDefinedGeometry, DrakeCollisionGeometryMixin):
     """
     Constructed such that box 1 stacks on top, and box 2 lies on the bottom:
 

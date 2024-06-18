@@ -97,7 +97,9 @@ if __name__ == "__main__":
         plans = get_hardware_plans(seed, config)
     else:
         folder_name = create_output_folder(output_dir, slider_type, traj_number)
-        plans = get_default_experiment_plans(seed, num_trajs, config)
+        plans = get_default_experiment_plans(
+            seed, num_trajs, config, workspace_size=0.9
+        )
 
     if traj_number is not None:
         plans_to_plan_for = [plans[traj_number]]
