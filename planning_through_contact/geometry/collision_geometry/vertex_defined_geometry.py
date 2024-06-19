@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -20,7 +20,11 @@ from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 class VertexDefinedGeometry(CollisionGeometry):
-    def __init__(self, vertices: List[npt.NDArray[np.float64]]) -> None:
+    def __init__(
+        self,
+        vertices: List[npt.NDArray[np.float64]],
+        com: Optional[npt.NDArray[np.float64]] = None,
+    ) -> None:
         """
         Assumes the following vertex ordering
         v0 -- v1
@@ -47,18 +51,20 @@ class VertexDefinedGeometry(CollisionGeometry):
         else:
             raise RuntimeError(f"Vertex shape {vertices[0].shape} is wrong.")
 
-        self._vertices = vertices
+        # If no center of mass is passed, we compute one assuming uniform density.
+        if com is None:
+            self.com = sum(vertices) / len(vertices)
+        else:
+            self.com = com
+
+        # After setting the CoM, we need to shift the vertices so that they are relative
+        # to the CoM (i.e. with the CoM as the origin of the body frame)
+        vertices_with_com_as_origin = [v - self.com for v in vertices]
+        self._vertices = vertices_with_com_as_origin
 
     @cached_property
     def vertices(self) -> List[npt.NDArray[np.float64]]:
         return self._vertices
-
-    @property
-    def com(self) -> npt.NDArray[np.float64]:
-        """
-        This can easily be extended to account for any Center of Mass (CoM).
-        """
-        return np.zeros((2, 1))
 
     @property
     def num_vertices(self) -> int:
@@ -241,5 +247,5 @@ class VertexDefinedGeometry(CollisionGeometry):
 
     @property
     def max_contact_radius(self) -> float:
-        test = float(np.max([np.linalg.norm(v - self.com) for v in self.vertices]))
+        test = float(np.max([np.linalg.norm(v) for v in self.vertices]))
         return test

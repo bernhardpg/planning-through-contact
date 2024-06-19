@@ -17,6 +17,7 @@ from pydrake.geometry import (
     MakePhongIllustrationProperties,
     SceneGraph,
 )
+from pydrake.geometry import Sphere as DrakeSphere
 from pydrake.math import RigidTransform, RotationMatrix
 from pydrake.systems.all import Context, DiagramBuilder, LeafSystem
 from pydrake.systems.analysis import Simulator
@@ -1230,6 +1231,7 @@ def _add_slider_geometries(
     slider_frame_id: FrameId,
     alpha: float = 1.0,
     color: RGB = AQUAMARINE4,
+    show_com: bool = False,
 ) -> None:
     DEFAULT_HEIGHT = 0.3
 
@@ -1280,10 +1282,26 @@ def _add_slider_geometries(
             geometry_id,
             MakePhongIllustrationProperties(color.diffuse(alpha)),
         )
-
     else:
         raise NotImplementedError(
             f"Cannot add geometry {slider_geometry.__class__.__name__} to builder."
+        )
+
+    if show_com:
+        com_id = scene_graph.RegisterGeometry(
+            source_id,
+            slider_frame_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, 0, 0])  # type: ignore
+                ),
+                DrakeSphere(0.005),
+                "pusher",
+            ),
+        )
+        com_color = BLACK.diffuse(alpha)
+        scene_graph.AssignRole(
+            source_id, com_id, MakePhongIllustrationProperties(com_color)
         )
 
 
@@ -1359,6 +1377,7 @@ class PlanarPushingStartGoalGeometry(LeafSystem):
             scene_graph,
             self.slider_frame_id,
             alpha=TRANSPARENCY,
+            show_com=False,
         )
         self.pusher_frame_id = scene_graph.RegisterFrame(
             self.source_id,
@@ -1543,7 +1562,11 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
             self.source_id, GeometryFrame("slider")
         )
         _add_slider_geometries(
-            self.source_id, slider_geometry, scene_graph, self.slider_frame_id
+            self.source_id,
+            slider_geometry,
+            scene_graph,
+            self.slider_frame_id,
+            show_com=True,
         )
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
@@ -1565,6 +1588,7 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
                 scene_graph,
                 self.slider_goal_frame_id,
                 alpha=GOAL_TRANSPARENCY,
+                show_com=False,
             )
             self.pusher_goal_frame_id = scene_graph.RegisterFrame(
                 self.source_id,
