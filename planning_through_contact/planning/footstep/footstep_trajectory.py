@@ -225,7 +225,7 @@ class FootPlan:
             return [t.eval(time) for t in trajectory]
         return trajectory.eval(time)
 
-    def get_torque(self, time: float) -> List[npt.NDArray[np.float64]]:
+    def get_computed_torque_at_t(self, time: float) -> List[npt.NDArray[np.float64]]:
         p_BFc_Ws = self.get(time, "p_BFc_Ws")
         f_F_Ws = self.get(time, "f_F_Ws")
         tau_Fc_Ws = [
@@ -233,6 +233,7 @@ class FootPlan:
         ]
         return tau_Fc_Ws
 
+    # TODO(bernhardpg): Remove these, they are duplicated!
     def compute_torques(self) -> List[npt.NDArray[np.float64]]:
         # compute arm (i.e. position of contact point relative to CoM)
         tau_F_Ws = [
@@ -241,6 +242,7 @@ class FootPlan:
         ]
         return tau_F_Ws
 
+    # TODO(bernhardpg): Remove these, they are duplicated!
     def get_torque_errors(self) -> List[npt.NDArray[np.float64]]:
         if self.tau_F_Ws is None:
             raise RuntimeError("Cannot compute torque error when torques are not saved")
@@ -473,8 +475,8 @@ class FootstepPlan:
         self, foot: int, time: float, traj: str
     ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
         assert foot <= self.num_feet - 1
-        if traj == "tau_Fc_Ws":
-            return self.feet_knot_points[foot].get_torque(time)
+        if traj == "computed_tau_F_Ws":
+            return self.feet_knot_points[foot].get_computed_torque_at_t(time)
         return self.feet_knot_points[foot].get(time, traj)
 
 
