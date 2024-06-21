@@ -240,8 +240,8 @@ def visualize_feet_trajectories(
 ) -> None:
     DT = 1e-3
     times = np.arange(0, plan.end_time, DT)
-    # the last dt is unused
-    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-1]])
+    # the last dt is unused and we have N-1 knot points for inputs
+    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-2]])
     num_feet = plan.num_feet
     TWO_D = 2
     num_trajs_per_foot_contact_point = 2 * TWO_D + 1  # force and position + torque
