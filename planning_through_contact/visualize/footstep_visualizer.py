@@ -246,48 +246,60 @@ def visualize_feet_trajectories(
     # Get first foot
     num_feet = plan.num_feet
     TWO_D = 2
-    num_trajs_per_foot = 2 * TWO_D + 1  # force and position + torque
+    num_trajs_per_foot_contact_point = 2 * TWO_D + 1  # force and position + torque
+    num_contact_points_per_foot = 2
 
-    fig, axs = plt.subplots(num_trajs_per_foot, num_feet, figsize=(6, 7), sharex=True)
+    fig, axs = plt.subplots(
+        num_trajs_per_foot_contact_point,
+        num_feet * num_contact_points_per_foot,
+        figsize=(12, 7),
+        sharex=True,
+    )
 
     for foot_idx in range(num_feet):
-        ax_force_x = axs[0, foot_idx]
-        ax_force_y = axs[1, foot_idx]
-        ax_pos_x = axs[2, foot_idx]
-        ax_pos_y = axs[3, foot_idx]
-        ax_torque = axs[4, foot_idx]
+        for contact_point_idx in range(2):
+            plot_idx = foot_idx * 2 + contact_point_idx
+            ax_force_x = axs[0, plot_idx]
+            ax_force_y = axs[1, plot_idx]
+            ax_pos_x = axs[2, plot_idx]
+            ax_pos_y = axs[3, plot_idx]
+            ax_torque = axs[4, plot_idx]
 
-        f_F_Ws_for_foot = []
-        p_BFc_Ws_for_foot = []
-        computed_tau_F_Ws_for_foot = []
-        planned_tau_F_Ws_for_foot = []
+            f_F_Ws_for_foot = []
+            p_BFc_Ws_for_foot = []
+            computed_tau_F_Ws_for_foot = []
+            planned_tau_F_Ws_for_foot = []
 
-        for t in times:
-            f_F_Ws = plan.get_foot(foot_idx, t, "f_F_Ws")[foot_idx]  # type: ignore
-            p_BFc_Ws = plan.get_foot(foot_idx, t, "p_BFc_Ws")[foot_idx]  # type: ignore
-            computed_tau_F_Ws = plan.get_foot(foot_idx, t, "computed_tau_F_Ws")[foot_idx]  # type: ignore
-            planned_tau_F_Ws = plan.get_foot(foot_idx, t, "planned_tau_F_Ws")[foot_idx]  # type: ignore
+            for t in times:
+                f_F_Ws = plan.get_foot(foot_idx, t, "f_F_Ws")[contact_point_idx]  # type: ignore
+                p_BFc_Ws = plan.get_foot(foot_idx, t, "p_BFc_Ws")[contact_point_idx]  # type: ignore
+                computed_tau_F_Ws = plan.get_foot(foot_idx, t, "computed_tau_F_Ws")[contact_point_idx]  # type: ignore
+                planned_tau_F_Ws = plan.get_foot(foot_idx, t, "planned_tau_F_Ws")[contact_point_idx]  # type: ignore
 
-            f_F_Ws_for_foot.append(f_F_Ws)
-            p_BFc_Ws_for_foot.append(p_BFc_Ws)
-            computed_tau_F_Ws_for_foot.append(computed_tau_F_Ws)
-            planned_tau_F_Ws_for_foot.append(planned_tau_F_Ws)
+                f_F_Ws_for_foot.append(f_F_Ws)
+                p_BFc_Ws_for_foot.append(p_BFc_Ws)
+                computed_tau_F_Ws_for_foot.append(computed_tau_F_Ws)
+                planned_tau_F_Ws_for_foot.append(planned_tau_F_Ws)
 
-        f_F_Ws_for_foot = np.hstack(f_F_Ws_for_foot)  # (2, N)
-        p_BFc_Ws_for_foot = np.hstack(p_BFc_Ws_for_foot)  # (2, N)
+            f_F_Ws_for_foot = np.hstack(f_F_Ws_for_foot)  # (2, N)
+            p_BFc_Ws_for_foot = np.hstack(p_BFc_Ws_for_foot)  # (2, N)
+            computed_tau_F_Ws_for_foot = np.array(computed_tau_F_Ws_for_foot)
+            planned_tau_F_Ws_for_foot = np.array(planned_tau_F_Ws_for_foot)
 
-        ax_force_x.set_title(f"Foot {foot_idx}")
-        ax_force_x.plot(times, f_F_Ws_for_foot[0, :], label="f_F_W_x")
-        ax_force_y.plot(times, f_F_Ws_for_foot[1, :], label="f_F_W_y")
-        ax_pos_x.plot(times, p_BFc_Ws_for_foot[0, :], label="p_BF_W_x")
-        ax_pos_y.plot(times, p_BFc_Ws_for_foot[1, :], label="p_BF_W_y")
-        ax_torque.plot(times, planned_tau_F_Ws_for_foot, label="tau_F_Ws (planned)")
-        ax_torque.plot(times, computed_tau_F_Ws_for_foot, label="tau_F_Ws (computed)")
+            ax_force_x.set_title(f"Foot {foot_idx}, cp {contact_point_idx}")
+            ax_force_x.plot(times, f_F_Ws_for_foot[0, :], label="f_F_W_x")
+            ax_force_y.plot(times, f_F_Ws_for_foot[1, :], label="f_F_W_y")
+            ax_pos_x.plot(times, p_BFc_Ws_for_foot[0, :], label="p_BF_W_x")
+            ax_pos_y.plot(times, p_BFc_Ws_for_foot[1, :], label="p_BF_W_y")
+            ax_torque.plot(times, planned_tau_F_Ws_for_foot, label="tau_F_Ws (planned)")
+            ax_torque.plot(
+                times, computed_tau_F_Ws_for_foot, label="tau_F_Ws (computed)"
+            )
 
-        ax_torque.set_xlabel("Time [s]")
+            ax_torque.set_xlabel("Time [s]")
 
-        for ax in axs[:, foot_idx]:
-            ax.legend()
+    for ax in axs.flatten():
+        ax.legend(fontsize="small", labelspacing=0.2, borderpad=0.3)
 
     plt.tight_layout()
 
