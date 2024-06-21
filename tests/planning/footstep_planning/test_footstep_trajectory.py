@@ -94,11 +94,6 @@ def test_trajectory_segment_one_foot() -> None:
 
     if DEBUG:
         a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
-        cost_vals = segment.evaluate_costs_with_result(relaxed_result)
-
-        cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
-        for key, val in cost_vals_sums.items():
-            print(f"Cost {key}: {val}")
 
         print(f"Total cost: {relaxed_result.get_optimal_cost()}")
 
@@ -165,7 +160,7 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepPlan.merge([segment_value])
+    traj = FootstepPlan.merge([segment_value], keep_eq_num_states_inputs=True)
     assert traj.p_WB.shape == (cfg.period_steps, 2)
     assert traj.theta_WB.shape == (cfg.period_steps,)
 

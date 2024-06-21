@@ -104,6 +104,7 @@ class FootPlan:
 
     def __post_init__(self) -> None:
         self._initialize_trajectories()
+        self._validate_shapes()
 
     def __getstate__(self):
         # Exclude the trajectories that are not serializable
@@ -126,13 +127,12 @@ class FootPlan:
         return new_plan
 
     def _validate_shapes(self) -> None:
-        num_inputs = self.num_knot_points - 1
-        assert self.p_WF.shape == (num_inputs, 2), "p_WF shape mismatch"
+        assert self.p_WF.shape == (self.num_inputs, 2), "p_WF shape mismatch"
         for f, tau in zip(self.f_F_Ws, self.tau_F_Ws):
-            assert f.shape == (num_inputs, 2), "f_F_W shape mismatch"
-            assert tau.shape == (num_inputs,), "tau_F_W shape mismatch"
+            assert f.shape == (self.num_inputs, 2), "f_F_W shape mismatch"
+            assert tau.shape == (self.num_inputs,), "tau_F_W shape mismatch"
 
-        assert self.p_WB.shape == (self.num_knot_points, 2), "p_WB shape mismatch"
+        assert self.p_WB.shape == (self.num_states, 2), "p_WB shape mismatch"
 
     def _initialize_trajectories(self) -> None:
         interpolation = "zero_order_hold"
@@ -148,8 +148,12 @@ class FootPlan:
         }
 
     @property
-    def num_knot_points(self) -> int:
+    def num_states(self) -> int:
         return self.p_WB.shape[0]
+
+    @property
+    def num_inputs(self) -> int:
+        return self.p_WF.shape[0]
 
     @property
     def num_forces(self) -> int:
@@ -157,7 +161,7 @@ class FootPlan:
 
     @property
     def end_time(self) -> float:
-        return (self.num_knot_points - 1) * self.dt  # we start at time = 0
+        return (self.num_states - 1) * self.dt  # we start at time = 0
 
     def _get_p_WFcs(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
@@ -240,7 +244,7 @@ class FootPlan:
     @classmethod
     def empty_like(cls, other: "FootPlan") -> "FootPlan":
         return cls.create_empty(
-            other.foot_width, other.dt, other.num_knot_points, other.num_forces
+            other.foot_width, other.dt, other.num_states, other.num_forces
         )
 
     def get(
@@ -298,8 +302,8 @@ class FootstepPlan:
         ], "Invalid number of feet knot points"
         if len(self.feet_knot_points) == 2:
             assert (
-                self.feet_knot_points[0].num_knot_points
-                == self.feet_knot_points[1].num_knot_points
+                self.feet_knot_points[0].num_states
+                == self.feet_knot_points[1].num_states
             ), "Feet knot points mismatch"
 
     def _initialize_trajectories(self) -> None:
@@ -332,7 +336,7 @@ class FootstepPlan:
 
     @property
     def num_inputs(self) -> int:
-        return self.feet_knot_points[0].num_knot_points
+        return self.feet_knot_points[0].num_states
 
     @property
     def num_knot_points(self) -> int:
@@ -358,7 +362,9 @@ class FootstepPlan:
         )
 
     @classmethod
-    def merge(cls, segments: List["FootstepPlan"]) -> "FootstepPlan":
+    def merge(
+        cls, segments: List["FootstepPlan"], keep_eq_num_states_inputs: bool = False
+    ) -> "FootstepPlan":
         both_feet = np.array([s.both_feet for s in segments])
         # This is a quick way to check that the bool value changes for each element in the array
         feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
@@ -431,8 +437,20 @@ class FootstepPlan:
 
         # we remove the last input step so we have N-1 input steps and N state steps
         # (in the GCS planning we don't know which mode shouldn't have a last step)
-        first_foot = first_foot.get_without_last_input_step()
-        second_foot = second_foot.get_without_last_input_step()
+        if keep_eq_num_states_inputs:
+            if not first_foot.num_states == first_foot.num_inputs:
+                raise RuntimeError(
+                    "First foot don't have equal number of state and input knot points"
+                )
+            if not second_foot.num_states == second_foot.num_inputs:
+                raise RuntimeError(
+                    "Second foot don't have equal number of state and input knot points"
+                )
+        else:
+            if first_foot.num_states == first_foot.num_inputs:
+                first_foot = first_foot.get_without_last_input_step()
+            if second_foot.num_states == second_foot.num_inputs:
+                second_foot = second_foot.get_without_last_input_step()
 
         return cls(dts, p_WBs, theta_WBs, [first_foot, second_foot])
 

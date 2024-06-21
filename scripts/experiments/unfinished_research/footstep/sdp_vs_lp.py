@@ -109,7 +109,6 @@ def plan(
     path = output_dir / name
     path.mkdir(exist_ok=True, parents=True)
 
-    # planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug, save_solver_output=True)
     planner.plan(
         print_flows=debug,
         print_solver_output=False,
@@ -118,7 +117,10 @@ def plan(
         output_dir=path,
     )
 
-    planner.save_analysis(str(path))
+    if debug:
+        print("Saving analysis...")
+
+    planner.save_analysis(str(path), print_debug=debug)
 
     best_result = planner.get_best_result()
     results = planner.get_results()

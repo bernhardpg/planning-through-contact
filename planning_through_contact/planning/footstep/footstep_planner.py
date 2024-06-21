@@ -952,6 +952,9 @@ class FootstepPlanner:
             )
             plan_results.append(res)
 
+        if print_debug:
+            print(f"Finished rounding {len(paths)} paths.")
+
         self.best_idx = int(
             np.argmin([res.rounded_metrics.cost for res in plan_results])
         )
@@ -974,15 +977,21 @@ class FootstepPlanner:
             )
         return self.best_result
 
-    def save_analysis(self, output_dir: str) -> None:
+    def save_analysis(self, output_dir: str, print_debug: bool = False) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
 
         assert self.gcs_result is not None
+        if print_debug:
+            print("Creating graph diagram...")
+
         self.create_graph_diagram(output_dir + "/" + "graph.pdf")
         self.create_graph_diagram(
             output_dir + "/" + "graph_with_flows.pdf", result=self.gcs_result
         )
+
+        if print_debug:
+            print("Saving configs...")
 
         self.config.save(str(output_dir_path / "config.yaml"))
         self.terrain.save(str(output_dir_path / "terrain.yaml"))
@@ -990,6 +999,8 @@ class FootstepPlanner:
         assert self.plan_results is not None
 
         for idx, res in enumerate(self.plan_results):
+            if print_debug:
+                print(f"Making restriction analysis {idx/len(self.plan_results)}...")
             # Use the unique name to save paths, so we can easily identify
             # equal paths between different methods
             res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
@@ -1012,6 +1023,9 @@ class FootstepPlanner:
             # Rename best directory with _BEST appended
             if idx == self.best_idx:
                 Path(res_output_dir).rename(res_output_dir + "_BEST")
+
+        if print_debug:
+            print(f"Saving path costs and solve times...")
 
         plot_relaxation_vs_rounding_bar_plot(
             self.plan_results,
