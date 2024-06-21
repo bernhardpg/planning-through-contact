@@ -74,24 +74,19 @@ class FootPlan:
 
     foot_width: float
     dt: float
-    p_WF: npt.NDArray[np.float64]  # (num_knot_points, 2)
+    p_WF: npt.NDArray[np.float64]  # (num_knot_points - 1, 2)
     f_F_Ws: List[
         npt.NDArray[np.float64]
-    ]  # [(num_knot_points, 2)] (one for each contact point)
+    ]  # [(num_knot_points - 1, 2)] (one for each contact point)
     # This is the PLANNED torque (which might NOT be equal to p x f)
     tau_F_Ws: List[
         npt.NDArray[np.float64]
-    ]  # [(num_knot_points, )] (one for each contact point)
+    ]  # [(num_knot_points - 1, )] (one for each contact point)
     # NOTE: p_WB is only used to compute torques and footstep positions relative to COM
-    p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
+    # and has one more knot point than the other values!
+    p_WB: npt.NDArray[np.float64]  # (num_knot_points, 2)
 
     def __post_init__(self) -> None:
-        if self.p_WB.shape[0] == self.num_knot_points + 1:
-            self.p_WB = self.p_WB[
-                :-1, :
-            ]  # remove the last knot point (we only have N-1 points)
-
-        self._validate_shapes()
         self._initialize_trajectories()
 
     def __getstate__(self):
@@ -103,11 +98,25 @@ class FootPlan:
         self.__dict__.update(state)
         self._initialize_trajectories()
 
+    def get_without_last_input_step(self) -> "FootPlan":
+        new_p_WF = self.p_WF[:-1, :]
+        new_f_F_Ws = [f[:-1, :] for f in self.f_F_Ws]
+        new_tau_F_Ws = [tau[:-1] for tau in self.tau_F_Ws]
+
+        new_plan = FootPlan(
+            self.foot_width, self.dt, new_p_WF, new_f_F_Ws, new_tau_F_Ws, self.p_WB
+        )
+        new_plan._validate_shapes()
+        return new_plan
+
     def _validate_shapes(self) -> None:
-        assert self.p_WF.shape == (self.num_knot_points, 2), "p_WF shape mismatch"
+        num_inputs = self.num_knot_points - 1
+        assert self.p_WF.shape == (num_inputs, 2), "p_WF shape mismatch"
         for f, tau in zip(self.f_F_Ws, self.tau_F_Ws):
-            assert f.shape == (self.num_knot_points, 2), "f_F_W shape mismatch"
-            assert tau.shape == (self.num_knot_points,), "tau_F_W shape mismatch"
+            assert f.shape == (num_inputs, 2), "f_F_W shape mismatch"
+            assert tau.shape == (num_inputs,), "tau_F_W shape mismatch"
+
+        assert self.p_WB.shape == (self.num_knot_points, 2), "p_WB shape mismatch"
 
     def _initialize_trajectories(self) -> None:
         interpolation = "zero_order_hold"
@@ -119,12 +128,12 @@ class FootPlan:
             "planned_tau_F_Ws": [
                 self._interpolate_segment(tau, interpolation) for tau in self.tau_F_Ws
             ],
-            "p_WB": self._interpolate_segment(self.p_WB, interpolation),
+            "p_WB": self._interpolate_segment(self.p_WB, "first_order_hold"),
         }
 
     @property
     def num_knot_points(self) -> int:
-        return self.p_WF.shape[0]
+        return self.p_WB.shape[0]
 
     @property
     def num_forces(self) -> int:
@@ -132,7 +141,7 @@ class FootPlan:
 
     @property
     def end_time(self) -> float:
-        return self.num_knot_points * self.dt
+        return (self.num_knot_points - 1) * self.dt  # we start at time = 0
 
     def _get_p_WFcs(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
@@ -320,7 +329,7 @@ class FootstepPlan:
 
     @property
     def end_time(self) -> float:
-        return sum(self.dts)
+        return sum(self.dts[:-1])  # the last dt is unused
 
     @property
     def tau_F_Ws(self) -> List[List[npt.NDArray[np.float64]]]:
@@ -421,6 +430,11 @@ class FootstepPlan:
         assert (
             first_foot is not None and second_foot is not None
         ), "Foot knot points cannot be None"
+
+        # we remove the last input step so we have N-1 input steps and N state steps
+        # (in the GCS planning we don't know which mode shouldn't have a last step)
+        first_foot = first_foot.get_without_last_input_step()
+        second_foot = second_foot.get_without_last_input_step()
 
         return cls(dts, p_WBs, theta_WBs, [first_foot, second_foot])
 

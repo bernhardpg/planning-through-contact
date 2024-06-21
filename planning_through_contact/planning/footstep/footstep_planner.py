@@ -306,6 +306,8 @@ class FootstepPlanRounder:
         """
         WARNING: This currently ruins the MathematicalProgramResult.
         """
+        # Set the rounded result to the initial guess obtained from the
+        # convex restriction (i.e. the relaxation for this specific path)
         for var, val in zip(self.prog.decision_variables(), self.initial_guess):
             self.rounded_result.SetSolution(var, val)
         return self.get_plan(self.rounded_result)

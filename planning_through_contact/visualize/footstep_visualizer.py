@@ -239,11 +239,9 @@ def visualize_feet_trajectories(
     plan: FootstepPlan, filename: Optional[str] = None
 ) -> None:
     DT = 1e-3
-    times = np.arange(
-        0, plan.end_time, DT
-    )  # Cumulative sum of time intervals to get time points
-
-    # Get first foot
+    times = np.arange(0, plan.end_time, DT)
+    # the last dt is unused
+    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-1]])
     num_feet = plan.num_feet
     TWO_D = 2
     num_trajs_per_foot_contact_point = 2 * TWO_D + 1  # force and position + torque
@@ -295,6 +293,41 @@ def visualize_feet_trajectories(
             ax_torque.plot(
                 times, computed_tau_F_Ws_for_foot, label="tau_F_Ws (computed)"
             )
+
+            # Adding scatter plots at knot points without labels
+            f_F_Ws_at_knots = np.array(
+                [
+                    plan.get_foot(foot_idx, t, "f_F_Ws")[contact_point_idx]  # type: ignore
+                    for t in knot_point_times
+                ]
+            )
+            p_BFc_Ws_at_knots = np.array(
+                [
+                    plan.get_foot(foot_idx, t, "p_BFc_Ws")[contact_point_idx]  # type: ignore
+                    for t in knot_point_times
+                ]
+            )
+            computed_tau_F_Ws_at_knots = np.array(
+                [
+                    plan.get_foot(foot_idx, t, "computed_tau_F_Ws")[  # type:ignore
+                        contact_point_idx
+                    ]
+                    for t in knot_point_times
+                ]
+            )
+            planned_tau_F_Ws_at_knots = np.array(
+                [
+                    plan.get_foot(foot_idx, t, "planned_tau_F_Ws")[contact_point_idx]  # type: ignore
+                    for t in knot_point_times
+                ]
+            )
+
+            ax_force_x.scatter(knot_point_times, f_F_Ws_at_knots[:, 0], color="r")
+            ax_force_y.scatter(knot_point_times, f_F_Ws_at_knots[:, 1], color="r")
+            ax_pos_x.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 0], color="r")
+            ax_pos_y.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 1], color="r")
+            ax_torque.scatter(knot_point_times, planned_tau_F_Ws_at_knots, color="r")
+            ax_torque.scatter(knot_point_times, computed_tau_F_Ws_at_knots, color="b")
 
             ax_torque.set_xlabel("Time [s]")
 
