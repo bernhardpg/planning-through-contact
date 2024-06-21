@@ -9,6 +9,9 @@ from planning_through_contact.experiments.ablation_study.planar_pushing_ablation
 )
 from planning_through_contact.geometry.collision_geometry.box_2d import Box2d
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.collision_geometry.vertex_defined_geometry import (
+    VertexDefinedGeometry,
+)
 from planning_through_contact.geometry.rigid_body import RigidBody
 from planning_through_contact.planning.planar.planar_plan_config import (
     BoxWorkspace,
@@ -65,6 +68,30 @@ def get_sugar_box() -> RigidBody:
     return slider
 
 
+def get_four_corner_slider() -> RigidBody:
+    vertices = [[-0.4, -1], [-1, 0.5], [1, 0.7], [1, -0.6]]
+    scale = 1 / 10
+    vertices = [np.array(v) * scale for v in vertices]
+    geometry = VertexDefinedGeometry(vertices)
+    return RigidBody("convex_4_corners", geometry, mass=0.1)
+
+
+def get_five_corner_slider() -> RigidBody:
+    vertices = [[-0.4, -0.4], [-0.4, 0.4], [0.4, 0.4], [0.4, -0.4], [0, -1.0]]
+    scale = 1 / 10
+    vertices = [np.array(v) * scale for v in vertices]
+    geometry = VertexDefinedGeometry(vertices)
+    return RigidBody("convex_4_corners", geometry, mass=0.1)
+
+
+def get_triangle() -> RigidBody:
+    vertices = [[-1, -1], [-1, 1], [1, 1]]
+    scale = 1 / 10
+    vertices = [np.array(v) * scale for v in vertices]
+    geometry = VertexDefinedGeometry(vertices)
+    return RigidBody("triangle", geometry, mass=0.1)
+
+
 def get_default_contact_cost() -> ContactCost:
     contact_cost = ContactCost(
         keypoint_arc_length=10.0,
@@ -118,18 +145,24 @@ def get_default_plan_config(
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
-    hardware: bool = False,
+    use_case: Literal["hardware", "demo", "normal"] = "demo",
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
     elif slider_type == "sugar_box":
         slider = get_sugar_box()
+    elif slider_type == "convex_4":
+        slider = get_four_corner_slider()
+    elif slider_type == "convex_5":
+        slider = get_five_corner_slider()
+    elif slider_type == "triangle":
+        slider = get_triangle()
     elif slider_type == "tee":
         slider = get_tee()
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 
-    if hardware:
+    if use_case == "hardware":
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
             pusher_radius=pusher_radius,
@@ -149,7 +182,28 @@ def get_default_plan_config(
 
         num_knot_points_non_collision = 5
         num_knot_points_contact = 3
-    else:
+    elif use_case == "demo":
+        slider_pusher_config = SliderPusherSystemConfig(
+            slider=slider,
+            pusher_radius=pusher_radius,
+            friction_coeff_slider_pusher=0.1,
+            friction_coeff_table_slider=0.5,
+            integration_constant=0.3,
+        )
+        contact_cost = get_default_contact_cost()
+        non_collision_cost = get_default_non_collision_cost()
+        buffer_to_corners = 0.0
+        contact_config = ContactConfig(
+            cost=contact_cost, lam_min=buffer_to_corners, lam_max=1 - buffer_to_corners
+        )
+
+        time_contact = 1.5
+        time_non_collision = 0.75
+
+        num_knot_points_non_collision = 3
+        num_knot_points_contact = 4
+
+    else:  # use_case == normal
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
             pusher_radius=pusher_radius,

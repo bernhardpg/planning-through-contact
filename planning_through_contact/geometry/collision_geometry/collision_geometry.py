@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import Enum
+from functools import cached_property
 from typing import Any, List, NamedTuple, Tuple, TypeVar
 
 import numpy as np
@@ -30,26 +30,30 @@ class PolytopeContactLocation(NamedTuple):
         return f"{self.pos.name}_{self.idx}"
 
 
+class DrakeCollisionGeometryMixin:
+    @property
+    @abstractmethod
+    def collision_geometry_names(self) -> List[str]: ...
+
+    @classmethod
+    @abstractmethod
+    def from_drake(cls, drake_shape: DrakeShape):
+        pass
+
+
 class CollisionGeometry(ABC):
     """
     Abstract class for all of the collision geometries supported by the contact planner,
     with all of the helper functions required by the planner.
     """
 
-    @property
+    @cached_property
     @abstractmethod
-    def collision_geometry_names(self) -> List[str]:
-        ...
+    def vertices(self) -> List[npt.NDArray[np.float64]]: ...
 
-    @property
+    @cached_property
     @abstractmethod
-    def vertices(self) -> List[npt.NDArray[np.float64]]:
-        ...
-
-    @property
-    @abstractmethod
-    def faces(self) -> List[Hyperplane]:
-        ...
+    def faces(self) -> List[Hyperplane]: ...
 
     @abstractmethod
     def get_proximate_vertices_from_location(
@@ -89,11 +93,6 @@ class CollisionGeometry(ABC):
     def get_face_length(self, location: PolytopeContactLocation) -> float:
         pass
 
-    @classmethod
-    @abstractmethod
-    def from_drake(cls, drake_shape: DrakeShape):
-        pass
-
     def get_shortest_vec_from_com_to_loc(
         self, location: PolytopeContactLocation
     ) -> npt.NDArray[np.float64]:
@@ -104,6 +103,11 @@ class CollisionGeometry(ABC):
     @property
     @abstractmethod
     def num_collision_free_regions(self) -> int:
+        pass
+
+    @property
+    @abstractmethod
+    def max_contact_radius(self) -> float:
         pass
 
     @abstractmethod

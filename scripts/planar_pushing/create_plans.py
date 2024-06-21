@@ -46,6 +46,11 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--demo",
+        help="Generate demo trajectories for project web page.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--debug",
         help="Debug mode. Will print additional information, including solver output.",
         action="store_true",
@@ -72,6 +77,7 @@ if __name__ == "__main__":
     seed = args.seed
     traj_number = args.traj
     hardware_demos = args.hardware_demos
+    demo_plans = args.demo
     debug = args.debug
     rounding = True
     interpolate = args.interpolate
@@ -83,10 +89,17 @@ if __name__ == "__main__":
 
     pusher_radius = 0.015
 
+    if hardware_demos:
+        use_case = "hardware"
+    elif demo_plans:
+        use_case = "demo"
+    else:
+        use_case = "normal"
+
     config = get_default_plan_config(
         slider_type=slider_type,
         pusher_radius=pusher_radius,
-        hardware=hardware_demos,
+        use_case=use_case,
     )
     solver_params = get_default_solver_params(debug, clarabel=False)
 
@@ -97,7 +110,9 @@ if __name__ == "__main__":
         plans = get_hardware_plans(seed, config)
     else:
         folder_name = create_output_folder(output_dir, slider_type, traj_number)
-        plans = get_default_experiment_plans(seed, num_trajs, config)
+        plans = get_default_experiment_plans(
+            seed, num_trajs, config, workspace_size=0.9
+        )
 
     if traj_number is not None:
         plans_to_plan_for = [plans[traj_number]]
@@ -111,7 +126,7 @@ if __name__ == "__main__":
             solver_params,
             output_folder=folder_name,
             debug=debug,
-            output_name=f"hw_demo_{idx}",
+            output_name=f"traj_{idx}",
             save_video=True,
             save_traj=True,
             animation_lims=None,

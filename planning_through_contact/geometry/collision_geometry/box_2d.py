@@ -9,6 +9,7 @@ from pydrake.math import sqrt
 from planning_through_contact.geometry.collision_geometry.collision_geometry import (
     CollisionGeometry,
     ContactLocation,
+    DrakeCollisionGeometryMixin,
     PolytopeContactLocation,
 )
 from planning_through_contact.geometry.hyperplane import (
@@ -19,7 +20,7 @@ from planning_through_contact.geometry.utilities import cross_2d, normalize_vec
 
 
 @dataclass(frozen=True)
-class Box2d(CollisionGeometry):
+class Box2d(CollisionGeometry, DrakeCollisionGeometryMixin):
     """
     Implements a two-dimensional box collision geometry.
     """
@@ -35,7 +36,7 @@ class Box2d(CollisionGeometry):
         return ["box::box_collision"]
 
     @classmethod
-    def from_drake(
+    def from_drake(  # type: ignore
         cls, drake_box: DrakeBox, axis_mode: Literal["planar"] = "planar"
     ) -> "Box2d":
         """
@@ -211,6 +212,10 @@ class Box2d(CollisionGeometry):
     @property
     def _tc3(self) -> npt.NDArray[np.float64]:
         return self._nc2
+
+    @property
+    def max_contact_radius(self) -> float:
+        return np.sqrt((self.width / 2) ** 2 + (self.height) ** 2)
 
     def get_norm_and_tang_vecs_from_location(
         self, location: PolytopeContactLocation

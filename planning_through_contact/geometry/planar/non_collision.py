@@ -355,9 +355,7 @@ class NonCollisionMode(AbstractContactMode):
                     c_1 = self.config.contact_config.cost.time * self.dt
                     assert self.config.non_collision_cost.distance_to_object is not None
 
-                    c_2 = 1 / (
-                        self.config.non_collision_cost.distance_to_object * self.dt
-                    )
+                    c_2 = 1 / self.config.non_collision_cost.distance_to_object
 
                     dist = (
                         plane.dist_to(p_BP) - self.config.dynamics_config.pusher_radius

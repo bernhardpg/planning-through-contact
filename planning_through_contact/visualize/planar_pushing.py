@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import matplotlib.patches as mpatches
@@ -6,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from pydrake.common.value import Value
 from pydrake.geometry import Box as DrakeBox
+from pydrake.geometry import Convex
 from pydrake.geometry import Cylinder as DrakeCylinder
 from pydrake.geometry import (
     FrameId,
@@ -15,6 +17,7 @@ from pydrake.geometry import (
     MakePhongIllustrationProperties,
     SceneGraph,
 )
+from pydrake.geometry import Sphere as DrakeSphere
 from pydrake.math import RigidTransform, RotationMatrix
 from pydrake.systems.all import Context, DiagramBuilder, LeafSystem
 from pydrake.systems.analysis import Simulator
@@ -28,6 +31,9 @@ from planning_through_contact.geometry.collision_geometry.collision_geometry imp
     CollisionGeometry,
 )
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
+from planning_through_contact.geometry.collision_geometry.vertex_defined_geometry import (
+    VertexDefinedGeometry,
+)
 from planning_through_contact.geometry.planar.face_contact import FaceContactVariables
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.planar.planar_pushing_trajectory import (
@@ -45,12 +51,14 @@ from planning_through_contact.planning.planar.planar_plan_config import (
     PlanarPushingStartAndGoal,
 )
 from planning_through_contact.visualize.colors import (
+    AQUAMARINE4,
     BLACK,
     CADMIUMORANGE,
     COLORS,
     CRIMSON,
     DARKORCHID2,
     EMERALDGREEN,
+    RGB,
 )
 from planning_through_contact.visualize.visualizer_2d import (
     VisualizationForce2d,
@@ -1171,14 +1179,60 @@ def make_traj_figure(
         plt.show()
 
 
+def _create_polygon_mesh(
+    vertices: npt.NDArray[np.float64], filename: str = "polygon.obj"
+) -> None:
+    # Ensure vertices are in the correct format (N x 3 for 3D mesh)
+    if vertices.shape[1] != 3:
+        raise ValueError("Vertices should have 3 columns for x, y, z coordinates.")
+
+    # Write vertices to an OBJ file
+    with open(filename, "w") as file:
+        file.write("# OBJ file\n")
+        for vertex in vertices:
+            file.write("v {} {} {}\n".format(vertex[0], vertex[1], vertex[2]))
+
+        # Assuming the polygon is a closed loop and vertices are ordered
+        file.write("f")
+        for i in range(len(vertices)):
+            file.write(" {}".format(i + 1))
+        file.write("\n")
+
+
+def _load_2d_vertices_as_mesh(
+    vertices: List[npt.NDArray[np.float64]],
+) -> Convex:
+    def _make_3d(v: npt.NDArray[np.float64], height: float) -> npt.NDArray[np.float64]:
+        return np.array([v[0, 0], v[1, 0], height]).reshape((3, 1))
+
+    HEIGHT = 0.3
+    vertices_zero_height = [_make_3d(v, height=0) for v in vertices]
+    vertices_fixed_height = [_make_3d(v, height=HEIGHT) for v in vertices]
+
+    all_vertices = np.hstack(vertices_zero_height + vertices_fixed_height).T  # (N, 3)
+
+    # Drake requires us to load the mesh from a file, so we make a temporary file which
+    # we then delete
+    temp_file = Path("temp/slider_geometry.obj")
+    temp_file.parent.mkdir(exist_ok=True, parents=True)
+    _create_polygon_mesh(all_vertices, str(temp_file))
+    mesh = Convex(str(temp_file))
+
+    # NOTE: The file can apparently not be deleted until the animation is completed,
+    # so for now we just leave it.
+    # temp_file.unlink()  # delete the file
+    return mesh
+
+
 def _add_slider_geometries(
     source_id,
     slider_geometry: CollisionGeometry,
     scene_graph: SceneGraph,
     slider_frame_id: FrameId,
     alpha: float = 1.0,
+    color: RGB = AQUAMARINE4,
+    show_com: bool = False,
 ) -> None:
-    BOX_COLOR = COLORS["aquamarine4"]
     DEFAULT_HEIGHT = 0.3
 
     if isinstance(slider_geometry, Box2d):
@@ -1194,7 +1248,7 @@ def _add_slider_geometries(
         scene_graph.AssignRole(
             source_id,
             box_geometry_id,
-            MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+            MakePhongIllustrationProperties(color.diffuse(alpha)),
         )
     elif isinstance(slider_geometry, TPusher2d):
         boxes, transforms = slider_geometry.get_as_boxes(DEFAULT_HEIGHT / 2)
@@ -1214,8 +1268,41 @@ def _add_slider_geometries(
             scene_graph.AssignRole(
                 source_id,
                 box_geometry_id,
-                MakePhongIllustrationProperties(BOX_COLOR.diffuse(alpha)),
+                MakePhongIllustrationProperties(color.diffuse(alpha)),
             )
+    elif isinstance(slider_geometry, VertexDefinedGeometry):
+        mesh = _load_2d_vertices_as_mesh(slider_geometry.vertices)
+        geometry_id = scene_graph.RegisterGeometry(
+            source_id,
+            slider_frame_id,
+            GeometryInstance(RigidTransform.Identity(), mesh, "slider"),
+        )
+        scene_graph.AssignRole(
+            source_id,
+            geometry_id,
+            MakePhongIllustrationProperties(color.diffuse(alpha)),
+        )
+    else:
+        raise NotImplementedError(
+            f"Cannot add geometry {slider_geometry.__class__.__name__} to builder."
+        )
+
+    if show_com:
+        com_id = scene_graph.RegisterGeometry(
+            source_id,
+            slider_frame_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, 0, 0])  # type: ignore
+                ),
+                DrakeSphere(0.005),
+                "pusher",
+            ),
+        )
+        com_color = BLACK.diffuse(alpha)
+        scene_graph.AssignRole(
+            source_id, com_id, MakePhongIllustrationProperties(com_color)
+        )
 
 
 def _add_pusher_geometry(
@@ -1290,6 +1377,7 @@ class PlanarPushingStartGoalGeometry(LeafSystem):
             scene_graph,
             self.slider_frame_id,
             alpha=TRANSPARENCY,
+            show_com=False,
         )
         self.pusher_frame_id = scene_graph.RegisterFrame(
             self.source_id,
@@ -1474,7 +1562,11 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
             self.source_id, GeometryFrame("slider")
         )
         _add_slider_geometries(
-            self.source_id, slider_geometry, scene_graph, self.slider_frame_id
+            self.source_id,
+            slider_geometry,
+            scene_graph,
+            self.slider_frame_id,
+            show_com=True,
         )
 
         self.pusher_frame_id = scene_graph.RegisterFrame(
@@ -1496,6 +1588,7 @@ class PlanarPushingTrajectoryGeometry(LeafSystem):
                 scene_graph,
                 self.slider_goal_frame_id,
                 alpha=GOAL_TRANSPARENCY,
+                show_com=False,
             )
             self.pusher_goal_frame_id = scene_graph.RegisterFrame(
                 self.source_id,
