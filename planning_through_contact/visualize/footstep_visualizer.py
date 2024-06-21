@@ -21,6 +21,7 @@ def animate_footstep_plan(
     plan: FootstepPlan,
     title: Optional[str] = None,
     output_file: Optional[str] = None,
+    plot_knot_points: bool = True,
 ) -> FuncAnimation:
     # Initialize figure for animation
     fig, ax = plt.subplots()
@@ -87,8 +88,14 @@ def animate_footstep_plan(
     animation_dt_ms = 0.01 * 1000
     num_frames = int(np.ceil(end_time * 1000 / animation_dt_ms))
 
+    times = np.concatenate([[0], np.cumsum(plan.dts[:-1])])
+
     def animate(step: int) -> None:
         time = step * animation_dt_ms / 1000
+
+        if plot_knot_points:
+            if not any(np.isclose(times, time, atol=1e-2)):
+                return
 
         # Robot position and orientation
         p_WB_val = plan.get(time, "p_WB").flatten()  # type: ignore
@@ -120,7 +127,7 @@ def animate_footstep_plan(
 
             forces = foot_forces[foot_idx]
 
-            for force_idx, (f, p) in enumerate(zip(f_F_Ws_val, p_WFcs_val)):
+            for force_idx, (f, p) in enumerate(zip(f_F_Ws_val, p_WFcs_val)):  # type: ignore
                 f = f.flatten()
                 p = p.flatten()
                 if not np.isnan(f).any():
@@ -247,6 +254,8 @@ def visualize_feet_trajectories(
     num_trajs_per_foot_contact_point = 2 * TWO_D + 1  # force and position + torque
     num_contact_points_per_foot = 2
 
+    show_knot_points = len(knot_point_times) < 10
+
     fig, axs = plt.subplots(
         num_trajs_per_foot_contact_point,
         num_feet * num_contact_points_per_foot,
@@ -322,12 +331,17 @@ def visualize_feet_trajectories(
                 ]
             )
 
-            ax_force_x.scatter(knot_point_times, f_F_Ws_at_knots[:, 0], color="r")
-            ax_force_y.scatter(knot_point_times, f_F_Ws_at_knots[:, 1], color="r")
-            ax_pos_x.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 0], color="r")
-            ax_pos_y.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 1], color="r")
-            ax_torque.scatter(knot_point_times, planned_tau_F_Ws_at_knots, color="r")
-            ax_torque.scatter(knot_point_times, computed_tau_F_Ws_at_knots, color="b")
+            if show_knot_points:
+                ax_force_x.scatter(knot_point_times, f_F_Ws_at_knots[:, 0], color="r")
+                ax_force_y.scatter(knot_point_times, f_F_Ws_at_knots[:, 1], color="r")
+                ax_pos_x.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 0], color="r")
+                ax_pos_y.scatter(knot_point_times, p_BFc_Ws_at_knots[:, 1], color="r")
+                ax_torque.scatter(
+                    knot_point_times, planned_tau_F_Ws_at_knots, color="r"
+                )
+                ax_torque.scatter(
+                    knot_point_times, computed_tau_F_Ws_at_knots, color="b"
+                )
 
             ax_torque.set_xlabel("Time [s]")
 
@@ -350,6 +364,8 @@ def visualize_footstep_plan_trajectories(
     times = np.arange(0, plan.end_time, DT)
     # the last dt is unused and we have N-1 knot points for inputs
     knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-1]])
+
+    show_knot_points = len(knot_point_times) < 10
 
     p_WB_x = []
     p_WB_y = []
@@ -492,39 +508,33 @@ def visualize_footstep_plan_trajectories(
     fig, axs = plt.subplots(6, 1, figsize=(6, 5), sharex=True)
 
     axs[0].plot(times, p_WB_x, label="p_WB x")
-    axs[0].scatter(knot_point_times, knot_p_WB_x, color="r")
     axs[0].set_ylabel("[m]")
     axs[0].legend()
     axs[0].grid(True)
 
     axs[1].plot(times, p_WB_y, label="p_WB y")
-    axs[1].scatter(knot_point_times, knot_p_WB_y, color="r")
     axs[1].set_ylabel("[m]")
     axs[1].legend()
     axs[1].grid(True)
 
     axs[2].plot(times, theta_WB * 180 / np.pi, label="theta_WB")
-    axs[2].scatter(knot_point_times, knot_theta_WB * 180 / np.pi, color="r")
     axs[2].set_ylabel("[deg]")
     axs[2].legend()
     axs[2].grid(True)
 
     axs[3].plot(times, f_F_Ws_x_sum, label="sum(f_F_Ws)_x")
-    axs[3].scatter(knot_point_times[:-1], knot_f_F_Ws_x_sum, color="r")
     axs[3].set_ylabel("[N]")
     axs[3].legend()
     axs[3].grid(True)
 
     axs[4].plot(times, f_F_Ws_y_sum, label="sum(f_F_Ws)_y")
-    axs[4].scatter(knot_point_times[:-1], knot_f_F_Ws_y_sum, color="r")
     axs[4].set_ylabel("[N]")
     axs[4].legend()
     axs[4].grid(True)
 
     axs[5].plot(times, planned_tau_F_Ws_sum, label="sum(tau_F_Ws) (planned)")
     axs[5].plot(times, actual_tau_F_Ws_sum, label="sum(tau_F_Ws) (actual)")
-    axs[5].scatter(knot_point_times[:-1], knot_planned_tau_F_Ws_sum, color="r")
-    axs[5].scatter(knot_point_times[:-1], knot_actual_tau_F_Ws_sum, color="b")
+
     axs[5].set_ylabel("[Nm]")
     axs[5].legend()
     axs[5].grid(True)
@@ -533,6 +543,15 @@ def visualize_footstep_plan_trajectories(
         fig.suptitle(title)
 
     axs[5].set_xlabel("Time (s)")
+
+    if show_knot_points:
+        axs[0].scatter(knot_point_times, knot_p_WB_x, color="r")
+        axs[1].scatter(knot_point_times, knot_p_WB_y, color="r")
+        axs[2].scatter(knot_point_times, knot_theta_WB * 180 / np.pi, color="r")
+        axs[3].scatter(knot_point_times[:-1], knot_f_F_Ws_x_sum, color="r")
+        axs[4].scatter(knot_point_times[:-1], knot_f_F_Ws_y_sum, color="r")
+        axs[5].scatter(knot_point_times[:-1], knot_planned_tau_F_Ws_sum, color="r")
+        axs[5].scatter(knot_point_times[:-1], knot_actual_tau_F_Ws_sum, color="b")
 
     plt.tight_layout()
 
