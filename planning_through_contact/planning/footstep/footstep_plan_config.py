@@ -76,6 +76,8 @@ class FootstepPlanningConfig:
     relaxation_trace_cost: Optional[float] = None
     use_variable_grouping: bool = True
     force_scale: float = 1
+    dt_min: float = 0.1
+    dt_max: float = 0.5
 
     @property
     def dt(self) -> float:

@@ -936,7 +936,8 @@ class FootstepPlanSegmentProgram:
         # dynamics
         if self.config.use_variable_timing:
             self.dt = self.prog.NewContinuousVariables(1, "dt").item()
-            self.prog.AddLinearConstraint(self.dt >= 0.1)
+            self.prog.AddLinearConstraint(self.dt >= self.config.dt_min)
+            self.prog.AddLinearConstraint(self.dt <= self.config.dt_max)
 
             if self.config.cost.sq_time is not None:
                 self.prog.AddQuadraticCost(
@@ -982,7 +983,7 @@ class FootstepPlanSegmentProgram:
 
         cost = config.cost
 
-        # Squared timej
+        # Squared time
         if type(self.dt) is Variable and self.config.cost.sq_time is not None:
             c = self.prog.AddQuadraticCost(
                 self.num_steps * self.config.cost.sq_time * self.dt**2
