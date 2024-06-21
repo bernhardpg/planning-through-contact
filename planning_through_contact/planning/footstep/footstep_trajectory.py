@@ -1,7 +1,7 @@
 import pickle
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -52,6 +52,22 @@ from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
+
+
+# TODO: Need to change this when we add rotations in the terrain!
+def get_foot_contact_points(
+    foot_width: float, p_WF: npt.NDArray[Any]
+) -> List[npt.NDArray[Any]]:
+    p_Fcs = [
+        np.array([-foot_width / 2, 0]).reshape((2, 1)),
+        np.array([foot_width / 2, 0]).reshape((2, 1)),
+    ]
+    if p_WF.shape[0] == 2:
+        return [p_WF + p_Fc for p_Fc in p_Fcs]
+    elif p_WF.shape[1] == 2:
+        return [(p_WF.T + p_Fc).T for p_Fc in p_Fcs]
+    else:
+        raise RuntimeError(f"p_WF has wrong shape {p_WF.shape}")
 
 
 @dataclass
@@ -147,14 +163,9 @@ class FootPlan:
         """
         Planned contact force positions in world frame.
         """
-        # TODO: Need to change this when we add rotations in the terrain!
-        p_Fcs = [
-            np.array([-self.foot_width / 2, 0]).reshape((2, 1)),
-            np.array([self.foot_width / 2, 0]).reshape((2, 1)),
-        ]
         p_WF = self.get(time, "p_WF")
-        p_WFcs = [p_WF + p_Fc for p_Fc in p_Fcs]
-        return p_WFcs
+        assert type(p_WF) is np.ndarray
+        return get_foot_contact_points(self.foot_width, p_WF)
 
     def _get_p_BFc_Ws(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
@@ -775,11 +786,13 @@ class FootstepPlanSegmentProgram:
             self.omega_dot_WB += (1 / robot.inertia) * (self.tau_F2_1 + self.tau_F2_2)
 
         # contact points positions relative to CoM
-        self.p_BF1_1W = self.p_BF1_W + np.array([robot.foot_length / 2, 0])
-        self.p_BF1_2W = self.p_BF1_W - np.array([robot.foot_length / 2, 0])
+        self.p_BF1_1W, self.p_BF1_2W = get_foot_contact_points(
+            robot.foot_length, self.p_BF1_W
+        )
         if self.two_feet:
-            self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
-            self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
+            self.p_BF2_1W, self.p_BF2_2W = get_foot_contact_points(
+                robot.foot_length, self.p_BF2_W
+            )
 
         # torque = arm x force
         self.non_convex_constraints = []

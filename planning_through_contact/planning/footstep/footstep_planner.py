@@ -295,6 +295,7 @@ class FootstepPlanRounder:
             )
             solver_options.SetOption(snopt.solver_id(), "Major iterations limit", 1000)
         self.rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess, solver_options=solver_options)  # type: ignore
+
         return self.rounded_result
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
