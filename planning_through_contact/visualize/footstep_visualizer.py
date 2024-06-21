@@ -349,7 +349,7 @@ def visualize_footstep_plan_trajectories(
     DT = 1e-3
     times = np.arange(0, plan.end_time, DT)
     # the last dt is unused and we have N-1 knot points for inputs
-    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-2]])
+    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-1]])
 
     p_WB_x = []
     p_WB_y = []
@@ -391,7 +391,7 @@ def visualize_footstep_plan_trajectories(
         f_F_Ws_at_t = [
             f
             for foot_idx in range(NUM_FEET)
-            for f in plan.get_foot(foot_idx, t, "f_F_Ws")
+            for f in plan.get_foot(foot_idx, t, "f_F_Ws")  # type: ignore
         ]
         sum_f_F_Ws_at_t = np.sum(f_F_Ws_at_t, axis=0)
 
@@ -400,8 +400,6 @@ def visualize_footstep_plan_trajectories(
 
     f_F_Ws_x_sum = np.array(f_F_Ws_x_sum)
     f_F_Ws_y_sum = np.array(f_F_Ws_y_sum)
-
-    GRAV_FORCE = robot.mass * 9.81
 
     planned_tau_F_Ws_sum = []
     for t in times:
@@ -426,35 +424,107 @@ def visualize_footstep_plan_trajectories(
         )
         actual_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
 
+    actual_tau_F_Ws_sum = np.array(actual_tau_F_Ws_sum)
+
+    # Extract knot point values
+    knot_p_WB_x = []
+    knot_p_WB_y = []
+    knot_theta_WB = []
+    knot_f_F_Ws_x_sum = []
+    knot_f_F_Ws_y_sum = []
+    knot_planned_tau_F_Ws_sum = []
+    knot_actual_tau_F_Ws_sum = []
+
+    for t in knot_point_times:
+        knot_p_WB = plan.get(t, "p_WB").flatten()  # type: ignore
+        knot_theta = plan.get(t, "theta_WB")
+
+        if isinstance(knot_p_WB, np.ndarray) and knot_p_WB.shape == (2,):
+            knot_p_WB_x.append(knot_p_WB[0])
+            knot_p_WB_y.append(knot_p_WB[1])
+        else:
+            raise ValueError(
+                f"Unexpected shape for knot p_WB at time {t}: {knot_p_WB.shape if isinstance(knot_p_WB, np.ndarray) else 'not an array'}"
+            )
+
+        if isinstance(knot_theta, np.ndarray) and knot_theta.shape == ():
+            knot_theta_WB.append(knot_theta)
+        elif isinstance(knot_theta, float):
+            knot_theta_WB.append(knot_theta)
+        else:
+            raise ValueError(
+                f"Unexpected shape for knot theta_WB at time {t}: {knot_theta.shape if isinstance(knot_theta, np.ndarray) else 'not an array'}"
+            )
+
+        f_F_Ws_at_t = [
+            f
+            for foot_idx in range(NUM_FEET)
+            for f in plan.get_foot(foot_idx, t, "f_F_Ws")  # type: ignore
+        ]
+        sum_f_F_Ws_at_t = np.sum(f_F_Ws_at_t, axis=0)
+        knot_f_F_Ws_x_sum.append(sum_f_F_Ws_at_t[0])
+        knot_f_F_Ws_y_sum.append(sum_f_F_Ws_at_t[1] - GRAV_FORCE)
+
+        tau_F_Ws_sum_at_t = np.sum(
+            [
+                np.sum(plan.get_foot(foot_idx, t, "planned_tau_F_Ws"))
+                for foot_idx in range(NUM_FEET)
+            ]
+        )
+        knot_planned_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
+
+        tau_F_Ws_sum_at_t = np.sum(
+            [
+                np.sum(plan.get_foot(foot_idx, t, "computed_tau_F_Ws"))
+                for foot_idx in range(NUM_FEET)
+            ]
+        )
+        knot_actual_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
+
+    knot_p_WB_x = np.array(knot_p_WB_x)
+    knot_p_WB_y = np.array(knot_p_WB_y)
+    knot_theta_WB = np.array(knot_theta_WB)
+    knot_f_F_Ws_x_sum = np.array(knot_f_F_Ws_x_sum[:-1])
+    knot_f_F_Ws_y_sum = np.array(knot_f_F_Ws_y_sum[:-1])
+    knot_planned_tau_F_Ws_sum = np.array(knot_planned_tau_F_Ws_sum[:-1])
+    knot_actual_tau_F_Ws_sum = np.array(knot_actual_tau_F_Ws_sum[:-1])
+
     fig, axs = plt.subplots(6, 1, figsize=(6, 5), sharex=True)
 
     axs[0].plot(times, p_WB_x, label="p_WB x")
+    axs[0].scatter(knot_point_times, knot_p_WB_x, color="r")
     axs[0].set_ylabel("[m]")
     axs[0].legend()
     axs[0].grid(True)
 
     axs[1].plot(times, p_WB_y, label="p_WB y")
+    axs[1].scatter(knot_point_times, knot_p_WB_y, color="r")
     axs[1].set_ylabel("[m]")
     axs[1].legend()
     axs[1].grid(True)
 
     axs[2].plot(times, theta_WB * 180 / np.pi, label="theta_WB")
+    axs[2].scatter(knot_point_times, knot_theta_WB * 180 / np.pi, color="r")
     axs[2].set_ylabel("[deg]")
     axs[2].legend()
     axs[2].grid(True)
 
     axs[3].plot(times, f_F_Ws_x_sum, label="sum(f_F_Ws)_x")
+    axs[3].scatter(knot_point_times[:-1], knot_f_F_Ws_x_sum, color="r")
     axs[3].set_ylabel("[N]")
     axs[3].legend()
     axs[3].grid(True)
 
     axs[4].plot(times, f_F_Ws_y_sum, label="sum(f_F_Ws)_y")
+    axs[4].scatter(knot_point_times[:-1], knot_f_F_Ws_y_sum, color="r")
     axs[4].set_ylabel("[N]")
     axs[4].legend()
     axs[4].grid(True)
 
     axs[5].plot(times, planned_tau_F_Ws_sum, label="sum(tau_F_Ws) (planned)")
     axs[5].plot(times, actual_tau_F_Ws_sum, label="sum(tau_F_Ws) (actual)")
+    axs[5].scatter(knot_point_times[:-1], knot_planned_tau_F_Ws_sum, color="r")
+    axs[5].scatter(knot_point_times[:-1], knot_actual_tau_F_Ws_sum, color="b")
     axs[5].set_ylabel("[Nm]")
     axs[5].legend()
     axs[5].grid(True)
@@ -462,7 +532,7 @@ def visualize_footstep_plan_trajectories(
     if title:
         fig.suptitle(title)
 
-    axs[4].set_xlabel("Time (s)")
+    axs[5].set_xlabel("Time (s)")
 
     plt.tight_layout()
 
