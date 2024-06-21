@@ -138,73 +138,6 @@ def animate_footstep_plan(
     return ani
 
 
-def plot_relaxation_errors(
-    plan: FootstepPlan,
-    title: Optional[str] = None,
-    output_file: Optional[str] = None,
-) -> None:
-    # Assuming compute_torques method is defined in FootstepPlan
-    planned_torques = plan.tau_F_Ws  # List of Lists of np.ndarray
-    true_torques = plan.compute_torques()  # List of Lists of np.ndarray
-
-    num_feet = len(planned_torques)
-    num_forces = len(planned_torques[0]) if num_feet > 0 else 0
-
-    # Determine global y-axis limits
-    all_torques = [
-        torque
-        for sublist in planned_torques
-        for torque in sublist
-        if not np.isnan(torque).all()
-    ] + [
-        torque
-        for sublist in true_torques
-        for torque in sublist
-        if not np.isnan(torque).all()
-    ]
-
-    if all_torques:
-        y_min = min(torque[np.isfinite(torque)].min() for torque in all_torques)
-        y_max = max(torque[np.isfinite(torque)].max() for torque in all_torques)
-    else:
-        y_min, y_max = 0, 1  # Default values if all torques contain NaNs
-
-    fig, axs = plt.subplots(
-        num_feet, num_forces, figsize=(12, 3.5 * num_feet), squeeze=False
-    )
-
-    for i in range(num_feet):
-        for j in range(num_forces):
-            ax = axs[i, j]
-            planned_torque = planned_torques[i][j]
-            true_torque = true_torques[i][j]
-
-            N = planned_torque.shape[0]
-            x = np.arange(N)
-
-            # Mask NaN values
-            planned_torque_masked = np.ma.masked_invalid(planned_torque)
-            true_torque_masked = np.ma.masked_invalid(true_torque)
-
-            ax.plot(x, planned_torque_masked, label="Planned Torque")
-            ax.plot(x, true_torque_masked, label="True Torque", linestyle="--")
-            ax.set_xlabel("N")
-            ax.set_ylabel("Torque")
-            ax.set_title(f"Foot {i + 1} - Force {j + 1}")
-            ax.legend()
-            ax.set_ylim(y_min, y_max)
-
-    if title:
-        fig.suptitle(title)
-    plt.tight_layout()
-
-    if output_file:
-        plt.savefig(output_file)
-        plt.close()
-    else:
-        plt.show()
-
-
 def plot_relaxation_vs_rounding_bar_plot(
     plan_results: List[FootstepPlanResult],
     filename: Optional[str] = None,
@@ -326,16 +259,19 @@ def visualize_feet_trajectories(
 
         f_F_Ws_for_foot = []
         p_BFc_Ws_for_foot = []
-        torques = []
+        computed_tau_F_Ws_for_foot = []
+        planned_tau_F_Ws_for_foot = []
 
         for t in times:
-            f_F_W = plan.get_foot(foot_idx, t, "f_F_Ws")[foot_idx]  # type: ignore
-            p_BFc_W = plan.get_foot(foot_idx, t, "p_BFc_Ws")[foot_idx]  # type: ignore
+            f_F_Ws = plan.get_foot(foot_idx, t, "f_F_Ws")[foot_idx]  # type: ignore
+            p_BFc_Ws = plan.get_foot(foot_idx, t, "p_BFc_Ws")[foot_idx]  # type: ignore
+            computed_tau_F_Ws = plan.get_foot(foot_idx, t, "computed_tau_F_Ws")[foot_idx]  # type: ignore
+            planned_tau_F_Ws = plan.get_foot(foot_idx, t, "planned_tau_F_Ws")[foot_idx]  # type: ignore
 
-            f_F_Ws_for_foot.append(f_F_W)
-            p_BFc_Ws_for_foot.append(p_BFc_W)
-
-            torques.append(cross_2d(p_BFc_W, f_F_W))
+            f_F_Ws_for_foot.append(f_F_Ws)
+            p_BFc_Ws_for_foot.append(p_BFc_Ws)
+            computed_tau_F_Ws_for_foot.append(computed_tau_F_Ws)
+            planned_tau_F_Ws_for_foot.append(planned_tau_F_Ws)
 
         f_F_Ws_for_foot = np.hstack(f_F_Ws_for_foot)  # (2, N)
         p_BFc_Ws_for_foot = np.hstack(p_BFc_Ws_for_foot)  # (2, N)
@@ -345,7 +281,8 @@ def visualize_feet_trajectories(
         ax_force_y.plot(times, f_F_Ws_for_foot[1, :], label="f_F_W_y")
         ax_pos_x.plot(times, p_BFc_Ws_for_foot[0, :], label="p_BF_W_x")
         ax_pos_y.plot(times, p_BFc_Ws_for_foot[1, :], label="p_BF_W_y")
-        ax_torque.plot(times, torques, label="p x f")
+        ax_torque.plot(times, planned_tau_F_Ws_for_foot, label="tau_F_Ws (planned)")
+        ax_torque.plot(times, computed_tau_F_Ws_for_foot, label="tau_F_Ws (computed)")
 
         ax_torque.set_xlabel("Time [s]")
 
@@ -424,7 +361,7 @@ def visualize_footstep_plan_trajectories(
         # First sum is over forces within one foot, second sum is over both feet
         tau_F_Ws_sum_at_t = np.sum(
             [
-                np.sum(plan.get_foot(foot_idx, t, "tau_F_Ws"))
+                np.sum(plan.get_foot(foot_idx, t, "planned_tau_F_Ws"))
                 for foot_idx in range(NUM_FEET)
             ]
         )

@@ -1,6 +1,5 @@
 import pickle
 from dataclasses import asdict, dataclass
-from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
@@ -76,9 +75,13 @@ class FootPlan:
     foot_width: float
     dt: float
     p_WF: npt.NDArray[np.float64]  # (num_knot_points, 2)
-    f_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, 2)]
-    # This is the PLANNED torque (which might not be equal to p x f)
-    tau_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, )]
+    f_F_Ws: List[
+        npt.NDArray[np.float64]
+    ]  # [(num_knot_points, 2)] (one for each contact point)
+    # This is the PLANNED torque (which might NOT be equal to p x f)
+    tau_F_Ws: List[
+        npt.NDArray[np.float64]
+    ]  # [(num_knot_points, )] (one for each contact point)
     # NOTE: p_WB is only used to compute torques and footstep positions relative to COM
     p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
 
@@ -110,18 +113,13 @@ class FootPlan:
         interpolation = "zero_order_hold"
         self.trajectories = {
             "p_WF": self._interpolate_segment(self.p_WF, interpolation),
-            "p_WFcs": [
-                self._interpolate_segment(p, interpolation) for p in self.p_WFcs
-            ],
-            "p_BFc_Ws": [
-                self._interpolate_segment(p, interpolation) for p in self.p_BFc_Ws
-            ],
             "f_F_Ws": [
                 self._interpolate_segment(f, interpolation) for f in self.f_F_Ws
             ],
-            "tau_F_Ws": [
+            "planned_tau_F_Ws": [
                 self._interpolate_segment(tau, interpolation) for tau in self.tau_F_Ws
             ],
+            "p_WB": self._interpolate_segment(self.p_WB, interpolation),
         }
 
     @property
@@ -136,23 +134,34 @@ class FootPlan:
     def end_time(self) -> float:
         return self.num_knot_points * self.dt
 
-    @cached_property
-    def p_WFcs(self) -> List[npt.NDArray[np.float64]]:
+    def _get_p_WFcs(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
         Planned contact force positions in world frame.
         """
+        # TODO: Need to change this when we add rotations in the terrain!
         p_Fcs = [
-            np.array([-self.foot_width / 2, 0]),
-            np.array([self.foot_width / 2, 0]),
-        ]  # contact positions
-        return [self.p_WF + p_Fc for p_Fc in p_Fcs]
+            np.array([-self.foot_width / 2, 0]).reshape((2, 1)),
+            np.array([self.foot_width / 2, 0]).reshape((2, 1)),
+        ]
+        p_WF = self.get(time, "p_WF")
+        p_WFcs = [p_WF + p_Fc for p_Fc in p_Fcs]
+        return p_WFcs
 
-    @cached_property
-    def p_BFc_Ws(self) -> List[npt.NDArray[np.float64]]:
+    def _get_p_BFc_Ws(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
-        Planned contact force positions in world frame.
+        Planned contact force positions relative to the body frame in world frame.
         """
-        return [p_WFc - self.p_WB for p_WFc in self.p_WFcs]
+        p_WFcs = self._get_p_WFcs(time)
+        p_WB = self.get(time, "p_WB")
+        return [p_WFc - p_WB for p_WFc in p_WFcs]
+
+    def _get_computed_tau_F_Ws(self, time: float) -> List[npt.NDArray[np.float64]]:
+        p_BFc_Ws = self.get(time, "p_BFc_Ws")
+        f_F_Ws = self.get(time, "f_F_Ws")
+        tau_Fc_Ws = [
+            cross_2d(p_BFc_W, f_F_W) for p_BFc_W, f_F_W in zip(p_BFc_Ws, f_F_Ws)
+        ]
+        return tau_Fc_Ws
 
     def __add__(self, other: Optional["FootPlan"]) -> "FootPlan":
         if other is None:
@@ -217,42 +226,22 @@ class FootPlan:
     def get(
         self, time: float, traj: str
     ) -> Union[npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
+        # these are computed values that are not pure trajectories
         if traj not in self.trajectories:
-            raise NotImplementedError(f"Trajectory {traj} not implemented")
+            if traj == "p_WFcs":
+                return self._get_p_WFcs(time)
+            elif traj == "p_BFc_Ws":
+                return self._get_p_BFc_Ws(time)
+            elif traj == "computed_tau_F_Ws":
+                return self._get_computed_tau_F_Ws(time)
+            else:
+                raise NotImplementedError(f"Trajectory {traj} not implemented")
 
-        trajectory = self.trajectories[traj]
-        if isinstance(trajectory, list):
-            return [t.eval(time) for t in trajectory]
-        return trajectory.eval(time)
-
-    def get_computed_torque_at_t(self, time: float) -> List[npt.NDArray[np.float64]]:
-        p_BFc_Ws = self.get(time, "p_BFc_Ws")
-        f_F_Ws = self.get(time, "f_F_Ws")
-        tau_Fc_Ws = [
-            cross_2d(p_BFc_W, f_F_W) for p_BFc_W, f_F_W in zip(p_BFc_Ws, f_F_Ws)
-        ]
-        return tau_Fc_Ws
-
-    # TODO(bernhardpg): Remove these, they are duplicated!
-    def compute_torques(self) -> List[npt.NDArray[np.float64]]:
-        # compute arm (i.e. position of contact point relative to CoM)
-        tau_F_Ws = [
-            np.array([cross_2d(p, f) for p, f in zip(ps, fs)])
-            for ps, fs in zip(self.p_BFc_Ws, self.f_F_Ws)
-        ]
-        return tau_F_Ws
-
-    # TODO(bernhardpg): Remove these, they are duplicated!
-    def get_torque_errors(self) -> List[npt.NDArray[np.float64]]:
-        if self.tau_F_Ws is None:
-            raise RuntimeError("Cannot compute torque error when torques are not saved")
-
-        true_tau_F_Ws = self.compute_torques()
-        errors = [
-            np.abs(true_tau - tau)
-            for true_tau, tau in zip(true_tau_F_Ws, self.tau_F_Ws)
-        ]
-        return errors
+        else:
+            trajectory = self.trajectories[traj]
+            if isinstance(trajectory, list):
+                return [t.eval(time) for t in trajectory]
+            return trajectory.eval(time)
 
 
 @dataclass
@@ -475,8 +464,6 @@ class FootstepPlan:
         self, foot: int, time: float, traj: str
     ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
         assert foot <= self.num_feet - 1
-        if traj == "computed_tau_F_Ws":
-            return self.feet_knot_points[foot].get_computed_torque_at_t(time)
         return self.feet_knot_points[foot].get(time, traj)
 
 
@@ -628,13 +615,6 @@ class FootstepPlanResult:
     def save_rounded_animation(self, output_file: str) -> None:
         self._save_anim(self.rounded_plan, output_file)
 
-    def save_relaxation_error_plot(self, output_file: str) -> None:
-        from planning_through_contact.visualize.footstep_visualizer import (
-            plot_relaxation_errors,
-        )
-
-        plot_relaxation_errors(self.restriction_plan, output_file=output_file)
-
     def save_analysis_to_folder(self, folder: str) -> None:
         """
         Saves all the analysis data and the plans themselves, as well as animations,
@@ -653,7 +633,6 @@ class FootstepPlanResult:
                 self.restriction_plan, str(path / "relaxed_plan_trajectories.png")
             )
             self.restriction_plan.save(str(path / "relaxed_plan.pkl"))
-            self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
 
         if self.rounded_metrics.success:
             self.save_rounded_animation(str(path / "rounded_plan_video.mp4"))
