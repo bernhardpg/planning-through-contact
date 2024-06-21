@@ -39,6 +39,7 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.gcs_tools import hash_gcs_edges
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import (
     plot_relaxation_vs_rounding_bar_plot,
 )
@@ -65,8 +66,11 @@ class VertexSegmentPair(NamedTuple):
             idxs
         ]  # NOTE: This will intentionally only work for degree 1 monomial variables
 
-    def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
-        return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
+    def get_lin_exprs_in_vertex(self, exprs: npt.NDArray) -> npt.NDArray:
+        return self.s.get_lin_exprs_in_vertex(exprs, self.v.x())
+
+    def get_lin_expr_in_vertex(self, expr) -> npt.NDArray:
+        return self.get_lin_exprs_in_vertex(np.array([expr])).item()
 
     def get_segment_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
@@ -745,8 +749,11 @@ class FootstepPlanner:
             # v -> target
             e = self.gcs.AddEdge(pair.v, s)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(-1))
-            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
-            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-1))
+            # NOTE: Here we get the SECOND last knot point, because the last point when connected to
+            # the target vertex is discarded (a trajectory has N-1 knot points for inputs because
+            # of Forward Euler)
+            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-2))
+            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-2))
 
         # The only variables in the source/target are the pose variables
         constraint = eq(pose, s.x())
@@ -759,8 +766,9 @@ class FootstepPlanner:
         # for c in constraint:
         #     e.AddConstraint(c)
 
-        # Enforce that we start and end in an equilibrium position
         if self.config.initial_is_equilibrium:
+            # NOTE: It is better numerically to add these constraints directly on the sum of variables
+            # rather than on the spatial acceleration (which is just some scaling of these sums)
             constraint = eq(spatial_acc, 0)
             for c in constraint:
                 e.AddConstraint(c)

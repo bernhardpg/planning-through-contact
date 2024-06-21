@@ -346,7 +346,10 @@ def visualize_footstep_plan_trajectories(
     title: Optional[str] = None,
     filename: Optional[str] = None,
 ) -> None:
-    times = np.cumsum(plan.dts)  # Cumulative sum of time intervals to get time points
+    DT = 1e-3
+    times = np.arange(0, plan.end_time, DT)
+    # the last dt is unused and we have N-1 knot points for inputs
+    knot_point_times = np.concatenate([[0], np.cumsum(plan.dts)[:-2]])
 
     p_WB_x = []
     p_WB_y = []
@@ -385,16 +388,15 @@ def visualize_footstep_plan_trajectories(
     GRAV_FORCE = robot.mass * 9.81
 
     for t in times:
-        # First sum is over forces within one foot, second sum is over both feet
-        f_F_Ws_sum_at_t = np.sum(
-            [
-                np.sum(plan.get_foot(foot_idx, t, "f_F_Ws"), axis=0)
-                for foot_idx in range(NUM_FEET)
-            ],
-            axis=0,
-        ).flatten()
-        f_F_Ws_x_sum.append(f_F_Ws_sum_at_t[0])
-        f_F_Ws_y_sum.append(f_F_Ws_sum_at_t[1] - GRAV_FORCE)
+        f_F_Ws_at_t = [
+            f
+            for foot_idx in range(NUM_FEET)
+            for f in plan.get_foot(foot_idx, t, "f_F_Ws")
+        ]
+        sum_f_F_Ws_at_t = np.sum(f_F_Ws_at_t, axis=0)
+
+        f_F_Ws_x_sum.append(sum_f_F_Ws_at_t[0])
+        f_F_Ws_y_sum.append(sum_f_F_Ws_at_t[1] - GRAV_FORCE)
 
     f_F_Ws_x_sum = np.array(f_F_Ws_x_sum)
     f_F_Ws_y_sum = np.array(f_F_Ws_y_sum)
@@ -424,7 +426,7 @@ def visualize_footstep_plan_trajectories(
         )
         actual_tau_F_Ws_sum.append(tau_F_Ws_sum_at_t)
 
-    fig, axs = plt.subplots(6, 1, figsize=(5, 10), sharex=True)
+    fig, axs = plt.subplots(6, 1, figsize=(6, 5), sharex=True)
 
     axs[0].plot(times, p_WB_x, label="p_WB x")
     axs[0].set_ylabel("[m]")
