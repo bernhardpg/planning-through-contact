@@ -336,19 +336,6 @@ class FootstepPlan:
         torques = [foot.tau_F_Ws for foot in self.feet_knot_points]
         return torques
 
-    def compute_torques(self) -> List[List[npt.NDArray[np.float64]]]:
-        torques = [foot.compute_torques() for foot in self.feet_knot_points]
-        return torques
-
-    def get_torque_errors(self) -> List[List[npt.NDArray[np.float64]]]:
-        """
-        Compares the computed torques p ⊗ f with the planned torques τ.
-        Returns an array (num_steps, num_forces) with entries equal to
-        the absolute constraint violation |τ - p ⊗ f| for each force and timestep.
-        """
-        errors = [foot.get_torque_errors() for foot in self.feet_knot_points]
-        return errors
-
     def _interpolate_segment(
         self, data: npt.NDArray[np.float64], interpolation: TrajType
     ) -> "LinTrajSegment":
