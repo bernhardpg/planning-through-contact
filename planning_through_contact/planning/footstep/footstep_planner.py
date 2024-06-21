@@ -39,6 +39,7 @@ from planning_through_contact.planning.footstep.footstep_trajectory import (
 )
 from planning_through_contact.planning.footstep.in_plane_terrain import InPlaneTerrain
 from planning_through_contact.tools.gcs_tools import hash_gcs_edges
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.footstep_visualizer import (
     plot_relaxation_vs_rounding_bar_plot,
 )
@@ -65,8 +66,11 @@ class VertexSegmentPair(NamedTuple):
             idxs
         ]  # NOTE: This will intentionally only work for degree 1 monomial variables
 
-    def get_lin_exprs_in_vertex(self, vars: npt.NDArray) -> npt.NDArray:
-        return self.s.get_lin_exprs_in_vertex(vars, self.v.x())
+    def get_lin_exprs_in_vertex(self, exprs: npt.NDArray) -> npt.NDArray:
+        return self.s.get_lin_exprs_in_vertex(exprs, self.v.x())
+
+    def get_lin_expr_in_vertex(self, expr) -> npt.NDArray:
+        return self.get_lin_exprs_in_vertex(np.array([expr])).item()
 
     def get_segment_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
         return self.s.evaluate_with_vertex_result(result, self.v.x())
@@ -215,13 +219,13 @@ class FootstepPlanRounder:
         # We need extra logic here to deal with the fact that initial and target constraints
         # are added as singleton sets (Point class).
         if u.name() == "source":
-            u_prog_vars = u.set().x()[u_idxs]
+            u_prog_vars = u.set().x()[u_idxs]  # type: ignore
         else:
             segment_u = self.all_pairs[u.name()].s
             u_prog_vars = segment_u.prog.decision_variables()[u_idxs]
 
         if v.name() == "target":
-            v_prog_vars = v.set().x()[v_idxs]
+            v_prog_vars = v.set().x()[v_idxs]  # type: ignore
         else:
             segment_v = self.all_pairs[v.name()].s
             v_prog_vars = segment_v.prog.decision_variables()[v_idxs]
@@ -295,6 +299,7 @@ class FootstepPlanRounder:
             )
             solver_options.SetOption(snopt.solver_id(), "Major iterations limit", 1000)
         self.rounded_result = snopt.Solve(self.prog, initial_guess=self.initial_guess, solver_options=solver_options)  # type: ignore
+
         return self.rounded_result
 
     def get_plan(self, result: MathematicalProgramResult) -> FootstepPlan:
@@ -306,6 +311,8 @@ class FootstepPlanRounder:
         """
         WARNING: This currently ruins the MathematicalProgramResult.
         """
+        # Set the rounded result to the initial guess obtained from the
+        # convex restriction (i.e. the relaxation for this specific path)
         for var, val in zip(self.prog.decision_variables(), self.initial_guess):
             self.rounded_result.SetSolution(var, val)
         return self.get_plan(self.rounded_result)
@@ -742,8 +749,11 @@ class FootstepPlanner:
             # v -> target
             e = self.gcs.AddEdge(pair.v, s)
             pose = pair.get_vars_in_vertex(pair.s.get_robot_pose(-1))
-            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-1))
-            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-1))
+            # NOTE: Here we get the SECOND last knot point, because the last point when connected to
+            # the target vertex is discarded (a trajectory has N-1 knot points for inputs because
+            # of Forward Euler)
+            spatial_vel = pair.get_vars_in_vertex(pair.s.get_robot_spatial_vel(-2))
+            spatial_acc = pair.get_lin_exprs_in_vertex(pair.s.get_robot_spatial_acc(-2))
 
         # The only variables in the source/target are the pose variables
         constraint = eq(pose, s.x())
@@ -756,8 +766,9 @@ class FootstepPlanner:
         # for c in constraint:
         #     e.AddConstraint(c)
 
-        # Enforce that we start and end in an equilibrium position
         if self.config.initial_is_equilibrium:
+            # NOTE: It is better numerically to add these constraints directly on the sum of variables
+            # rather than on the spatial acceleration (which is just some scaling of these sums)
             constraint = eq(spatial_acc, 0)
             for c in constraint:
                 e.AddConstraint(c)
@@ -941,6 +952,9 @@ class FootstepPlanner:
             )
             plan_results.append(res)
 
+        if print_debug:
+            print(f"Finished rounding {len(paths)} paths.")
+
         self.best_idx = int(
             np.argmin([res.rounded_metrics.cost for res in plan_results])
         )
@@ -963,15 +977,21 @@ class FootstepPlanner:
             )
         return self.best_result
 
-    def save_analysis(self, output_dir: str) -> None:
+    def save_analysis(self, output_dir: str, print_debug: bool = False) -> None:
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(exist_ok=True, parents=True)
 
         assert self.gcs_result is not None
+        if print_debug:
+            print("Creating graph diagram...")
+
         self.create_graph_diagram(output_dir + "/" + "graph.pdf")
         self.create_graph_diagram(
             output_dir + "/" + "graph_with_flows.pdf", result=self.gcs_result
         )
+
+        if print_debug:
+            print("Saving configs...")
 
         self.config.save(str(output_dir_path / "config.yaml"))
         self.terrain.save(str(output_dir_path / "terrain.yaml"))
@@ -979,6 +999,8 @@ class FootstepPlanner:
         assert self.plan_results is not None
 
         for idx, res in enumerate(self.plan_results):
+            if print_debug:
+                print(f"Making restriction analysis {idx/len(self.plan_results)}...")
             # Use the unique name to save paths, so we can easily identify
             # equal paths between different methods
             res_output_dir = output_dir + "/" + res.get_unique_gcs_name()
@@ -1001,6 +1023,9 @@ class FootstepPlanner:
             # Rename best directory with _BEST appended
             if idx == self.best_idx:
                 Path(res_output_dir).rename(res_output_dir + "_BEST")
+
+        if print_debug:
+            print(f"Saving path costs and solve times...")
 
         plot_relaxation_vs_rounding_bar_plot(
             self.plan_results,

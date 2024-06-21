@@ -54,8 +54,8 @@ def test_trajectory_segment_one_foot() -> None:
 
     # N - 1 inputs
     assert segment.p_WF1.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_2W.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_2W_vars.shape == (cfg.period_steps - 1, 2)
 
     assert segment.tau_F1_1.shape == (cfg.period_steps - 1,)
     assert segment.tau_F1_2.shape == (cfg.period_steps - 1,)
@@ -94,11 +94,6 @@ def test_trajectory_segment_one_foot() -> None:
 
     if DEBUG:
         a_WB = evaluate_np_expressions_array(segment.a_WB, relaxed_result)
-        cost_vals = segment.evaluate_costs_with_result(relaxed_result)
-
-        cost_vals_sums = {key: np.sum(val) for key, val in cost_vals.items()}
-        for key, val in cost_vals_sums.items():
-            print(f"Cost {key}: {val}")
 
         print(f"Total cost: {relaxed_result.get_optimal_cost()}")
 
@@ -136,8 +131,8 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
     # NOTE: This time, we should have N inputs!
     # N inputs
     assert segment.p_WF1.shape == (cfg.period_steps, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_F1_2W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_2W_vars.shape == (cfg.period_steps, 2)
 
     assert segment.tau_F1_1.shape == (cfg.period_steps,)
     assert segment.tau_F1_2.shape == (cfg.period_steps,)
@@ -165,7 +160,7 @@ def test_trajectory_segment_one_foot_extra_inputs() -> None:
 
     segment_value = segment.evaluate_with_result(relaxed_result)
 
-    traj = FootstepPlan.merge([segment_value])
+    traj = FootstepPlan.merge([segment_value], keep_eq_num_states_inputs=True)
     assert traj.p_WB.shape == (cfg.period_steps, 2)
     assert traj.theta_WB.shape == (cfg.period_steps,)
 
@@ -272,10 +267,10 @@ def test_traj_segment_convex_concave_decomposition() -> None:
         p_BF2_1W = relaxed_result.GetSolution(segment.p_BF2_1W)
         p_BF2_2W = relaxed_result.GetSolution(segment.p_BF2_2W)
 
-        f_F1_1W = relaxed_result.GetSolution(segment.f_F1_1W)
-        f_F1_2W = relaxed_result.GetSolution(segment.f_F1_2W)
-        f_F2_1W = relaxed_result.GetSolution(segment.f_F2_1W)
-        f_F2_2W = relaxed_result.GetSolution(segment.f_F2_2W)
+        f_F1_1W = relaxed_result.GetSolution(segment.f_F1_1W_vars)
+        f_F1_2W = relaxed_result.GetSolution(segment.f_F1_2W_vars)
+        f_F2_1W = relaxed_result.GetSolution(segment.f_F2_1W_vars)
+        f_F2_2W = relaxed_result.GetSolution(segment.f_F2_2W_vars)
 
         target_tau_F1_1 = np.array(
             [cross_2d(p, f).Evaluate() for p, f in zip(p_BF1_1W, f_F1_1W)]
@@ -374,15 +369,15 @@ def test_trajectory_segment_two_feet_one_stone() -> None:
     )
 
     assert segment.p_WF1.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_2W.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_2W_vars.shape == (cfg.period_steps - 1, 2)
 
     assert segment.tau_F1_1.shape == (cfg.period_steps - 1,)
     assert segment.tau_F1_2.shape == (cfg.period_steps - 1,)
 
     assert segment.p_WF2.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps - 1, 2)
-    assert segment.f_F2_2W.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps - 1, 2)
+    assert segment.f_F2_2W_vars.shape == (cfg.period_steps - 1, 2)
 
     assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)
     assert segment.tau_F2_1.shape == (cfg.period_steps - 1,)

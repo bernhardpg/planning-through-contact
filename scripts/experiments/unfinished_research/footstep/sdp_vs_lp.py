@@ -61,23 +61,6 @@ def plan(
 
     robot = PotatoRobot(mass=50.0)
     cost = FootstepCost()
-    # cost = FootstepCost.with_none()
-    # cost.sq_acc_lin = None
-    # cost.sq_acc_rot = None
-    # cost.sq_nominal_pose = 1.0
-    # cost.sq_vel_rot = 1.0
-    # cost.sq_vel_lin = 1.0
-    # cost.sq_force = None
-    # cost.sq_torque = None
-    # cost = FootstepCost.with_none()
-    # cost.sq_acc_lin = cost.sq_acc_rot = 100.0
-    # cost.sq_force = 1.0
-    # cost.sq_torque = 1.0
-    # cost.sq_vel_lin = 1.0
-    # cost.sq_vel_rot = 1.0
-    # cost.sq_acc_lin = 1.0
-    # cost.sq_acc_rot = 1.0
-    # cost.sq_nominal_pose = 1.0
 
     cfg = FootstepPlanningConfig(
         cost=cost,
@@ -87,7 +70,8 @@ def plan(
         use_implied_constraints=False,
         use_variable_grouping=True,
         initial_is_equilibrium=True,
-        use_linearized_cost=False,
+        use_linearized_cost=True,
+        use_variable_timing=True,
         relaxation_trace_cost=1e-5,
         force_scale=1e2,
     )
@@ -125,7 +109,6 @@ def plan(
     path = output_dir / name
     path.mkdir(exist_ok=True, parents=True)
 
-    # planner.plan(print_flows=debug, print_solver_output=debug, print_debug=debug, save_solver_output=True)
     planner.plan(
         print_flows=debug,
         print_solver_output=False,
@@ -134,7 +117,10 @@ def plan(
         output_dir=path,
     )
 
-    planner.save_analysis(str(path))
+    if debug:
+        print("Saving analysis...")
+
+    planner.save_analysis(str(path), print_debug=debug)
 
     best_result = planner.get_best_result()
     results = planner.get_results()

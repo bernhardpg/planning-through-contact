@@ -45,6 +45,7 @@ class FootstepCost:
     sq_acc_lin: Optional[float] = 100.0
     sq_acc_rot: Optional[float] = 1.0
     sq_nominal_pose: Optional[float] = 5.0
+    sq_time: Optional[float] = 1.0
 
     @classmethod
     def with_none(cls) -> "FootstepCost":
@@ -71,9 +72,12 @@ class FootstepPlanningConfig:
     use_linearized_cost: bool = True
     max_rounded_paths: int = 10
     use_implied_constraints: bool = False
+    use_variable_timing: bool = False
     relaxation_trace_cost: Optional[float] = None
     use_variable_grouping: bool = True
     force_scale: float = 1
+    dt_min: float = 0.1
+    dt_max: float = 0.5
 
     @property
     def dt(self) -> float:

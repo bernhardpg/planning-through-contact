@@ -1,8 +1,7 @@
 import pickle
 from dataclasses import asdict, dataclass
-from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -55,6 +54,22 @@ GcsVertex = GraphOfConvexSets.Vertex
 GcsEdge = GraphOfConvexSets.Edge
 
 
+# TODO: Need to change this when we add rotations in the terrain!
+def get_foot_contact_points(
+    foot_width: float, p_WF: npt.NDArray[Any]
+) -> List[npt.NDArray[Any]]:
+    p_Fcs = [
+        np.array([-foot_width / 2, 0]).reshape((2, 1)),
+        np.array([foot_width / 2, 0]).reshape((2, 1)),
+    ]
+    if p_WF.shape[0] == 2:
+        return [p_WF + p_Fc for p_Fc in p_Fcs]
+    elif p_WF.shape[1] == 2:
+        return [(p_WF.T + p_Fc).T for p_Fc in p_Fcs]
+    else:
+        raise RuntimeError(f"p_WF has wrong shape {p_WF.shape}")
+
+
 @dataclass
 class FootPlan:
     """
@@ -75,13 +90,21 @@ class FootPlan:
 
     foot_width: float
     dt: float
-    p_WF: npt.NDArray[np.float64]  # (num_knot_points, 2)
-    f_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, 2)]
-    tau_F_Ws: List[npt.NDArray[np.float64]]  # [(num_knot_points, )]
+    p_WF: npt.NDArray[np.float64]  # (num_knot_points - 1, 2)
+    f_F_Ws: List[
+        npt.NDArray[np.float64]
+    ]  # [(num_knot_points - 1, 2)] (one for each contact point)
+    # This is the PLANNED torque (which might NOT be equal to p x f)
+    tau_F_Ws: List[
+        npt.NDArray[np.float64]
+    ]  # [(num_knot_points - 1, )] (one for each contact point)
+    # NOTE: p_WB is only used to compute torques and footstep positions relative to COM
+    # and has one more knot point than the other values!
+    p_WB: npt.NDArray[np.float64]  # (num_knot_points, 2)
 
     def __post_init__(self) -> None:
-        self._validate_shapes()
         self._initialize_trajectories()
+        self._validate_shapes()
 
     def __getstate__(self):
         # Exclude the trajectories that are not serializable
@@ -92,29 +115,44 @@ class FootPlan:
         self.__dict__.update(state)
         self._initialize_trajectories()
 
+    def get_without_last_input_step(self) -> "FootPlan":
+        new_p_WF = self.p_WF[:-1, :]
+        new_f_F_Ws = [f[:-1, :] for f in self.f_F_Ws]
+        new_tau_F_Ws = [tau[:-1] for tau in self.tau_F_Ws]
+
+        new_plan = FootPlan(
+            self.foot_width, self.dt, new_p_WF, new_f_F_Ws, new_tau_F_Ws, self.p_WB
+        )
+        new_plan._validate_shapes()
+        return new_plan
+
     def _validate_shapes(self) -> None:
-        assert self.p_WF.shape == (self.num_knot_points, 2), "p_WF shape mismatch"
+        assert self.p_WF.shape == (self.num_inputs, 2), "p_WF shape mismatch"
         for f, tau in zip(self.f_F_Ws, self.tau_F_Ws):
-            assert f.shape == (self.num_knot_points, 2), "f_F_W shape mismatch"
-            assert tau.shape == (self.num_knot_points,), "tau_F_W shape mismatch"
+            assert f.shape == (self.num_inputs, 2), "f_F_W shape mismatch"
+            assert tau.shape == (self.num_inputs,), "tau_F_W shape mismatch"
+
+        assert self.p_WB.shape == (self.num_states, 2), "p_WB shape mismatch"
 
     def _initialize_trajectories(self) -> None:
         interpolation = "zero_order_hold"
         self.trajectories = {
             "p_WF": self._interpolate_segment(self.p_WF, interpolation),
-            "p_WFcs": [
-                self._interpolate_segment(p, interpolation) for p in self.p_WFcs
-            ],
             "f_F_Ws": [
                 self._interpolate_segment(f, interpolation) for f in self.f_F_Ws
             ],
-            "tau_F_Ws": [
+            "planned_tau_F_Ws": [
                 self._interpolate_segment(tau, interpolation) for tau in self.tau_F_Ws
             ],
+            "p_WB": self._interpolate_segment(self.p_WB, "first_order_hold"),
         }
 
     @property
-    def num_knot_points(self) -> int:
+    def num_states(self) -> int:
+        return self.p_WB.shape[0]
+
+    @property
+    def num_inputs(self) -> int:
         return self.p_WF.shape[0]
 
     @property
@@ -123,18 +161,31 @@ class FootPlan:
 
     @property
     def end_time(self) -> float:
-        return self.num_knot_points * self.dt
+        return (self.num_states - 1) * self.dt  # we start at time = 0
 
-    @cached_property
-    def p_WFcs(self) -> List[npt.NDArray[np.float64]]:
+    def _get_p_WFcs(self, time: float) -> List[npt.NDArray[np.float64]]:
         """
         Planned contact force positions in world frame.
         """
-        p_Fcs = [
-            np.array([-self.foot_width / 2, 0]),
-            np.array([self.foot_width / 2, 0]),
-        ]  # contact positions
-        return [self.p_WF + p_Fc for p_Fc in p_Fcs]
+        p_WF = self.get(time, "p_WF")
+        assert type(p_WF) is np.ndarray
+        return get_foot_contact_points(self.foot_width, p_WF)
+
+    def _get_p_BFc_Ws(self, time: float) -> List[npt.NDArray[np.float64]]:
+        """
+        Planned contact force positions relative to the body frame in world frame.
+        """
+        p_WFcs = self._get_p_WFcs(time)
+        p_WB = self.get(time, "p_WB")
+        return [p_WFc - p_WB for p_WFc in p_WFcs]
+
+    def _get_computed_tau_F_Ws(self, time: float) -> List[npt.NDArray[np.float64]]:
+        p_BFc_Ws = self.get(time, "p_BFc_Ws")
+        f_F_Ws = self.get(time, "f_F_Ws")
+        tau_Fc_Ws = [
+            cross_2d(p_BFc_W, f_F_W) for p_BFc_W, f_F_W in zip(p_BFc_Ws, f_F_Ws)
+        ]
+        return tau_Fc_Ws
 
     def __add__(self, other: Optional["FootPlan"]) -> "FootPlan":
         if other is None:
@@ -155,6 +206,7 @@ class FootPlan:
             np.hstack((self_tau, other_tau))
             for self_tau, other_tau in zip(self.tau_F_Ws, other.tau_F_Ws)
         ]
+        new_p_WB = np.vstack((self.p_WB, other.p_WB))
 
         return FootPlan(
             foot_width=self.foot_width,
@@ -162,6 +214,7 @@ class FootPlan:
             p_WF=new_p_WF,
             f_F_Ws=new_f_F_Ws,
             tau_F_Ws=new_tau_F_Ws,
+            p_WB=new_p_WB,
         )
 
     def _interpolate_segment(
@@ -184,58 +237,35 @@ class FootPlan:
         p_WF = np.full(twod_shape, np.nan)
         f_F_Ws = [np.full(twod_shape, np.nan) for _ in range(num_forces)]
         tau_F_Ws = [np.full(oned_shape, np.nan) for _ in range(num_forces)]
+        p_WB = np.full(twod_shape, np.nan)
 
-        return cls(foot_width, dt, p_WF, f_F_Ws, tau_F_Ws)
+        return cls(foot_width, dt, p_WF, f_F_Ws, tau_F_Ws, p_WB)
 
     @classmethod
     def empty_like(cls, other: "FootPlan") -> "FootPlan":
         return cls.create_empty(
-            other.foot_width, other.dt, other.num_knot_points, other.num_forces
+            other.foot_width, other.dt, other.num_states, other.num_forces
         )
 
     def get(
         self, time: float, traj: str
     ) -> Union[npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
+        # these are computed values that are not pure trajectories
         if traj not in self.trajectories:
-            raise NotImplementedError(f"Trajectory {traj} not implemented")
+            if traj == "p_WFcs":
+                return self._get_p_WFcs(time)
+            elif traj == "p_BFc_Ws":
+                return self._get_p_BFc_Ws(time)
+            elif traj == "computed_tau_F_Ws":
+                return self._get_computed_tau_F_Ws(time)
+            else:
+                raise NotImplementedError(f"Trajectory {traj} not implemented")
 
-        trajectory = self.trajectories[traj]
-        if isinstance(trajectory, list):
-            return [t.eval(time) for t in trajectory]
-        return trajectory.eval(time)
-
-    def compute_torques(
-        self, p_WB: npt.NDArray[np.float64]
-    ) -> List[npt.NDArray[np.float64]]:
-
-        if not p_WB.shape[0] in (self.num_knot_points, self.num_knot_points + 1):
-            raise RuntimeError(
-                f"p_WB has length N = {p_WB.shape[0]}, but num_knot_points for foot is {self.num_knot_points} (should be N-1)"
-            )
-
-        if p_WB.shape[0] == self.num_knot_points + 1:
-            p_WB = p_WB[:-1, :]  # remove the last knot point (we only have N-1 points)
-
-        # compute arm (i.e. position of contact point relative to CoM)
-        p_BFc_Ws = [p_WFc - p_WB for p_WFc in self.p_WFcs]
-        tau_F_Ws = [
-            np.array([cross_2d(p, f) for p, f in zip(ps, fs)])
-            for ps, fs in zip(p_BFc_Ws, self.f_F_Ws)
-        ]
-        return tau_F_Ws
-
-    def get_torque_errors(
-        self, p_WB: npt.NDArray[np.float64]
-    ) -> List[npt.NDArray[np.float64]]:
-        if self.tau_F_Ws is None:
-            raise RuntimeError("Cannot compute torque error when torques are not saved")
-
-        true_tau_F_Ws = self.compute_torques(p_WB)
-        errors = [
-            np.abs(true_tau - tau)
-            for true_tau, tau in zip(true_tau_F_Ws, self.tau_F_Ws)
-        ]
-        return errors
+        else:
+            trajectory = self.trajectories[traj]
+            if isinstance(trajectory, list):
+                return [t.eval(time) for t in trajectory]
+            return trajectory.eval(time)
 
 
 @dataclass
@@ -254,7 +284,7 @@ class FootstepPlan:
         Knot points for the feet. List length can be 1 or 2.
     """
 
-    dt: float
+    dts: npt.NDArray[np.float64]
     p_WB: npt.NDArray[np.float64]  # (num_steps, 2)
     theta_WB: npt.NDArray[np.float64]  # (num_steps, )
     feet_knot_points: List[FootPlan]  # [num_feet]
@@ -272,8 +302,8 @@ class FootstepPlan:
         ], "Invalid number of feet knot points"
         if len(self.feet_knot_points) == 2:
             assert (
-                self.feet_knot_points[0].num_knot_points
-                == self.feet_knot_points[1].num_knot_points
+                self.feet_knot_points[0].num_states
+                == self.feet_knot_points[1].num_states
             ), "Feet knot points mismatch"
 
     def _initialize_trajectories(self) -> None:
@@ -306,7 +336,7 @@ class FootstepPlan:
 
     @property
     def num_inputs(self) -> int:
-        return self.feet_knot_points[0].num_knot_points
+        return self.feet_knot_points[0].num_states
 
     @property
     def num_knot_points(self) -> int:
@@ -314,25 +344,12 @@ class FootstepPlan:
 
     @property
     def end_time(self) -> float:
-        return self.num_knot_points * self.dt
+        return sum(self.dts[:-1])  # the last dt is unused
 
     @property
     def tau_F_Ws(self) -> List[List[npt.NDArray[np.float64]]]:
         torques = [foot.tau_F_Ws for foot in self.feet_knot_points]
         return torques
-
-    def compute_torques(self) -> List[List[npt.NDArray[np.float64]]]:
-        torques = [foot.compute_torques(self.p_WB) for foot in self.feet_knot_points]
-        return torques
-
-    def get_torque_errors(self) -> List[List[npt.NDArray[np.float64]]]:
-        """
-        Compares the computed torques p ⊗ f with the planned torques τ.
-        Returns an array (num_steps, num_forces) with entries equal to
-        the absolute constraint violation |τ - p ⊗ f| for each force and timestep.
-        """
-        errors = [foot.get_torque_errors(self.p_WB) for foot in self.feet_knot_points]
-        return errors
 
     def _interpolate_segment(
         self, data: npt.NDArray[np.float64], interpolation: TrajType
@@ -345,7 +362,9 @@ class FootstepPlan:
         )
 
     @classmethod
-    def merge(cls, segments: List["FootstepPlan"]) -> "FootstepPlan":
+    def merge(
+        cls, segments: List["FootstepPlan"], keep_eq_num_states_inputs: bool = False
+    ) -> "FootstepPlan":
         both_feet = np.array([s.both_feet for s in segments])
         # This is a quick way to check that the bool value changes for each element in the array
         feet_are_alternating = not np.any(both_feet[:-1] & both_feet[1:])
@@ -366,6 +385,8 @@ class FootstepPlan:
 
         p_WBs = np.vstack([k.p_WB for k in segments])
         theta_WBs = np.hstack([k.theta_WB for k in segments])
+
+        dts = np.concatenate([k.dts for k in segments])
 
         first_foot, second_foot = None, None
 
@@ -414,11 +435,24 @@ class FootstepPlan:
             first_foot is not None and second_foot is not None
         ), "Foot knot points cannot be None"
 
-        dt = segments[0].dt
-        for s in segments:
-            assert s.dt == dt, "dt must match between segments"
+        # we remove the last input step so we have N-1 input steps and N state steps
+        # (in the GCS planning we don't know which mode shouldn't have a last step)
+        if keep_eq_num_states_inputs:
+            if not first_foot.num_states == first_foot.num_inputs:
+                raise RuntimeError(
+                    "First foot don't have equal number of state and input knot points"
+                )
+            if not second_foot.num_states == second_foot.num_inputs:
+                raise RuntimeError(
+                    "Second foot don't have equal number of state and input knot points"
+                )
+        else:
+            if first_foot.num_states == first_foot.num_inputs:
+                first_foot = first_foot.get_without_last_input_step()
+            if second_foot.num_states == second_foot.num_inputs:
+                second_foot = second_foot.get_without_last_input_step()
 
-        return cls(dt, p_WBs, theta_WBs, [first_foot, second_foot])
+        return cls(dts, p_WBs, theta_WBs, [first_foot, second_foot])
 
     def __getstate__(self):
         # Exclude the trajectories that are not serializable
@@ -444,12 +478,14 @@ class FootstepPlan:
             return instance
 
     def get(
-        self, time: float, traj: str
+        self, time: float, traj: str, derivative_order: int = 0
     ) -> Union[float, npt.NDArray[np.float64], List[npt.NDArray[np.float64]]]:
         if traj not in self.trajectories:
             raise NotImplementedError(f"Trajectory {traj} not implemented")
 
         trajectory = self.trajectories[traj]
+        if derivative_order != 0:
+            breakpoint()
         if isinstance(trajectory, list):
             return [t.eval(time) for t in trajectory]
         return trajectory.eval(time)
@@ -474,7 +510,7 @@ class PlanMetrics:
         solver_name = result.get_solver_id().name()
         solver_details = result.get_solver_details()
         if solver_name == "Mosek":
-            solve_time = solver_details.optimizer_time
+            solve_time = solver_details.optimizer_time  # type: ignore
         elif solver_name == "SNOPT":
             assert (
                 snopt_solve_time is not None
@@ -589,18 +625,25 @@ class FootstepPlanResult:
             self.config.robot, self.terrain, plan, output_file=output_file
         )
 
+    def _save_trajectories(self, plan: FootstepPlan, output_file: str) -> None:
+        from planning_through_contact.visualize.footstep_visualizer import (
+            visualize_feet_trajectories,
+            visualize_footstep_plan_trajectories,
+        )
+
+        visualize_feet_trajectories(
+            plan, filename=output_file.split(".")[0] + "_feet" + ".png"
+        )
+
+        visualize_footstep_plan_trajectories(
+            self.config.robot, plan, filename=output_file
+        )
+
     def save_relaxed_animation(self, output_file: str) -> None:
         self._save_anim(self.restriction_plan, output_file)
 
     def save_rounded_animation(self, output_file: str) -> None:
         self._save_anim(self.rounded_plan, output_file)
-
-    def save_relaxation_error_plot(self, output_file: str) -> None:
-        from planning_through_contact.visualize.footstep_visualizer import (
-            plot_relaxation_errors,
-        )
-
-        plot_relaxation_errors(self.restriction_plan, output_file=output_file)
 
     def save_analysis_to_folder(self, folder: str) -> None:
         """
@@ -615,12 +658,17 @@ class FootstepPlanResult:
         self.terrain.save(str(path / "terrain.yaml"))
 
         if self.restriction_metrics.success:
-            self.save_relaxed_animation(str(path / "relaxed_traj.mp4"))
+            self.save_relaxed_animation(str(path / "relaxed_plan_video.mp4"))
+            self._save_trajectories(
+                self.restriction_plan, str(path / "relaxed_plan_trajectories.png")
+            )
             self.restriction_plan.save(str(path / "relaxed_plan.pkl"))
-            self.save_relaxation_error_plot(str(path / "relaxation_errors.pdf"))
 
         if self.rounded_metrics.success:
-            self.save_rounded_animation(str(path / "rounded_traj.mp4"))
+            self.save_rounded_animation(str(path / "rounded_plan_video.mp4"))
+            self._save_trajectories(
+                self.rounded_plan, str(path / "rounded_plan_trajectories.png")
+            )
             self.rounded_plan.save(str(path / "rounded_plan.pkl"))
 
     def get_unique_gcs_name(self) -> str:
@@ -699,17 +747,26 @@ class FootstepPlanSegmentProgram:
             self.num_inputs = self.num_states - 1
 
         self.p_WF1_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF1_x")
-        self.f_F1_1W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_1W")
-        self.f_F1_2W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_2W")
+        self.f_F1_1W_vars = self.prog.NewContinuousVariables(
+            self.num_inputs, 2, "f_F1_1W"
+        )
+        self.f_F1_2W_vars = self.prog.NewContinuousVariables(
+            self.num_inputs, 2, "f_F1_2W"
+        )
+        force_scale = self.config.force_scale
+        self.f_F1_1W = force_scale * self.f_F1_1W_vars
+        self.f_F1_2W = force_scale * self.f_F1_2W_vars
         if self.two_feet:
             # second foot
             self.p_WF2_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF2_x")
-            self.f_F2_1W = self.prog.NewContinuousVariables(
+            self.f_F2_1W_vars = self.prog.NewContinuousVariables(
                 self.num_inputs, 2, "f_F2_1W"
             )
-            self.f_F2_2W = self.prog.NewContinuousVariables(
+            self.f_F2_2W_vars = self.prog.NewContinuousVariables(
                 self.num_inputs, 2, "f_F2_2W"
             )
+            self.f_F2_1W = force_scale * self.f_F2_1W_vars
+            self.f_F2_2W = force_scale * self.f_F2_2W_vars
 
         self.p_WF1 = np.vstack(
             [self.p_WF1_x, np.full(self.p_WF1_x.shape, self.stone_first.z_pos)]
@@ -724,9 +781,7 @@ class FootstepPlanSegmentProgram:
         if self.two_feet:
             self.p_BF2_W = self.p_WF2 - self.p_WB[: self.num_inputs]
 
-        # auxilliary vars
-        # TODO(bernhardpg): we might be able to get around this once we
-        # have SDP constraints over the edges
+        # Torque vars
         self.tau_F1_1 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_1")
         self.tau_F1_2 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_2")
         if self.two_feet:
@@ -739,15 +794,9 @@ class FootstepPlanSegmentProgram:
 
         # linear acceleration
         g = np.array([0, -9.81])
-        self.a_WB = (1 / robot.mass) * self.config.force_scale * (
-            self.f_F1_1W + self.f_F1_2W
-        ) + g
+        self.a_WB = (1 / robot.mass) * (self.f_F1_1W + self.f_F1_2W) + g
         if self.two_feet:
-            self.a_WB += (
-                (1 / robot.mass)
-                * self.config.force_scale
-                * (self.f_F2_1W + self.f_F2_2W)
-            )
+            self.a_WB += (1 / robot.mass) * (self.f_F2_1W + self.f_F2_2W)
 
         # angular acceleration
         self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F1_2)
@@ -755,11 +804,13 @@ class FootstepPlanSegmentProgram:
             self.omega_dot_WB += (1 / robot.inertia) * (self.tau_F2_1 + self.tau_F2_2)
 
         # contact points positions relative to CoM
-        self.p_BF1_1W = self.p_BF1_W + np.array([robot.foot_length / 2, 0])
-        self.p_BF1_2W = self.p_BF1_W - np.array([robot.foot_length / 2, 0])
+        self.p_BF1_1W, self.p_BF1_2W = get_foot_contact_points(
+            robot.foot_length, self.p_BF1_W
+        )
         if self.two_feet:
-            self.p_BF2_1W = self.p_BF2_W + np.array([robot.foot_length / 2, 0])
-            self.p_BF2_2W = self.p_BF2_W - np.array([robot.foot_length / 2, 0])
+            self.p_BF2_1W, self.p_BF2_2W = get_foot_contact_points(
+                robot.foot_length, self.p_BF2_W
+            )
 
         # torque = arm x force
         self.non_convex_constraints = []
@@ -815,11 +866,15 @@ class FootstepPlanSegmentProgram:
             else:  # add quadratic equality constraints
                 cs_for_knot_point = []
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
+                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]),
+                    0,
+                    0,
                 )
                 cs_for_knot_point.append(c)
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
+                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]),
+                    0,
+                    0,
                 )
                 cs_for_knot_point.append(c)
                 if self.two_feet:
@@ -886,25 +941,42 @@ class FootstepPlanSegmentProgram:
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
-            for f in (self.f_F1_1W, self.f_F1_2W):
+            for f in (self.f_F1_1W_vars, self.f_F1_2W_vars):
                 self.prog.AddLinearConstraint(f[k][1] >= 0)
                 self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                 self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
             if self.two_feet:
-                for f in (self.f_F2_1W, self.f_F2_2W):
+                for f in (self.f_F2_1W_vars, self.f_F2_2W_vars):
                     self.prog.AddLinearConstraint(f[k][1] >= 0)
                     self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                     self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
 
         # dynamics
-        dt = self.config.dt
+        if self.config.use_variable_timing:
+            self.dt = self.prog.NewContinuousVariables(1, "dt").item()
+            self.prog.AddLinearConstraint(self.dt >= self.config.dt_min)
+            self.prog.AddLinearConstraint(self.dt <= self.config.dt_max)
+
+            if self.config.cost.sq_time is not None:
+                self.prog.AddQuadraticCost(
+                    self.num_steps * self.config.cost.sq_time * self.dt**2
+                )
+        else:
+            self.dt = self.config.dt
+
         for k in range(self.num_steps - 1):
             s_next = self.get_state(k + 1)
             s_curr = self.get_state(k)
             f = self.get_dynamics(k)
             # forward euler
-            dynamics = s_next - (s_curr + dt * f)
-            self.prog.AddLinearConstraint(eq(dynamics, 0))
+            dynamics = s_next - (s_curr + self.dt * f)
+
+            if self.config.use_variable_timing:
+                for d in dynamics:
+                    self.prog.AddQuadraticConstraint(d, 0, 0)
+            else:
+                # This constraint is linear if we don't have variable timing
+                self.prog.AddLinearConstraint(eq(dynamics, 0))
 
         # feet can't move during segment
         for k in range(self.num_inputs - 1):
@@ -924,9 +996,17 @@ class FootstepPlanSegmentProgram:
             "sq_lin_vel": [],
             "sq_rot_vel": [],
             "sq_nominal_pose": [],
+            "sq_time": [],
         }
 
         cost = config.cost
+
+        # Squared time
+        if type(self.dt) is Variable and self.config.cost.sq_time is not None:
+            c = self.prog.AddQuadraticCost(
+                self.num_steps * self.config.cost.sq_time * self.dt**2
+            )
+            self.costs["sq_time"].append(c)
 
         # squared forces
         if cost.sq_force is not None:
@@ -938,9 +1018,7 @@ class FootstepPlanSegmentProgram:
                     f1 = self.f_F2_1W[k]
                     f2 = self.f_F2_2W[k]
                     sq_forces += f1.T @ f1 + f2.T @ f2
-                c = self.prog.AddQuadraticCost(
-                    cost.sq_force * self.config.force_scale**2 * sq_forces
-                )
+                c = self.prog.AddQuadraticCost(cost.sq_force * sq_forces)
                 self.costs["sq_forces"].append(c)
 
         if True:  # this causes the relaxation gap to be high
@@ -1004,10 +1082,6 @@ class FootstepPlanSegmentProgram:
                 c = self.prog.AddQuadraticCost(cost.sq_nominal_pose * sq_diff)  # type: ignore
                 self.costs["sq_nominal_pose"].append(c)
 
-    @property
-    def dt(self) -> float:
-        return self.config.dt
-
     def get_state(self, k: int) -> npt.NDArray:
         if k == -1:
             k = self.config.period_steps - 1
@@ -1021,16 +1095,18 @@ class FootstepPlanSegmentProgram:
         if self.two_feet:
             return np.concatenate(
                 [
-                    self.f_F1_1W[k],
-                    self.f_F1_2W[k],
+                    self.f_F1_1W_vars[k],
+                    self.f_F1_2W_vars[k],
                     [self.p_WF1_x[k]],
-                    self.f_F2_1W[k],
-                    self.f_F2_2W[k],
+                    self.f_F2_1W_vars[k],
+                    self.f_F2_2W_vars[k],
                     [self.p_WF2_x[k]],
                 ]
             )
         else:
-            return np.concatenate([self.f_F1_1W[k], self.f_F1_2W[k], [self.p_WF1_x[k]]])
+            return np.concatenate(
+                [self.f_F1_1W_vars[k], self.f_F1_2W_vars[k], [self.p_WF1_x[k]]]
+            )
 
     def constrain_foot_pos_ge(self, foot: Literal["first", "last"], x: float) -> None:
         """
@@ -1224,6 +1300,12 @@ class FootstepPlanSegmentProgram:
                     Variables(self.get_state(self.num_states - 1))
                 )  # add the last state
 
+            # Add dt as a variable in each group
+            if self.config.use_variable_timing:
+                assert type(self.dt) is Variable
+                for v in variable_groups:
+                    v.insert(self.dt)
+
             assert self.num_states - 1 == len(variable_groups)
 
             self.relaxed_prog = MakeSemidefiniteRelaxation(
@@ -1248,23 +1330,12 @@ class FootstepPlanSegmentProgram:
             trace_costs = add_trace_cost_on_psd_cones(self.relaxed_prog, eps=trace_cost)
             self.costs_to_use_for_gcs.extend(trace_costs)
 
-        def _find_correct_psd_constraint(vars):
-            vars = Variables(vars)
-            for c in self.semidefinite_relaxation_constraints:
-                c_vars = Variables(c.variables())
-                if vars.IsSubsetOf(c_vars):
-                    return c
-
-            raise RuntimeError(
-                f"The variables {vars} does not belong to any one PSD constraint"
-            )
-
         if use_lp_approx:
             approximate_sdp_cones_with_linear_cones(self.relaxed_prog)
 
             # Constrain all the square expressions from the cost to be nonnegative so the
             # naive LP relaxation is not unbounded
-            if not self.config.use_linearized_cost:
+            if self.config.use_linearized_cost:
                 original_vars = self.prog.decision_variables()
 
                 def _pure_square(cost):
@@ -1287,6 +1358,17 @@ class FootstepPlanSegmentProgram:
             if False:
                 # TODO: remove if no longer needed
                 # This code adds the cuts that the used squares in the cost must be positive.
+
+                # def _find_correct_psd_constraint(vars):
+                #     vars = Variables(vars)
+                #     for c in self.semidefinite_relaxation_constraints:
+                #         c_vars = Variables(c.variables())
+                #         if vars.IsSubsetOf(c_vars):
+                #             return c
+                #
+                #     raise RuntimeError(
+                #         f"The variables {vars} does not belong to any one PSD constraint"
+                #     )
 
                 def _make_homogenous(Q, p, r):
                     """
@@ -1381,45 +1463,51 @@ class FootstepPlanSegmentProgram:
         p_WB = self.get_solution(self.p_WB, result, vertex_vars)
         theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
         p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
-        f_F1_1W, f_F1_2W = self.config.force_scale * self.get_solution(
+        f_F1_1W, f_F1_2W = self.evaluate_expressions(
             self.f_F1_1W, result, vertex_vars
-        ), self.config.force_scale * self.get_solution(
-            self.f_F1_2W, result, vertex_vars
-        )
+        ), self.evaluate_expressions(self.f_F1_2W, result, vertex_vars)
         tau_F1_1, tau_F1_2 = self.get_solution(
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
 
+        if type(self.dt) is Variable:
+            dt = self.get_solution(np.array([self.dt]), result, vertex_vars).item()
+        else:
+            dt = self.dt
+
+        # Repeat the one timestep length for the entire segment
+        dts = np.array([dt] * len(p_WB))
+
         first_foot = FootPlan(
             self.robot.foot_length,
-            self.dt,
+            dt,
             p_WF1,
             [f_F1_1W, f_F1_2W],
             [tau_F1_1, tau_F1_2],
+            p_WB,
         )
 
         if self.two_feet:
             p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
-            f_F2_1W, f_F2_2W = self.config.force_scale * self.get_solution(
+            f_F2_1W, f_F2_2W = self.evaluate_expressions(
                 self.f_F2_1W, result, vertex_vars
-            ), self.config.force_scale * self.get_solution(
-                self.f_F2_2W, result, vertex_vars
-            )
+            ), self.evaluate_expressions(self.f_F2_2W, result, vertex_vars)
             tau_F2_1, tau_F2_2 = self.get_solution(
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
 
             second_foot = FootPlan(
                 self.robot.foot_length,
-                self.dt,
+                dt,
                 p_WF2,
                 [f_F2_1W, f_F2_2W],
                 [tau_F2_1, tau_F2_2],
+                p_WB,
             )
 
-            return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot, second_foot])
+            return FootstepPlan(dts, p_WB, theta_WB, [first_foot, second_foot])
 
-        return FootstepPlan(self.dt, p_WB, theta_WB, [first_foot])
+        return FootstepPlan(dts, p_WB, theta_WB, [first_foot])
 
     def evaluate_with_vertex_result(
         self, result: MathematicalProgramResult, vertex_vars: npt.NDArray

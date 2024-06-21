@@ -178,15 +178,15 @@ def test_semidefinite_relaxation_lp_approximation() -> None:
     )
 
     assert segment.p_WF1.shape == (cfg.period_steps, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_F1_2W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_2W_vars.shape == (cfg.period_steps, 2)
 
     assert segment.tau_F1_1.shape == (cfg.period_steps,)
     assert segment.tau_F1_2.shape == (cfg.period_steps,)
 
     assert segment.p_WF2.shape == (cfg.period_steps, 2)
-    assert segment.f_F1_1W.shape == (cfg.period_steps, 2)
-    assert segment.f_F2_2W.shape == (cfg.period_steps, 2)
+    assert segment.f_F1_1W_vars.shape == (cfg.period_steps, 2)
+    assert segment.f_F2_2W_vars.shape == (cfg.period_steps, 2)
 
     assert segment.tau_F2_1.shape == (cfg.period_steps,)
     assert segment.tau_F2_1.shape == (cfg.period_steps,)
