@@ -6,6 +6,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Ellipse, FancyArrowPatch, Polygon
 from matplotlib.ticker import MaxNLocator
 
+from planning_through_contact.geometry.utilities import cross_2d
 from planning_through_contact.planning.footstep.footstep_plan_config import PotatoRobot
 from planning_through_contact.planning.footstep.footstep_trajectory import (
     FootstepPlan,
@@ -301,6 +302,62 @@ def plot_relaxation_vs_rounding_bar_plot(
     plt.close()
 
 
+def visualize_feet_trajectories(
+    plan: FootstepPlan, filename: Optional[str] = None
+) -> None:
+    DT = 1e-3
+    times = np.arange(
+        0, plan.end_time, DT
+    )  # Cumulative sum of time intervals to get time points
+
+    # Get first foot
+    num_feet = plan.num_feet
+    TWO_D = 2
+    num_trajs_per_foot = 2 * TWO_D + 1  # force and position + torque
+
+    fig, axs = plt.subplots(num_trajs_per_foot, num_feet, figsize=(6, 7), sharex=True)
+
+    for foot_idx in range(num_feet):
+        ax_force_x = axs[0, foot_idx]
+        ax_force_y = axs[1, foot_idx]
+        ax_pos_x = axs[2, foot_idx]
+        ax_pos_y = axs[3, foot_idx]
+        ax_torque = axs[4, foot_idx]
+
+        f_F_Ws_for_foot = []
+        p_BFc_Ws_for_foot = []
+        torques = []
+
+        for t in times:
+            f_F_W = plan.get_foot(foot_idx, t, "f_F_Ws")[foot_idx]  # type: ignore
+            p_BFc_W = plan.get_foot(foot_idx, t, "p_BFc_Ws")[foot_idx]  # type: ignore
+
+            f_F_Ws_for_foot.append(f_F_W)
+            p_BFc_Ws_for_foot.append(p_BFc_W)
+
+            torques.append(cross_2d(p_BFc_W, f_F_W))
+
+        f_F_Ws_for_foot = np.hstack(f_F_Ws_for_foot)  # (2, N)
+        p_BFc_Ws_for_foot = np.hstack(p_BFc_Ws_for_foot)  # (2, N)
+
+        ax_force_x.set_title(f"Foot {foot_idx}")
+        ax_force_x.plot(times, f_F_Ws_for_foot[0, :], label="f_F_W_x")
+        ax_force_y.plot(times, f_F_Ws_for_foot[1, :], label="f_F_W_y")
+        ax_pos_x.plot(times, p_BFc_Ws_for_foot[0, :], label="p_BF_W_x")
+        ax_pos_y.plot(times, p_BFc_Ws_for_foot[1, :], label="p_BF_W_y")
+        ax_torque.plot(times, torques, label="p x f")
+
+        ax_torque.set_xlabel("Time [s]")
+
+        for ax in axs[:, foot_idx]:
+            ax.legend()
+
+    plt.tight_layout()
+
+    if filename is not None:
+        fig.savefig(filename.split(".")[0] + ".pdf")
+
+
 def visualize_footstep_plan_trajectories(
     robot: PotatoRobot,
     plan: FootstepPlan,
@@ -379,7 +436,7 @@ def visualize_footstep_plan_trajectories(
     for t in times:
         tau_F_Ws_sum_at_t = np.sum(
             [
-                np.sum(plan.get_foot(foot_idx, t, "tau_Fc_Ws"))
+                np.sum(plan.get_foot(foot_idx, t, "computed_tau_F_Ws"))
                 for foot_idx in range(NUM_FEET)
             ]
         )

@@ -215,13 +215,13 @@ class FootstepPlanRounder:
         # We need extra logic here to deal with the fact that initial and target constraints
         # are added as singleton sets (Point class).
         if u.name() == "source":
-            u_prog_vars = u.set().x()[u_idxs]
+            u_prog_vars = u.set().x()[u_idxs]  # type: ignore
         else:
             segment_u = self.all_pairs[u.name()].s
             u_prog_vars = segment_u.prog.decision_variables()[u_idxs]
 
         if v.name() == "target":
-            v_prog_vars = v.set().x()[v_idxs]
+            v_prog_vars = v.set().x()[v_idxs]  # type: ignore
         else:
             segment_v = self.all_pairs[v.name()].s
             v_prog_vars = segment_v.prog.decision_variables()[v_idxs]

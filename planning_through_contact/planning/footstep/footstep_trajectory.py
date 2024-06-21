@@ -610,7 +610,12 @@ class FootstepPlanResult:
 
     def _save_trajectories(self, plan: FootstepPlan, output_file: str) -> None:
         from planning_through_contact.visualize.footstep_visualizer import (
+            visualize_feet_trajectories,
             visualize_footstep_plan_trajectories,
+        )
+
+        visualize_feet_trajectories(
+            plan, filename=output_file.split(".")[0] + "_feet" + ".png"
         )
 
         visualize_footstep_plan_trajectories(
