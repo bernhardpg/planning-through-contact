@@ -718,17 +718,26 @@ class FootstepPlanSegmentProgram:
             self.num_inputs = self.num_states - 1
 
         self.p_WF1_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF1_x")
-        self.f_F1_1W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_1W")
-        self.f_F1_2W = self.prog.NewContinuousVariables(self.num_inputs, 2, "f_F1_2W")
+        self.f_F1_1W_vars = self.prog.NewContinuousVariables(
+            self.num_inputs, 2, "f_F1_1W"
+        )
+        self.f_F1_2W_vars = self.prog.NewContinuousVariables(
+            self.num_inputs, 2, "f_F1_2W"
+        )
+        force_scale = self.config.force_scale
+        self.f_F1_1W = force_scale * self.f_F1_1W_vars
+        self.f_F1_2W = force_scale * self.f_F1_2W_vars
         if self.two_feet:
             # second foot
             self.p_WF2_x = self.prog.NewContinuousVariables(self.num_inputs, "p_WF2_x")
-            self.f_F2_1W = self.prog.NewContinuousVariables(
+            self.f_F2_1W_vars = self.prog.NewContinuousVariables(
                 self.num_inputs, 2, "f_F2_1W"
             )
-            self.f_F2_2W = self.prog.NewContinuousVariables(
+            self.f_F2_2W_vars = self.prog.NewContinuousVariables(
                 self.num_inputs, 2, "f_F2_2W"
             )
+            self.f_F2_1W = force_scale * self.f_F2_1W_vars
+            self.f_F2_2W = force_scale * self.f_F2_2W_vars
 
         self.p_WF1 = np.vstack(
             [self.p_WF1_x, np.full(self.p_WF1_x.shape, self.stone_first.z_pos)]
@@ -743,9 +752,7 @@ class FootstepPlanSegmentProgram:
         if self.two_feet:
             self.p_BF2_W = self.p_WF2 - self.p_WB[: self.num_inputs]
 
-        # auxilliary vars
-        # TODO(bernhardpg): we might be able to get around this once we
-        # have SDP constraints over the edges
+        # Torque vars
         self.tau_F1_1 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_1")
         self.tau_F1_2 = self.prog.NewContinuousVariables(self.num_inputs, "tau_F1_2")
         if self.two_feet:
@@ -758,15 +765,9 @@ class FootstepPlanSegmentProgram:
 
         # linear acceleration
         g = np.array([0, -9.81])
-        self.a_WB = (1 / robot.mass) * self.config.force_scale * (
-            self.f_F1_1W + self.f_F1_2W
-        ) + g
+        self.a_WB = (1 / robot.mass) * (self.f_F1_1W + self.f_F1_2W) + g
         if self.two_feet:
-            self.a_WB += (
-                (1 / robot.mass)
-                * self.config.force_scale
-                * (self.f_F2_1W + self.f_F2_2W)
-            )
+            self.a_WB += (1 / robot.mass) * (self.f_F2_1W + self.f_F2_2W)
 
         # angular acceleration
         self.omega_dot_WB = (1 / robot.inertia) * (self.tau_F1_1 + self.tau_F1_2)
@@ -834,11 +835,15 @@ class FootstepPlanSegmentProgram:
             else:  # add quadratic equality constraints
                 cs_for_knot_point = []
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]), 0, 0
+                    self.tau_F1_1[k] - cross_2d(self.p_BF1_1W[k], self.f_F1_1W[k]),
+                    0,
+                    0,
                 )
                 cs_for_knot_point.append(c)
                 c = self.prog.AddQuadraticConstraint(
-                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]), 0, 0
+                    self.tau_F1_2[k] - cross_2d(self.p_BF1_2W[k], self.f_F1_2W[k]),
+                    0,
+                    0,
                 )
                 cs_for_knot_point.append(c)
                 if self.two_feet:
@@ -905,12 +910,12 @@ class FootstepPlanSegmentProgram:
             # TODO(bernhardpg): Friction cone must be formulated differently
             # when we have tilted ground
             mu = 0.5  # TODO: move friction coeff
-            for f in (self.f_F1_1W, self.f_F1_2W):
+            for f in (self.f_F1_1W_vars, self.f_F1_2W_vars):
                 self.prog.AddLinearConstraint(f[k][1] >= 0)
                 self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                 self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
             if self.two_feet:
-                for f in (self.f_F2_1W, self.f_F2_2W):
+                for f in (self.f_F2_1W_vars, self.f_F2_2W_vars):
                     self.prog.AddLinearConstraint(f[k][1] >= 0)
                     self.prog.AddLinearConstraint(f[k][0] <= mu * f[k][1])
                     self.prog.AddLinearConstraint(f[k][0] >= -mu * f[k][1])
@@ -981,9 +986,7 @@ class FootstepPlanSegmentProgram:
                     f1 = self.f_F2_1W[k]
                     f2 = self.f_F2_2W[k]
                     sq_forces += f1.T @ f1 + f2.T @ f2
-                c = self.prog.AddQuadraticCost(
-                    cost.sq_force * self.config.force_scale**2 * sq_forces
-                )
+                c = self.prog.AddQuadraticCost(cost.sq_force * sq_forces)
                 self.costs["sq_forces"].append(c)
 
         if True:  # this causes the relaxation gap to be high
@@ -1060,16 +1063,18 @@ class FootstepPlanSegmentProgram:
         if self.two_feet:
             return np.concatenate(
                 [
-                    self.f_F1_1W[k],
-                    self.f_F1_2W[k],
+                    self.f_F1_1W_vars[k],
+                    self.f_F1_2W_vars[k],
                     [self.p_WF1_x[k]],
-                    self.f_F2_1W[k],
-                    self.f_F2_2W[k],
+                    self.f_F2_1W_vars[k],
+                    self.f_F2_2W_vars[k],
                     [self.p_WF2_x[k]],
                 ]
             )
         else:
-            return np.concatenate([self.f_F1_1W[k], self.f_F1_2W[k], [self.p_WF1_x[k]]])
+            return np.concatenate(
+                [self.f_F1_1W_vars[k], self.f_F1_2W_vars[k], [self.p_WF1_x[k]]]
+            )
 
     def constrain_foot_pos_ge(self, foot: Literal["first", "last"], x: float) -> None:
         """
@@ -1426,11 +1431,9 @@ class FootstepPlanSegmentProgram:
         p_WB = self.get_solution(self.p_WB, result, vertex_vars)
         theta_WB = self.get_solution(self.theta_WB, result, vertex_vars)
         p_WF1 = self.evaluate_expressions(self.p_WF1, result, vertex_vars)
-        f_F1_1W, f_F1_2W = self.config.force_scale * self.get_solution(
+        f_F1_1W, f_F1_2W = self.evaluate_expressions(
             self.f_F1_1W, result, vertex_vars
-        ), self.config.force_scale * self.get_solution(
-            self.f_F1_2W, result, vertex_vars
-        )
+        ), self.evaluate_expressions(self.f_F1_2W, result, vertex_vars)
         tau_F1_1, tau_F1_2 = self.get_solution(
             self.tau_F1_1, result, vertex_vars
         ), self.get_solution(self.tau_F1_2, result, vertex_vars)
@@ -1454,11 +1457,9 @@ class FootstepPlanSegmentProgram:
 
         if self.two_feet:
             p_WF2 = self.evaluate_expressions(self.p_WF2, result, vertex_vars)
-            f_F2_1W, f_F2_2W = self.config.force_scale * self.get_solution(
+            f_F2_1W, f_F2_2W = self.evaluate_expressions(
                 self.f_F2_1W, result, vertex_vars
-            ), self.config.force_scale * self.get_solution(
-                self.f_F2_2W, result, vertex_vars
-            )
+            ), self.evaluate_expressions(self.f_F2_2W, result, vertex_vars)
             tau_F2_1, tau_F2_2 = self.get_solution(
                 self.tau_F2_1, result, vertex_vars
             ), self.get_solution(self.tau_F2_2, result, vertex_vars)
