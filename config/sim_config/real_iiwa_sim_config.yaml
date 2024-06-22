@@ -24,12 +24,12 @@ contact_model: ContactModel.kHydroelastic
 visualize_desired: true
 slider_goal_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.575
+  x: 0.587
   y: -0.0355
   theta: 0.0
 pusher_start_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.575
+  x: 0.587
   y: 0.15
   theta: 0.0
 time_step: 0.001
@@ -156,7 +156,7 @@ data_collection_config:
       - ${slider_goal_pose.x}
       - ${slider_goal_pose.y}
     buffer: 0.0
-    seed: 1
+    seed: 0
     num_plans: 750
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
