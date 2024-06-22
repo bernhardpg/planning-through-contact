@@ -129,8 +129,8 @@ robot_station:
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
   generate_plans: false
-  render_plans: true
-  convert_to_zarr: false
+  render_plans: false
+  convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
   plans_dir: 'trajectories/underactuated'
   rendered_plans_dir: 'trajectories_rendered/underactuated_multi_camera'
@@ -139,7 +139,7 @@ data_collection_config:
   state_chunk_length: 1024
   action_chunk_length: 2048
   target_chunk_length: 1024
-  image_chunk_length: 32 # 128
+  image_chunk_length: 16 # 128
   image_width: 320
   image_height: 240
   plan_config:

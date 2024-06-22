@@ -400,32 +400,23 @@ def convert_to_zarr(
                 continue
             traj_dir_list.append(traj_dir)
 
-    camera_names = [camera_config.name for camera_config in sim_config.camera_configs]
     concatenated_states = []
     concatenated_slider_states = []
     concatenated_actions = []
-    concatenated_images = {camera_name: [] for camera_name in camera_names}
     concatenated_targets = []
     episode_ends = []
     current_end = 0
 
     freq = data_collection_config.policy_freq
     dt = 1 / freq
-    desired_image_shape = np.array(
-        [data_collection_config.image_height, data_collection_config.image_width, 3]
-    )
 
     for traj_dir in tqdm(traj_dir_list):
         traj_log_path = traj_dir.joinpath("combined_logs.pkl")
         log_path = traj_dir.joinpath("log.txt")
 
         # If too many IK fails, skip this rollout
-        with open(log_path, "r") as f:
-            line = f.readline()
-            if len(line) != 0:
-                ik_fails = int(line.rsplit(" ", 1)[-1])
-                if ik_fails > 5:
-                    continue
+        if _is_ik_fail(log_path):
+            continue
 
         # load pickle file and timing variables
         combined_logs = pickle.load(open(traj_log_path, "rb"))
@@ -444,7 +435,6 @@ def convert_to_zarr(
         idx = start_idx
         state = []
         slider_state = []
-        images = {camera_name: [] for camera_name in camera_names}
 
         while current_time < total_time:
             # state and action
@@ -466,30 +456,6 @@ def convert_to_zarr(
             state.append(current_state)
             slider_state.append(current_slider_state)
 
-            # image
-            # This line can be simplified but it is clearer this way.
-            # Image names are "{time in ms}" rounded to the nearest 100th
-            image_name = round((current_time * 1000) / 100) * 100
-            for camera_name in camera_names:
-                image_path = traj_dir.joinpath(camera_name, f"{int(image_name)}.png")
-                img = Image.open(image_path).convert("RGB")
-                img = np.asarray(img)
-                if not np.allclose(img.shape, desired_image_shape):
-                    # Image size for cv2 is (width, height) instead of (height, width)
-                    img = cv2.resize(
-                        img, (desired_image_shape[1], desired_image_shape[0])
-                    )
-                images[camera_name].append(img)
-                if debug:
-                    from matplotlib import pyplot as plt
-
-                    print(f"\nCurrent time: {current_time}")
-                    print(f"Current index: {idx}")
-                    print(f"Image path: {image_path}")
-                    print(f"Current state: {current_state}")
-                    plt.imshow(img[6:-6, 6:-6, :])
-                    plt.show()
-
             # update current time
             current_time = round((current_time + dt) * freq) / freq
 
@@ -497,8 +463,6 @@ def convert_to_zarr(
         slider_state = np.array(slider_state)  # T x 3
         action = np.array(state)[:, :2]  # T x 2
         action = np.concatenate([action[1:, :], action[-1:, :]], axis=0)  # shift action
-        for camera_name in camera_names:
-            images[camera_name] = np.array(images[camera_name])
 
         # get target
         target = np.array([slider_state[-1] for _ in range(len(state))])
@@ -507,8 +471,6 @@ def convert_to_zarr(
         concatenated_states.append(state)
         concatenated_slider_states.append(slider_state)
         concatenated_actions.append(action)
-        for camera_name in camera_names:
-            concatenated_images[camera_name].append(images[camera_name])
         concatenated_targets.append(target)
         episode_ends.append(current_end + len(state))
         current_end += len(state)
@@ -531,30 +493,18 @@ def convert_to_zarr(
     )
     action_chunk_size = (data_collection_config.action_chunk_length, action.shape[1])
     target_chunk_size = (data_collection_config.target_chunk_length, target.shape[1])
-    image_chunk_sizes = {
-        camera_name: (
-            data_collection_config.image_chunk_length,
-            *images[camera_name][0].shape,
-        )
-        for camera_name in camera_names
-    }
 
     # convert to numpy
     concatenated_states = np.concatenate(concatenated_states, axis=0)
     concatenated_slider_states = np.concatenate(concatenated_slider_states, axis=0)
     concatenated_actions = np.concatenate(concatenated_actions, axis=0)
-    for camera_name in camera_names:
-        concatenated_images[camera_name] = np.concatenate(
-            concatenated_images[camera_name], axis=0
-        )
     concatenated_targets = np.concatenate(concatenated_targets, axis=0)
     episode_ends = np.array(episode_ends)
+    last_episode_end = episode_ends[-1]
 
-    assert episode_ends[-1] == concatenated_states.shape[0]
+    assert last_episode_end == concatenated_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_slider_states.shape[0]
     assert concatenated_states.shape[0] == concatenated_actions.shape[0]
-    for camera_name in camera_names:
-        assert concatenated_states.shape[0] == concatenated_images[camera_name].shape[0]
     assert concatenated_states.shape[0] == concatenated_targets.shape[0]
 
     data_group.create_dataset(
@@ -569,13 +519,97 @@ def convert_to_zarr(
     data_group.create_dataset(
         "target", data=concatenated_targets, chunks=target_chunk_size
     )
+    meta_group.create_dataset("episode_ends", data=episode_ends)
+
+    # Delete arrays to save memory
+    del concatenated_states
+    del concatenated_slider_states
+    del concatenated_actions
+    del concatenated_targets
+    del episode_ends
+
+    # Save images separately and one at a time to save RAM
+    camera_names = [camera_config.name for camera_config in sim_config.camera_configs]
+    desired_image_shape = np.array(
+        [data_collection_config.image_height, data_collection_config.image_width, 3]
+    )
+    image_chunk_size = [
+        data_collection_config.image_chunk_length,
+        *desired_image_shape,
+    ]
+
     for camera_name in camera_names:
+        print(f"Converting images from {camera_name} to zarr...")
+        concatenated_images = zarr.zeros(
+            (last_episode_end, *desired_image_shape),
+            chunks=image_chunk_size,
+            dtype="u1",
+        )
+        sequence_idx = 0
+
+        for traj_dir in tqdm(traj_dir_list):
+            traj_log_path = traj_dir.joinpath("combined_logs.pkl")
+            log_path = traj_dir.joinpath("log.txt")
+
+            # If too many IK fails, skip this rollout
+            if _is_ik_fail(log_path):
+                continue
+
+            # load pickle file and timing variables
+            combined_logs = pickle.load(open(traj_log_path, "rb"))
+            pusher_desired = combined_logs.pusher_desired
+            total_time = pusher_desired.t[-1]
+            total_time = math.floor(total_time * freq) / freq
+
+            # get start time
+            start_idx = _get_start_idx(pusher_desired)
+            start_time = math.ceil(t[start_idx] * freq) / freq
+            del pusher_desired
+
+            # get state, action, images
+            current_time = start_time
+            idx = start_idx
+
+            while current_time < total_time:
+                idx = _get_closest_index(t, current_time, idx)
+
+                # Image names are "{time in ms}" rounded to the nearest 100th
+                image_name = round((current_time * 1000) / 100) * 100
+                image_path = traj_dir.joinpath(camera_name, f"{int(image_name)}.png")
+                img = Image.open(image_path).convert("RGB")
+                img = np.asarray(img)
+                if not np.allclose(img.shape, desired_image_shape):
+                    # Image size for cv2 is (width, height) instead of (height, width)
+                    img = cv2.resize(
+                        img, (desired_image_shape[1], desired_image_shape[0])
+                    )
+
+                concatenated_images[sequence_idx] = img
+                sequence_idx += 1
+
+                if debug:
+                    from matplotlib import pyplot as plt
+
+                    print(f"\nCurrent time: {current_time}")
+                    print(f"Current index: {idx}")
+                    print(f"Image path: {image_path}")
+                    plt.imshow(img[6:-6, 6:-6, :])
+                    plt.show()
+
+                current_time = round((current_time + dt) * freq) / freq
+            # End episode time step loop
+        # End episode loop
+
+        # Save images to zarr
+        assert len(concatenated_images) == last_episode_end
+        assert sequence_idx == last_episode_end
         data_group.create_dataset(
             camera_name,
-            data=concatenated_images[camera_name],
-            chunks=image_chunk_sizes[camera_name],
+            data=concatenated_images,
+            chunks=image_chunk_size,
         )
-    meta_group.create_dataset("episode_ends", data=episode_ends)
+
+    # End camera loop
 
 
 def _get_start_idx(pusher_desired):
@@ -612,6 +646,16 @@ def _get_start_idx(pusher_desired):
             return i
 
     return None
+
+
+def _is_ik_fail(log_path, max_failures=5):
+    with open(log_path, "r") as f:
+        line = f.readline()
+        if len(line) != 0:
+            ik_fails = int(line.rsplit(" ", 1)[-1])
+            if ik_fails > max_failures:
+                return True
+    return False
 
 
 def _get_closest_index(arr, t, start_idx=None, end_idx=None):
