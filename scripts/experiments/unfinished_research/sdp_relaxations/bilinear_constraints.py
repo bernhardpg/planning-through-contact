@@ -1,6 +1,11 @@
 import numpy as np
 from pydrake.math import eq
-from pydrake.solvers import MakeSemidefiniteRelaxation, MathematicalProgram, Solve
+from pydrake.solvers import (
+    MakeSemidefiniteRelaxation,
+    MathematicalProgram,
+    SemidefiniteRelaxationOptions,
+    Solve,
+)
 
 from planning_through_contact.convex_relaxation.sdp import (
     get_X_from_semidefinite_relaxation,
@@ -48,13 +53,13 @@ def example_1():
 def example_2():
     """
     Example 2 (tight)
-    With bilinear constraint: x y + x = 1
+    With bilinear constraint: x y = x + 1
     Here the cost is 0.67
     """
     prog = MathematicalProgram()
     x = prog.NewContinuousVariables(1, 1, "x").item()
     y = prog.NewContinuousVariables(1, 1, "y").item()
-    prog.AddQuadraticConstraint(x * y + x - 1, 0, 0)
+    prog.AddQuadraticConstraint(x * y - x - 1, 0, 0)
 
     prog.AddQuadraticCost(x**2)
     prog.AddQuadraticCost(y**2)
@@ -82,7 +87,45 @@ def example_2():
     print(f"x * y - x - 1 = {x_val * y_val - x_val - 1}")
 
 
-def example_3():
+def example_2_no_implied_constraints():
+    """
+    Example 2 without implied constraints. Still tight
+    """
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(1, 1, "x").item()
+    y = prog.NewContinuousVariables(1, 1, "y").item()
+    prog.AddQuadraticConstraint(x * y - x - 1, 0, 0)
+
+    prog.AddQuadraticCost(x**2)
+    prog.AddQuadraticCost(y**2)
+
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
+    X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+    relaxed_prog.AddCost(1e-5 * np.trace(X))
+
+    relaxed_result = Solve(relaxed_prog)
+    X_val = relaxed_result.GetSolution(X)
+
+    print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+
+    eigvals = [e.real for e in np.linalg.eigvals(X_val)]
+    print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
+
+    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"x: {relaxed_result.GetSolution(x)}")
+    print(f"y: {relaxed_result.GetSolution(y)}")
+
+    x_val = relaxed_result.GetSolution(x)
+    y_val = relaxed_result.GetSolution(y)
+
+    print(f"x * y - x - 1 = {x_val * y_val - x_val - 1}")
+
+
+def example_forces_torques():
     """
     This example is more like the footstep planning case with forces.
     It is tight.
@@ -129,4 +172,5 @@ def example_3():
 np.set_printoptions(precision=2)
 
 # example_1()
-example_2()
+# example_2()
+example_2_no_implied_constraints()
