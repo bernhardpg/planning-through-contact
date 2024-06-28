@@ -1,17 +1,20 @@
 import numpy as np
 import numpy.typing as npt
-from pydrake.math import eq, ge
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
+    CommonSolverOption,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     SemidefiniteRelaxationOptions,
     Solve,
+    SolverOptions,
 )
 
 from planning_through_contact.convex_relaxation.sdp import (
     get_X_from_semidefinite_relaxation,
 )
 from planning_through_contact.geometry.utilities import cross_2d
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 
 def example_1():
@@ -229,7 +232,7 @@ def example_2_smaller_psd_cones():
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
     print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
 
-    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"Primal cost: {relaxed_result.get_optimal_cost():.2f}")
     print(f"x: {relaxed_result.GetSolution(x)}")
     print(f"y: {relaxed_result.GetSolution(y)}")
 
@@ -239,29 +242,130 @@ def example_2_smaller_psd_cones():
     print(f"x * y - x - 1 = {x_val * y_val - x_val - 1}")
 
 
-def solve_lcp_dual(M: npt.NDArray[np.float64], q: npt.NDArray[np.float64]) -> float:
+def solve_lcp_dual(
+    M: npt.NDArray[np.float64], q: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64] | None:
     dual = MathematicalProgram()
-    n = len(q)
+    n = M.shape[0]
+    assert M.shape == (n, n)  # M must be symmetric
 
-    lam = dual.NewContinuousVariables(n, "lambda")
-    nu = dual.NewContinuousVariables(1, "nu").item()
+    assert len(q) == n
 
-    dual.AddLinearCost(lam.T @ q)  # type: ignore
+    lam = dual.NewContinuousVariables(n, "lambda")  # Mx + q >= 0
+    mu = dual.NewContinuousVariables(n, "mu")  # x >= 0
+    nu = dual.NewContinuousVariables(1, "nu").item()  # xᵀ(Mx + q) = 0
+    gamma = dual.NewContinuousVariables(1, "gamma").item()  # slack var
+
+    dual.AddLinearCost(-gamma)  # max gamma
 
     dual.AddLinearConstraint(ge(lam, 0))
-    dual.AddLinearConstraint(ge(q * nu - M.T @ lam, 0))
+    dual.AddLinearConstraint(ge(mu, 0))
 
-    dual.AddPositiveSemidefiniteConstraint(np.eye(n) + nu * M)
+    P_tilde = np.eye(n) + nu * M
+    q_tilde = (nu * q - M.T @ lam - mu).reshape((n, 1))
+    r_tilde = -q.T @ lam - gamma
+    H = np.block([[P_tilde, 0.5 * q_tilde], [0.5 * q_tilde.T, r_tilde]])
 
-    dual_result = Solve(dual)
+    assert H.shape == (n + 1, n + 1)
+    dual.AddPositiveSemidefiniteConstraint(H)
+
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    dual_result = Solve(dual, solver_options=solver_options)
+    print(f"Dual result: {dual_result.get_solution_result()}")
     assert dual_result.is_success()
+    print(f"Dual cost: {-dual_result.get_optimal_cost():.2f}")
+
+    # This follows the procedure in:
+    # X. J. Zheng, X. L. Sun, D. Li, and Y. F. Xu,
+    # “On zero duality gap in nonconvex quadratic programming problems,”
+    A_star = evaluate_np_expressions_array(P_tilde, dual_result)
+    b_star = 0.5 * evaluate_np_expressions_array(q_tilde, dual_result)
+
+    print(f"A* =\n{A_star}")
+    eigvals = np.linalg.eigvals(A_star)
+    print(f"eigs(A*): {eigvals}")
+
+    ZERO_TOL = 1e-5
+    if np.all(eigvals >= ZERO_TOL):
+        print("A* ≻ 0 (strictly PSD), so the relaxation is tight.")
+    else:
+        print("A* singular, so no guarantee that the relaxation is tight")
+
+    x_sol = -np.linalg.solve(A_star, b_star).flatten()
+    print(f"x_sol = {x_sol}")
+    return x_sol
+
+
+def solve_lcp_dual_w_redundant_constraints(
+    M: npt.NDArray[np.float64], q: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64] | None:
+    dual = MathematicalProgram()
+    n = M.shape[0]
+    assert M.shape == (n, n)  # M must be symmetric
+
+    assert len(q) == n
+
+    lam = dual.NewContinuousVariables(n, "lambda")  # Mx + q >= 0
+    mu = dual.NewContinuousVariables(n, "mu")  # x >= 0
+    nu = dual.NewContinuousVariables(n, "nu")  # xᵢᵀ(Mx + q)ᵢ = 0
+    gamma = dual.NewContinuousVariables(1, "gamma").item()  # slack var
+
+    dual.AddLinearCost(-gamma)  # max gamma
+
+    dual.AddLinearConstraint(ge(lam, 0))
+    dual.AddLinearConstraint(ge(mu, 0))
+
+    def E_ii(i: int) -> npt.NDArray[np.float64]:
+        E = np.zeros((n, n))
+        E[i, i] = 1
+        return E
+
+    P_tilde = np.eye(n) + sum([nu[i] * E_ii(i) @ M for i in range(n)])
+    q_tilde = (sum([nu[i] * E_ii(i) @ q for i in range(n)]) - M.T @ lam - mu).reshape(
+        (n, 1)
+    )
+    r_tilde = -q.T @ lam - gamma
+    H = np.block([[P_tilde, 0.5 * q_tilde], [0.5 * q_tilde.T, r_tilde]])
+
+    assert H.shape == (n + 1, n + 1)
+    dual.AddPositiveSemidefiniteConstraint(H)
+
+    # TODO: Why is this dual only feasible when the dual variables are equal
+    # (which makes the two dual problems equal?)
+    for nu_i in nu:
+        dual.AddLinearEqualityConstraint(nu_i == nu[0])
+
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    dual_result = Solve(dual, solver_options=solver_options)
+    print(f"Dual result: {dual_result.get_solution_result()}")
+    assert dual_result.is_success()
+    print(f"Dual cost: {-dual_result.get_optimal_cost():.2f}")
+
+    # This follows the procedure in:
+    # X. J. Zheng, X. L. Sun, D. Li, and Y. F. Xu,
+    # “On zero duality gap in nonconvex quadratic programming problems,”
+    A_star = evaluate_np_expressions_array(P_tilde, dual_result)
+    b_star = evaluate_np_expressions_array(q_tilde, dual_result)
+
+    print(f"A*: {A_star}")
+    eigvals = np.linalg.eigvals(A_star)
+    print(f"eigvals(A*): {eigvals}")
+
+    if np.all(eigvals >= 0):
+        print("A* ≻ 0 (strictly PSD), so the relaxation is tight.")
+        x_sol = np.linalg.solve(A_star, b_star)
+        return x_sol
 
     lam_res = dual_result.GetSolution(lam)
     nu_res = dual_result.GetSolution(nu)
     print(f"Dual lambda: {lam_res}")
     print(f"Dual nu: {nu_res}")
 
-    return -dual_result.get_optimal_cost()
+    return None
 
 
 def example_3_lcp_loose():
@@ -288,7 +392,6 @@ def example_3_lcp_loose():
 
     complimentarity_constraint = z * x
     for c in complimentarity_constraint:
-        print(c)
         prog.AddQuadraticConstraint(c, 0, 0)
 
     options = SemidefiniteRelaxationOptions()
@@ -303,15 +406,22 @@ def example_3_lcp_loose():
     X_val = relaxed_result.GetSolution(X)
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"X =\n{X_val[1:,1:]}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
-    print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
+    print(f"eigs(X): {', '.join([f"{e:.2f}" for e in eigvals])}")
 
-    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"Primal cost: {relaxed_result.get_optimal_cost():.2f}")
     print(f"x: {relaxed_result.GetSolution(x)}")
 
-    dual_cost = solve_lcp_dual(M, q)
-    print(f"Dual cost: {dual_cost:.2f}")
+    x_sol = solve_lcp_dual(M, q)
+
+    all_satisfied = True
+    for const in prog.GetAllConstraints():
+        all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
+            x_sol, tol=1e-4  # type: ignore
+        )
+    print(f"x_sol feasible: {all_satisfied}")
 
 
 def example_3_lcp_tight():
@@ -332,14 +442,11 @@ def example_3_lcp_tight():
 
     prog.AddQuadraticCost(x.T @ x)  # type: ignore
 
-    z = M @ x + q
-
     prog.AddLinearConstraint(ge(x, 0))
-    prog.AddLinearConstraint(ge(z, 0))
+    prog.AddLinearConstraint(ge(M @ x + q, 0))
 
-    complimentarity_constraint = z * x
+    complimentarity_constraint = x * (M @ x + q)
     for c in complimentarity_constraint:
-        print(c)
         prog.AddQuadraticConstraint(c, 0, 0)
 
     options = SemidefiniteRelaxationOptions()
@@ -348,9 +455,10 @@ def example_3_lcp_tight():
     relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
     X = get_X_from_semidefinite_relaxation(relaxed_prog)
 
-    # relaxed_prog.AddCost(1e-5 * np.trace(X))
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    relaxed_result = Solve(relaxed_prog)
+    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
     X_val = relaxed_result.GetSolution(X)
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
@@ -361,8 +469,14 @@ def example_3_lcp_tight():
     print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
     print(f"x: {relaxed_result.GetSolution(x)}")
 
-    dual_cost = solve_lcp_dual(M, q)
-    print(f"Dual cost: {dual_cost:.2f}")
+    x_sol = solve_lcp_dual(M, q)
+
+    all_satisfied = True
+    for const in prog.GetAllConstraints():
+        all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
+            x_sol, tol=1e-4  # type: ignore
+        )
+    print(f"x_sol feasible: {all_satisfied}")
 
 
 def example_forces_torques():
@@ -408,14 +522,14 @@ def example_forces_torques():
     print(f"a: {relaxed_result.GetSolution(a)}")
 
 
-# Set the print options to display 2 decimal places
-np.set_printoptions(precision=2)
+# Set the print options to display 2 decimal places and no scientific
+np.set_printoptions(precision=2, suppress=True)
 
 # example_1()
-example_1_homogenous()
+# example_1_homogenous()
 # example_2()
 # example_2_no_implied_constraints()
 # example_2_smaller_psd_cones()
-# example_3_lcp_loose()
+example_3_lcp_loose()
 # example_3_lcp_tight()
 # example_4()
