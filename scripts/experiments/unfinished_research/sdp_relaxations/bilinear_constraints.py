@@ -553,8 +553,8 @@ def example_3_lcp_4():
     n = 2
     x = prog.NewContinuousVariables(n, "x")
 
-    M = np.array([[2, 10], [1.2, -2]])
-    q = np.array([1.3, -2.8])
+    M = np.array([[1, 0], [1.2, 2]])
+    q = np.array([13, -2])
 
     prog.AddQuadraticCost(x.T @ x)  # type: ignore
 
@@ -609,7 +609,7 @@ def example_3_lcp_5():
     x = prog.NewContinuousVariables(n, "x")
 
     M = np.array([[20, 1], [-1.2, 2]])
-    q = np.array([1.3, 2.8])
+    q = np.array([1.3, -2.8])
 
     prog.AddQuadraticCost(x.T @ x)  # type: ignore
 
@@ -631,6 +631,7 @@ def example_3_lcp_5():
 
     relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
     X_val = relaxed_result.GetSolution(X)
+    print(f"X=\n{X_val}")
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
     print(f"Primal result: {relaxed_result.get_solution_result()}")
@@ -705,6 +706,6 @@ np.set_printoptions(precision=2, suppress=True)
 # example_3_lcp_loose()
 # example_3_lcp_tight()
 # example_3_lcp_3()
-# example_3_lcp_4()
+example_3_lcp_4()
 # example_3_lcp_5()
 # example_4()
