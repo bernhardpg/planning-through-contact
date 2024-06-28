@@ -42,6 +42,8 @@ def example_1():
     relaxed_result = Solve(relaxed_prog)
     X_val = relaxed_result.GetSolution(X)
 
+    print(f"X =\n{X_val}")
+
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
@@ -78,6 +80,8 @@ def example_1_homogenous():
 
     eigvals, eigvecs = np.linalg.eig(S_val)
     idx = np.flatnonzero(eigvals)[0]
+    # print(eigvecs[:, idx])
+    # print(eigvals[idx])
 
     x_1 = np.sqrt(eigvals[idx]) * eigvecs[:, idx]
     print(f"x_1 = {x_1}")
@@ -406,6 +410,7 @@ def example_3_lcp_loose():
     X_val = relaxed_result.GetSolution(X)
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"Primal result: {relaxed_result.get_solution_result()}")
     print(f"X =\n{X_val[1:,1:]}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
@@ -421,7 +426,7 @@ def example_3_lcp_loose():
         all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
             x_sol, tol=1e-4  # type: ignore
         )
-    print(f"x_sol feasible: {all_satisfied}")
+    # print(f"x_sol feasible: {all_satisfied}")
 
 
 def example_3_lcp_tight():
@@ -462,6 +467,7 @@ def example_3_lcp_tight():
     X_val = relaxed_result.GetSolution(X)
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"Primal result: {relaxed_result.get_solution_result()}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
     print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
@@ -476,7 +482,173 @@ def example_3_lcp_tight():
         all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
             x_sol, tol=1e-4  # type: ignore
         )
-    print(f"x_sol feasible: {all_satisfied}")
+    # print(f"x_sol feasible: {all_satisfied}")
+
+
+def example_3_lcp_3():
+    """
+    Example 3, a "standard" LCP formulation.
+
+    x >= 0, Mx + q >= 0,
+    x_i (Mx + q)_i = 0
+    i = 1, .., n
+    """
+    prog = MathematicalProgram()
+    n = 2
+    x = prog.NewContinuousVariables(n, "x")
+
+    M = np.array([[2, 1], [1, -2]])
+    # Here both entries of q are negative, which for some reason makes this tight!
+    q = np.array([-1, 2])
+
+    prog.AddQuadraticCost(x.T @ x)  # type: ignore
+
+    prog.AddLinearConstraint(ge(x, 0))
+    prog.AddLinearConstraint(ge(M @ x + q, 0))
+
+    complimentarity_constraint = x * (M @ x + q)
+    for c in complimentarity_constraint:
+        prog.AddQuadraticConstraint(c, 0, 0)
+
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
+    X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+    X_val = relaxed_result.GetSolution(X)
+
+    print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"Primal result: {relaxed_result.get_solution_result()}")
+
+    eigvals = [e.real for e in np.linalg.eigvals(X_val)]
+    print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
+
+    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"x: {relaxed_result.GetSolution(x)}")
+
+    x_sol = solve_lcp_dual(M, q)
+
+    all_satisfied = True
+    for const in prog.GetAllConstraints():
+        all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
+            x_sol, tol=1e-4  # type: ignore
+        )
+    # print(f"x_sol feasible: {all_satisfied}")
+
+
+def example_3_lcp_4():
+    """
+    Example 3, a "standard" LCP formulation.
+
+    x >= 0, Mx + q >= 0,
+    x_i (Mx + q)_i = 0
+    i = 1, .., n
+    """
+    prog = MathematicalProgram()
+    n = 2
+    x = prog.NewContinuousVariables(n, "x")
+
+    M = np.array([[2, 10], [1.2, -2]])
+    q = np.array([1.3, -2.8])
+
+    prog.AddQuadraticCost(x.T @ x)  # type: ignore
+
+    prog.AddLinearConstraint(ge(x, 0))
+    prog.AddLinearConstraint(ge(M @ x + q, 0))
+
+    complimentarity_constraint = x * (M @ x + q)
+    for c in complimentarity_constraint:
+        prog.AddQuadraticConstraint(c, 0, 0)
+
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
+    X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+    X_val = relaxed_result.GetSolution(X)
+
+    print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"Primal result: {relaxed_result.get_solution_result()}")
+
+    eigvals = [e.real for e in np.linalg.eigvals(X_val)]
+    print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
+
+    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"x: {relaxed_result.GetSolution(x)}")
+
+    x_sol = solve_lcp_dual(M, q)
+
+    all_satisfied = True
+    for const in prog.GetAllConstraints():
+        all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
+            x_sol, tol=1e-4  # type: ignore
+        )
+    # print(f"x_sol feasible: {all_satisfied}")
+
+
+def example_3_lcp_5():
+    """
+    Example 3, a "standard" LCP formulation.
+
+    x >= 0, Mx + q >= 0,
+    x_i (Mx + q)_i = 0
+    i = 1, .., n
+    """
+    prog = MathematicalProgram()
+    n = 2
+    x = prog.NewContinuousVariables(n, "x")
+
+    M = np.array([[20, 1], [-1.2, 2]])
+    q = np.array([1.3, 2.8])
+
+    prog.AddQuadraticCost(x.T @ x)  # type: ignore
+
+    prog.AddLinearConstraint(ge(x, 0))
+    prog.AddLinearConstraint(ge(M @ x + q, 0))
+
+    complimentarity_constraint = x * (M @ x + q)
+    for c in complimentarity_constraint:
+        prog.AddQuadraticConstraint(c, 0, 0)
+
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
+    X = get_X_from_semidefinite_relaxation(relaxed_prog)
+
+    solver_options = SolverOptions()
+    # solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+    X_val = relaxed_result.GetSolution(X)
+
+    print(f"Solved with: {relaxed_result.get_solver_id().name()}")
+    print(f"Primal result: {relaxed_result.get_solution_result()}")
+
+    eigvals = [e.real for e in np.linalg.eigvals(X_val)]
+    print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
+
+    print(f"cost: {relaxed_result.get_optimal_cost():.2f}")
+    print(f"x: {relaxed_result.GetSolution(x)}")
+
+    x_sol = solve_lcp_dual(M, q)
+
+    all_satisfied = True
+    for const in prog.GetAllConstraints():
+        all_satisfied = all_satisfied and const.evaluator().CheckSatisfied(  # type: ignore
+            x_sol, tol=1e-4  # type: ignore
+        )
+    # print(f"x_sol feasible: {all_satisfied}")
 
 
 def example_forces_torques():
@@ -530,6 +702,9 @@ np.set_printoptions(precision=2, suppress=True)
 # example_2()
 # example_2_no_implied_constraints()
 # example_2_smaller_psd_cones()
-example_3_lcp_loose()
+# example_3_lcp_loose()
 # example_3_lcp_tight()
+# example_3_lcp_3()
+# example_3_lcp_4()
+# example_3_lcp_5()
 # example_4()
