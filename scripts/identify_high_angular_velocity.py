@@ -72,7 +72,6 @@ if __name__ == "__main__":
 
         # Compute angular speed
         angular_speed = compute_angular_speed(time, orientation)
-        print(max(angular_speed))
 
         # Identify high angular speed moments
         has_high_angular_speed = identify_high_angular_speed(
@@ -82,10 +81,11 @@ if __name__ == "__main__":
         # If high angular speed moments are found, add the subdirectory to the list
         if has_high_angular_speed:
             subdirs_with_high_angular_speed.append(int(subdir))
-            print(f"High angular speed moments found in {subdir}")
 
     # Print the names of all subdirectories that contained high angular velocities
-    print("\nSubdirectories with high angular velocities:")
+    print("Subdirectories with high angular velocities:")
     subdirs_with_high_angular_speed.sort()
-    for subdir in subdirs_with_high_angular_speed:
-        print(subdir)
+    print(subdirs_with_high_angular_speed)
+    print(
+        f"Ratio of high angular speed: {len(subdirs_with_high_angular_speed) / len(subdirs)}"
+    )
