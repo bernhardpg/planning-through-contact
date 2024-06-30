@@ -127,8 +127,12 @@ class DiffusionPolicyController(LeafSystem):
         workspace.load_payload(payload, exclude_keys=None, include_keys=None)
 
         # get normalizer: this might be expensive for larger datasets
-        COTRAIN_DATASET = "diffusion_policy.dataset.drake_cotrain_planar_pushing_hybrid_dataset.DrakeCotrainPlanarPushingHybridDataset"
-        if self._cfg.task.dataset._target_ == COTRAIN_DATASET:
+        LEGACY_COTRAIN_DATASET = "diffusion_policy.dataset.drake_cotrain_planar_pushing_hybrid_dataset.DrakeCotrainPlanarPushingHybridDataset"
+        PLANAR_PUSHING_DATASET = (
+            "diffusion_policy.dataset.planar_pushing_dataset.PlanarPushingDataset"
+        )
+        cotraining_datasets = [LEGACY_COTRAIN_DATASET, PLANAR_PUSHING_DATASET]
+        if self._cfg.task.dataset._target_ in cotraining_datasets:
             zarr_configs = self._cfg.task.dataset.zarr_configs
             for config in zarr_configs:
                 config["path"] = self._diffusion_policy_path.joinpath(config["path"])

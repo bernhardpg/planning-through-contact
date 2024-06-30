@@ -168,6 +168,10 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
     while num_plans < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
 
+        print(
+            f"Generating plan {plan_idx}: {plan.slider_initial_pose} -> {plan.slider_target_pose}"
+        )
+
         success = create_plan(
             plan_spec=plan,
             config=config,
