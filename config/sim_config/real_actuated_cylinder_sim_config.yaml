@@ -6,28 +6,44 @@ dynamics_config:
   grav_acc: 9.81
   integration_constant: 0.3
   force_scale: 0.01
-slider_type: 'box'
+slider_type: 'arbitrary'
+arbitrary_shape_pickle_path: arbitrary_shape_pickles/small_t_pusher.pkl
+arbitrary_shape_visual_mesh_path: null # "hammer/rotated_hammer.obj" # Can be null (collision mesh will be used)
+physical_properties: # Slider physical properties
+  _target_: planning_through_contact.tools.utils.PhysicalProperties
+  mass: 0.1
+  inertia: [[1e-5, 0.0, 0.0], [0.0, 1e-5, 0.0], [0.0, 0.0, 1e-5]]
+  center_of_mass: null # [0.0, 0.0, 0.0] # Use null for uniform density
+  is_compliant: true
+  hydroelastic_modulus: 1.0e6
+  # NOTE: These friction coefficients are used for sim while the ones in `dynamic_config` are used for planning!
+  mu_dynamic: 0.5
+  mu_static: 0.5
+  mesh_resolution_hint: 0.01
 contact_model: ContactModel.kHydroelastic
 visualize_desired: true
-slider_goal_pose: # Configures the goal pose of the slider
+slider_goal_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.575
-  y: 0.0
+  x: 0.587
+  y: -0.0355
+  # x: 0.575
+  # y: -0.04285714
   theta: 0.0
-pusher_start_pose: # Confiures the starting and ending location of the pusher
+pusher_start_pose:
   _target_: planning_through_contact.geometry.planar.planar_pose.PlanarPose
-  x: 0.575
-  y: 0.25
+  x: 0.587
+  # x: 0.575
+  y: 0.15
   theta: 0.0
 time_step: 0.001
-closed_loop: false
+closed_loop: false # MPC flag
 draw_frames: true
 use_realtime: false
 delay_before_execution: 5.0
 save_plots: false
 diffusion_policy_config:
   _target_: planning_through_contact.simulation.controllers.diffusion_policy_source.DiffusionPolicyConfig
-  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/push_box_v5/checkpoints/latest.ckpt'
+  checkpoint: '/home/adam/workspace/gcs-diffusion/data/outputs/pretrained_multi_camera/checkpoints/latest.ckpt'
   initial_pusher_pose: ${pusher_start_pose}
   target_slider_pose: ${slider_goal_pose}
   diffusion_policy_path: '/home/adam/workspace/gcs-diffusion'
@@ -44,36 +60,50 @@ camera_configs:
     orientation:
       roll: 3.141592653589793
       pitch: 0.0
-      yaw: 0.0    
-    position: [0.5, 0.0, 1.0]
-    width: 96
-    height: 96
-    show_rgb: false
+      yaw: 0.0
+    position:
+      - 0.88
+      - -0.03
+      - 0.45
+    width: 640
+    height: 480
+    center_x: 318.05
+    center_y: 244.107
+    focal_x: 616.704
+    focal_y: 616.777
+    show_rgb: true
+camera_randomization: false
+domain_randomization: false
 log_dir: 'diffusion_policy_logs'
 multi_run_config:
   _target_: planning_through_contact.simulation.planar_pushing.planar_pushing_sim_config.MultiRunConfig
-  num_runs: 2
-  max_attempt_duration: 60
-  seed: 42
+  num_runs: 5
+  max_attempt_duration: 90 # 80
+  seed: 8 # 42
   slider_type: ${slider_type}
+  arbitrary_shape_pickle_path: ${arbitrary_shape_pickle_path}
   pusher_start_pose: ${pusher_start_pose}
   slider_goal_pose: ${slider_goal_pose}
-  workspace_width: 0.35
-  workspace_height: 0.5
-  trans_tol: 0.01
-  rot_tol: 1.5 # degrees
+  workspace_width: 0.3
+  workspace_height: 0.3
+  trans_tol: 0.02
+  rot_tol: 5 # degrees
   evaluate_final_pusher_position: true
   evaluate_final_slider_rotation: true
+  slider_physical_properties: ${physical_properties}
 
 ## Robot specific configs
 # sim_config
+# scene_directive_name: 'planar_pushing_iiwa_plant_hydroelastic.yaml'
+# default_joint_positions: [0.41, 0.88, -0.65, -1.45, 0.59, 1.01, 2.76]
 scene_directive_name: 'planar_pushing_cylinder_plant_hydroelastic.yaml'
 default_joint_positions:
-  - {pusher_start_pose.x}
-  - {pusher_start_pose.y}
+  - ${pusher_start_pose.x}
+  - ${pusher_start_pose.y}
 
 # position controller / robot station
 robot_station:
+  # _target_: planning_through_contact.simulation.controllers.iiwa_hardware_station.IiwaHardwareStation
   _target_: planning_through_contact.simulation.controllers.cylinder_actuated_station.CylinderActuatedStation
   sim_config: null  # override in hydra.utils.instantiate
   meshcat: null     # override in hydra.utils.instantiate
@@ -81,40 +111,45 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: false    # Configures whether new plans should be generated
-  render_plans: false      # Configures whether plans should be replayed and rendered
-  convert_to_zarr: false   # Configures whether the rendered plans should be converted to zarr
-  convert_to_zarr_reduce: true # Supercloud flag to perform "reduce" step, leave as false
-  plans_dir: 'trajectories/dan_trajectories' # Save directory for trajectories
-  rendered_plans_dir: 'trajectories_rendered/dan_rendered' # Save directory for rendered trajectories
-  zarr_path: ${data_collection_config.rendered_plans_dir}/data.zarr # Save directory for zarr dataset
+  generate_plans: false
+  render_plans: true
+  convert_to_zarr: false
+  convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
+  plans_dir: 'trajectories/cotrain_data/run_0'
+  # rendered_plans_dir: 'trajectories_rendered/test'
+  rendered_plans_dir: 'trajectories_rendered/actuated_cylinder_cotrain_data'
+  zarr_path: 'trajectories_rendered/actuated_cylinder_cotrain_data_v1.zarr'
   policy_freq: 10.0
   state_chunk_length: 1024
   action_chunk_length: 2048
   target_chunk_length: 1024
   image_chunk_length: 128
+  image_width: 96
+  image_height: 96
+  # image_widht: 320
+  # image_height: 240
   plan_config:
     _target_: planning_through_contact.simulation.environments.data_collection_table_environment.PlanConfig
     slider_type: ${slider_type}
+    arbitrary_shape_pickle_path: ${arbitrary_shape_pickle_path}
     pusher_radius: 0.015
     contact_lam_min: 0.2
     contact_lam_max: 0.8
     distance_to_object_socp: 0.25
-    width: 0.5  # Width of the workspace
-    height: 0.5 # Height of the workspace
+    width: 0.35
+    height: 0.5
     center:
       - ${slider_goal_pose.x}
       - ${slider_goal_pose.y}
     buffer: 0.0
-    seed: 42     # Seed for data generation
-    num_plans: 11 # Number of initial conditions to plan from
+    seed: 0
+    num_plans: 750
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
-    noise_final_pose: false
-    num_unique_plans: 25 # Number of plans per initial condition
-    sort_plans: false    # Configures whether plans should be sorted and by optimality
-
+    noise_final_pose: true
+    num_unique_plans: 2
+    sort_plans: true
   ## Supercloud
   LLSUB_RANK: null
   LLSUB_SIZE: null

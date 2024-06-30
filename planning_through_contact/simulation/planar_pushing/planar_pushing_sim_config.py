@@ -235,24 +235,15 @@ class PlanarPushingSimConfig:
         if "camera_configs" in cfg and cfg.camera_configs:
             camera_configs = []
             for camera_config in cfg.camera_configs:
-                if camera_config.orientation == "default":
-                    # default camera orientation is looking down
-                    X_PB = Transform(
-                        RigidTransform(
-                            RotationMatrix.MakeXRotation(np.pi),
-                            np.array(camera_config.position),
-                        )
-                    )
-                else:
-                    orientation = RollPitchYaw(
-                        roll=camera_config.orientation.roll,
-                        pitch=camera_config.orientation.pitch,
-                        yaw=camera_config.orientation.yaw,
-                    )
+                orientation = RollPitchYaw(
+                    roll=camera_config.orientation.roll,
+                    pitch=camera_config.orientation.pitch,
+                    yaw=camera_config.orientation.yaw,
+                )
 
-                    X_PB = Transform(
-                        RigidTransform(orientation, np.array(camera_config.position))
-                    )
+                X_PB = Transform(
+                    RigidTransform(orientation, np.array(camera_config.position))
+                )
                 if "parent_frame" in camera_config:
                     X_PB.base_frame = camera_config.parent_frame
 
