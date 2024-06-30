@@ -91,6 +91,11 @@ camera_configs:
     center_y: 244.107
     focal_x: 616.704
     focal_y: 616.777
+    background:
+      r: 1.0
+      g: 0.894117
+      b: 0.768627
+      a: 1.0
     show_rgb: false
 camera_randomization: false
 domain_randomization: false

@@ -62,16 +62,17 @@ camera_configs:
       pitch: 0.0
       yaw: 0.0
     position:
-      - 0.88
-      - -0.03
-      - 0.45
-    width: 640
-    height: 480
-    center_x: 318.05
-    center_y: 244.107
-    focal_x: 616.704
-    focal_y: 616.777
-    show_rgb: true
+      - ${slider_goal_pose.x}
+      - ${slider_goal_pose.y}
+      - 1.0
+    width: 96
+    height: 96
+    background:
+      r: 1.0
+      g: 0.894117
+      b: 0.768627
+      a: 1.0
+    show_rgb: false
 camera_randomization: false
 domain_randomization: false
 log_dir: 'diffusion_policy_logs'

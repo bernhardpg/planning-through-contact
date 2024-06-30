@@ -234,35 +234,53 @@ class PlanarPushingSimConfig:
             )
         if "camera_configs" in cfg and cfg.camera_configs:
             camera_configs = []
+            camera_config_attrs = dir(CameraConfig)
             for camera_config in cfg.camera_configs:
+                kwargs = {}
                 orientation = RollPitchYaw(
                     roll=camera_config.orientation.roll,
                     pitch=camera_config.orientation.pitch,
                     yaw=camera_config.orientation.yaw,
                 )
 
-                X_PB = Transform(
+                kwargs["X_PB"] = Transform(
                     RigidTransform(orientation, np.array(camera_config.position))
                 )
                 if "parent_frame" in camera_config:
-                    X_PB.base_frame = camera_config.parent_frame
+                    kwargs["X_PB"].base_frame = camera_config.parent_frame
 
-                camera_configs.append(
-                    CameraConfig(
-                        name=camera_config.name,
-                        X_PB=X_PB,
-                        width=camera_config.width,
-                        height=camera_config.height,
-                        show_rgb=camera_config.show_rgb,
-                        center_x=camera_config.center_x,
-                        center_y=camera_config.center_y,
-                        focal=CameraConfig.FocalLength(
-                            x=camera_config.focal_x, y=camera_config.focal_y
-                        ),
-                        background=Rgba(
-                            255.0 / 255.0, 228.0 / 255.0, 196.0 / 255.0, 1.0
-                        ),
+                if "background" in camera_config:
+                    kwargs["background"] = Rgba(
+                        camera_config.background.r,
+                        camera_config.background.g,
+                        camera_config.background.b,
+                        camera_config.background.a,
                     )
+
+                if "focal_x" in camera_config and "focal_y" in camera_config:
+                    kwargs["focal"] = CameraConfig.FocalLength(
+                        x=camera_config.focal_x, y=camera_config.focal_y
+                    )
+                for key in camera_config:
+                    if key not in kwargs and key in camera_config_attrs:
+                        kwargs[key] = camera_config[key]
+                camera_configs.append(
+                    # CameraConfig(
+                    #     name=camera_config.name,
+                    #     X_PB=X_PB,
+                    #     width=camera_config.width,
+                    #     height=camera_config.height,
+                    #     show_rgb=camera_config.show_rgb,
+                    #     center_x=camera_config.center_x,
+                    #     center_y=camera_config.center_y,
+                    #     focal=CameraConfig.FocalLength(
+                    #         x=camera_config.focal_x, y=camera_config.focal_y
+                    #     ),
+                    #     background=Rgba(
+                    #         255.0 / 255.0, 228.0 / 255.0, 196.0 / 255.0, 1.0
+                    #     ),
+                    # )
+                    CameraConfig(**kwargs)
                 )
             sim_config.camera_configs = camera_configs
         if "multi_run_config" in cfg and cfg.multi_run_config:
