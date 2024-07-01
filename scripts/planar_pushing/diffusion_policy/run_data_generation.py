@@ -159,6 +159,10 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
         limit_rotations=False,
         noise_final_pose=False,
     )
+    indices = np.array([1, 4, 5, 7, 10, 12, 13, 15, 16, 19, 20, 21, 22, 24])
+    # indices = indices[:3]
+    index = [4]
+    plan_starts_and_goals = [plan_starts_and_goals[i] for i in indices]
     print(f"Finished generating start and goal pairs.")
 
     ## Generate plans

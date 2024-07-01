@@ -131,12 +131,12 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: false
+  generate_plans: true
   render_plans: true
   convert_to_zarr: false
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'trajectories/test'
-  rendered_plans_dir: 'trajectories_rendered/test'
+  plans_dir: 'trajectories/test_angular_speed'
+  rendered_plans_dir: 'trajectories_rendered/test_angular_speed'
   zarr_path: 'trajectories_rendered/iiwa_cotrain_data.zarr'
   policy_freq: 10.0
   state_chunk_length: 1024

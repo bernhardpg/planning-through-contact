@@ -23,13 +23,17 @@ def compute_angular_speed(time, orientation):
 # Function to identify high angular speed moments
 def identify_high_angular_speed(angular_speed, threshold, window_size):
     angular_speed_cumsum = np.cumsum(angular_speed)
+    max_window_avg = -1
+    ret = False
     for i in range(len(angular_speed_cumsum) - window_size):
         window_avg = (
             angular_speed_cumsum[i + window_size] - angular_speed_cumsum[i]
         ) / window_size
+        max_window_avg = max(max_window_avg, window_avg)
         if window_avg > threshold:
-            return True
-    return False
+            ret = True
+    print(f"Max window average: {max_window_avg}")
+    return ret
 
 
 if __name__ == "__main__":
@@ -74,6 +78,7 @@ if __name__ == "__main__":
         angular_speed = compute_angular_speed(time, orientation)
 
         # Identify high angular speed moments
+        print(f"Subdirectory: {subdir}")
         has_high_angular_speed = identify_high_angular_speed(
             angular_speed, angular_speed_threshold, window_size
         )
@@ -86,6 +91,7 @@ if __name__ == "__main__":
     print("Subdirectories with high angular velocities:")
     subdirs_with_high_angular_speed.sort()
     print(subdirs_with_high_angular_speed)
+    print({int(subdir) // 2 for subdir in subdirs_with_high_angular_speed})
     print(
         f"Ratio of high angular speed: {len(subdirs_with_high_angular_speed) / len(subdirs)}"
     )
