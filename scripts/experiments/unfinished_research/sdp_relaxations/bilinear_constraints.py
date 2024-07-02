@@ -114,7 +114,7 @@ def example_4():
     X_val = relaxed_result.GetSolution(X)
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
-    print(f"")
+    print(f"X = \n{X_val}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
     print(f"eigvals: {', '.join([f"{e:.2f}" for e in eigvals])}")
@@ -399,7 +399,8 @@ def example_3_lcp_loose():
         prog.AddQuadraticConstraint(c, 0, 0)
 
     options = SemidefiniteRelaxationOptions()
-    options.set_to_weakest()
+    # options.set_to_weakest()
+    options.set_to_strongest()
 
     relaxed_prog = MakeSemidefiniteRelaxation(prog, options)
     X = get_X_from_semidefinite_relaxation(relaxed_prog)
@@ -411,7 +412,7 @@ def example_3_lcp_loose():
 
     print(f"Solved with: {relaxed_result.get_solver_id().name()}")
     print(f"Primal result: {relaxed_result.get_solution_result()}")
-    print(f"X =\n{X_val[1:,1:]}")
+    print(f"X =\n{X_val}")
 
     eigvals = [e.real for e in np.linalg.eigvals(X_val)]
     print(f"eigs(X): {', '.join([f"{e:.2f}" for e in eigvals])}")
@@ -703,9 +704,9 @@ np.set_printoptions(precision=2, suppress=True)
 # example_2()
 # example_2_no_implied_constraints()
 # example_2_smaller_psd_cones()
-# example_3_lcp_loose()
+example_3_lcp_loose()
 # example_3_lcp_tight()
 # example_3_lcp_3()
-example_3_lcp_4()
+# example_3_lcp_4()
 # example_3_lcp_5()
 # example_4()
