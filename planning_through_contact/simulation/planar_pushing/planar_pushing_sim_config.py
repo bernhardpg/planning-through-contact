@@ -235,6 +235,7 @@ class PlanarPushingSimConfig:
         if "camera_configs" in cfg and cfg.camera_configs:
             camera_configs = []
             camera_config_attrs = dir(CameraConfig)
+            exclude_keys = ["focal_x", "focal_y"]
             for camera_config in cfg.camera_configs:
                 kwargs = {}
                 orientation = RollPitchYaw(
@@ -262,26 +263,13 @@ class PlanarPushingSimConfig:
                         x=camera_config.focal_x, y=camera_config.focal_y
                     )
                 for key in camera_config:
-                    if key not in kwargs and key in camera_config_attrs:
+                    if (
+                        key not in kwargs
+                        and key not in exclude_keys
+                        and key in camera_config_attrs
+                    ):
                         kwargs[key] = camera_config[key]
-                camera_configs.append(
-                    # CameraConfig(
-                    #     name=camera_config.name,
-                    #     X_PB=X_PB,
-                    #     width=camera_config.width,
-                    #     height=camera_config.height,
-                    #     show_rgb=camera_config.show_rgb,
-                    #     center_x=camera_config.center_x,
-                    #     center_y=camera_config.center_y,
-                    #     focal=CameraConfig.FocalLength(
-                    #         x=camera_config.focal_x, y=camera_config.focal_y
-                    #     ),
-                    #     background=Rgba(
-                    #         255.0 / 255.0, 228.0 / 255.0, 196.0 / 255.0, 1.0
-                    #     ),
-                    # )
-                    CameraConfig(**kwargs)
-                )
+                camera_configs.append(CameraConfig(**kwargs))
             sim_config.camera_configs = camera_configs
         if "multi_run_config" in cfg and cfg.multi_run_config:
             sim_config.multi_run_config = hydra.utils.instantiate(cfg.multi_run_config)
