@@ -33,12 +33,12 @@ def identify_high_angular_speed(angular_speed, threshold, window_size):
         if window_avg > threshold:
             ret = True
     print(f"Max window average: {max_window_avg}")
-    return ret
+    return ret, max_window_avg
 
 
 if __name__ == "__main__":
-    # Root directory containing subdirectories with demonstration data
-    root_dir = "trajectories_rendered/test_angular_speed"
+    # Root directory containing subdirectories with demonstrat  ion data
+    root_dir = "trajectories_rendered/test_angular_speed_reg_25"
     # Threshold for high angular speed (this can be adjusted)
     angular_speed_threshold = 2.0
     # Number of consecutive time steps for high angular speed
@@ -60,6 +60,7 @@ if __name__ == "__main__":
             subdirs.append(subdir)
     subdirs.sort(key=lambda x: int(x))
 
+    max_speeds = []
     for subdir in subdirs:
         # Path to the pickle file
         subdir_path = os.path.join(root_dir, subdir)
@@ -79,9 +80,10 @@ if __name__ == "__main__":
 
         # Identify high angular speed moments
         print(f"Subdirectory: {subdir}")
-        has_high_angular_speed = identify_high_angular_speed(
+        has_high_angular_speed, max_speed = identify_high_angular_speed(
             angular_speed, angular_speed_threshold, window_size
         )
+        max_speeds.append(max_speed)
 
         # If high angular speed moments are found, add the subdirectory to the list
         if has_high_angular_speed:
@@ -95,3 +97,4 @@ if __name__ == "__main__":
     print(
         f"Ratio of high angular speed: {len(subdirs_with_high_angular_speed) / len(subdirs)}"
     )
+    print(f"Mean window average: {sum(max_speeds) / len(max_speeds)}")

@@ -159,10 +159,6 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
         limit_rotations=False,
         noise_final_pose=False,
     )
-    indices = np.array([1, 4, 5, 7, 10, 12, 13, 15, 16, 19, 20, 21, 22, 24])
-    # indices = indices[:3]
-    index = [4]
-    plan_starts_and_goals = [plan_starts_and_goals[i] for i in indices]
     print(f"Finished generating start and goal pairs.")
 
     ## Generate plans
@@ -171,10 +167,6 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
     num_plans = 0
     while num_plans < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
-
-        print(
-            f"Generating plan {plan_idx}: {plan.slider_initial_pose} -> {plan.slider_target_pose}"
-        )
 
         success = create_plan(
             plan_spec=plan,
