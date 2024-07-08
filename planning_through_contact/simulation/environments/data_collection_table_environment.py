@@ -84,6 +84,8 @@ class PlanConfig:
     limit_rotations: bool
     noise_final_pose: float
 
+    # Default values
+    ang_velocity_regularization: float = None
     # Multimodal generation
     num_unique_plans: int = 1
     sort_plans: bool = True
@@ -107,6 +109,8 @@ class DataCollectionConfig:
         image_height: int,
         policy_freq: float,
         plan_config: PlanConfig,
+        angular_speed_threshold: float = None,
+        angular_speed_window_size: int = None,
         LLSUB_RANK: int = None,
         LLSUB_SIZE: int = None,
     ):
@@ -134,6 +138,10 @@ class DataCollectionConfig:
 
         # Plan generatino config
         self.plan_config = plan_config
+
+        # angular speed params
+        self.angular_speed_threshold = angular_speed_threshold
+        self.angular_speed_window_size = angular_speed_window_size
 
         # Supercloud settings
         self.LLSUB_RANK = LLSUB_RANK

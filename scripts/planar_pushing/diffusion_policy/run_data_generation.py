@@ -132,6 +132,10 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
     solver_params = get_default_solver_params(debug=False, clarabel=False)
     config.contact_config.lam_min = _plan_config.contact_lam_min
     config.contact_config.lam_max = _plan_config.contact_lam_max
+    if _plan_config.ang_velocity_regularization is not None:
+        config.contact_config.cost.ang_velocity_regularization = (
+            _plan_config.ang_velocity_regularization
+        )
     config.non_collision_cost.distance_to_object_socp = (
         _plan_config.distance_to_object_socp
     )
@@ -167,10 +171,6 @@ def generate_plans(data_collection_config: DataCollectionConfig, cfg: OmegaConf)
     num_plans = 0
     while num_plans < _plan_config.num_plans and plan_idx < len(plan_starts_and_goals):
         plan = plan_starts_and_goals[plan_idx]
-
-        print(
-            f"Generating plan {plan_idx}: {plan.slider_initial_pose} -> {plan.slider_target_pose}"
-        )
 
         success = create_plan(
             plan_spec=plan,
@@ -414,18 +414,30 @@ def convert_to_zarr(
     freq = data_collection_config.policy_freq
     dt = 1 / freq
 
+    num_ik_fails = 0
+    num_angular_speed_violations = 0
+
     for traj_dir in tqdm(traj_dir_list):
         traj_log_path = traj_dir.joinpath("combined_logs.pkl")
         log_path = traj_dir.joinpath("log.txt")
 
         # If too many IK fails, skip this rollout
         if _is_ik_fail(log_path):
+            num_ik_fails += 1
             continue
 
         # load pickle file and timing variables
         combined_logs = pickle.load(open(traj_log_path, "rb"))
         pusher_desired = combined_logs.pusher_desired
         slider_desired = combined_logs.slider_desired
+
+        if _has_high_angular_speed(
+            slider_desired,
+            data_collection_config.angular_speed_threshold,
+            data_collection_config.angular_speed_window_size,
+        ):
+            num_angular_speed_violations += 1
+            continue
 
         t = pusher_desired.t
         total_time = math.floor(t[-1] * freq) / freq
@@ -479,9 +491,16 @@ def convert_to_zarr(
         episode_ends.append(current_end + len(state))
         current_end += len(state)
 
-    print(
-        f"{len(traj_dir_list)-len(episode_ends)} of {len(traj_dir_list)} rollouts were skipped due to IK fails."
+    assert num_ik_fails + num_angular_speed_violations + len(episode_ends) == len(
+        traj_dir_list
     )
+    print(
+        f"{num_ik_fails} of {len(traj_dir_list)} rollouts were skipped due to IK fails."
+    )
+    print(
+        f"{num_angular_speed_violations} of {len(traj_dir_list)} rollouts were skipped due to high angular speeds."
+    )
+    print(f"Total number of converted rollouts: {len(episode_ends)}\n")
 
     # save to zarr
     zarr_path = data_collection_config.zarr_path
@@ -564,6 +583,13 @@ def convert_to_zarr(
             pusher_desired = combined_logs.pusher_desired
             total_time = pusher_desired.t[-1]
             total_time = math.floor(total_time * freq) / freq
+
+            if _has_high_angular_speed(
+                combined_logs.slider_desired,
+                data_collection_config.angular_speed_threshold,
+                data_collection_config.angular_speed_window_size,
+            ):
+                continue
 
             # get start time
             start_idx = _get_start_idx(pusher_desired)
@@ -682,6 +708,40 @@ def _get_closest_index(arr, t, start_idx=None, end_idx=None):
         if diff < min_diff:
             min_diff = diff
             min_idx = i
+
+
+def _compute_angular_speed(time, orientation):
+    dt = np.diff(time)
+    dtheta = np.diff(orientation)
+    angular_speed = abs(dtheta / dt)
+
+    # Remove sharp angular velocity at beginning
+    first_zero_idx = -1
+    for i in range(len(angular_speed)):
+        if np.allclose(angular_speed[i], 0.0):
+            first_zero_idx = i
+            break
+
+    return angular_speed[first_zero_idx:]
+
+
+# Function to identify high angular speed moments
+def _has_high_angular_speed(slider_desired, threshold, window_size):
+    if threshold is None:
+        return False
+
+    angular_speed = _compute_angular_speed(slider_desired.t, slider_desired.theta)
+    angular_speed_cumsum = np.cumsum(angular_speed)
+    max_window_avg = -1
+    ret = False
+    for i in range(len(angular_speed_cumsum) - window_size):
+        window_avg = (
+            angular_speed_cumsum[i + window_size] - angular_speed_cumsum[i]
+        ) / window_size
+        max_window_avg = max(max_window_avg, window_avg)
+        if window_avg > threshold:
+            return True
+    return False
 
 
 def _get_plan_start_and_goals_to_point(

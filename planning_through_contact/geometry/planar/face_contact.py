@@ -615,6 +615,19 @@ class FaceContactMode(AbstractContactMode):
                     )
                     self.costs["keypoint_reg"].append(cost)
 
+        # Angular velocity regularization
+        if cost_config.ang_velocity_regularization is not None:
+            for k, (delta_cos_th, delta_sin_th) in enumerate(
+                zip(self.variables.cos_th_vels, self.variables.sin_th_vels)
+            ):
+                cost = self.prog_wrapper.add_quadratic_cost(
+                    k,
+                    k + 1,
+                    cost_config.ang_velocity_regularization
+                    * (delta_sin_th**2 + delta_cos_th**2),
+                )
+                self.costs["angular_vel_reg"].append(cost)
+
     def set_finger_pos(self, lam_target: float) -> None:
         """
         Set finger position along the contact face.

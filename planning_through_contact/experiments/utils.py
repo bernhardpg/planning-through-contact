@@ -84,6 +84,7 @@ def get_default_contact_cost() -> ContactCost:
         keypoint_arc_length=10.0,
         force_regularization=100000.0,  # NOTE: This is multiplied by 1e-4 because we have forces in other units in the optimization problem
         keypoint_velocity_regularization=100.0,
+        ang_velocity_regularization=None,
         trace=None,
         mode_transition_cost=None,
         time=1.0,
