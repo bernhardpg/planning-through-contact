@@ -70,6 +70,8 @@ def run_sim(cfg: OmegaConf):
         arbitrary_shape_pickle_path=cfg.arbitrary_shape_pickle_path,
     )
 
+    environment.export_diagram("diffusion_environment_diagram.pdf")
+
     # Configure sim and recording
     recording_name = "diffusion_policy_roll_out.html"
     # environment.export_diagram("diffusion_environment_diagram.pdf")

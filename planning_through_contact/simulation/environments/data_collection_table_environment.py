@@ -247,10 +247,11 @@ class DataCollectionTableEnvironment:
             )
 
         # Add system to convert slider_pose to generalized coords
+        slider_z_value = self._state_estimator.get_slider_shapes()[0].height() / 2
         self._slider_pose_to_generalized_coords = builder.AddNamedSystem(
             "PlanarPoseToGeneralizedCoords",
             PlanarPoseToGeneralizedCoords(
-                z_value=0.025,  # Assumes objects are 5cm tall
+                z_value=slider_z_value,
                 z_axis_is_positive=True,
             ),
         )
