@@ -111,14 +111,16 @@ robot_station:
 ## Data Collection Config
 data_collection_config:
   _target_: planning_through_contact.simulation.environments.data_collection_table_environment.DataCollectionConfig
-  generate_plans: true
-  render_plans: true
-  convert_to_zarr: false
+  generate_plans: false
+  render_plans: false
+  convert_to_zarr: true
   convert_to_zarr_reduce: false # Supercloud flag to perform "reduce" step
-  plans_dir: 'trajectories/test_angular_speed_reg_25'
-  rendered_plans_dir: 'trajectories_rendered/test_angular_speed_reg_25'
+  plans_dir: 'trajectories/test'
+  rendered_plans_dir: 'trajectories_rendered/test'
   zarr_path: 'trajectories_rendered/iiwa_cotrain_data.zarr'
   policy_freq: 10.0
+  angular_speed_threshold: 1.0 # rad/s
+  angular_speed_window_size: 3
   state_chunk_length: 1024
   action_chunk_length: 2048
   target_chunk_length: 1024
@@ -132,6 +134,7 @@ data_collection_config:
     slider_type: ${slider_type}
     arbitrary_shape_pickle_path: ${arbitrary_shape_pickle_path}
     pusher_radius: 0.015
+    ang_velocity_regularization: 25 # null
     contact_lam_min: 0.2
     contact_lam_max: 0.8
     distance_to_object_socp: 0.25
@@ -142,11 +145,11 @@ data_collection_config:
       - ${slider_goal_pose.y}
     buffer: 0.0
     seed: 0
-    num_plans: 25
+    num_plans: 5
     pusher_start_pose: ${pusher_start_pose}
     slider_goal_pose: ${slider_goal_pose}
     limit_rotations: false
-    noise_final_pose: true
+    noise_final_pose: false
     num_unique_plans: 1
     sort_plans: true
   ## Supercloud
