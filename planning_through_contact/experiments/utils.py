@@ -145,7 +145,7 @@ def get_default_plan_config(
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
-    use_case: Literal["hardware", "demo", "normal"] = "demo",
+    use_case: Literal["hardware", "demo", "normal"] = "normal",
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
