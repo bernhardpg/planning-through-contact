@@ -2,7 +2,7 @@
 
 ## RSS 2024: Towards Tight Convex Relaxations for Contact-Rich Manipulation
 
-**💻 Paper website**: [Towards Tight Convex Relaxations for Contact-Rich Manipulation](https://bernhardgraesdal.com/rss24-towards-tight-convex-relaxations/)
+**🌐 Paper website**: [Towards Tight Convex Relaxations for Contact-Rich Manipulation](https://bernhardgraesdal.com/rss24-towards-tight-convex-relaxations/)
 
 **📋 Paper**: [arXiv](https://arxiv.org/pdf/2402.10312)
 
@@ -12,14 +12,19 @@
   <img src="images/demo_tee.gif" alt="Demo T" width="30%" />
 </p>
 
-The code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
+💻 The code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
+
 The trajectories and data in the paper are generated with `scripts/planar_pushing/create_plans.py`.
+
+📘 You can find an introduction notebook to using the code [here](https://github.com/bernhardpg/planning-through-contact/blob/introductory-notebook/notebooks/planar_pushing.ipynb).
+
+**If you run into any problems, don't hesitate to reach out or create an issue.**
 
 ---
 
 **⚠️ Note: This repo is under active development and may be changed at any time. ⚠️**
 
-## Installation (Linux and MacOS)
+## 🚀 Installation (Linux and MacOS)
 
 This repo uses Poetry for dependency management. To setup this project, first
 install [Poetry](https://python-poetry.org/docs/#installation) and, make sure
