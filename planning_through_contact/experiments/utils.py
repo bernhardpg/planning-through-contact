@@ -198,7 +198,7 @@ def get_default_plan_config(
         # We add some specific regularization on the angular velocity so
         # the plans don't rotate the object too quickly (this gives plans
         # that are easier to use for i.e. diffusion policy training).
-        contact_cost.angular_velocity_regularixation = 25
+        contact_cost.angular_velocity_regularixation = 10
         non_collision_cost = get_default_non_collision_cost()
         buffer_to_corners = 0.0
         contact_config = ContactConfig(
