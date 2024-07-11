@@ -2,17 +2,18 @@
 
 ## RSS 2024: Towards Tight Convex Relaxations for Contact-Rich Manipulation
 
-Paper website: [Towards Tight Convex Relaxations for Contact-Rich Manipulation](https://bernhardgraesdal.com/rss24-towards-tight-convex-relaxations/)
+**💻 Paper website**: [Towards Tight Convex Relaxations for Contact-Rich Manipulation](https://bernhardgraesdal.com/rss24-towards-tight-convex-relaxations/)
 
-Paper: [arXiv](https://arxiv.org/pdf/2402.10312)
+**📋 Paper**: [arXiv](https://arxiv.org/pdf/2402.10312)
 
 <p align="center">
   <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
-  <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
-  <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
+  <img src="images/demo_convex4.gif" alt="Demo convex object" width="30%" />
+  <img src="images/demo_tee.gif" alt="Demo T" width="30%" />
 </p>
 
 The code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
+The trajectories and data in the paper are generated with `scripts/planar_pushing/create_plans.py`.
 
 ---
 
