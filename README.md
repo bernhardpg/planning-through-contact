@@ -22,13 +22,13 @@ The trajectories and data in the paper are generated with `scripts/planar_pushin
 
 ---
 
-**⚠️ Note: This repo is under active development and may be changed at any time. ⚠️**
+**⚠️ Note: This repo is under active development changes to the code may occur. ⚠️**
 
 ## 🚀 Installation (Linux and MacOS)
 
 This repo uses Poetry for dependency management. To setup this project, first
 install [Poetry](https://python-poetry.org/docs/#installation) and, make sure
-to have Python3.11 installed on your system.
+to have Python3.12 installed on your system.
 
 Then, configure poetry to setup a virtual environment that uses Python 3.12:
 
