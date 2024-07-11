@@ -113,11 +113,17 @@ python scripts/planar_pushing/create_plan.py
 which takes a number of command line arguments. Add the flag `--help` for a
 description of these.
 
-For instance, to generate 10 plans for a box slider geometry, run
+For instance, to generate 10 plans for a rectangular slider geometry, run
 
 ```python
-python scripts/planar_pushing/create_plan.py --body box --seed 0 --num 10
+python scripts/planar_pushing/create_plan.py --body sugar_box --seed 0 --num 10
 ```
+
+which will generate plans that look like this:
+
+<p align="center">
+  <img src="images/demo_box.gif" alt="Demo triangle" width="70%" />
+</p>
 
 ---
 
