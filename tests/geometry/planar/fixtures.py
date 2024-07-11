@@ -60,7 +60,7 @@ def rigid_body_box(box_geometry: Box2d) -> RigidBody:
 
 @pytest.fixture
 def plan_config() -> PlanarPlanConfig:
-    cfg = get_default_plan_config()
+    cfg = get_default_plan_config(use_case="normal")
     return cfg
 
 
