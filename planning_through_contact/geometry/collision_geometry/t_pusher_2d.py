@@ -79,12 +79,10 @@ class TPusher2d(VertexDefinedGeometry, DrakeCollisionGeometryMixin):
         v7 = self.box_1.vertices[3]
         vs = [v0, v1, v2, v3, v4, v5, v6, v7]
 
-        # Calculated COM for Tee
-        vs_offset = [v - self.com_offset for v in vs]
-        return vs_offset
+        return vs
 
     def __post_init__(self):
-        super().__init__(self._calc_vertices_from_boxes())
+        super().__init__(self._calc_vertices_from_boxes(), self.com_offset)
 
     @property
     def max_contact_radius(self) -> float:

@@ -145,7 +145,7 @@ def get_default_plan_config(
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
-    use_case: Literal["hardware", "demo", "normal"] = "demo",
+    use_case: Literal["hardware", "demo", "normal"] = "normal",
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -162,7 +162,9 @@ def get_default_plan_config(
     else:
         raise NotImplementedError(f"Slider type {slider_type} not supported")
 
-    if use_case == "hardware":
+    if (
+        use_case == "hardware"
+    ):  # this is the config used for generating plans for hardware demos
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
             pusher_radius=pusher_radius,
