@@ -1,8 +1,22 @@
 # Planning Through Contact
 
-**Note: This repo is still under active development and is updated continuously.**
+## RSS 2024: Towards Tight Convex Relaxations for Contact-Rich Manipulation
+
+Paper website: [Towards Tight Convex Relaxations for Contact-Rich Manipulation](https://bernhardgraesdal.com/rss24-towards-tight-convex-relaxations/)
+
+Paper: [arXiv](https://arxiv.org/pdf/2402.10312)
+
+<p align="center">
+  <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
+  <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
+  <img src="images/demo_triangle.gif" alt="Demo triangle" width="30%" />
+</p>
+
+The code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
 
 ---
+
+**⚠️ Note: This repo is under active development and may be changed at any time. ⚠️**
 
 ## Installation (Linux and MacOS)
 
@@ -34,7 +48,7 @@ of Drake. To install, follow these instructions:
 Navigate to a desired installation location and run:
 
 ```console
-git clone git@github.com:bernhardpg/drake.git 
+git clone git@github.com:bernhardpg/drake.git
 cd drake
 git checkout towards-tight-convex-relaxations
 ```
