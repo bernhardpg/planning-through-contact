@@ -168,6 +168,7 @@ class ContactCost:
     force_regularization: Optional[float] = None
     keypoint_velocity_regularization: Optional[float] = None
     mode_transition_cost: Optional[float] = None
+    angular_velocity_regularixation: Optional[float] = None
     trace: Optional[float] = None
     time: Optional[float] = None
 

@@ -5,10 +5,6 @@ from planning_through_contact.deprecated.geometry.two_d.equilateral_polytope_2d 
     EquilateralPolytope2d,
 )
 from planning_through_contact.deprecated.geometry.two_d.t_pusher import TPusher
-from planning_through_contact.experiments.deprecated.planar_pushing.old.planar_pushing_gcs import (
-    DynamicsConfig,
-    PlanarPushingContactMode,
-)
 from planning_through_contact.geometry.collision_geometry.t_pusher_2d import TPusher2d
 from planning_through_contact.geometry.planar.planar_pose import PlanarPose
 from planning_through_contact.geometry.rigid_body import RigidBody
@@ -18,6 +14,10 @@ from planning_through_contact.visualize.visualizer_2d import (
     VisualizationPoint2d,
     VisualizationPolygon2d,
     Visualizer2d,
+)
+from scripts.unfinished_research.deprecated.planar_pushing.old.planar_pushing_gcs import (
+    DynamicsConfig,
+    PlanarPushingContactMode,
 )
 
 
