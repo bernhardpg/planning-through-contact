@@ -134,6 +134,16 @@ which will generate plans that look like this:
   <img src="images/demo_box.gif" alt="Demo triangle" width="70%" />
 </p>
 
+# Developers
+
+Before merging a branch to `main`, make sure the unit test pass by running
+
+```
+pytest
+```
+
+(after activating the virtual environment).
+
 # Other (experimental)
 
 ## Running a single hardware experiment
