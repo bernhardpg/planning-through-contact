@@ -344,6 +344,7 @@ class FaceContactMode(AbstractContactMode):
         self.costs = {
             "keypoint_arc": [],
             "keypoint_reg": [],
+            "angular_vel_reg": [],
             "force_reg": [],
             "contact_time": [],
             "mode_cost": [],
