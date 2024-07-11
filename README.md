@@ -12,13 +12,15 @@
   <img src="images/demo_tee.gif" alt="Demo T" width="30%" />
 </p>
 
-💻 The code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
-
-The trajectories and data in the paper are generated with `scripts/planar_pushing/create_plans.py`.
-
 📘 You can find an introduction notebook to generate planar pushing trajectories [here](https://github.com/bernhardpg/planning-through-contact/blob/introductory-notebook/notebooks/planar_pushing.ipynb).
 
 **If you run into any problems, don't hesitate to reach out or create an issue.**
+
+### Paper results
+
+💻 The exact code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
+The trajectories and data in the paper are generated with `scripts/planar_pushing/create_plans.py`, see the user guide below.
+However, if you are simply interested in using the code, it is recommended to use the updated code on the `main` branch.
 
 ---
 
