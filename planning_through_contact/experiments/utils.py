@@ -145,7 +145,7 @@ def get_default_plan_config(
     time_contact: float = 2.0,
     time_non_collision: float = 4.0,
     workspace: Optional[PlanarPushingWorkspace] = None,
-    use_case: Literal["hardware", "more_stable", "normal"] = "more_stable",
+    use_case: Literal["hardware", "demo", "normal"] = "demo",
 ) -> PlanarPlanConfig:
     if slider_type == "box":
         slider = get_box()
@@ -184,9 +184,7 @@ def get_default_plan_config(
 
         num_knot_points_non_collision = 5
         num_knot_points_contact = 3
-    elif (
-        use_case == "more_stable"
-    ):  # this config creates plans with lower rotational velocity that might be better suited for diffusion policies etc.
+    elif use_case == "demo":
         slider_pusher_config = SliderPusherSystemConfig(
             slider=slider,
             pusher_radius=pusher_radius,
@@ -195,10 +193,6 @@ def get_default_plan_config(
             integration_constant=0.3,
         )
         contact_cost = get_default_contact_cost()
-        # We add some specific regularization on the angular velocity so
-        # the plans don't rotate the object too quickly (this gives plans
-        # that are easier to use for i.e. diffusion policy training).
-        contact_cost.angular_velocity_regularixation = 10
         non_collision_cost = get_default_non_collision_cost()
         buffer_to_corners = 0.0
         contact_config = ContactConfig(
