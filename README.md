@@ -45,7 +45,14 @@ poetry install -vvv
 
 (the `-vvv` flag adds verbose output).
 
-#### Activating the environment
+For debug features to work, make sure to have graphviz installed on your computer. On MacOS, run the following
+command:
+
+```python
+brew install graphviz
+```
+
+### Activating the environment
 
 To activate the environment, run:
 
@@ -53,7 +60,7 @@ To activate the environment, run:
 poetry shell
 ```
 
-#### Installing customized Drake version
+### Installing customized Drake version
 
 **⚠️ At the moment, the code relies on a custom build of Drake. This will only be the case for another week or so, meaning that this step will not be necessary very soon⚠️**
 
@@ -124,19 +131,6 @@ which will generate plans that look like this:
 <p align="center">
   <img src="images/demo_box.gif" alt="Demo triangle" width="70%" />
 </p>
-
----
-
-## Visualizing graphs
-
-Make sure to have graphviz installed on your computer. On MacOS, run the following
-command:
-
-```python
-brew install graphviz
-```
-
----
 
 # Other (experimental)
 
