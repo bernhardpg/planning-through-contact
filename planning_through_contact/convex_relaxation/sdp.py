@@ -644,12 +644,33 @@ def plot_eigenvalues(X: npt.NDArray[np.float64]) -> None:
     plt.show()
 
 
+def print_eigenvalues(X: npt.NDArray[np.float64], threshold: float = 1e-4) -> None:
+    N = X.shape[0]
+    assert X.shape == (N, N)
+
+    # Compute eigenvalues
+    # (note: eigvalsh is more stable for real symmetric matrices)
+    eigenvalues = np.linalg.eigvalsh(X)
+
+    # Sort eigenvalues in descending order
+    sorted_eigenvalues = np.sort(eigenvalues)[::-1]
+
+    # Filter eigenvalues above the threshold
+    filtered_eigenvalues = sorted_eigenvalues[sorted_eigenvalues > threshold]
+
+    # Print the filtered eigenvalues
+    print("Eigenvalues above the threshold of {}: ".format(threshold))
+    for i, eigenvalue in enumerate(filtered_eigenvalues, start=1):
+        print("Eigenvalue {}: {:.4f}".format(i, eigenvalue))
+
+
 def solve_sdp_relaxation(
     qcqp: MathematicalProgram,
     print_solver_output: bool = False,
     plot_eigvals: bool = False,
+    print_eigvals: bool = False,
     trace_cost: bool = False,
-) -> None:
+) -> npt.NDArray[np.float64]:
     options = SemidefiniteRelaxationOptions()
     options.set_to_weakest()
 
@@ -670,6 +691,19 @@ def solve_sdp_relaxation(
 
     if plot_eigvals:
         plot_eigenvalues(X_val)
+
+    if print_eigvals:
+        print_eigenvalues(X_val)
+
+    return X_val
+
+
+def get_gaussian_from_sdp_relaxation_solution(X: npt.NDArray[np.float64]):
+    N = X.shape[0]
+    assert X.shape == (N, N)
+    assert X.dtype == float
+
+    breakpoint()
 
 
 def to_symmetric_matrix_from_lower_triangular_columns(

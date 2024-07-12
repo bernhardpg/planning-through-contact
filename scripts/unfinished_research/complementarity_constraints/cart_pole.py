@@ -262,7 +262,9 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    solve_sdp_relaxation(qcqp=trajopt.prog, plot_eigvals=True, trace_cost=False)
+    X = solve_sdp_relaxation(
+        qcqp=trajopt.prog, plot_eigvals=False, print_eigvals=True, trace_cost=False
+    )
 
 
 def main() -> None:
