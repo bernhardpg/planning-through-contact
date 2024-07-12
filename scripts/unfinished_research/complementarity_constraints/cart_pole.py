@@ -142,19 +142,19 @@ class LcsTrajectoryOptimization:
                 prog.AddLinearEqualityConstraint(c)
 
         # RHS nonnegativity of complementarity constraint
-        for k in range(params.N - 1):
+        for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
 
             rhs = sys.get_complementarity_rhs(x, u, λ)
             prog.AddLinearConstraint(ge(rhs, 0))
 
         # LHs nonnegativity of complementarity constraint
-        for k in range(params.N - 1):
+        for k in range(params.N):
             λ = λs[k]
             prog.AddLinearConstraint(ge(λ, 0))
 
         # Complementarity constraint (element-wise)
-        for k in range(params.N - 1):
+        for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
             rhs = sys.get_complementarity_rhs(x, u, λ)
 
@@ -203,6 +203,25 @@ def test_lcs_trajectory_optimization():
     assert trajopt.xs.shape == (params.N + 1, sys.num_states)
     assert trajopt.us.shape == (params.N, sys.num_inputs)
     assert trajopt.λs.shape == (params.N, sys.num_forces)
+
+    # Dynamics
+    assert (
+        len(trajopt.prog.linear_equality_constraints())
+        == (params.N - 1) * sys.num_states
+    )
+
+    # Complementarity LHS and RHS ≥ 0
+    assert (
+        len(trajopt.prog.linear_constraints())
+        + len(trajopt.prog.bounding_box_constraints())
+        == params.N * 2
+    )
+
+    # Complementarity constraints
+    assert len(trajopt.prog.quadratic_constraints()) == params.N * sys.num_forces
+
+    # Running costs + terminal cost
+    assert len(trajopt.prog.quadratic_costs()) == params.N + params.N - 1
 
 
 def main() -> None:
