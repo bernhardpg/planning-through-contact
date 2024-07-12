@@ -2,6 +2,7 @@ from enum import Enum
 from itertools import permutations
 from typing import Any, Callable, List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
@@ -619,6 +620,26 @@ def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) ->
         added_costs.append(c)
 
     return added_costs
+
+
+def plot_eigenvalues(X: npt.NDArray[np.float64]) -> None:
+    N = X.shape[0]
+    assert X.shape == (N, N)
+
+    # Compute eigenvalues
+    # (note: eigvalsh is more stable for real symmetric matrices)
+    eigenvalues = np.linalg.eigvalsh(X)
+
+    # Sort eigenvalues in descending order
+    sorted_eigenvalues = np.sort(eigenvalues)[::-1]
+
+    # Plot the sorted eigenvalues
+    indices = np.arange(len(sorted_eigenvalues))
+    plt.bar(indices, sorted_eigenvalues)
+    plt.xlabel("Index")
+    plt.ylabel("Eigenvalue")
+    plt.title("Eigenvalues of the Symmetric PSD Matrix (sorted)")
+    plt.show()
 
 
 def to_symmetric_matrix_from_lower_triangular_columns(

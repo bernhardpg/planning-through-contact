@@ -12,6 +12,12 @@ from pydrake.solvers import (
     SolverOptions,
 )
 
+from planning_through_contact.convex_relaxation.sdp import (
+    add_trace_cost_on_psd_cones,
+    get_X_from_semidefinite_relaxation,
+    plot_eigenvalues,
+)
+
 
 @dataclass
 class LinearComplementaritySystem:
@@ -266,10 +272,15 @@ def main() -> None:
     solver_options = SolverOptions()
     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
+    add_trace_cost_on_psd_cones(relaxed_prog)
+
     relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
     assert relaxed_result.is_success()
 
-    breakpoint()
+    X = get_X_from_semidefinite_relaxation(relaxed_prog)
+    X_val = relaxed_result.GetSolution(X)
+
+    plot_eigenvalues(X_val)
 
 
 if __name__ == "__main__":
