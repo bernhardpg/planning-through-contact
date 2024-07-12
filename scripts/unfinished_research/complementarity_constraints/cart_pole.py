@@ -4,6 +4,7 @@ from time import time
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+from matplotlib.axes import Axes
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
 
@@ -260,6 +261,10 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
 
     # Plotting the attributes
     fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+
+    # Ensure axs is a list of Axes
+    if isinstance(axs, Axes):
+        axs = [axs]
 
     # Plot success values
     axs[0].bar(range(num_rounding_trials), success_values)
