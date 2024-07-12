@@ -248,10 +248,31 @@ def test_lcs_trajectory_optimization():
     assert len(trajopt.prog.quadratic_costs()) == params.N + params.N - 1
 
 
-def main() -> None:
-    test_cart_pole_w_walls()
-    test_lcs_trajectory_optimization()
+def solve_sdp_relaxation(
+    qcqp: MathematicalProgram, plot_eigvals: bool = False, trace_cost: bool = False
+) -> None:
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
 
+    sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+
+    solver_options = SolverOptions()
+    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    if trace_cost:
+        add_trace_cost_on_psd_cones(sdp_relaxation)
+
+    relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
+    assert relaxed_result.is_success()
+
+    X = get_X_from_semidefinite_relaxation(sdp_relaxation)
+    X_val = relaxed_result.GetSolution(X)
+
+    if plot_eigvals:
+        plot_eigenvalues(X_val)
+
+
+def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
     params = TrajectoryOptimizationParameters(
         N=10,
@@ -264,23 +285,14 @@ def main() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    options = SemidefiniteRelaxationOptions()
-    options.set_to_weakest()
+    solve_sdp_relaxation(qcqp=trajopt.prog, trace_cost=True)
 
-    relaxed_prog = MakeSemidefiniteRelaxation(trajopt.prog, options)
 
-    solver_options = SolverOptions()
-    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+def main() -> None:
+    test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
 
-    add_trace_cost_on_psd_cones(relaxed_prog)
-
-    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
-    assert relaxed_result.is_success()
-
-    X = get_X_from_semidefinite_relaxation(relaxed_prog)
-    X_val = relaxed_result.GetSolution(X)
-
-    plot_eigenvalues(X_val)
+    cart_pole_experiment_1()
 
 
 if __name__ == "__main__":
