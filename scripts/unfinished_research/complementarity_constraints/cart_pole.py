@@ -16,6 +16,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     add_trace_cost_on_psd_cones,
     get_X_from_semidefinite_relaxation,
     plot_eigenvalues,
+    solve_sdp_relaxation,
 )
 
 
@@ -246,34 +247,6 @@ def test_lcs_trajectory_optimization():
 
     # Running costs + terminal cost
     assert len(trajopt.prog.quadratic_costs()) == 2 * params.N + 1
-
-
-def solve_sdp_relaxation(
-    qcqp: MathematicalProgram,
-    print_solver_output: bool = False,
-    plot_eigvals: bool = False,
-    trace_cost: bool = False,
-) -> None:
-    options = SemidefiniteRelaxationOptions()
-    options.set_to_weakest()
-
-    sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
-
-    solver_options = SolverOptions()
-    if print_solver_output:
-        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-
-    if trace_cost:
-        add_trace_cost_on_psd_cones(sdp_relaxation)
-
-    relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
-    assert relaxed_result.is_success()
-
-    X = get_X_from_semidefinite_relaxation(sdp_relaxation)
-    X_val = relaxed_result.GetSolution(X)
-
-    if plot_eigvals:
-        plot_eigenvalues(X_val)
 
 
 def cart_pole_experiment_1() -> None:

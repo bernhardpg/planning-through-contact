@@ -9,6 +9,7 @@ import pydrake.symbolic as sym
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
+    CommonSolverOption,
     LinearConstraint,
     LinearEqualityConstraint,
     MakeSemidefiniteRelaxation,
@@ -19,6 +20,7 @@ from pydrake.solvers import (
     SemidefiniteRelaxationOptions,
     SnoptSolver,
     Solve,
+    SolverOptions,
 )
 
 from planning_through_contact.geometry.utilities import unit_vector
@@ -640,6 +642,34 @@ def plot_eigenvalues(X: npt.NDArray[np.float64]) -> None:
     plt.ylabel("Eigenvalue")
     plt.title("Eigenvalues of the Symmetric PSD Matrix (sorted)")
     plt.show()
+
+
+def solve_sdp_relaxation(
+    qcqp: MathematicalProgram,
+    print_solver_output: bool = False,
+    plot_eigvals: bool = False,
+    trace_cost: bool = False,
+) -> None:
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+
+    solver_options = SolverOptions()
+    if print_solver_output:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    if trace_cost:
+        add_trace_cost_on_psd_cones(sdp_relaxation)
+
+    relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
+    assert relaxed_result.is_success()
+
+    X = get_X_from_semidefinite_relaxation(sdp_relaxation)
+    X_val = relaxed_result.GetSolution(X)
+
+    if plot_eigvals:
+        plot_eigenvalues(X_val)
 
 
 def to_symmetric_matrix_from_lower_triangular_columns(
