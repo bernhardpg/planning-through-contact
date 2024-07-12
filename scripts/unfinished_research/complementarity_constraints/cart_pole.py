@@ -427,7 +427,7 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    Y = solve_sdp_relaxation(
+    Y, cost_relaxed = solve_sdp_relaxation(
         qcqp=trajopt.qcqp, plot_eigvals=False, print_eigvals=False, trace_cost=False
     )
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
@@ -450,10 +450,14 @@ def cart_pole_experiment_1() -> None:
         )
         trials.append(trial)
 
-    plot_rounding_trials(trials)
+    # plot_rounding_trials(trials)
 
     best_trial_idx = np.argmax([trial.cost for trial in trials])
     best_trial = trials[best_trial_idx]
+
+    cost_rounded = best_trial.cost
+
+    print(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
 
     xs_sol = evaluate_np_expressions_array(trajopt.xs, best_trial.result)
     # plot_cart_pole_trajectories(xs_sol)

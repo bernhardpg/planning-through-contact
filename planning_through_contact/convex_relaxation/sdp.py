@@ -670,7 +670,7 @@ def solve_sdp_relaxation(
     plot_eigvals: bool = False,
     print_eigvals: bool = False,
     trace_cost: bool = False,
-) -> npt.NDArray[np.float64]:
+) -> tuple[npt.NDArray[np.float64], float]:
     options = SemidefiniteRelaxationOptions()
     options.set_to_weakest()
 
@@ -695,7 +695,7 @@ def solve_sdp_relaxation(
     if print_eigvals:
         print_eigenvalues(X_val)
 
-    return X_val
+    return X_val, relaxed_result.get_optimal_cost()
 
 
 def get_gaussian_from_sdp_relaxation_solution(
