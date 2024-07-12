@@ -1,21 +1,14 @@
 from dataclasses import dataclass
+from time import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge
-from pydrake.solvers import (
-    CommonSolverOption,
-    MakeSemidefiniteRelaxation,
-    MathematicalProgram,
-    SemidefiniteRelaxationOptions,
-    Solve,
-    SolverOptions,
-)
+from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
 
 from planning_through_contact.convex_relaxation.sdp import (
-    add_trace_cost_on_psd_cones,
-    get_X_from_semidefinite_relaxation,
-    plot_eigenvalues,
+    get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
 
@@ -150,11 +143,11 @@ class LcsTrajectoryOptimization:
         x0: npt.NDArray[np.float64],
     ):
 
-        prog = MathematicalProgram()
-        xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
+        qcqp = MathematicalProgram()
+        xs = qcqp.NewContinuousVariables(params.N, sys.num_states, "x")
         xs = np.vstack([x0, xs])  # First entry of xs is x0
-        us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
-        λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+        us = qcqp.NewContinuousVariables(params.N, sys.num_inputs, "u")
+        λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
         # Dynamics
         for k in range(params.N - 1):
@@ -164,19 +157,19 @@ class LcsTrajectoryOptimization:
             x_dot = sys.get_x_dot(x, u, λ)
             forward_euler = eq(x_next, x + params.T_s * x_dot)
             for c in forward_euler:
-                prog.AddLinearEqualityConstraint(c)
+                qcqp.AddLinearEqualityConstraint(c)
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
 
             rhs = sys.get_complementarity_rhs(x, u, λ)
-            prog.AddLinearConstraint(ge(rhs, 0))
+            qcqp.AddLinearConstraint(ge(rhs, 0))
 
         # LHs nonnegativity of complementarity constraint
         for k in range(params.N):
             λ = λs[k]
-            prog.AddLinearConstraint(ge(λ, 0))
+            qcqp.AddLinearConstraint(ge(λ, 0))
 
         # Complementarity constraint (element-wise)
         for k in range(params.N):
@@ -185,7 +178,7 @@ class LcsTrajectoryOptimization:
 
             elementwise_product = λ * rhs
             for p in elementwise_product:
-                prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+                qcqp.AddQuadraticConstraint(p, 0, 0)  # p == 0
 
         # Input limits
         # TODO
@@ -196,15 +189,15 @@ class LcsTrajectoryOptimization:
         # Cost
         for k in range(params.N):
             x, u = xs[k], us[k]
-            prog.AddQuadraticCost(x.T @ params.Q @ x)
+            qcqp.AddQuadraticCost(x.T @ params.Q @ x)
 
             u = u.reshape((-1, 1))  # handle the case where u.shape = (1,)
-            prog.AddQuadraticCost((u.T @ params.R @ u).item())
+            qcqp.AddQuadraticCost((u.T @ params.R @ u).item())
 
         # Terminal cost
-        prog.AddQuadraticCost(xs[params.N].T @ params.Q_N @ xs[params.N])
+        qcqp.AddQuadraticCost(xs[params.N].T @ params.Q_N @ xs[params.N])
 
-        self.prog = prog
+        self.qcqp = qcqp
         self.xs = xs
         self.us = us
         self.λs = λs
@@ -231,22 +224,66 @@ def test_lcs_trajectory_optimization():
 
     # Dynamics
     assert (
-        len(trajopt.prog.linear_equality_constraints())
+        len(trajopt.qcqp.linear_equality_constraints())
         == (params.N - 1) * sys.num_states
     )
 
     # Complementarity LHS and RHS ≥ 0
     assert (
-        len(trajopt.prog.linear_constraints())
-        + len(trajopt.prog.bounding_box_constraints())
+        len(trajopt.qcqp.linear_constraints())
+        + len(trajopt.qcqp.bounding_box_constraints())
         == params.N * 2
     )
 
     # Complementarity constraints
-    assert len(trajopt.prog.quadratic_constraints()) == params.N * sys.num_forces
+    assert len(trajopt.qcqp.quadratic_constraints()) == params.N * sys.num_forces
 
     # Running costs + terminal cost
-    assert len(trajopt.prog.quadratic_costs()) == 2 * params.N + 1
+    assert len(trajopt.qcqp.quadratic_costs()) == 2 * params.N + 1
+
+
+@dataclass
+class RoundingTrial:
+    success: bool
+    time: float
+    cost: float
+    result: MathematicalProgramResult
+
+
+def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
+    num_rounding_trials = len(trials)
+
+    # Extract attributes for plotting
+    success_values = [trial.success for trial in trials]
+    time_values = [trial.time for trial in trials]
+    cost_values = [trial.cost for trial in trials]
+
+    # Plotting the attributes
+    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+
+    # Plot success values
+    axs[0].bar(range(num_rounding_trials), success_values)
+    axs[0].set_xlabel("Trial Index")
+    axs[0].set_ylabel("Success")
+    axs[0].set_title("Rounding Trial Success")
+    axs[0].set_xticks(range(num_rounding_trials))
+
+    # Plot time values
+    axs[1].bar(range(num_rounding_trials), time_values)
+    axs[1].set_xlabel("Trial Index")
+    axs[1].set_ylabel("Time (s)")
+    axs[1].set_title("Rounding Trial Time")
+    axs[1].set_xticks(range(num_rounding_trials))
+
+    # Plot cost values
+    axs[2].bar(range(num_rounding_trials), cost_values)
+    axs[2].set_xlabel("Trial Index")
+    axs[2].set_ylabel("Cost")
+    axs[2].set_title("Rounding Trial Cost")
+    axs[2].set_xticks(range(num_rounding_trials))
+
+    plt.tight_layout()
+    plt.show()
 
 
 def cart_pole_experiment_1() -> None:
@@ -262,9 +299,30 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    X = solve_sdp_relaxation(
-        qcqp=trajopt.prog, plot_eigvals=False, print_eigvals=True, trace_cost=False
+    Y = solve_sdp_relaxation(
+        qcqp=trajopt.qcqp, plot_eigvals=False, print_eigvals=True, trace_cost=False
     )
+    μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+
+    num_rounding_trials = 10
+    initial_guesses = np.random.multivariate_normal(
+        mean=μ, cov=Σ, size=num_rounding_trials
+    )
+    trials = []
+    for initial_guess in initial_guesses:
+        snopt = SnoptSolver()
+
+        start = time()
+        result = snopt.Solve(trajopt.qcqp, initial_guess)
+        end = time()
+        rounding_time = end - start
+
+        trial = RoundingTrial(
+            result.is_success(), rounding_time, result.get_optimal_cost(), result
+        )
+        trials.append(trial)
+
+    plot_rounding_trials(trials)
 
 
 def main() -> None:

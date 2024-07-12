@@ -698,12 +698,31 @@ def solve_sdp_relaxation(
     return X_val
 
 
-def get_gaussian_from_sdp_relaxation_solution(X: npt.NDArray[np.float64]):
-    N = X.shape[0]
-    assert X.shape == (N, N)
-    assert X.dtype == float
+def get_gaussian_from_sdp_relaxation_solution(
+    Y: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Follows the sceme from Section 3.3 in
+    J. Park and S. P. Boyd, “General Heuristics for
+    Nonconvex Quadratically Constrained Quadratic Programming,” 2017
 
-    breakpoint()
+    Y = [X  x
+         xᵀ 1]
+
+    @return (mean vector, covariance matrix)
+    """
+    N = Y.shape[0]
+    assert Y.shape == (N, N)
+    assert Y.dtype == float
+
+    assert np.isclose(Y[-1, -1], 1)
+    X = Y[:-1, :-1]
+    x = Y[:-1, -1]
+
+    μ = x
+    Σ = X - np.outer(x, x)
+
+    return μ, Σ
 
 
 def to_symmetric_matrix_from_lower_triangular_columns(
