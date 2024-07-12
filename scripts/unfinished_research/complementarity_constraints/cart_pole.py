@@ -3,7 +3,14 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 from pydrake.math import eq, ge
-from pydrake.solvers import MathematicalProgram
+from pydrake.solvers import (
+    CommonSolverOption,
+    MakeSemidefiniteRelaxation,
+    MathematicalProgram,
+    SemidefiniteRelaxationOptions,
+    Solve,
+    SolverOptions,
+)
 
 
 @dataclass
@@ -50,6 +57,17 @@ class CartPoleWithWalls(LinearComplementaritySystem):
     A. Aydinoglu, P. Sieg, V. M. Preciado, and M. Posa,
     “Stabilization of Complementarity Systems via
     Contact-Aware Controllers.” 2021
+
+    x_1 = cart position
+    x_2 = pole position
+    x_3 = cart velocity
+    x_4 = pole velocity
+
+    u_1 = force applied to cart
+
+    λ_1 = contact force from right wall
+    λ_2 = contact force from left wall
+
     """
 
     def __init__(self):
@@ -236,6 +254,22 @@ def main() -> None:
         Q_N=np.diag([1, 1, 1, 1]),
         R=np.array([1]),
     )
+    x0 = np.array([0.35, 0, 0, 0])
+
+    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+
+    options = SemidefiniteRelaxationOptions()
+    options.set_to_weakest()
+
+    relaxed_prog = MakeSemidefiniteRelaxation(trajopt.prog, options)
+
+    solver_options = SolverOptions()
+    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    relaxed_result = Solve(relaxed_prog, solver_options=solver_options)
+    assert relaxed_result.is_success()
+
+    breakpoint()
 
 
 if __name__ == "__main__":
