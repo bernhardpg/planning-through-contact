@@ -108,55 +108,115 @@ def test_cart_pole_w_walls():
     assert sys.get_complementarity_rhs(x, u, λ).shape == (sys.num_forces,)
 
 
+@dataclass
+class TrajectoryOptimizationParameters:
+    N: int
+    T_s: float
+    Q: npt.NDArray[np.float64]
+    Q_N: npt.NDArray[np.float64]
+    R: npt.NDArray[np.float64]
+
+
+class LcsTrajectoryOptimization:
+    def __init__(
+        self,
+        sys: LinearComplementaritySystem,
+        params: TrajectoryOptimizationParameters,
+        x0: npt.NDArray[np.float64],
+    ):
+
+        prog = MathematicalProgram()
+        xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
+        xs = np.vstack([x0, xs])  # First entry of xs is x0
+        us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
+        λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+
+        # Dynamics
+        for k in range(params.N - 1):
+            x, u, λ = xs[k], us[k], λs[k]
+            x_next = xs[k + 1]
+
+            x_dot = sys.get_x_dot(x, u, λ)
+            forward_euler = eq(x_next, x + params.T_s * x_dot)
+            for c in forward_euler:
+                prog.AddLinearEqualityConstraint(c)
+
+        # RHS nonnegativity of complementarity constraint
+        for k in range(params.N - 1):
+            x, u, λ = xs[k], us[k], λs[k]
+
+            rhs = sys.get_complementarity_rhs(x, u, λ)
+            prog.AddLinearConstraint(ge(rhs, 0))
+
+        # LHs nonnegativity of complementarity constraint
+        for k in range(params.N - 1):
+            λ = λs[k]
+            prog.AddLinearConstraint(ge(λ, 0))
+
+        # Complementarity constraint (element-wise)
+        for k in range(params.N - 1):
+            x, u, λ = xs[k], us[k], λs[k]
+            rhs = sys.get_complementarity_rhs(x, u, λ)
+
+            elementwise_product = λ * rhs
+            for p in elementwise_product:
+                prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+
+        # Input limits
+        # TODO
+
+        # State limits
+        # TODO
+
+        # Cost
+        for k in range(params.N - 1):
+            x, u = xs[k], us[k]
+            prog.AddQuadraticCost(x.T @ params.Q @ x)
+
+            u = u.reshape((-1, 1))  # handle the case where u.shape = (1,)
+            prog.AddQuadraticCost((u.T @ params.R @ u).item())
+
+        # Terminal cost
+        prog.AddQuadraticCost(xs[params.N].T @ params.Q_N @ xs[params.N])
+
+        self.prog = prog
+        self.xs = xs
+        self.us = us
+        self.λs = λs
+
+
+# TODO: Move to unit test
+def test_lcs_trajectory_optimization():
+    sys = CartPoleWithWalls()
+    params = TrajectoryOptimizationParameters(
+        N=10,
+        T_s=0.01,
+        Q=np.diag([1, 1, 1, 1]),
+        Q_N=np.diag([1, 1, 1, 1]),
+        R=np.array([1]),
+    )
+
+    x0 = np.array([0, 0, 0, 0])
+
+    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+
+    assert trajopt.xs.shape == (params.N + 1, sys.num_states)
+    assert trajopt.us.shape == (params.N, sys.num_inputs)
+    assert trajopt.λs.shape == (params.N, sys.num_forces)
+
+
 def main() -> None:
     test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
 
     sys = CartPoleWithWalls()
-
-    N = 10
-    T_s = 0.01
-
-    prog = MathematicalProgram()
-    xs = prog.NewContinuousVariables(N, sys.num_states, "x")
-    us = prog.NewContinuousVariables(N, sys.num_inputs, "u")
-    λs = prog.NewContinuousVariables(N, sys.num_forces, "λ")
-
-    # Dynamics
-    for k in range(N - 1):
-        x, u, λ = xs[k], us[k], λs[k]
-        x_next = xs[k + 1]
-
-        x_dot = sys.get_x_dot(x, u, λ)
-        forward_euler = eq(x_next, x + T_s * x_dot)
-        for c in forward_euler:
-            prog.AddLinearEqualityConstraint(c)
-
-    # RHS nonnegativity of complementarity constraint
-    for k in range(N - 1):
-        x, u, λ = xs[k], us[k], λs[k]
-
-        rhs = sys.get_complementarity_rhs(x, u, λ)
-        prog.AddLinearConstraint(ge(rhs, 0))
-
-    # LHs nonnegativity of complementarity constraint
-    for k in range(N - 1):
-        λ = λs[k]
-        prog.AddLinearConstraint(ge(λ, 0))
-
-    # Complementarity constraint (element-wise)
-    for k in range(N - 1):
-        x, u, λ = xs[k], us[k], λs[k]
-        rhs = sys.get_complementarity_rhs(x, u, λ)
-
-        elementwise_product = λ * rhs
-        for p in elementwise_product:
-            prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
-
-    # Input limits
-    # TODO
-
-    # State limits
-    # TODO
+    params = TrajectoryOptimizationParameters(
+        N=10,
+        T_s=0.01,
+        Q=np.diag([1, 1, 1, 1]),
+        Q_N=np.diag([1, 1, 1, 1]),
+        R=np.array([1]),
+    )
 
 
 if __name__ == "__main__":
