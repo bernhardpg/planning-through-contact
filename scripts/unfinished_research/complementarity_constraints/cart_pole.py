@@ -193,7 +193,7 @@ class LcsTrajectoryOptimization:
         # TODO
 
         # Cost
-        for k in range(params.N - 1):
+        for k in range(params.N):
             x, u = xs[k], us[k]
             prog.AddQuadraticCost(x.T @ params.Q @ x)
 
@@ -245,11 +245,14 @@ def test_lcs_trajectory_optimization():
     assert len(trajopt.prog.quadratic_constraints()) == params.N * sys.num_forces
 
     # Running costs + terminal cost
-    assert len(trajopt.prog.quadratic_costs()) == params.N + params.N - 1
+    assert len(trajopt.prog.quadratic_costs()) == 2 * params.N + 1
 
 
 def solve_sdp_relaxation(
-    qcqp: MathematicalProgram, plot_eigvals: bool = False, trace_cost: bool = False
+    qcqp: MathematicalProgram,
+    print_solver_output: bool = False,
+    plot_eigvals: bool = False,
+    trace_cost: bool = False,
 ) -> None:
     options = SemidefiniteRelaxationOptions()
     options.set_to_weakest()
@@ -257,7 +260,8 @@ def solve_sdp_relaxation(
     sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
 
     solver_options = SolverOptions()
-    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    if print_solver_output:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
     if trace_cost:
         add_trace_cost_on_psd_cones(sdp_relaxation)
@@ -285,7 +289,7 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    solve_sdp_relaxation(qcqp=trajopt.prog, trace_cost=True)
+    solve_sdp_relaxation(qcqp=trajopt.prog, plot_eigvals=True, trace_cost=False)
 
 
 def main() -> None:
