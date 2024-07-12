@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from time import time
 
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -12,6 +13,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
+from planning_through_contact.tools.utils import evaluate_np_expressions_array
 
 
 @dataclass
@@ -259,6 +261,9 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
     time_values = [trial.time for trial in trials]
     cost_values = [trial.cost for trial in trials]
 
+    # Find the index of the trial with the lowest cost
+    best_trial_index = cost_values.index(min(cost_values))
+
     # Plotting the attributes
     fig, axs = plt.subplots(3, 1, figsize=(6, 6))
 
@@ -267,21 +272,30 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
         axs = [axs]
 
     # Plot success values
-    axs[0].bar(range(num_rounding_trials), success_values)
+    axs[0].bar(range(num_rounding_trials), success_values, color="grey")
+    axs[0].bar(
+        best_trial_index, success_values[best_trial_index], color="red"
+    )  # Highlight the best trial
     axs[0].set_xlabel("Trial Index")
     axs[0].set_ylabel("Success")
     axs[0].set_title("Rounding Trial Success")
     axs[0].set_xticks(range(num_rounding_trials))
 
     # Plot time values
-    axs[1].bar(range(num_rounding_trials), time_values)
+    axs[1].bar(range(num_rounding_trials), time_values, color="grey")
+    axs[1].bar(
+        best_trial_index, time_values[best_trial_index], color="red"
+    )  # Highlight the best trial
     axs[1].set_xlabel("Trial Index")
     axs[1].set_ylabel("Time (s)")
     axs[1].set_title("Rounding Trial Time")
     axs[1].set_xticks(range(num_rounding_trials))
 
     # Plot cost values
-    axs[2].bar(range(num_rounding_trials), cost_values)
+    axs[2].bar(range(num_rounding_trials), cost_values, color="grey")
+    axs[2].bar(
+        best_trial_index, cost_values[best_trial_index], color="red"
+    )  # Highlight the best trial
     axs[2].set_xlabel("Trial Index")
     axs[2].set_ylabel("Cost")
     axs[2].set_title("Rounding Trial Cost")
@@ -291,11 +305,120 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
     plt.show()
 
 
+def animate_cart_pole(cart_positions, pole_angles, interval_ms=20):
+    """
+    Animate the cart-pole system.
+
+    Parameters:
+    cart_positions (list or array): The positions of the cart over time.
+    pole_angles (list or array): The angles of the pole over time.
+    interval (int): The delay between frames in milliseconds.
+    """
+
+    # Ensure inputs are numpy arrays
+    cart_positions = np.array(cart_positions)
+    pole_angles = np.array(pole_angles)
+
+    # Set up the figure and axis
+    fig, ax = plt.subplots()
+    ax.set_xlim(-3, 3)
+    ax.set_ylim(-1, 3)
+    ax.set_aspect("equal")
+    ax.grid()
+
+    # Initialize the cart and pole
+    cart_width = 0.4
+    cart_height = 0.2
+    pole_length = 1.0
+
+    cart = plt.Rectangle((0, 0), cart_width, cart_height, fc="blue")
+    ax.add_patch(cart)
+    (pole,) = ax.plot([], [], lw=3, c="green")
+
+    def init():
+        cart.set_xy((-cart_width / 2, -cart_height / 2))
+        pole.set_data([], [])
+        return cart, pole
+
+    def update(frame):
+        x = cart_positions[frame]
+        theta = pole_angles[frame]
+
+        cart.set_xy((x - cart_width / 2, -cart_height / 2))
+
+        pole_x = [x, x + pole_length * np.sin(theta)]
+        pole_y = [0, pole_length * np.cos(theta)]
+        pole.set_data(pole_x, pole_y)
+
+        return cart, pole
+
+    ani = animation.FuncAnimation(
+        fig,
+        update,
+        frames=len(cart_positions),
+        init_func=init,
+        blit=True,
+        interval=interval_ms,
+    )
+    plt.show()
+
+
+def plot_cart_pole_trajectories(x: npt.NDArray[np.float64]) -> None:
+    """
+    Plots the trajectories for cart position, pole angle, cart velocity, and pole angular velocity.
+
+    Parameters:
+    x (numpy.ndarray): A 2D array with shape (N, 4) where N is the number of time steps. The columns represent:
+                       [cart position, pole angle, cart velocity, pole angular velocity].
+    """
+    if x.shape[1] != 4:
+        raise ValueError("Input array must have shape (N, 4)")
+
+    # Extract individual trajectories
+    cart_position = x[:, 0]
+    pole_angle = x[:, 1]
+    cart_velocity = x[:, 2]
+    pole_angular_velocity = x[:, 3]
+
+    # Create a figure and subplots
+    fig, axs = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
+
+    # Ensure axs is a list of Axes
+    if isinstance(axs, Axes):
+        axs = [axs]
+
+    # Plot each trajectory and adjust y-axis limits
+    def plot_with_dynamic_limits(ax, data, label, color):
+        ax.plot(data, label=label, color=color)
+        ax.scatter(range(len(data)), data, color=color, s=10)  # Plot points
+        ax.set_ylabel(label)
+        ax.legend(loc="upper right")
+
+        data_range = data.max() - data.min()
+        TOL = 1e-1
+        if data_range < TOL:  # Adjust this threshold as needed
+            ax.set_ylim(data.min() - TOL, data.max() + TOL)
+
+    plot_with_dynamic_limits(axs[0], cart_position, "Cart Position", "blue")
+    plot_with_dynamic_limits(axs[1], pole_angle, "Pole Angle", "orange")
+    plot_with_dynamic_limits(axs[2], cart_velocity, "Cart Velocity", "green")
+    plot_with_dynamic_limits(
+        axs[3], pole_angular_velocity, "Pole Angular Velocity", "red"
+    )
+
+    # Set the x-axis label for the last subplot
+    axs[3].set_xlabel("Time Step")
+
+    # Display the plots
+    plt.tight_layout()
+    plt.show()
+
+
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
     params = TrajectoryOptimizationParameters(
-        N=10,
-        T_s=0.01,
+        N=100,
+        T_s=0.1,
         Q=np.diag([1, 1, 1, 1]),
         Q_N=np.diag([1, 1, 1, 1]),
         R=np.array([1]),
@@ -305,7 +428,7 @@ def cart_pole_experiment_1() -> None:
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
     Y = solve_sdp_relaxation(
-        qcqp=trajopt.qcqp, plot_eigvals=False, print_eigvals=True, trace_cost=False
+        qcqp=trajopt.qcqp, plot_eigvals=False, print_eigvals=False, trace_cost=False
     )
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
@@ -328,6 +451,17 @@ def cart_pole_experiment_1() -> None:
         trials.append(trial)
 
     plot_rounding_trials(trials)
+
+    best_trial_idx = np.argmax([trial.cost for trial in trials])
+    best_trial = trials[best_trial_idx]
+
+    xs_sol = evaluate_np_expressions_array(trajopt.xs, best_trial.result)
+    # plot_cart_pole_trajectories(xs_sol)
+
+    cart_pos = xs_sol[:, 0]
+    pole_pos = xs_sol[:, 1]
+
+    animate_cart_pole(cart_pos, pole_pos, interval_ms=int(params.T_s * 1000))
 
 
 def main() -> None:
