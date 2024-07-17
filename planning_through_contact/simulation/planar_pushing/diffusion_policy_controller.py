@@ -1,4 +1,5 @@
 import logging
+import os
 import pathlib
 import time as pytime
 from collections import deque
@@ -66,11 +67,8 @@ class DiffusionPolicyController(LeafSystem):
         self._B = 1  # batch size is 1
 
         # indexing parameters for action predictions
-        self._start = self._obs_horizon - 1
-        self._start += 1
-        if "push_tee_v2" in checkpoint:  # for backwards compatibility
-            print("Using push_tee_v2 slicing for action predictions")
-            self._start += 1
+        # Note: this used to be self._state = self._obs_horizon - 1
+        self._start = self._obs_horizon
         self._end = self._start + self._action_steps
 
         # variables for DoCalcOutput
@@ -125,25 +123,7 @@ class DiffusionPolicyController(LeafSystem):
         workspace: BaseWorkspace
         workspace = cls(self._cfg)
         workspace.load_payload(payload, exclude_keys=None, include_keys=None)
-
-        # get normalizer: this might be expensive for larger datasets
-        LEGACY_COTRAIN_DATASET = "diffusion_policy.dataset.drake_cotrain_planar_pushing_hybrid_dataset.DrakeCotrainPlanarPushingHybridDataset"
-        PLANAR_PUSHING_DATASET = (
-            "diffusion_policy.dataset.planar_pushing_dataset.PlanarPushingDataset"
-        )
-        cotraining_datasets = [LEGACY_COTRAIN_DATASET, PLANAR_PUSHING_DATASET]
-        if self._cfg.task.dataset._target_ in cotraining_datasets:
-            zarr_configs = self._cfg.task.dataset.zarr_configs
-            for config in zarr_configs:
-                config["path"] = self._diffusion_policy_path.joinpath(config["path"])
-        else:
-            self._cfg.task.dataset.zarr_path = self._diffusion_policy_path.joinpath(
-                self._cfg.task.dataset.zarr_path
-            )
-            print(f"Zarr path: {self._cfg.task.dataset.zarr_path}")
-
-        dataset: BaseImageDataset = hydra.utils.instantiate(self._cfg.task.dataset)
-        self._normalizer = dataset.get_normalizer()  # TODO: this might not be needed
+        self._normalizer = self._load_normalizer()
 
         # get policy from workspace
         self._policy = workspace.model
@@ -224,7 +204,9 @@ class DiffusionPolicyController(LeafSystem):
         for image_deque in self._image_deque_dict.values():
             image_deque.clear()
 
-    def _deque_to_dict(self, obs_deque: deque, img_deque: deque, target: np.ndarray):
+    def _deque_to_dict(
+        self, obs_deque: deque, image_deque_dict: dict, target: np.ndarray
+    ):
         state_tensor = torch.cat(
             [torch.from_numpy(obs) for obs in obs_deque], dim=0
         ).reshape(self._B, self._obs_horizon, self._state_dim)
@@ -238,7 +220,7 @@ class DiffusionPolicyController(LeafSystem):
         }
 
         # Load images into data dict
-        for camera, image_deque in self._image_deque_dict.items():
+        for camera, image_deque in image_deque_dict.items():
             img_tensor = torch.cat(
                 [
                     torch.from_numpy(np.moveaxis(img, -1, -3) / 255.0)
@@ -272,3 +254,32 @@ class DiffusionPolicyController(LeafSystem):
             if image.shape[0] != image_height or image.shape[1] != image_width:
                 image = cv2.resize(image, (image_width, image_height))
             self._image_deque_dict[camera].append(image[:, :, :-1])  # C H W
+
+    def _load_normalizer(self):
+        normalizer_path = self._checkpoint.parent.parent.joinpath("normalizer.pt")
+        if os.path.exists(normalizer_path):
+            return torch.load(normalizer_path)
+        else:
+            # get normalizer: this might be expensive for larger datasets
+            LEGACY_COTRAIN_DATASET = "diffusion_policy.dataset.drake_cotrain_planar_pushing_hybrid_dataset.DrakeCotrainPlanarPushingHybridDataset"
+            PLANAR_PUSHING_DATASET = (
+                "diffusion_policy.dataset.planar_pushing_dataset.PlanarPushingDataset"
+            )
+            cotraining_datasets = [LEGACY_COTRAIN_DATASET, PLANAR_PUSHING_DATASET]
+            # Fix config paths for datasets
+            if self._cfg.task.dataset._target_ in cotraining_datasets:
+                zarr_configs = self._cfg.task.dataset.zarr_configs
+                for config in zarr_configs:
+                    config["path"] = self._diffusion_policy_path.joinpath(
+                        config["path"]
+                    )
+            else:
+                self._cfg.task.dataset.zarr_path = self._diffusion_policy_path.joinpath(
+                    self._cfg.task.dataset.zarr_path
+                )
+
+            # Extract and save normalizer
+            dataset: BaseImageDataset = hydra.utils.instantiate(self._cfg.task.dataset)
+            normalizer = dataset.get_normalizer()
+            torch.save(normalizer, normalizer_path)
+            return normalizer

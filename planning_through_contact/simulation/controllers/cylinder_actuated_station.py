@@ -157,10 +157,15 @@ class CylinderActuatedStation(RobotSystemBase):
     @property
     def slider_model_name(self) -> str:
         """The name of the robot model."""
+        """The name of the robot model."""
         if self._sim_config.slider.name == "box":
             return "box"
+        elif self._sim_config.slider.name in ["tee", "t_pusher"]:
+            return "t_pusher"
+        elif self._sim_config.slider.name == "arbitrary":
+            return "arbitrary"
         else:
-            return "pusher"
+            raise ValueError(f"Invalid slider name: {self._sim_config.slider.name}")
 
     def num_positions(self) -> int:
         return self._num_positions

@@ -196,6 +196,7 @@ class OutputFeedbackTableEnvironment:
         # add a small height to avoid the box penetrating the table
         q = pose.to_generalized_coords(min_height + 1e-2, z_axis_is_positive=True)
         self._plant.SetPositions(self.mbp_context, self._slider, q)
+        self._plant.SetVelocities(self.mbp_context, self._slider, np.zeros(6))
 
     def set_pusher_planar_pose(self, pose: PlanarPose):
         q_v = np.array([pose.x, pose.y, 0.0, 0.0])

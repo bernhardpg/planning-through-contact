@@ -97,6 +97,14 @@ def run_sim(cfg: OmegaConf):
             f"Success ratio: {len(successful_idx)} / {num_runs} = {100.0*len(successful_idx) / num_runs:.3f}%\n"
         )
         f.write(f"Success_idx: {successful_idx}\n")
+        f.write(f"trans_tol: {cfg.multi_run_config.trans_tol}\n")
+        f.write(f"rot_tol: {cfg.multi_run_config.rot_tol}\n")
+        f.write(
+            f"evaluate_final_pusher_position: {cfg.multi_run_config.evaluate_final_pusher_position}\n"
+        )
+        f.write(
+            f"evaluate_final_slider_rotation: {cfg.multi_run_config.evaluate_final_slider_rotation}\n"
+        )
         f.write(f"Save dir: {save_dir}\n")
         f.write("\n")
 
