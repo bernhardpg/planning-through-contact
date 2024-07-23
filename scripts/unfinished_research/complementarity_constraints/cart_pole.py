@@ -190,34 +190,49 @@ class CartPoleWithWallsTrajectory:
         return len(self.cart_position) - 1
 
     def plot(self) -> None:
-        # Create a figure and subplots
-        fig, axs = plt.subplots(4, 1, figsize=(6, 8), sharex=True)
+        # Create a figure and subplots.
+        fig, axs = plt.subplots(4, 2, figsize=(12, 6), sharex=True)
 
-        # Ensure axs is a list of Axes
+        # Ensure axs is a list of Axes.
         if isinstance(axs, Axes):
-            axs = [axs]
+            axs = np.array([[axs]])
+        elif len(axs.shape) == 1:
+            axs = axs[:, np.newaxis]
 
-        # Plot each trajectory and adjust y-axis limits
+        # Plot each trajectory and adjust y-axis limits.
         def plot_with_dynamic_limits(ax, data, label, color):
             ax.plot(data, label=label, color=color)
-            ax.scatter(range(len(data)), data, color=color, s=10)  # Plot points
-            ax.set_ylabel(label)
+            ax.scatter(range(len(data)), data, color=color, s=10)  # Plot keypoints.
+            ax.set_title(label)
             ax.legend(loc="upper right")
 
             data_range = data.max() - data.min()
             TOL = 1e-1
-            if data_range < TOL:  # Adjust this threshold as needed
+            if data_range < TOL:  # Adjust this threshold as needed.
                 ax.set_ylim(data.min() - TOL, data.max() + TOL)
 
-        plot_with_dynamic_limits(axs[0], self.cart_position, "Cart Position", "blue")
-        plot_with_dynamic_limits(axs[1], self.pole_angle, "Pole Angle", "orange")
-        plot_with_dynamic_limits(axs[2], self.cart_velocity, "Cart Velocity", "green")
+        plot_with_dynamic_limits(axs[0][0], self.cart_position, "Cart Position", "blue")
+        plot_with_dynamic_limits(axs[1][0], self.cart_velocity, "Cart Velocity", "blue")
+        plot_with_dynamic_limits(axs[2][0], self.pole_angle, "Pole Angle", "orange")
         plot_with_dynamic_limits(
-            axs[3], self.pole_velocity, "Pole (angular) Velocity", "red"
+            axs[3][0], self.pole_velocity, "Pole (angular) Velocity", "orange"
+        )
+
+        plot_with_dynamic_limits(
+            axs[0][1], self.applied_force, "Applied force", "green"
+        )
+        plot_with_dynamic_limits(
+            axs[1][1], self.left_contact_force, "(Left) Contact force", "red"
+        )
+        plot_with_dynamic_limits(
+            axs[2][1], self.right_contact_force, "(Right) Contact force", "red"
         )
 
         # Set the x-axis label for the last subplot
-        axs[3].set_xlabel("Time Step")
+        axs[3][0].set_xlabel("Time Step")
+        axs[3][1].set_xlabel("Time Step")
+
+        axs[3][1].set_visible(False)
 
         # Display the plots
         plt.tight_layout()
