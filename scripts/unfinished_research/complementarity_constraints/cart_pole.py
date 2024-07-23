@@ -10,6 +10,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
+from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
     get_gaussian_from_sdp_relaxation_solution,
@@ -490,8 +491,13 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
+    print("Solving SDP relaxation...")
     Y, cost_relaxed = solve_sdp_relaxation(
-        qcqp=trajopt.qcqp, plot_eigvals=False, print_eigvals=False, trace_cost=False
+        qcqp=trajopt.qcqp,
+        plot_eigvals=False,
+        print_eigvals=False,
+        trace_cost=False,
+        print_time=True,
     )
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
@@ -500,7 +506,8 @@ def cart_pole_experiment_1() -> None:
         mean=μ, cov=Σ, size=num_rounding_trials
     )
     trials = []
-    for initial_guess in initial_guesses:
+    print(f"Rounding {len(initial_guesses)} trials...")
+    for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
         start = time()
@@ -515,7 +522,7 @@ def cart_pole_experiment_1() -> None:
 
     # plot_rounding_trials(trials)
 
-    best_trial_idx = np.argmax([trial.cost for trial in trials])
+    best_trial_idx = np.argmin([trial.cost for trial in trials])
     best_trial = trials[best_trial_idx]
 
     cost_rounded = best_trial.cost

@@ -670,6 +670,7 @@ def solve_sdp_relaxation(
     plot_eigvals: bool = False,
     print_eigvals: bool = False,
     trace_cost: bool = False,
+    print_time: bool = False,
 ) -> tuple[npt.NDArray[np.float64], float]:
     options = SemidefiniteRelaxationOptions()
     options.set_to_weakest()
@@ -694,6 +695,11 @@ def solve_sdp_relaxation(
 
     if print_eigvals:
         print_eigenvalues(X_val)
+
+    if print_time:
+        print(
+            f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"
+        )
 
     return X_val, relaxed_result.get_optimal_cost()
 
