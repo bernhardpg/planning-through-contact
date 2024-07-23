@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from time import time
 
 import matplotlib.animation as animation
@@ -119,6 +119,111 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         super().__init__(A, B, D, d, E, F, H, c)
 
 
+@dataclass
+class CartPoleWithWallsTrajectory:
+    cart_position: npt.NDArray[np.float64]
+    pole_angle: npt.NDArray[np.float64]
+    cart_velocity: npt.NDArray[np.float64]
+    pole_velocity: npt.NDArray[np.float64]
+    applied_force: npt.NDArray[np.float64]
+    right_contact_force: npt.NDArray[np.float64]
+    left_contact_force: npt.NDArray[np.float64]
+
+    def __post_init__(self):
+
+        states = "cart_position", "pole_angle", "cart_velocity", "pole_velocity"
+        inputs = "applied_force"
+        forces = "right_contact_force", "left_contact_force"
+
+        for field in fields(self):
+            if field.name in states:
+                if len(getattr(self, field.name)) != self.state_length:
+                    raise ValueError(
+                        f"All state trajectories must be of length {self.state_length}"
+                    )
+            else:
+                if len(getattr(self, field.name)) != self.input_length:
+                    raise ValueError(
+                        f"All input/force trajectories must be of length {self.input_length}"
+                    )
+
+    @classmethod
+    def from_state_input_forces(
+        cls,
+        state: npt.NDArray[np.float64],
+        input: npt.NDArray[np.float64],
+        forces: npt.NDArray[np.float64],
+    ) -> "CartPoleWithWallsTrajectory":
+        if state.shape[1] != 4:
+            raise ValueError("Input array must have shape (N, 4)")
+
+        if len(input.shape) != 1:
+            raise ValueError("Input array must have shape (N, )")
+
+        if forces.shape[1] != 2:
+            raise ValueError("Input array must have shape (N, 2)")
+
+        cart_pos = state[:, 0]
+        pole_pos = state[:, 1]
+        cart_vel = state[:, 2]
+        pole_vel = state[:, 3]
+        applied_force = input
+        right_wall_force = forces[:, 0]
+        left_wall_force = forces[:, 1]
+
+        return cls(
+            cart_pos,
+            pole_pos,
+            cart_vel,
+            pole_vel,
+            applied_force,
+            right_wall_force,
+            left_wall_force,
+        )
+
+    @property
+    def state_length(self) -> int:
+        return len(self.cart_position)
+
+    @property
+    def input_length(self) -> int:
+        return len(self.cart_position) - 1
+
+    def plot(self) -> None:
+        # Create a figure and subplots
+        fig, axs = plt.subplots(4, 1, figsize=(6, 8), sharex=True)
+
+        # Ensure axs is a list of Axes
+        if isinstance(axs, Axes):
+            axs = [axs]
+
+        # Plot each trajectory and adjust y-axis limits
+        def plot_with_dynamic_limits(ax, data, label, color):
+            ax.plot(data, label=label, color=color)
+            ax.scatter(range(len(data)), data, color=color, s=10)  # Plot points
+            ax.set_ylabel(label)
+            ax.legend(loc="upper right")
+
+            data_range = data.max() - data.min()
+            TOL = 1e-1
+            if data_range < TOL:  # Adjust this threshold as needed
+                ax.set_ylim(data.min() - TOL, data.max() + TOL)
+
+        plot_with_dynamic_limits(axs[0], self.cart_position, "Cart Position", "blue")
+        plot_with_dynamic_limits(axs[1], self.pole_angle, "Pole Angle", "orange")
+        plot_with_dynamic_limits(axs[2], self.cart_velocity, "Cart Velocity", "green")
+        plot_with_dynamic_limits(
+            axs[3], self.pole_velocity, "Pole (angular) Velocity", "red"
+        )
+
+        # Set the x-axis label for the last subplot
+        axs[3].set_xlabel("Time Step")
+
+        # Display the plots
+        plt.tight_layout()
+        plt.show()
+
+
 # TODO: Move to unit test
 def test_cart_pole_w_walls():
     sys = CartPoleWithWalls()
@@ -207,6 +312,16 @@ class LcsTrajectoryOptimization:
         self.xs = xs
         self.us = us
         self.λs = λs
+
+    def evaluate_state_input_forces(
+        self, result: MathematicalProgramResult
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]:
+        xs_sol = evaluate_np_expressions_array(self.xs, result)
+        us_sol = result.GetSolution(self.us)
+        λs_sol = result.GetSolution(self.λs)
+        return xs_sol, us_sol, λs_sol
 
 
 # TODO: Move to unit test
@@ -427,61 +542,10 @@ def animate_cart_pole(
     plt.show()
 
 
-def plot_cart_pole_trajectories(x: npt.NDArray[np.float64]) -> None:
-    """
-    Plots the trajectories for cart position, pole angle, cart velocity, and pole angular velocity.
-
-    Parameters:
-    x (numpy.ndarray): A 2D array with shape (N, 4) where N is the number of time steps. The columns represent:
-                       [cart position, pole angle, cart velocity, pole angular velocity].
-    """
-    if x.shape[1] != 4:
-        raise ValueError("Input array must have shape (N, 4)")
-
-    # Extract individual trajectories
-    cart_position = x[:, 0]
-    pole_angle = x[:, 1]
-    cart_velocity = x[:, 2]
-    pole_angular_velocity = x[:, 3]
-
-    # Create a figure and subplots
-    fig, axs = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
-
-    # Ensure axs is a list of Axes
-    if isinstance(axs, Axes):
-        axs = [axs]
-
-    # Plot each trajectory and adjust y-axis limits
-    def plot_with_dynamic_limits(ax, data, label, color):
-        ax.plot(data, label=label, color=color)
-        ax.scatter(range(len(data)), data, color=color, s=10)  # Plot points
-        ax.set_ylabel(label)
-        ax.legend(loc="upper right")
-
-        data_range = data.max() - data.min()
-        TOL = 1e-1
-        if data_range < TOL:  # Adjust this threshold as needed
-            ax.set_ylim(data.min() - TOL, data.max() + TOL)
-
-    plot_with_dynamic_limits(axs[0], cart_position, "Cart Position", "blue")
-    plot_with_dynamic_limits(axs[1], pole_angle, "Pole Angle", "orange")
-    plot_with_dynamic_limits(axs[2], cart_velocity, "Cart Velocity", "green")
-    plot_with_dynamic_limits(
-        axs[3], pole_angular_velocity, "Pole Angular Velocity", "red"
-    )
-
-    # Set the x-axis label for the last subplot
-    axs[3].set_xlabel("Time Step")
-
-    # Display the plots
-    plt.tight_layout()
-    plt.show()
-
-
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
     params = TrajectoryOptimizationParameters(
-        N=100,
+        N=20,
         T_s=0.1,
         Q=np.diag([1, 1, 1, 1]),
         Q_N=np.diag([1, 1, 1, 1]),
@@ -529,27 +593,20 @@ def cart_pole_experiment_1() -> None:
 
     print(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
 
-    xs_sol = evaluate_np_expressions_array(trajopt.xs, best_trial.result)
-    us_sol = best_trial.result.GetSolution(trajopt.us)
-    λs_sol = best_trial.result.GetSolution(trajopt.λs)
-
-    # plot_cart_pole_trajectories(xs_sol)
-
-    cart_pos = xs_sol[:, 0]
-    pole_pos = xs_sol[:, 1]
-    applied_force = us_sol
-    right_wall_force = λs_sol[:, 0]
-    left_wall_force = λs_sol[:, 1]
+    trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+        *trajopt.evaluate_state_input_forces(best_trial.result)
+    )
+    trajectory.plot()
 
     # TODO something is wrong here!
-    animate_cart_pole(
-        cart_pos,
-        pole_pos,
-        applied_force,
-        right_wall_force,
-        left_wall_force,
-        interval_ms=int(params.T_s * 1000),
-    )
+    # animate_cart_pole(
+    #     cart_pos,
+    #     pole_pos,
+    #     applied_force,
+    #     right_wall_force,
+    #     left_wall_force,
+    #     interval_ms=int(params.T_s * 1000),
+    # )
 
 
 def main() -> None:
