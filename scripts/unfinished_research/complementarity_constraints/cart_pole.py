@@ -349,11 +349,11 @@ class CartPoleWithWallsTrajectory:
             )
 
         def update(frame):
-            x = self.cart_position[frame]
-            theta = self.pole_angle[frame]
-            applied_force = self.applied_force[frame]
-            left_contact_force = self.left_contact_force[frame]
-            right_contact_force = self.right_contact_force[frame]
+            x = float(self.cart_position[frame])
+            theta = float(self.pole_angle[frame])
+            applied_force = float(self.applied_force[frame])
+            left_contact_force = float(self.left_contact_force[frame])
+            right_contact_force = float(self.right_contact_force[frame])
 
             cart.set_xy((x - cart_width / 2, -cart_height / 2))
 
