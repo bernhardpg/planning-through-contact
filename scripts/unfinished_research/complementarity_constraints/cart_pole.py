@@ -458,7 +458,7 @@ def test_lcs_trajectory_optimization():
     # Complementarity constraints
     assert len(trajopt.qcqp.quadratic_constraints()) == params.N * sys.num_forces
 
-    # Running costs + terminal cost
+    # Running costs (2 per time step) + terminal cost
     assert len(trajopt.qcqp.quadratic_costs()) == 2 * params.N + 1
 
 
@@ -643,11 +643,12 @@ def animate_cart_pole(
 
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
+    Q = np.diag([1, 1 / 2 * np.pi, 1, 1 / 2 * np.pi])
     params = TrajectoryOptimizationParameters(
-        N=20,
+        N=40,
         T_s=0.1,
-        Q=np.diag([1, 1, 1, 1]),
-        Q_N=np.diag([1, 1, 1, 1]),
+        Q=Q,
+        Q_N=Q,
         R=np.array([1]),
     )
     x0 = np.array([0.35, 0, 0, 0])
