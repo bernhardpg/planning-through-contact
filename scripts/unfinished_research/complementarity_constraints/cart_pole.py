@@ -161,12 +161,13 @@ class CartPoleWithWallsTrajectory:
     right_contact_force: npt.NDArray[np.float64]
     left_contact_force: npt.NDArray[np.float64]
     sys: CartPoleWithWalls
+    T_s: float
 
     def __post_init__(self):
         states = "cart_position", "pole_angle", "cart_velocity", "pole_velocity"
 
         for field in fields(self):
-            if field.name == "sys":
+            if field.name in ("sys", "T_s"):
                 continue
             if field.name in states:
                 if len(getattr(self, field.name)) != self.state_length:
@@ -195,6 +196,7 @@ class CartPoleWithWallsTrajectory:
         input: npt.NDArray[np.float64],
         forces: npt.NDArray[np.float64],
         sys: CartPoleWithWalls,
+        T_s: float,
     ) -> "CartPoleWithWallsTrajectory":
         if state.shape[1] != 4:
             raise ValueError("Input array must have shape (N, 4)")
@@ -222,6 +224,7 @@ class CartPoleWithWallsTrajectory:
             right_wall_force,
             left_wall_force,
             sys,
+            T_s,
         )
 
     @property
@@ -296,6 +299,100 @@ class CartPoleWithWallsTrajectory:
 
         # Display the plots
         plt.tight_layout()
+        plt.show()
+
+    def animate(self) -> None:
+        # Set up the figure and axis
+        fig, ax = plt.subplots()
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_aspect("equal")
+
+        # Initialize the cart and pole
+        cart_width = 0.4
+        cart_height = 0.3
+        pole_length = self.sys.pole_length
+
+        cart = Rectangle((0, 0), cart_width, cart_height, fc="blue")
+        ax.add_patch(cart)
+        pole = Line2D([], [], lw=3, c="green")
+        ax.add_line(pole)
+
+        # Initialize force arrows using FancyArrowPatch
+        FORCE_SCALE = 1
+
+        def create_force_patch(color):
+            return FancyArrowPatch(
+                (0, 0), (0, 0), arrowstyle="->", color=color, mutation_scale=10
+            )
+
+        applied_force_arrow = create_force_patch("red")
+        left_contact_force_arrow = create_force_patch("purple")
+        right_contact_force_arrow = create_force_patch("orange")
+
+        ax.add_patch(applied_force_arrow)
+        ax.add_patch(left_contact_force_arrow)
+        ax.add_patch(right_contact_force_arrow)
+
+        def init():
+            cart.set_xy((-cart_width / 2, -cart_height / 2))
+            pole.set_data([], [])
+            applied_force_arrow.set_positions((0, 0), (0, 0))
+            left_contact_force_arrow.set_positions((0, 0), (0, 0))
+            right_contact_force_arrow.set_positions((0, 0), (0, 0))
+            return (
+                cart,
+                pole,
+                applied_force_arrow,
+                left_contact_force_arrow,
+                right_contact_force_arrow,
+            )
+
+        def update(frame):
+            x = self.cart_position[frame]
+            theta = self.pole_angle[frame]
+            applied_force = self.applied_force[frame]
+            left_contact_force = self.left_contact_force[frame]
+            right_contact_force = self.right_contact_force[frame]
+
+            cart.set_xy((x - cart_width / 2, -cart_height / 2))
+
+            pole_x = [x, x + pole_length * np.sin(theta)]
+            pole_y = [0, pole_length * np.cos(theta)]
+            pole.set_data(pole_x, pole_y)
+
+            # Update force arrows
+            applied_force_arrow.set_positions(
+                (x, 0), (x + applied_force * FORCE_SCALE, 0)
+            )
+            wall_height = 0.3
+            wall_distance = 0.3
+            left_contact_force_arrow.set_positions(
+                (-wall_distance, wall_height),
+                (-wall_distance + left_contact_force * FORCE_SCALE, wall_height),
+            )
+            right_contact_force_arrow.set_positions(
+                (wall_distance, wall_height),
+                (wall_distance - right_contact_force * FORCE_SCALE, wall_height),
+            )
+
+            return (
+                cart,
+                pole,
+                applied_force_arrow,
+                left_contact_force_arrow,
+                right_contact_force_arrow,
+            )
+
+        interval_ms = int(self.T_s * 1000)
+        ani = animation.FuncAnimation(
+            fig,
+            update,
+            frames=self.input_length,
+            init_func=init,
+            blit=True,
+            interval=interval_ms,
+        )
         plt.show()
 
 
@@ -530,125 +627,6 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
     plt.show()
 
 
-def animate_cart_pole(
-    cart_positions,
-    pole_angles,
-    applied_forces,
-    right_contact_forces,
-    left_contact_forces,
-    interval_ms=20,
-):
-    """
-    Animate the cart-pole system with wall forces.
-
-    Parameters:
-    cart_positions (list or array): The positions of the cart over time.
-    pole_angles (list or array): The angles of the pole over time.
-    applied_forces (list or array): The forces applied to the cart over time.
-    left_contact_forces (list or array): The contact forces from the left wall over time.
-    right_contact_forces (list or array): The contact forces from the right wall over time.
-    interval (int): The delay between frames in milliseconds.
-    """
-
-    # Ensure inputs are numpy arrays
-    cart_positions = np.array(cart_positions)
-    pole_angles = np.array(pole_angles)
-    applied_forces = np.array(applied_forces)
-    left_contact_forces = np.array(left_contact_forces)
-    right_contact_forces = np.array(right_contact_forces)
-
-    # Set up the figure and axis
-    fig, ax = plt.subplots()
-    ax.set_xlim(-3, 3)
-    ax.set_ylim(-1, 3)
-    ax.set_aspect("equal")
-    ax.grid()
-
-    # Initialize the cart and pole
-    cart_width = 0.4
-    cart_height = 0.2
-    pole_length = 1.0
-
-    cart = Rectangle((0, 0), cart_width, cart_height, fc="blue")
-    ax.add_patch(cart)
-    pole = Line2D([], [], lw=3, c="green")
-    ax.add_line(pole)
-
-    # Initialize force arrows using FancyArrowPatch
-    FORCE_SCALE = 0.1
-
-    def create_force_patch(color):
-        return FancyArrowPatch(
-            (0, 0), (0, 0), arrowstyle="->", color=color, mutation_scale=10
-        )
-
-    applied_force_arrow = create_force_patch("red")
-    left_contact_force_arrow = create_force_patch("purple")
-    right_contact_force_arrow = create_force_patch("orange")
-
-    ax.add_patch(applied_force_arrow)
-    ax.add_patch(left_contact_force_arrow)
-    ax.add_patch(right_contact_force_arrow)
-
-    def init():
-        cart.set_xy((-cart_width / 2, -cart_height / 2))
-        pole.set_data([], [])
-        applied_force_arrow.set_positions((0, 0), (0, 0))
-        left_contact_force_arrow.set_positions((0, 0), (0, 0))
-        right_contact_force_arrow.set_positions((0, 0), (0, 0))
-        return (
-            cart,
-            pole,
-            applied_force_arrow,
-            left_contact_force_arrow,
-            right_contact_force_arrow,
-        )
-
-    def update(frame):
-        x = cart_positions[frame]
-        theta = pole_angles[frame]
-        applied_force = applied_forces[frame]
-        left_contact_force = left_contact_forces[frame]
-        right_contact_force = right_contact_forces[frame]
-
-        cart.set_xy((x - cart_width / 2, -cart_height / 2))
-
-        pole_x = [x, x + pole_length * np.sin(theta)]
-        pole_y = [0, pole_length * np.cos(theta)]
-        pole.set_data(pole_x, pole_y)
-
-        # Update force arrows
-        applied_force_arrow.set_positions((x, 0), (x + applied_force * FORCE_SCALE, 0))
-        wall_height = 0.3
-        wall_distance = 0.3
-        left_contact_force_arrow.set_positions(
-            (-wall_distance, wall_height),
-            (-wall_distance + left_contact_force * FORCE_SCALE, wall_height),
-        )
-        right_contact_force_arrow.set_positions(
-            (wall_distance, wall_height),
-            (wall_distance - right_contact_force * FORCE_SCALE, wall_height),
-        )
-
-        return (
-            cart,
-            pole,
-            applied_force_arrow,
-            left_contact_force_arrow,
-            right_contact_force_arrow,
-        )
-
-    ani = animation.FuncAnimation(
-        fig,
-        update,
-        frames=len(cart_positions),
-        init_func=init,
-        blit=True,
-        interval=interval_ms,
-    )
-    plt.show()
-
-
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
     Q = np.diag([1, 1 / 2 * np.pi, 1, 1 / 2 * np.pi])
@@ -702,19 +680,10 @@ def cart_pole_experiment_1() -> None:
     print(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
 
     trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(best_trial.result), sys
+        *trajopt.evaluate_state_input_forces(best_trial.result), sys, params.T_s
     )
-    trajectory.plot()
-
-    # TODO something is wrong here!
-    # animate_cart_pole(
-    #     cart_pos,
-    #     pole_pos,
-    #     applied_force,
-    #     right_wall_force,
-    #     left_wall_force,
-    #     interval_ms=int(params.T_s * 1000),
-    # )
+    # trajectory.plot()
+    trajectory.animate()
 
 
 def main() -> None:
