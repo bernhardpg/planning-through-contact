@@ -1,5 +1,7 @@
 from dataclasses import dataclass, fields
+from functools import cached_property
 from time import time
+from typing import Literal
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -118,6 +120,36 @@ class CartPoleWithWalls(LinearComplementaritySystem):
 
         super().__init__(A, B, D, d, E, F, H, c)
 
+        self.distance_to_walls = 0.35
+        self.pole_length = 0.6
+        self.cart_mass = 0.978
+        self.pole_mass = 0.35
+
+    def get_linearized_pole_top_position(self, x: float, θ: float) -> float:
+        """
+        Returns the linearized pole position:
+        x - l sin θ ≈ x - l θ
+
+        @param x is the cart position.
+        @param θ is the pole angle.
+        """
+        return x - self.pole_length * θ
+
+    def get_linearized_distance_to_wall(
+        self, x: float, θ: float, wall: Literal["right", "left"]
+    ) -> float:
+        """
+        Returns the linearized distance to the wall, where the pole position is taken as
+        x - l sin θ ≈ x - l θ
+
+        @param x is the cart position.
+        @param θ is the pole angle.
+        """
+        if wall == "right":
+            return self.distance_to_walls - self.get_linearized_pole_top_position(x, θ)
+        else:  # left:
+            return self.distance_to_walls + self.get_linearized_pole_top_position(x, θ)
+
 
 @dataclass
 class CartPoleWithWallsTrajectory:
@@ -128,14 +160,14 @@ class CartPoleWithWallsTrajectory:
     applied_force: npt.NDArray[np.float64]
     right_contact_force: npt.NDArray[np.float64]
     left_contact_force: npt.NDArray[np.float64]
+    sys: CartPoleWithWalls
 
     def __post_init__(self):
-
         states = "cart_position", "pole_angle", "cart_velocity", "pole_velocity"
-        inputs = "applied_force"
-        forces = "right_contact_force", "left_contact_force"
 
         for field in fields(self):
+            if field.name == "sys":
+                continue
             if field.name in states:
                 if len(getattr(self, field.name)) != self.state_length:
                     raise ValueError(
@@ -147,12 +179,22 @@ class CartPoleWithWallsTrajectory:
                         f"All input/force trajectories must be of length {self.input_length}"
                     )
 
+    @cached_property
+    def linearized_pole_top_position(self) -> npt.NDArray[np.float64]:
+        return np.array(
+            [
+                self.sys.get_linearized_pole_top_position(x, θ)
+                for x, θ in zip(self.cart_position, self.pole_angle)
+            ]
+        )
+
     @classmethod
     def from_state_input_forces(
         cls,
         state: npt.NDArray[np.float64],
         input: npt.NDArray[np.float64],
         forces: npt.NDArray[np.float64],
+        sys: CartPoleWithWalls,
     ) -> "CartPoleWithWallsTrajectory":
         if state.shape[1] != 4:
             raise ValueError("Input array must have shape (N, 4)")
@@ -179,6 +221,7 @@ class CartPoleWithWallsTrajectory:
             applied_force,
             right_wall_force,
             left_wall_force,
+            sys,
         )
 
     @property
@@ -214,6 +257,7 @@ class CartPoleWithWallsTrajectory:
         plot_with_dynamic_limits(axs[0][0], self.cart_position, "Cart Position", "blue")
         plot_with_dynamic_limits(axs[1][0], self.cart_velocity, "Cart Velocity", "blue")
         plot_with_dynamic_limits(axs[2][0], self.pole_angle, "Pole Angle", "orange")
+
         plot_with_dynamic_limits(
             axs[3][0], self.pole_velocity, "Pole (angular) Velocity", "orange"
         )
@@ -228,11 +272,19 @@ class CartPoleWithWallsTrajectory:
             axs[2][1], self.right_contact_force, "(Right) Contact force", "red"
         )
 
-        # Set the x-axis label for the last subplot
+        plot_with_dynamic_limits(
+            axs[3][1],
+            self.linearized_pole_top_position,
+            "(Linearized) Pole top position",
+            "purple",
+        )
+        # Plot wall positions
+        axs[3][1].axhline(y=self.sys.distance_to_walls, color="grey", linestyle="--")
+        axs[3][1].axhline(y=-self.sys.distance_to_walls, color="grey", linestyle="--")
+
+        # Set the x-axis label for the last subplots.
         axs[3][0].set_xlabel("Time Step")
         axs[3][1].set_xlabel("Time Step")
-
-        axs[3][1].set_visible(False)
 
         # Display the plots
         plt.tight_layout()
@@ -250,6 +302,32 @@ def test_cart_pole_w_walls():
 
     assert isinstance(sys.get_complementarity_rhs(x, u, λ), type(np.array([])))
     assert sys.get_complementarity_rhs(x, u, λ).shape == (sys.num_forces,)
+
+    # Test distance functions
+    # (Upright positions)
+    distance = sys.get_linearized_distance_to_wall(0.35, 0, wall="right")
+    assert distance == 0
+
+    # (Upright positions)
+    distance = sys.get_linearized_distance_to_wall(-0.35, 0, wall="left")
+    assert distance == 0
+
+    # (Some angle)
+    assert sys.get_linearized_distance_to_wall(
+        0, 0, wall="left"
+    ) > sys.get_linearized_distance_to_wall(0, 0.1, wall="left")
+
+    assert sys.get_linearized_distance_to_wall(
+        0, 0, wall="left"
+    ) < sys.get_linearized_distance_to_wall(0, -0.1, wall="left")
+
+    assert sys.get_linearized_distance_to_wall(
+        0, 0, wall="right"
+    ) < sys.get_linearized_distance_to_wall(0, 0.1, wall="right")
+
+    assert sys.get_linearized_distance_to_wall(
+        0, 0, wall="right"
+    ) > sys.get_linearized_distance_to_wall(0, -0.1, wall="right")
 
 
 @dataclass
@@ -609,7 +687,7 @@ def cart_pole_experiment_1() -> None:
     print(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
 
     trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(best_trial.result)
+        *trajopt.evaluate_state_input_forces(best_trial.result), sys
     )
     trajectory.plot()
 
