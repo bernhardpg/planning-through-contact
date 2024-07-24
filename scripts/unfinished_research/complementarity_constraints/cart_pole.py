@@ -345,6 +345,7 @@ class LcsTrajectoryOptimization:
         sys: LinearComplementaritySystem,
         params: TrajectoryOptimizationParameters,
         x0: npt.NDArray[np.float64],
+        integrator: Literal["forward_euler", "backward_euler"] = "forward_euler",
     ):
 
         qcqp = MathematicalProgram()
@@ -358,10 +359,15 @@ class LcsTrajectoryOptimization:
             x, u, λ = xs[k], us[k], λs[k]
             x_next = xs[k + 1]
 
-            x_dot = sys.get_x_dot(x, u, λ)
-            forward_euler = eq(x_next, x + params.T_s * x_dot)
-            for c in forward_euler:
-                qcqp.AddLinearEqualityConstraint(c)
+            if integrator == "forward_euler":
+                # Forward euler: x_next = x_curr + h * f(x_curr, u_curr)
+                x_dot = sys.get_x_dot(x, u, λ)
+                forward_euler = eq(x_next, x + params.T_s * x_dot)
+                for c in forward_euler:
+                    qcqp.AddLinearEqualityConstraint(c)
+            else:  # "backward_euler"
+                # Backward euler: x_next = x_curr + h * f(x_next, u_next)
+                raise NotImplementedError()
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
