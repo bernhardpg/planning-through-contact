@@ -335,17 +335,45 @@ class CartPoleWithWallsTrajectory:
         )
         ax.add_line(pole)
 
+        # Initialize walls
+        wall_distance = self.sys.distance_to_walls
+        wall_height = 0.4
+        wall_width = 0.1
+
+        left_wall = Rectangle(
+            (-wall_distance - wall_width / 2, 0.3),
+            wall_width,
+            wall_height,
+            fc="grey",
+            ec="black",
+        )
+        right_wall = Rectangle(
+            (wall_distance + wall_width / 2, 0.3),
+            wall_width,
+            wall_height,
+            fc="grey",
+            ec="black",
+        )
+        ax.add_patch(left_wall)
+        ax.add_patch(right_wall)
+
         # Initialize force arrows using FancyArrowPatch
         FORCE_SCALE = 1
 
         def create_force_patch(color):
             return FancyArrowPatch(
-                (0, 0), (0, 0), arrowstyle="->", color=color, mutation_scale=10
+                (0, 0),
+                (0, 0),
+                arrowstyle="->",
+                color=color,
+                mutation_scale=8,
+                linewidth=2,
+                zorder=1,
             )
 
-        applied_force_arrow = create_force_patch("red")
-        left_contact_force_arrow = create_force_patch("purple")
-        right_contact_force_arrow = create_force_patch("orange")
+        applied_force_arrow = create_force_patch("blue")
+        left_contact_force_arrow = create_force_patch("blue")
+        right_contact_force_arrow = create_force_patch("blue")
 
         ax.add_patch(applied_force_arrow)
         ax.add_patch(left_contact_force_arrow)
@@ -660,7 +688,7 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
 
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([1, 1 / 2 * np.pi, 1, 1 / 2 * np.pi])
+    Q = np.diag([1, 10, 1, 10])
     params = TrajectoryOptimizationParameters(
         N=40,
         T_s=0.1,
@@ -668,7 +696,7 @@ def cart_pole_experiment_1() -> None:
         Q_N=Q,
         R=np.array([1]),
     )
-    x0 = np.array([0.35, 0, 0, 0])
+    x0 = np.array([0, 0, 0.2, 0])
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
