@@ -519,7 +519,7 @@ class LcsTrajectoryOptimization:
         λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
         # Dynamics
-        for k in range(params.N - 1):
+        for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
             x_next = xs[k + 1]
 
@@ -608,8 +608,7 @@ def test_lcs_trajectory_optimization():
 
     # Dynamics
     assert (
-        len(trajopt.qcqp.linear_equality_constraints())
-        == (params.N - 1) * sys.num_states
+        len(trajopt.qcqp.linear_equality_constraints()) == (params.N) * sys.num_states
     )
 
     # Complementarity LHS and RHS ≥ 0
@@ -694,9 +693,9 @@ def cart_pole_experiment_1() -> None:
         T_s=0.1,
         Q=Q,
         Q_N=Q,
-        R=np.array([1]),
+        R=np.array([100]),
     )
-    x0 = np.array([0, 0, 0.2, 0])
+    x0 = np.array([0, 0, 0.4, 0])
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
@@ -741,8 +740,8 @@ def cart_pole_experiment_1() -> None:
     trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.evaluate_state_input_forces(best_trial.result), sys, params.T_s
     )
-    # trajectory.plot()
-    trajectory.animate()
+    trajectory.plot()
+    # trajectory.animate()
 
 
 def main() -> None:
