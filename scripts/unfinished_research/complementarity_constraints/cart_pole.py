@@ -357,23 +357,37 @@ class CartPoleWithWallsTrajectory:
 
             cart.set_xy((x - cart_width / 2, -cart_height / 2))
 
-            pole_x = [x, x + pole_length * np.sin(theta)]
-            pole_y = [0, pole_length * np.cos(theta)]
+            rod_x = x + pole_length * np.sin(theta)
+            rod_y = pole_length * np.cos(theta)
+
+            pole_x = [x, rod_x]
+            pole_y = [0, rod_y]
             pole.set_data(pole_x, pole_y)
 
+            # Define a threshold for plotting forces
+            FORCE_THRESHOLD = 1e-3
+
+            # Helper function to update force arrows conditionally
+            def update_horizontal_force_arrow(arrow, start_pos, force):
+                if abs(force) >= FORCE_THRESHOLD:
+                    arrow.set_positions(
+                        start_pos,
+                        (start_pos[0] + force * FORCE_SCALE, start_pos[1]),
+                    )
+                else:
+                    arrow.set_positions((0, 0), (0, 0))
+
             # Update force arrows
-            applied_force_arrow.set_positions(
-                (x, 0), (x + applied_force * FORCE_SCALE, 0)
+            update_horizontal_force_arrow(applied_force_arrow, (x, 0), applied_force)
+            update_horizontal_force_arrow(
+                left_contact_force_arrow,
+                (rod_x, rod_y),
+                left_contact_force,
             )
-            wall_height = 0.3
-            wall_distance = 0.3
-            left_contact_force_arrow.set_positions(
-                (-wall_distance, wall_height),
-                (-wall_distance + left_contact_force * FORCE_SCALE, wall_height),
-            )
-            right_contact_force_arrow.set_positions(
-                (wall_distance, wall_height),
-                (wall_distance - right_contact_force * FORCE_SCALE, wall_height),
+            update_horizontal_force_arrow(
+                right_contact_force_arrow,
+                (rod_x, rod_y),
+                -right_contact_force,  # this force is along the negative x-direction.
             )
 
             return (
