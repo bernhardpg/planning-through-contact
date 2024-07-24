@@ -19,6 +19,12 @@ from planning_through_contact.convex_relaxation.sdp import (
     solve_sdp_relaxation,
 )
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
+from planning_through_contact.visualize.colors import (
+    BROWN2,
+    BURLYWOOD1,
+    BURLYWOOD3,
+    BURLYWOOD4,
+)
 
 
 @dataclass
@@ -304,8 +310,8 @@ class CartPoleWithWallsTrajectory:
     def animate(self) -> None:
         # Set up the figure and axis
         fig, ax = plt.subplots()
-        ax.set_xlim(-1, 1)
-        ax.set_ylim(-1, 1)
+        ax.set_xlim(-0.8, 0.8)
+        ax.set_ylim(-0.8, 0.8)
         ax.set_aspect("equal")
 
         # Initialize the cart and pole
@@ -313,9 +319,20 @@ class CartPoleWithWallsTrajectory:
         cart_height = 0.3
         pole_length = self.sys.pole_length
 
-        cart = Rectangle((0, 0), cart_width, cart_height, fc="blue")
+        cart = Rectangle(
+            (0, 0), cart_width, cart_height, fc=BROWN2.diffuse(), ec="black"
+        )
         ax.add_patch(cart)
-        pole = Line2D([], [], lw=3, c="green")
+        pole = Line2D(
+            [],
+            [],
+            lw=3,
+            color=BURLYWOOD3.diffuse(),  # type: ignore
+            marker="o",
+            markersize=9,
+            markerfacecolor=BURLYWOOD4.diffuse(),  # type: ignore
+            markeredgecolor="black",
+        )
         ax.add_line(pole)
 
         # Initialize force arrows using FancyArrowPatch
