@@ -247,35 +247,43 @@ class CartPoleWithWallsTrajectory:
             ax.plot(data, label=label, color=color)
             ax.scatter(range(len(data)), data, color=color, s=10)  # Plot keypoints.
             ax.set_title(label)
-            ax.legend(loc="upper right")
 
             data_range = data.max() - data.min()
             TOL = 1e-1
             if data_range < TOL:  # Adjust this threshold as needed.
                 ax.set_ylim(data.min() - TOL, data.max() + TOL)
 
-        plot_with_dynamic_limits(axs[0][0], self.cart_position, "Cart Position", "blue")
-        plot_with_dynamic_limits(axs[1][0], self.cart_velocity, "Cart Velocity", "blue")
-        plot_with_dynamic_limits(axs[2][0], self.pole_angle, "Pole Angle", "orange")
-
         plot_with_dynamic_limits(
-            axs[3][0], self.pole_velocity, "Pole (angular) Velocity", "orange"
+            axs[0][0], self.cart_position, "Cart Position [m]", "blue"
+        )
+        plot_with_dynamic_limits(
+            axs[1][0], self.cart_velocity, "Cart Velocity [m/s]", "blue"
+        )
+        plot_with_dynamic_limits(
+            axs[2][0], self.pole_angle * 180 / np.pi, "Pole Angle [deg]", "orange"
         )
 
         plot_with_dynamic_limits(
-            axs[0][1], self.applied_force, "Applied force", "green"
+            axs[3][0],
+            self.pole_velocity * 180 / np.pi,
+            "Pole (angular) Velocity [deg/s]",
+            "orange",
+        )
+
+        plot_with_dynamic_limits(
+            axs[0][1], self.applied_force, "Applied force [N]", "green"
         )
         plot_with_dynamic_limits(
-            axs[1][1], self.left_contact_force, "(Left) Contact force", "red"
+            axs[1][1], self.left_contact_force, "(Left) Contact force [N]", "red"
         )
         plot_with_dynamic_limits(
-            axs[2][1], self.right_contact_force, "(Right) Contact force", "red"
+            axs[2][1], self.right_contact_force, "(Right) Contact force [N]", "red"
         )
 
         plot_with_dynamic_limits(
             axs[3][1],
             self.linearized_pole_top_position,
-            "(Linearized) Pole top position",
+            "(Linearized) Pole top position [m]",
             "purple",
         )
         # Plot wall positions
