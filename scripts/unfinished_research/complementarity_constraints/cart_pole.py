@@ -1,5 +1,7 @@
 from dataclasses import dataclass, fields
 from functools import cached_property
+from logging import Logger
+from pathlib import Path
 from time import time
 from typing import Literal
 
@@ -19,13 +21,9 @@ from planning_through_contact.convex_relaxation.sdp import (
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
+from planning_through_contact.tools.script_utils import default_script_setup
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
-from planning_through_contact.visualize.colors import (
-    BROWN2,
-    BURLYWOOD1,
-    BURLYWOOD3,
-    BURLYWOOD4,
-)
+from planning_through_contact.visualize.colors import BROWN2, BURLYWOOD3, BURLYWOOD4
 
 
 @dataclass
@@ -242,7 +240,7 @@ class CartPoleWithWallsTrajectory:
     def input_length(self) -> int:
         return len(self.cart_position) - 1
 
-    def plot(self) -> None:
+    def plot(self, filepath: Path | None = None) -> None:
         # Create a figure and subplots.
         fig, axs = plt.subplots(4, 2, figsize=(12, 6), sharex=True)
 
@@ -306,9 +304,13 @@ class CartPoleWithWallsTrajectory:
 
         # Display the plots
         plt.tight_layout()
-        plt.show()
 
-    def animate(self) -> None:
+        if filepath is not None:
+            fig.savefig(filepath)
+        else:
+            plt.show()
+
+    def animate(self, output_file: Path | None = None) -> None:
         # Set up the figure and axis
         fig, ax = plt.subplots()
         ax.set_xlim(-0.8, 0.8)
@@ -453,7 +455,11 @@ class CartPoleWithWallsTrajectory:
             blit=True,
             interval=interval_ms,
         )
-        plt.show()
+
+        if output_file is not None:
+            ani.save(output_file, writer="ffmpeg")
+        else:
+            plt.show()
 
 
 # TODO: Move to unit test
@@ -642,7 +648,9 @@ class RoundingTrial:
     result: MathematicalProgramResult
 
 
-def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
+def plot_rounding_trials(
+    trials: list[RoundingTrial], output_dir: Path | None = None
+) -> None:
     num_rounding_trials = len(trials)
 
     # Extract attributes for plotting
@@ -691,10 +699,14 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
     axs[2].set_xticks(range(num_rounding_trials))
 
     plt.tight_layout()
-    plt.show()
+
+    if output_dir is None:
+        plt.show()
+    else:
+        plt.savefig(output_dir / "rounding_trials.pdf")
 
 
-def cart_pole_experiment_1() -> None:
+def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
     Q = np.diag([1, 10, 0.1, 0.1])
     params = TrajectoryOptimizationParameters(
@@ -707,13 +719,15 @@ def cart_pole_experiment_1() -> None:
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
-    print("Solving SDP relaxation...")
+    logger.info("Solving SDP relaxation...")
     Y, cost_relaxed = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
-        plot_eigvals=False,
-        print_eigvals=False,
+        plot_eigvals=True,
+        print_eigvals=True,
         trace_cost=False,
         print_time=True,
+        logger=logger,
+        output_dir=output_dir,
     )
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
@@ -722,12 +736,12 @@ def cart_pole_experiment_1() -> None:
         mean=μ, cov=Σ, size=num_rounding_trials
     )
     trials = []
-    print(f"Rounding {len(initial_guesses)} trials...")
+    logger.info(f"Rounding {len(initial_guesses)} trials...")
     for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
         start = time()
-        result = snopt.Solve(trajopt.qcqp, initial_guess)
+        result = snopt.Solve(trajopt.qcqp, initial_guess)  # type: ignore
         end = time()
         rounding_time = end - start
 
@@ -736,7 +750,7 @@ def cart_pole_experiment_1() -> None:
         )
         trials.append(trial)
 
-    # plot_rounding_trials(trials)
+    plot_rounding_trials(trials, output_dir)
 
     best_trial_idx = np.argmin([trial.cost for trial in trials])
     best_trial_idx = 4
@@ -744,21 +758,22 @@ def cart_pole_experiment_1() -> None:
 
     cost_rounded = best_trial.cost
 
-    print(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
+    logger.info(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
 
     trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.evaluate_state_input_forces(best_trial.result), sys, params.T_s
     )
-    # trajectory.plot()
-    trajectory.animate()
+    trajectory.plot(output_dir / "trajectory.pdf")
+    trajectory.animate(output_dir / "animation.mp4")
 
 
-def main() -> None:
+def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     test_cart_pole_w_walls()
     test_lcs_trajectory_optimization()
 
-    cart_pole_experiment_1()
+    cart_pole_experiment_1(output_dir, debug, logger)
 
 
 if __name__ == "__main__":
-    main()
+    debug, output_dir, logger = default_script_setup()
+    main(output_dir, debug, logger)

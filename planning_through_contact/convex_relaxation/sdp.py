@@ -1,5 +1,7 @@
 from enum import Enum
 from itertools import permutations
+from logging import Logger
+from pathlib import Path
 from typing import Any, Callable, List, Tuple
 
 import matplotlib.pyplot as plt
@@ -24,6 +26,7 @@ from pydrake.solvers import (
 )
 
 from planning_through_contact.geometry.utilities import unit_vector
+from planning_through_contact.tools.script_utils import make_default_logger
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -624,7 +627,9 @@ def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) ->
     return added_costs
 
 
-def plot_eigenvalues(X: npt.NDArray[np.float64]) -> None:
+def plot_eigenvalues(
+    X: npt.NDArray[np.float64], output_dir: Path | None = None
+) -> None:
     N = X.shape[0]
     assert X.shape == (N, N)
 
@@ -641,10 +646,19 @@ def plot_eigenvalues(X: npt.NDArray[np.float64]) -> None:
     plt.xlabel("Index")
     plt.ylabel("Eigenvalue")
     plt.title("Eigenvalues of the Symmetric PSD Matrix (sorted)")
-    plt.show()
+
+    if output_dir is None:
+        plt.show()
+    else:
+        plt.savefig(output_dir / "eigenvalues.pdf")
 
 
-def print_eigenvalues(X: npt.NDArray[np.float64], threshold: float = 1e-4) -> None:
+def print_eigenvalues(
+    X: npt.NDArray[np.float64], threshold: float = 1e-4, logger: Logger | None = None
+) -> None:
+    if logger is None:
+        logger = make_default_logger()
+
     N = X.shape[0]
     assert X.shape == (N, N)
 
@@ -659,9 +673,9 @@ def print_eigenvalues(X: npt.NDArray[np.float64], threshold: float = 1e-4) -> No
     filtered_eigenvalues = sorted_eigenvalues[sorted_eigenvalues > threshold]
 
     # Print the filtered eigenvalues
-    print("Eigenvalues above the threshold of {}: ".format(threshold))
+    logger.info("Eigenvalues above the threshold of {}: ".format(threshold))
     for i, eigenvalue in enumerate(filtered_eigenvalues, start=1):
-        print("Eigenvalue {}: {:.4f}".format(i, eigenvalue))
+        logger.info("Eigenvalue {}: {:.4f}".format(i, eigenvalue))
 
 
 def solve_sdp_relaxation(
@@ -671,7 +685,12 @@ def solve_sdp_relaxation(
     print_eigvals: bool = False,
     trace_cost: bool = False,
     print_time: bool = False,
+    logger: Logger | None = None,
+    output_dir: Path | None = None,
 ) -> tuple[npt.NDArray[np.float64], float]:
+    if logger is None:
+        logger = make_default_logger()
+
     options = SemidefiniteRelaxationOptions()
     options.set_to_weakest()
 
@@ -691,14 +710,14 @@ def solve_sdp_relaxation(
     X_val = relaxed_result.GetSolution(X)
 
     if plot_eigvals:
-        plot_eigenvalues(X_val)
+        plot_eigenvalues(X_val, output_dir)
 
     if print_eigvals:
         print_eigenvalues(X_val)
 
     if print_time:
-        print(
-            f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"
+        logger.info(
+            f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
         )
 
     return X_val, relaxed_result.get_optimal_cost()
