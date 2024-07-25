@@ -12,6 +12,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
+from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
@@ -499,8 +500,8 @@ class TrajectoryOptimizationParameters:
     N: int
     T_s: float
     Q: npt.NDArray[np.float64]
-    Q_N: npt.NDArray[np.float64]
     R: npt.NDArray[np.float64]
+    Q_N: npt.NDArray[np.float64] | None = None
 
 
 class LcsTrajectoryOptimization:
@@ -569,7 +570,15 @@ class LcsTrajectoryOptimization:
             qcqp.AddQuadraticCost((u.T @ params.R @ u).item())
 
         # Terminal cost
-        qcqp.AddQuadraticCost(xs[params.N].T @ params.Q_N @ xs[params.N])
+        if params.Q_N is not None:
+            Q_N = params.Q_N
+        else:
+            _, S = res = DiscreteTimeLinearQuadraticRegulator(
+                sys.A, sys.B, params.Q, params.R
+            )
+            Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
+
+        qcqp.AddQuadraticCost(xs[params.N].T @ Q_N @ xs[params.N])
 
         self.qcqp = qcqp
         self.xs = xs
@@ -687,15 +696,14 @@ def plot_rounding_trials(trials: list[RoundingTrial]) -> None:
 
 def cart_pole_experiment_1() -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([1, 10, 1, 10])
+    Q = np.diag([1, 10, 0.1, 0.1])
     params = TrajectoryOptimizationParameters(
-        N=40,
+        N=30,
         T_s=0.1,
         Q=Q,
-        Q_N=Q,
-        R=np.array([100]),
+        R=np.array([1]),
     )
-    x0 = np.array([0, 0, 0.4, 0])
+    x0 = np.array([0.2, 0, 0.1, 0])
 
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
@@ -709,7 +717,7 @@ def cart_pole_experiment_1() -> None:
     )
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
-    num_rounding_trials = 10
+    num_rounding_trials = 5
     initial_guesses = np.random.multivariate_normal(
         mean=μ, cov=Σ, size=num_rounding_trials
     )
@@ -731,6 +739,7 @@ def cart_pole_experiment_1() -> None:
     # plot_rounding_trials(trials)
 
     best_trial_idx = np.argmin([trial.cost for trial in trials])
+    best_trial_idx = 4
     best_trial = trials[best_trial_idx]
 
     cost_rounded = best_trial.cost
@@ -740,8 +749,8 @@ def cart_pole_experiment_1() -> None:
     trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.evaluate_state_input_forces(best_trial.result), sys, params.T_s
     )
-    trajectory.plot()
-    # trajectory.animate()
+    # trajectory.plot()
+    trajectory.animate()
 
 
 def main() -> None:
