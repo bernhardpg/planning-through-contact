@@ -718,6 +718,88 @@ def print_eigenvalues(
         logger.info("Solution is rank-tight!")
 
 
+def get_principal_minor(matrix: np.ndarray, indices: list[int]) -> np.ndarray:
+    """
+    Returns the principal minor of a matrix for a given list of indices.
+
+    Parameters:
+    matrix (np.ndarray): The input square matrix.
+    indices (list of int): The list of indices for the principal minor.
+
+    Returns:
+    np.ndarray: The principal minor submatrix.
+
+    Raises:
+    ValueError: If the matrix is not square or indices are invalid.
+    """
+    # Check if the input is a NumPy array
+    if not isinstance(matrix, np.ndarray):
+        raise ValueError("Input matrix must be a NumPy array.")
+
+    # Check if the matrix is square
+    rows, cols = matrix.shape
+    if rows != cols:
+        raise ValueError("Input matrix must be square.")
+
+    # Check if all indices are valid
+    if not all(isinstance(i, int) and 0 <= i < rows for i in indices):
+        raise ValueError("All indices must be integers within the matrix dimensions.")
+
+    # Check for duplicate indices
+    if len(indices) != len(set(indices)):
+        raise ValueError("Indices must not contain duplicates.")
+
+    # Convert the indices to a numpy array for advanced indexing
+    indices = np.array(indices)  # type: ignore
+
+    # Get the submatrix corresponding to the given indices
+    principal_minor = matrix[np.ix_(indices, indices)]
+
+    return principal_minor
+
+
+def solve_psd_completion(
+    sdp: MathematicalProgram,
+    sparse_sdp: MathematicalProgram,
+    sparse_result: MathematicalProgramResult,
+    variable_groups: list[sym.Variables],
+):
+    Xs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
+    X_vals = [sparse_result.GetSolution(X) for X in Xs]
+
+    full_X = get_X_from_semidefinite_relaxation(sdp)
+
+    for i in range(len(variable_groups) - 1):
+        group = variable_groups[i]
+        group_next = variable_groups[i + 1]
+        common_variables = sym.intersect(group, group_next)
+
+        X = Xs[i]
+        X_next = Xs[i + 1]
+
+        def _get_submatrix_of_variables(M: np.ndarray):
+            """
+            Gets the submatrix (principal minor) in M associated with all variables in common_variables.
+            """
+            submatrix_idxs = []
+            for v in common_variables:
+                for var_idx in range(M.shape[0]):
+                    if v.EqualTo(M[var_idx, -1]):
+                        submatrix_idxs.append(var_idx)
+            return get_principal_minor(M, submatrix_idxs)
+
+        shared_submatrix = _get_submatrix_of_variables(X)
+        shared_submatrix_next = _get_submatrix_of_variables(X_next)
+
+        # The overlapping entries should be equal in the result.
+        assert np.allclose(
+            sparse_result.GetSolution(shared_submatrix),
+            sparse_result.GetSolution(shared_submatrix_next),
+        ), "Overlapping entries in PSD matrix are NOT equal."
+
+        breakpoint()
+
+
 ImpliedConstraintsType = Literal["weakest", "strongest"]
 
 
@@ -771,15 +853,25 @@ def solve_sdp_relaxation(
 
     if variable_groups is None:
         X = get_X_from_semidefinite_relaxation(sdp_relaxation)
-        X_vals = [relaxed_result.GetSolution(X)]
+        X_val = relaxed_result.GetSolution(X)
+        X_vals = [X_val]
     else:
-        Xs = get_Xs_from_semidefinite_relaxation(sdp_relaxation)
-        X_vals = [relaxed_result.GetSolution(X) for X in Xs]
+        full_sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+        solve_psd_completion(
+            full_sdp_relaxation, sdp_relaxation, relaxed_result, variable_groups
+        )
+
+        breakpoint()
+
+        np.set_printoptions(precision=1, suppress=True, linewidth=150)
+        for X_val in X_vals:
+            print(X_val)
+
+        breakpoint()
 
     if plot_eigvals:
         plot_eigenvalues(X_vals, output_dir)
 
-    # TODO: handle once we retrieve big X after variable grouping
     if len(X_vals) == 1 and print_eigvals:
         print_eigenvalues(X_vals[0])
 

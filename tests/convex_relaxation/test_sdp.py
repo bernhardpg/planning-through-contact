@@ -24,6 +24,7 @@ from planning_through_contact.convex_relaxation.sdp import (
     eliminate_equality_constraints,
     find_solution,
     get_nullspace_matrix,
+    get_principal_minor,
     to_symmetric_matrix_from_lower_triangular_columns,
 )
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
@@ -492,3 +493,41 @@ def test_to_symmetric_from_tril_columns():
     new_X = to_symmetric_matrix_from_lower_triangular_columns(prog.decision_variables())
     entries_equal = np.vectorize(lambda x: x.Evaluate())(eq(X, new_X))
     assert np.all(entries_equal)
+
+
+def test_get_principal_minor_valid():
+    matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    indices = [0, 2]
+    expected_result = np.array([[1, 3], [7, 9]])
+    result = get_principal_minor(matrix, indices)
+    np.testing.assert_array_equal(result, expected_result)
+
+
+def test_get_principal_minor_non_square_matrix():
+    matrix = np.array([[1, 2, 3], [4, 5, 6]])
+    indices = [0, 1]
+    with pytest.raises(ValueError, match="Input matrix must be square"):
+        get_principal_minor(matrix, indices)
+
+
+def test_get_principal_minor_invalid_indices():
+    matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    indices = [0, 3]
+    with pytest.raises(
+        ValueError, match="All indices must be integers within the matrix dimensions"
+    ):
+        get_principal_minor(matrix, indices)
+
+
+def test_get_principal_minor_duplicate_indices():
+    matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    indices = [0, 0]
+    with pytest.raises(ValueError, match="Indices must not contain duplicates"):
+        get_principal_minor(matrix, indices)
+
+
+def test_get_principal_minor_non_numpy_array():
+    matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    indices = [0, 1]
+    with pytest.raises(ValueError, match="Input matrix must be a NumPy array"):
+        get_principal_minor(matrix, indices)

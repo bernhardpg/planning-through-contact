@@ -764,13 +764,13 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=10,
+            N=20,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
         x0=np.array([0.2, 0, 0.1, 0]),
-        implied_constraints="strongest",
+        implied_constraints="weakest",
         trace_cost=None,
         use_chain_sparsity=True,
         seed=0,
