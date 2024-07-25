@@ -687,7 +687,7 @@ def solve_sdp_relaxation(
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
-) -> tuple[npt.NDArray[np.float64], float]:
+) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
     if logger is None:
         logger = make_default_logger()
 
@@ -720,7 +720,7 @@ def solve_sdp_relaxation(
             f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
         )
 
-    return X_val, relaxed_result.get_optimal_cost()
+    return X_val, relaxed_result.get_optimal_cost(), relaxed_result
 
 
 def get_gaussian_from_sdp_relaxation_solution(

@@ -720,7 +720,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     trajopt = LcsTrajectoryOptimization(sys, params, x0)
 
     logger.info("Solving SDP relaxation...")
-    Y, cost_relaxed = solve_sdp_relaxation(
+    Y, cost_relaxed, relaxed_result = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
         plot_eigvals=True,
         print_eigvals=True,
@@ -729,12 +729,21 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         logger=logger,
         output_dir=output_dir,
     )
+
+    relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+        *trajopt.evaluate_state_input_forces(relaxed_result), sys, params.T_s
+    )
+    relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
+    relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
+
+    # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
     num_rounding_trials = 5
     initial_guesses = np.random.multivariate_normal(
         mean=μ, cov=Σ, size=num_rounding_trials
     )
+
     trials = []
     logger.info(f"Rounding {len(initial_guesses)} trials...")
     for initial_guess in tqdm(initial_guesses):
@@ -753,18 +762,30 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     plot_rounding_trials(trials, output_dir)
 
     best_trial_idx = np.argmin([trial.cost for trial in trials])
-    best_trial_idx = 4
     best_trial = trials[best_trial_idx]
+    best_cost_rounded = best_trial.cost
 
-    cost_rounded = best_trial.cost
+    for idx, trial in enumerate(trials):
+        logger.info(
+            f"Optimality gap for trial {idx}: {(trial.cost - cost_relaxed) / cost_relaxed:.2f}%"
+        )
 
-    logger.info(f"Optimality gap: {(cost_rounded - cost_relaxed) / cost_relaxed:.2f}%")
+        trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+            *trajopt.evaluate_state_input_forces(trial.result), sys, params.T_s
+        )
 
-    trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(best_trial.result), sys, params.T_s
+        trial_dir = output_dir / f"trial_{idx}"
+
+        if idx == best_trial_idx:
+            trial_dir = Path(str(trial_dir) + "_BEST")
+        trial_dir.mkdir(exist_ok=True)
+        trajectory.plot(trial_dir / "trajectory.pdf")
+        trajectory.animate(trial_dir / "animation.mp4")
+
+    logger.info(f"Best trial: {best_trial_idx}")
+    logger.info(
+        f"Best optimality gap: {(best_cost_rounded - cost_relaxed) / cost_relaxed:.2f}%"
     )
-    trajectory.plot(output_dir / "trajectory.pdf")
-    trajectory.animate(output_dir / "animation.mp4")
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
