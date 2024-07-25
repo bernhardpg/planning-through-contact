@@ -36,7 +36,7 @@ class YamlMixin:
         data = convert_ndarrays(data)
         return data
 
-    def save(self, file_path: str) -> None:
+    def save(self, file_path: Path) -> None:
         import yaml
 
         with open(file_path, "w") as yaml_file:
@@ -65,7 +65,7 @@ class YamlMixin:
         return config
 
     @classmethod
-    def load(cls: Type[T], file_path: str) -> T:
+    def load(cls: Type[T], file_path: Path) -> T:
         import yaml
 
         with open(file_path, "r") as yaml_file:

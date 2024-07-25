@@ -13,6 +13,7 @@ from pydrake.solvers import (
     Binding,
     CommonSolverOption,
     LinearConstraint,
+    LinearCost,
     LinearEqualityConstraint,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
@@ -617,7 +618,9 @@ def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
             prog.AddLinearConstraint(X_i >= 0)
 
 
-def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) -> List:
+def add_trace_cost_on_psd_cones(
+    prog: MathematicalProgram, eps: float = 1e-6
+) -> List[Binding[LinearCost]]:
     added_costs = []
     for psd_constraint in prog.positive_semidefinite_constraints():
         X = get_X_from_psd_constraint(psd_constraint)
@@ -692,12 +695,17 @@ def solve_sdp_relaxation(
     logger: Logger | None = None,
     output_dir: Path | None = None,
 ) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
+    """
+    @return Y, cost (without trace penalty), MathematicalProgramResult
+    """
     if logger is None:
         logger = make_default_logger()
 
     options = SemidefiniteRelaxationOptions()
-    # options.set_to_weakest()
-    options.set_to_strongest()
+    if implied_constraints == "weakest":
+        options.set_to_weakest()
+    else:
+        options.set_to_strongest()
 
     sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
 
@@ -705,8 +713,9 @@ def solve_sdp_relaxation(
     if print_solver_output:
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
+    trace_costs = None
     if trace_cost:
-        add_trace_cost_on_psd_cones(sdp_relaxation)
+        trace_costs = add_trace_cost_on_psd_cones(sdp_relaxation)
 
     relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
     assert relaxed_result.is_success()
@@ -724,8 +733,24 @@ def solve_sdp_relaxation(
         logger.info(
             f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
         )
+        logger.info(
+            f"Relaxed cost: {relaxed_result.get_optimal_cost():.4f}"  # type: ignore
+        )
 
-    return X_val, relaxed_result.get_optimal_cost(), relaxed_result
+    if trace_cost and trace_costs is not None:
+
+        def eval_cost(cost: Binding[LinearCost]) -> float:
+            return cost.evaluator().Eval(relaxed_result.GetSolution(cost.variables()))
+
+        trace_cost_val = np.sum([eval_cost(cost) for cost in trace_costs])
+        logger.info(f"Total trace cost: ε * Tr X = {trace_cost_val:.4f}")
+
+        optimal_cost = relaxed_result.get_optimal_cost() - trace_cost_val
+
+    else:
+        optimal_cost = relaxed_result.get_optimal_cost()
+
+    return X_val, optimal_cost, relaxed_result
 
 
 def get_gaussian_from_sdp_relaxation_solution(

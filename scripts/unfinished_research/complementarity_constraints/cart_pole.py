@@ -712,32 +712,36 @@ class CartPoleConfig(YamlMixin):
     trajopt_params: TrajectoryOptimizationParameters
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
+    seed: int
 
 
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([1, 10, 0.1, 0.1])
+    Q = np.diag([10, 100, 0.1, 0.1])
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=30,
+            N=20,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
         x0=np.array([0.2, 0, 0.1, 0]),
-        implied_constraints="strongest",
+        implied_constraints="weakest",
+        seed=0,
     )
 
     cfg.save(output_dir / "config.yaml")
+
+    np.random.seed(cfg.seed)
 
     trajopt = LcsTrajectoryOptimization(sys, cfg.trajopt_params, cfg.x0)
 
     logger.info("Solving SDP relaxation...")
     Y, cost_relaxed, relaxed_result = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
-        trace_cost=False,
-        implied_constraints="strongest",
+        trace_cost=True,
+        implied_constraints=cfg.implied_constraints,
         print_time=True,
         plot_eigvals=True,
         print_eigvals=True,
@@ -746,7 +750,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     )
 
     relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(relaxed_result), sys, params.T_s
+        *trajopt.evaluate_state_input_forces(relaxed_result),
+        sys,
+        cfg.trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
@@ -786,7 +792,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         )
 
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-            *trajopt.evaluate_state_input_forces(trial.result), sys, params.T_s
+            *trajopt.evaluate_state_input_forces(trial.result),
+            sys,
+            cfg.trajopt_params.T_s,
         )
 
         trial_dir = output_dir / f"trial_{idx}"
