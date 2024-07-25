@@ -2,7 +2,7 @@ from enum import Enum
 from itertools import permutations
 from logging import Logger
 from pathlib import Path
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Literal, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -678,12 +678,16 @@ def print_eigenvalues(
         logger.info("Eigenvalue {}: {:.4f}".format(i, eigenvalue))
 
 
+ImpliedConstraintsType = Literal["weakest", "strongest"]
+
+
 def solve_sdp_relaxation(
     qcqp: MathematicalProgram,
+    trace_cost: bool = False,
+    implied_constraints: ImpliedConstraintsType = "weakest",
     print_solver_output: bool = False,
     plot_eigvals: bool = False,
     print_eigvals: bool = False,
-    trace_cost: bool = False,
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
@@ -692,7 +696,8 @@ def solve_sdp_relaxation(
         logger = make_default_logger()
 
     options = SemidefiniteRelaxationOptions()
-    options.set_to_weakest()
+    # options.set_to_weakest()
+    options.set_to_strongest()
 
     sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
 

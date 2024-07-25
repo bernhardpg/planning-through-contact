@@ -18,10 +18,11 @@ from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
+    ImpliedConstraintsType,
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
-from planning_through_contact.tools.script_utils import default_script_setup
+from planning_through_contact.tools.script_utils import YamlMixin, default_script_setup
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import BROWN2, BURLYWOOD3, BURLYWOOD4
 
@@ -706,26 +707,40 @@ def plot_rounding_trials(
         plt.savefig(output_dir / "rounding_trials.pdf")
 
 
+@dataclass
+class CartPoleConfig(YamlMixin):
+    trajopt_params: TrajectoryOptimizationParameters
+    x0: npt.NDArray[np.float64]
+    implied_constraints: ImpliedConstraintsType
+
+
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
     Q = np.diag([1, 10, 0.1, 0.1])
-    params = TrajectoryOptimizationParameters(
-        N=30,
-        T_s=0.1,
-        Q=Q,
-        R=np.array([1]),
-    )
-    x0 = np.array([0.2, 0, 0.1, 0])
 
-    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+    cfg = CartPoleConfig(
+        trajopt_params=TrajectoryOptimizationParameters(
+            N=30,
+            T_s=0.1,
+            Q=Q,
+            R=np.array([1]),
+        ),
+        x0=np.array([0.2, 0, 0.1, 0]),
+        implied_constraints="strongest",
+    )
+
+    cfg.save(output_dir / "config.yaml")
+
+    trajopt = LcsTrajectoryOptimization(sys, cfg.trajopt_params, cfg.x0)
 
     logger.info("Solving SDP relaxation...")
     Y, cost_relaxed, relaxed_result = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
+        trace_cost=False,
+        implied_constraints="strongest",
+        print_time=True,
         plot_eigvals=True,
         print_eigvals=True,
-        trace_cost=False,
-        print_time=True,
         logger=logger,
         output_dir=output_dir,
     )
