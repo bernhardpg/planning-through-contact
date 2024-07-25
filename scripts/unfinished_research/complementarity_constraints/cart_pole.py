@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
     ImpliedConstraintsType,
+    compute_optimality_gap,
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
@@ -652,6 +653,9 @@ class RoundingTrial:
     cost: float
     result: MathematicalProgramResult
 
+    def __str__(self) -> str:
+        return f"success: {self.success}, time: {self.time}, cost: {self.cost}"
+
 
 def plot_rounding_trials(
     trials: list[RoundingTrial], output_dir: Path | None = None
@@ -728,13 +732,13 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
+            N=10,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
         x0=np.array([0.2, 0, 0.1, 0]),
-        implied_constraints="weakest",
+        implied_constraints="strongest",
         trace_cost=None,
         seed=0,
         num_rounding_trials=5,
@@ -748,7 +752,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     trajopt = LcsTrajectoryOptimization(sys, cfg.trajopt_params, cfg.x0)
 
     logger.info("Solving SDP relaxation...")
-    Y, cost_relaxed, relaxed_result = solve_sdp_relaxation(
+    Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
         trace_cost=cfg.trace_cost,
         implied_constraints=cfg.implied_constraints,
@@ -794,11 +798,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     best_trial_idx = np.argmin([trial.cost for trial in trials])
     best_trial = trials[best_trial_idx]
-    best_cost_rounded = best_trial.cost
 
     for idx, trial in enumerate(trials):
         logger.info(
-            f"Optimality gap for trial {idx}: {(trial.cost - cost_relaxed) / cost_relaxed:.2f}%"
+            f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap(trial.cost, relaxed_cost):.4f}"
         )
 
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
@@ -817,7 +820,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     logger.info(f"Best trial: {best_trial_idx}")
     logger.info(
-        f"Best optimality gap: {(best_cost_rounded - cost_relaxed) / cost_relaxed:.2f}%"
+        f"Best optimality gap: {compute_optimality_gap(best_trial.cost, relaxed_cost):.4f}%"
     )
 
 

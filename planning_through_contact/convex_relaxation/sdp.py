@@ -678,7 +678,10 @@ def print_eigenvalues(
     # Print the filtered eigenvalues
     logger.info("Eigenvalues above the threshold of {}: ".format(threshold))
     for i, eigenvalue in enumerate(filtered_eigenvalues, start=1):
-        logger.info("Eigenvalue {}: {:.4f}".format(i, eigenvalue))
+        logger.info("    Eigenvalue {}: {:.4f}".format(i, eigenvalue))
+
+    if len(filtered_eigenvalues) == 1:
+        logger.info("Solution is rank-tight!")
 
 
 ImpliedConstraintsType = Literal["weakest", "strongest"]
@@ -719,6 +722,7 @@ def solve_sdp_relaxation(
 
     relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
     assert relaxed_result.is_success()
+    logger.info("Found solution.")
 
     X = get_X_from_semidefinite_relaxation(sdp_relaxation)
     X_val = relaxed_result.GetSolution(X)
@@ -751,6 +755,10 @@ def solve_sdp_relaxation(
         optimal_cost = relaxed_result.get_optimal_cost()
 
     return X_val, optimal_cost, relaxed_result
+
+
+def compute_optimality_gap(rounded_cost: float, relaxed_cost: float) -> float:
+    return (rounded_cost - relaxed_cost) / relaxed_cost
 
 
 def get_gaussian_from_sdp_relaxation_solution(
