@@ -22,7 +22,11 @@ from planning_through_contact.convex_relaxation.sdp import (
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
-from planning_through_contact.tools.script_utils import YamlMixin, default_script_setup
+from planning_through_contact.tools.script_utils import (
+    YamlMixin,
+    default_script_setup,
+    get_current_git_commit,
+)
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import BROWN2, BURLYWOOD3, BURLYWOOD4
 
@@ -712,8 +716,10 @@ class CartPoleConfig(YamlMixin):
     trajopt_params: TrajectoryOptimizationParameters
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
+    trace_cost: float | None
     seed: int
     num_rounding_trials: int
+    git_commit: str
 
 
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
@@ -729,8 +735,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.2, 0, 0.1, 0]),
         implied_constraints="weakest",
+        trace_cost=None,
         seed=0,
         num_rounding_trials=5,
+        git_commit=get_current_git_commit(),
     )
 
     cfg.save(output_dir / "config.yaml")
@@ -742,7 +750,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     logger.info("Solving SDP relaxation...")
     Y, cost_relaxed, relaxed_result = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
-        trace_cost=True,
+        trace_cost=cfg.trace_cost,
         implied_constraints=cfg.implied_constraints,
         print_time=True,
         plot_eigvals=True,

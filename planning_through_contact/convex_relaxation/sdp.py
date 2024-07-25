@@ -686,7 +686,7 @@ ImpliedConstraintsType = Literal["weakest", "strongest"]
 
 def solve_sdp_relaxation(
     qcqp: MathematicalProgram,
-    trace_cost: bool = False,
+    trace_cost: float | None = None,
     implied_constraints: ImpliedConstraintsType = "weakest",
     print_solver_output: bool = False,
     plot_eigvals: bool = False,
@@ -714,8 +714,8 @@ def solve_sdp_relaxation(
         solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
     trace_costs = None
-    if trace_cost:
-        trace_costs = add_trace_cost_on_psd_cones(sdp_relaxation)
+    if trace_cost is not None:
+        trace_costs = add_trace_cost_on_psd_cones(sdp_relaxation, eps=trace_cost)
 
     relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
     assert relaxed_result.is_success()

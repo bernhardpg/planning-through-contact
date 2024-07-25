@@ -1,6 +1,7 @@
 import argparse
 import inspect
 import logging
+import subprocess
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Optional, Tuple, Type, TypeVar
@@ -83,6 +84,18 @@ def get_main_script_path() -> Optional[Path]:
         ):
             return Path(frame.filename)
     return None
+
+
+def get_current_git_commit() -> str:
+    try:
+        commit_hash = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        return commit_hash
+    except subprocess.CalledProcessError:
+        raise RuntimeError("Could not get current git commit")
 
 
 def make_output_folder() -> Path:
