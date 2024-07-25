@@ -372,7 +372,7 @@ class CartPoleWithWallsTrajectory:
                 color=color,
                 mutation_scale=8,
                 linewidth=2,
-                zorder=1,
+                zorder=10,
             )
 
         applied_force_arrow = create_force_patch("blue")
@@ -713,6 +713,7 @@ class CartPoleConfig(YamlMixin):
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
     seed: int
+    num_rounding_trials: int
 
 
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
@@ -729,6 +730,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         x0=np.array([0.2, 0, 0.1, 0]),
         implied_constraints="weakest",
         seed=0,
+        num_rounding_trials=5,
     )
 
     cfg.save(output_dir / "config.yaml")
@@ -760,9 +762,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
-    num_rounding_trials = 5
-    initial_guesses = np.random.multivariate_normal(
-        mean=μ, cov=Σ, size=num_rounding_trials
+    initial_guesses = [μ]  # use the mean as an initial guess
+    initial_guesses.extend(
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
     )
 
     trials = []
