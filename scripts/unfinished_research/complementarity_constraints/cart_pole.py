@@ -14,6 +14,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
+from pydrake.symbolic import Variable, Variables
 from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
@@ -596,6 +597,7 @@ class LcsTrajectoryOptimization:
         self.xs = xs
         self.us = us
         self.λs = λs
+        self.params = params
 
     def evaluate_state_input_forces(
         self, result: MathematicalProgramResult
@@ -606,6 +608,22 @@ class LcsTrajectoryOptimization:
         us_sol = result.GetSolution(self.us)
         λs_sol = result.GetSolution(self.λs)
         return xs_sol, us_sol, λs_sol
+
+    def get_vars_at_time_step(self, k: int) -> np.ndarray:
+        assert k <= self.params.N
+        # First entry of self.xs is just x0 (which is a constant)
+        return np.concatenate([self.xs[k + 1], self.us[k], self.λs[k]])
+
+    def get_variable_groups(self) -> list[Variables]:
+        variable_groups = [
+            Variables(
+                np.concatenate(
+                    [self.get_vars_at_time_step(k), self.get_vars_at_time_step(k + 1)]
+                )
+            )
+            for k in range(self.params.N - 1)
+        ]
+        return variable_groups
 
 
 # TODO: Move to unit test
@@ -644,6 +662,19 @@ def test_lcs_trajectory_optimization():
 
     # Running costs (2 per time step) + terminal cost
     assert len(trajopt.qcqp.quadratic_costs()) == 2 * params.N + 1
+
+    for k in range(params.N):
+        group = trajopt.get_vars_at_time_step(k)
+        assert group.shape == (sys.num_states + sys.num_inputs + sys.num_forces,)
+        for var in group:
+            assert type(var) == Variable
+
+    groups = trajopt.get_variable_groups()
+    assert len(groups) == params.N - 1
+
+    for group in groups:
+        assert isinstance(group, Variables)
+        assert len(group) == (sys.num_states + sys.num_inputs + sys.num_forces) * 2
 
 
 @dataclass
@@ -721,6 +752,7 @@ class CartPoleConfig(YamlMixin):
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
     trace_cost: float | None
+    use_chain_sparsity: bool
     seed: int
     num_rounding_trials: int
     git_commit: str
@@ -740,6 +772,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         x0=np.array([0.2, 0, 0.1, 0]),
         implied_constraints="strongest",
         trace_cost=None,
+        use_chain_sparsity=True,
         seed=0,
         num_rounding_trials=5,
         git_commit=get_current_git_commit(),
@@ -756,6 +789,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         qcqp=trajopt.qcqp,
         trace_cost=cfg.trace_cost,
         implied_constraints=cfg.implied_constraints,
+        variable_groups=(
+            trajopt.get_variable_groups() if cfg.use_chain_sparsity else None
+        ),
         print_time=True,
         plot_eigvals=True,
         print_eigvals=True,

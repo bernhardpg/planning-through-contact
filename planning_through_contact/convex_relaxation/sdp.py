@@ -591,6 +591,16 @@ def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
     return X
 
 
+def get_Xs_from_semidefinite_relaxation(
+    relaxation: MathematicalProgram,
+) -> list[np.ndarray]:
+    Xs = [
+        get_X_from_psd_constraint(c)
+        for c in relaxation.positive_semidefinite_constraints()
+    ]
+    return Xs
+
+
 def get_X_from_psd_constraint(binding) -> npt.NDArray:
     assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
     X = binding.variables()
@@ -631,24 +641,48 @@ def add_trace_cost_on_psd_cones(
 
 
 def plot_eigenvalues(
-    X: npt.NDArray[np.float64], output_dir: Path | None = None
+    X: npt.NDArray[np.float64] | list[npt.NDArray[np.float64]],
+    output_dir: Path | None = None,
 ) -> None:
-    N = X.shape[0]
-    assert X.shape == (N, N)
+    def compute_and_sort_eigenvalues(
+        matrix: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        eigenvalues = np.linalg.eigvalsh(matrix)
+        return np.sort(eigenvalues)[::-1]
 
-    # Compute eigenvalues
-    # (note: eigvalsh is more stable for real symmetric matrices)
-    eigenvalues = np.linalg.eigvalsh(X)
+    if isinstance(X, list):
+        assert all(
+            matrix.shape == X[0].shape for matrix in X
+        ), "All matrices must have the same shape."
+        N = X[0].shape[0]
+        assert all(
+            matrix.shape == (N, N) for matrix in X
+        ), "Each matrix must be square."
 
-    # Sort eigenvalues in descending order
-    sorted_eigenvalues = np.sort(eigenvalues)[::-1]
+        sorted_eigenvalues_list = [compute_and_sort_eigenvalues(matrix) for matrix in X]
+        eigenvalues_array = np.array(sorted_eigenvalues_list)
 
-    # Plot the sorted eigenvalues
+        mean_eigenvalues = np.mean(eigenvalues_array, axis=0)
+        std_eigenvalues = np.std(eigenvalues_array, axis=0)
+
+        sorted_eigenvalues = mean_eigenvalues
+        yerr = std_eigenvalues
+        title = f"Eigenvalues of the {len(X)} PSD Matrices (sorted)"
+    else:
+        N = X.shape[0]
+        assert X.shape == (N, N), "The input matrix must be square."
+
+        sorted_eigenvalues = compute_and_sort_eigenvalues(X)
+        yerr = None
+        title = "Eigenvalues of the PSD Matrix (sorted)"
+
     indices = np.arange(len(sorted_eigenvalues))
-    plt.bar(indices, sorted_eigenvalues)
+    plt.bar(
+        indices, sorted_eigenvalues, yerr=yerr, capsize=5 if yerr is not None else 0
+    )
     plt.xlabel("Index")
     plt.ylabel("Eigenvalue")
-    plt.title("Eigenvalues of the Symmetric PSD Matrix (sorted)")
+    plt.title(title)
 
     if output_dir is None:
         plt.show()
@@ -691,6 +725,7 @@ def solve_sdp_relaxation(
     qcqp: MathematicalProgram,
     trace_cost: float | None = None,
     implied_constraints: ImpliedConstraintsType = "weakest",
+    variable_groups: list[sym.Variables] | None = None,
     print_solver_output: bool = False,
     plot_eigvals: bool = False,
     print_eigvals: bool = False,
@@ -710,7 +745,10 @@ def solve_sdp_relaxation(
     else:
         options.set_to_strongest()
 
-    sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+    if variable_groups is None:
+        sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+    else:
+        sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, variable_groups, options)
 
     solver_options = SolverOptions()
     if print_solver_output:
@@ -723,16 +761,6 @@ def solve_sdp_relaxation(
     relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
     assert relaxed_result.is_success()
     logger.info("Found solution.")
-
-    X = get_X_from_semidefinite_relaxation(sdp_relaxation)
-    X_val = relaxed_result.GetSolution(X)
-
-    if plot_eigvals:
-        plot_eigenvalues(X_val, output_dir)
-
-    if print_eigvals:
-        print_eigenvalues(X_val)
-
     if print_time:
         logger.info(
             f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
@@ -740,6 +768,20 @@ def solve_sdp_relaxation(
         logger.info(
             f"Relaxed cost: {relaxed_result.get_optimal_cost():.4f}"  # type: ignore
         )
+
+    if variable_groups is None:
+        X = get_X_from_semidefinite_relaxation(sdp_relaxation)
+        X_vals = [relaxed_result.GetSolution(X)]
+    else:
+        Xs = get_Xs_from_semidefinite_relaxation(sdp_relaxation)
+        X_vals = [relaxed_result.GetSolution(X) for X in Xs]
+
+    if plot_eigvals:
+        plot_eigenvalues(X_vals, output_dir)
+
+    # TODO: handle once we retrieve big X after variable grouping
+    if len(X_vals) == 1 and print_eigvals:
+        print_eigenvalues(X_vals[0])
 
     if trace_cost and trace_costs is not None:
 
@@ -754,7 +796,7 @@ def solve_sdp_relaxation(
     else:
         optimal_cost = relaxed_result.get_optimal_cost()
 
-    return X_val, optimal_cost, relaxed_result
+    return X_vals[0], optimal_cost, relaxed_result
 
 
 def compute_optimality_gap(rounded_cost: float, relaxed_cost: float) -> float:
