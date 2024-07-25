@@ -759,15 +759,105 @@ def get_principal_minor(matrix: np.ndarray, indices: list[int]) -> np.ndarray:
 
 
 def solve_psd_completion(
-    sdp: MathematicalProgram,
     sparse_sdp: MathematicalProgram,
     sparse_result: MathematicalProgramResult,
     variable_groups: list[sym.Variables],
 ):
-    Xs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
-    X_vals = [sparse_result.GetSolution(X) for X in Xs]
+    """
+    Given a Semidefinite Program where sparsity is exploited, the solution result for the
+    sparse program, and a list of variable groups used to generate the sparse program,
+    this solves the PSD completion problem for the sparse program.
+    """
 
-    full_X = get_X_from_semidefinite_relaxation(sdp)
+    Zs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
+    all_vars_per_group = [sym.Variables(Z.flatten()) for Z in Zs]
+
+    one = Zs[0][-1, -1]
+    assert str(one) == "one"
+
+    # Create a new SDP with one big Y matrix.
+    non_sparse_sdp = MathematicalProgram()
+    non_sparse_sdp.AddDecisionVariables(np.array([one]))
+
+    # Add all (original) variables to the new program.
+    all_vars = sym.Variables()
+    for group in variable_groups:
+        all_vars.insert(group)
+    x = np.array(list(all_vars)).reshape((-1, 1))
+    non_sparse_sdp.AddDecisionVariables(x)
+
+    # Add the big PSD constraint to the new program.
+    N = len(x)
+    X = non_sparse_sdp.NewSymmetricContinuousVariables(N, "X")
+    Y = np.block([[X, x], [x.T, np.array([[one]])]])
+    non_sparse_sdp.AddPositiveSemidefiniteConstraint(Y)
+
+    def _get_variable_group_idx(vars: np.ndarray) -> int:
+        vs = sym.Variables(vars)
+
+        correct_group = lambda group: vs.IsSubsetOf(group)
+        index = next(
+            (i for i, group in enumerate(all_vars_per_group) if correct_group(group)),
+            None,
+        )
+        if index is None:
+            raise RuntimeError(
+                f"Could not find an existing variable group for variables {vars}"
+            )
+        return index
+
+    def _get_var_idx_in_matrix(var: sym.Variable, m: np.ndarray) -> tuple[int, int]:
+        for i in range(m.shape[0]):
+            for j in range(m.shape[1]):
+                if var.EqualTo(m[i, j]):
+                    return i, j
+        raise RuntimeError(f"Could not find {var} in {m}")
+
+    def _get_var_idx_in_prog(var_target: sym.Variable) -> int:
+        if var_target.EqualTo(one):
+            return N
+
+        index = next(
+            (i for i, var in enumerate(all_vars) if var.EqualTo(var_target)), None
+        )
+        if index is None:
+            raise RuntimeError(f"Could not find variable {var_target} in {all_vars}")
+        return index
+
+    def get_vars_in_big_Y(vars: np.ndarray) -> np.ndarray:
+        group_idx = _get_variable_group_idx(vars)
+        Z = Zs[group_idx]
+        idxs = [_get_var_idx_in_matrix(var, Z) for var in vars]
+        monomials = [(Z[-1, i], Z[-1, j]) for (i, j) in idxs]
+        monomial_idxs = [
+            (_get_var_idx_in_prog(m), _get_var_idx_in_prog(n)) for m, n in monomials
+        ]
+        vars_in_Y = np.array([Y[i, j] for (i, j) in monomial_idxs])
+        return vars_in_Y
+
+    # Add all costs to the new program.
+    for cost in sparse_sdp.GetAllCosts():
+        # No decision vars in cost
+        if len(cost.variables()) == 0:
+            variables_in_Y = np.array([])
+        else:
+            variables_in_Y = get_vars_in_big_Y(cost.variables())
+
+        non_sparse_sdp.AddCost(cost.evaluator(), variables_in_Y)
+
+    # Add all constraints to the new program.
+    for constraint in sparse_sdp.GetAllConstraints():
+        # No decision vars in constraint
+        if len(constraint.variables()) == 0:
+            variables_in_Y = np.array([])
+        else:
+            variables_in_Y = get_vars_in_big_Y(constraint.variables())
+
+        non_sparse_sdp.AddConstraint(constraint.evaluator(), variables_in_Y)
+
+    breakpoint()
+
+    X_vals = [sparse_result.GetSolution(X) for X in Xs]
 
     for i in range(len(variable_groups) - 1):
         group = variable_groups[i]
@@ -777,7 +867,7 @@ def solve_psd_completion(
         X = Xs[i]
         X_next = Xs[i + 1]
 
-        def _get_submatrix_of_variables(M: np.ndarray):
+        def _get_submatrix_of_common_variables_in_matrix(M: np.ndarray):
             """
             Gets the submatrix (principal minor) in M associated with all variables in common_variables.
             """
@@ -788,8 +878,8 @@ def solve_psd_completion(
                         submatrix_idxs.append(var_idx)
             return get_principal_minor(M, submatrix_idxs)
 
-        shared_submatrix = _get_submatrix_of_variables(X)
-        shared_submatrix_next = _get_submatrix_of_variables(X_next)
+        shared_submatrix = _get_submatrix_of_common_variables_in_matrix(X)
+        shared_submatrix_next = _get_submatrix_of_common_variables_in_matrix(X_next)
 
         # The overlapping entries should be equal in the result.
         assert np.allclose(
@@ -857,9 +947,7 @@ def solve_sdp_relaxation(
         X_vals = [X_val]
     else:
         full_sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
-        solve_psd_completion(
-            full_sdp_relaxation, sdp_relaxation, relaxed_result, variable_groups
-        )
+        solve_psd_completion(sdp_relaxation, relaxed_result, variable_groups)
 
         breakpoint()
 
