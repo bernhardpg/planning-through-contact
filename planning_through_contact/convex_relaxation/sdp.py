@@ -889,9 +889,11 @@ def solve_psd_completion(
     for sparse_X, sparse_X_val in zip(sparse_Xs, sparse_X_vals):
         vars_in_Y = get_vars_in_big_Y(sparse_X.flatten())
         for var, val in zip(vars_in_Y, sparse_X_val.flatten()):
-            if not any((var.EqualTo(other) for other in already_constrained_vars)):
-                psd_completion.AddLinearEqualityConstraint(var == val)
-                already_constrained_vars.append(var)
+            print(f"{var} = {val}")
+            # TODO: Something is obviously wrong here, because many of the entries are constrained to be two different values....
+            # if not any((var.EqualTo(other) for other in already_constrained_vars)):
+            psd_completion.AddLinearEqualityConstraint(var == val)
+            already_constrained_vars.append(var)
 
     solver_options = SolverOptions()
     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
@@ -961,6 +963,9 @@ def solve_sdp_relaxation(
     else:
         Xs = get_Xs_from_semidefinite_relaxation(sdp_relaxation)
         X_vals = [relaxed_result.GetSolution(X_k) for X_k in Xs]
+
+        plot_eigenvalues(X_vals, output_dir, postfix="_sparse_Xs")
+
         X_val = solve_psd_completion(
             qcqp.decision_variables(), sdp_relaxation, relaxed_result, variable_groups
         )
@@ -986,7 +991,7 @@ def solve_sdp_relaxation(
     else:
         optimal_cost = relaxed_result.get_optimal_cost()
 
-    return X_vals[0], optimal_cost, relaxed_result
+    return X_val, optimal_cost, relaxed_result
 
 
 def compute_optimality_gap(rounded_cost: float, relaxed_cost: float) -> float:

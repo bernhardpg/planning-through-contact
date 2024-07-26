@@ -598,6 +598,7 @@ class LcsTrajectoryOptimization:
         self.us = us
         self.λs = λs
         self.params = params
+        self.sys = sys
 
     def evaluate_state_input_forces(
         self, result: MathematicalProgramResult
@@ -624,6 +625,15 @@ class LcsTrajectoryOptimization:
             for k in range(self.params.N - 1)
         ]
         return variable_groups
+
+    def update_program_result(
+        self, result: MathematicalProgramResult, values: npt.NDArray[np.float64]
+    ) -> None:
+        # Update the values for all decision variables in the result
+        decision_vars = self.qcqp.decision_variables()
+
+        for i, var in enumerate(decision_vars):
+            result.SetSolution(var, values[i])
 
 
 # TODO: Move to unit test
@@ -770,7 +780,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
             R=np.array([1]),
         ),
         x0=np.array([0.2, 0, 0.1, 0]),
-        implied_constraints="weakest",
+        implied_constraints="strongest",
         trace_cost=None,
         use_chain_sparsity=True,
         seed=0,
@@ -806,6 +816,15 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
+
+    trajopt.update_program_result(relaxed_result, Y[:-1, -1])
+    relaxed_trajectory_2 = CartPoleWithWallsTrajectory.from_state_input_forces(
+        *trajopt.evaluate_state_input_forces(relaxed_result),
+        sys,
+        cfg.trajopt_params.T_s,
+    )
+    relaxed_trajectory_2.plot(output_dir / "relaxed_trajectory_2.pdf")
+    relaxed_trajectory_2.animate(output_dir / "relaxed_animation_2.mp4")
 
     # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
