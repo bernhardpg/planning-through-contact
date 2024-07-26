@@ -643,6 +643,7 @@ def add_trace_cost_on_psd_cones(
 def plot_eigenvalues(
     X: npt.NDArray[np.float64] | list[npt.NDArray[np.float64]],
     output_dir: Path | None = None,
+    postfix: str = "",
 ) -> None:
     def compute_and_sort_eigenvalues(
         matrix: npt.NDArray[np.float64],
@@ -687,7 +688,8 @@ def plot_eigenvalues(
     if output_dir is None:
         plt.show()
     else:
-        plt.savefig(output_dir / "eigenvalues.pdf")
+        plt.savefig(output_dir / f"eigenvalues{postfix}.pdf")
+        plt.close()
 
 
 def print_eigenvalues(
@@ -759,38 +761,81 @@ def get_principal_minor(matrix: np.ndarray, indices: list[int]) -> np.ndarray:
 
 
 def solve_psd_completion(
+    original_vars: npt.NDArray[Any],
     sparse_sdp: MathematicalProgram,
     sparse_result: MathematicalProgramResult,
     variable_groups: list[sym.Variables],
-):
+) -> npt.NDArray[np.float64]:
     """
-    Given a Semidefinite Program where sparsity is exploited, the solution result for the
-    sparse program, and a list of variable groups used to generate the sparse program,
-    this solves the PSD completion problem for the sparse program.
+    Given the original decision variables, a Semidefinite Program where sparsity is exploited,
+    the solution result for the sparse program, and a list of variable groups used to generate
+    the sparse program, this solves the PSD completion problem for the sparse program.
+
+    I.e. it solves a feasiblity program to find Y = [X x; xᵀ 1] ≽ 0.
     """
 
-    Zs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
-    all_vars_per_group = [sym.Variables(Z.flatten()) for Z in Zs]
+    sparse_Xs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
+    sparse_X_vals = [sparse_result.GetSolution(X) for X in sparse_Xs]
 
-    one = Zs[0][-1, -1]
+    # Check that the dimensions in the provided prog are correct.
+    for group, sparse_X, sparse_X_val in zip(variable_groups, sparse_Xs, sparse_X_vals):
+        if not len(group) == sparse_X.shape[0] - 1:
+            raise RuntimeError(
+                "Dimensions of variable groups and sparse PSD matrices do not match. \
+                Something must be wrong."
+            )
+
+    all_vars_per_group = [sym.Variables(Z.flatten()) for Z in sparse_Xs]
+
+    one = sparse_Xs[0][-1, -1]
     assert str(one) == "one"
 
     # Create a new SDP with one big Y matrix.
-    non_sparse_sdp = MathematicalProgram()
-    non_sparse_sdp.AddDecisionVariables(np.array([one]))
+    psd_completion = MathematicalProgram()
+    psd_completion.AddDecisionVariables(np.array([one]))
+    psd_completion.AddLinearEqualityConstraint(one == 1.0)
 
     # Add all (original) variables to the new program.
-    all_vars = sym.Variables()
-    for group in variable_groups:
-        all_vars.insert(group)
-    x = np.array(list(all_vars)).reshape((-1, 1))
-    non_sparse_sdp.AddDecisionVariables(x)
+    psd_completion.AddDecisionVariables(original_vars)
 
-    # Add the big PSD constraint to the new program.
+    # Add the constraint X ≽ xxᵀ as Y = [X x; xᵀ 1] ≽ 0
+    # (using Schur complement).
+    x = original_vars.reshape((-1, 1))
     N = len(x)
-    X = non_sparse_sdp.NewSymmetricContinuousVariables(N, "X")
+    X = psd_completion.NewSymmetricContinuousVariables(N, "X")
     Y = np.block([[X, x], [x.T, np.array([[one]])]])
-    non_sparse_sdp.AddPositiveSemidefiniteConstraint(Y)
+    psd_completion.AddPositiveSemidefiniteConstraint(Y)
+
+    # Check that the overlapping entries in the sparse program are in fact equal.
+    for i in range(len(variable_groups) - 1):
+        group = variable_groups[i]
+        group_next = variable_groups[i + 1]
+        common_variables = sym.intersect(group, group_next)
+
+        sparse_X = sparse_Xs[i]
+        sparse_X_next = sparse_Xs[i + 1]
+
+        def _get_submatrix_of_common_variables_in_matrix(M: np.ndarray):
+            """
+            Gets the submatrix (principal minor) in M associated with all variables in common_variables.
+            """
+            submatrix_idxs = []
+            for v in common_variables:
+                for var_idx in range(M.shape[0]):
+                    if v.EqualTo(M[var_idx, -1]):
+                        submatrix_idxs.append(var_idx)
+            return get_principal_minor(M, submatrix_idxs)
+
+        shared_submatrix = _get_submatrix_of_common_variables_in_matrix(sparse_X)
+        shared_submatrix_next = _get_submatrix_of_common_variables_in_matrix(
+            sparse_X_next
+        )
+
+        shared_submatrix_val = sparse_result.GetSolution(shared_submatrix)
+        shared_submatrix_next_val = sparse_result.GetSolution(shared_submatrix_next)
+        # The overlapping entries should be equal in the result.
+        if not np.allclose(shared_submatrix_val, shared_submatrix_next_val, atol=1e-6):
+            raise RuntimeError("Overlapping entries in PSD matrix are NOT equal.")
 
     def _get_variable_group_idx(vars: np.ndarray) -> int:
         vs = sym.Variables(vars)
@@ -818,15 +863,17 @@ def solve_psd_completion(
             return N
 
         index = next(
-            (i for i, var in enumerate(all_vars) if var.EqualTo(var_target)), None
+            (i for i, var in enumerate(original_vars) if var.EqualTo(var_target)), None
         )
         if index is None:
-            raise RuntimeError(f"Could not find variable {var_target} in {all_vars}")
+            raise RuntimeError(
+                f"Could not find variable {var_target} in {original_vars}"
+            )
         return index
 
     def get_vars_in_big_Y(vars: np.ndarray) -> np.ndarray:
         group_idx = _get_variable_group_idx(vars)
-        Z = Zs[group_idx]
+        Z = sparse_Xs[group_idx]
         idxs = [_get_var_idx_in_matrix(var, Z) for var in vars]
         monomials = [(Z[-1, i], Z[-1, j]) for (i, j) in idxs]
         monomial_idxs = [
@@ -835,59 +882,25 @@ def solve_psd_completion(
         vars_in_Y = np.array([Y[i, j] for (i, j) in monomial_idxs])
         return vars_in_Y
 
-    # Add all costs to the new program.
-    for cost in sparse_sdp.GetAllCosts():
-        # No decision vars in cost
-        if len(cost.variables()) == 0:
-            variables_in_Y = np.array([])
-        else:
-            variables_in_Y = get_vars_in_big_Y(cost.variables())
+    # Constrain the entries of Y to be equal to those of the sparse program
+    already_constrained_vars = (
+        []
+    )  # keep track of these so we don't add redundant constraints
+    for sparse_X, sparse_X_val in zip(sparse_Xs, sparse_X_vals):
+        vars_in_Y = get_vars_in_big_Y(sparse_X.flatten())
+        for var, val in zip(vars_in_Y, sparse_X_val.flatten()):
+            if not any((var.EqualTo(other) for other in already_constrained_vars)):
+                psd_completion.AddLinearEqualityConstraint(var == val)
+                already_constrained_vars.append(var)
 
-        non_sparse_sdp.AddCost(cost.evaluator(), variables_in_Y)
+    solver_options = SolverOptions()
+    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
 
-    # Add all constraints to the new program.
-    for constraint in sparse_sdp.GetAllConstraints():
-        # No decision vars in constraint
-        if len(constraint.variables()) == 0:
-            variables_in_Y = np.array([])
-        else:
-            variables_in_Y = get_vars_in_big_Y(constraint.variables())
+    result = Solve(psd_completion, solver_options=solver_options)
 
-        non_sparse_sdp.AddConstraint(constraint.evaluator(), variables_in_Y)
+    assert result.is_success()
 
-    breakpoint()
-
-    X_vals = [sparse_result.GetSolution(X) for X in Xs]
-
-    for i in range(len(variable_groups) - 1):
-        group = variable_groups[i]
-        group_next = variable_groups[i + 1]
-        common_variables = sym.intersect(group, group_next)
-
-        X = Xs[i]
-        X_next = Xs[i + 1]
-
-        def _get_submatrix_of_common_variables_in_matrix(M: np.ndarray):
-            """
-            Gets the submatrix (principal minor) in M associated with all variables in common_variables.
-            """
-            submatrix_idxs = []
-            for v in common_variables:
-                for var_idx in range(M.shape[0]):
-                    if v.EqualTo(M[var_idx, -1]):
-                        submatrix_idxs.append(var_idx)
-            return get_principal_minor(M, submatrix_idxs)
-
-        shared_submatrix = _get_submatrix_of_common_variables_in_matrix(X)
-        shared_submatrix_next = _get_submatrix_of_common_variables_in_matrix(X_next)
-
-        # The overlapping entries should be equal in the result.
-        assert np.allclose(
-            sparse_result.GetSolution(shared_submatrix),
-            sparse_result.GetSolution(shared_submatrix_next),
-        ), "Overlapping entries in PSD matrix are NOT equal."
-
-        breakpoint()
+    return result.GetSolution(Y)
 
 
 ImpliedConstraintsType = Literal["weakest", "strongest"]
@@ -944,24 +957,21 @@ def solve_sdp_relaxation(
     if variable_groups is None:
         X = get_X_from_semidefinite_relaxation(sdp_relaxation)
         X_val = relaxed_result.GetSolution(X)
-        X_vals = [X_val]
+        X_vals = None
     else:
-        full_sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
-        solve_psd_completion(sdp_relaxation, relaxed_result, variable_groups)
-
-        breakpoint()
-
-        np.set_printoptions(precision=1, suppress=True, linewidth=150)
-        for X_val in X_vals:
-            print(X_val)
-
-        breakpoint()
+        Xs = get_Xs_from_semidefinite_relaxation(sdp_relaxation)
+        X_vals = [relaxed_result.GetSolution(X_k) for X_k in Xs]
+        X_val = solve_psd_completion(
+            qcqp.decision_variables(), sdp_relaxation, relaxed_result, variable_groups
+        )
 
     if plot_eigvals:
-        plot_eigenvalues(X_vals, output_dir)
+        if X_vals is not None:
+            plot_eigenvalues(X_vals, output_dir, postfix="_sparse_Xs")
+        plot_eigenvalues(X_val, output_dir)
 
-    if len(X_vals) == 1 and print_eigvals:
-        print_eigenvalues(X_vals[0])
+    if print_eigvals:
+        print_eigenvalues(X_val)
 
     if trace_cost and trace_costs is not None:
 
