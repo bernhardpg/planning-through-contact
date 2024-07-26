@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
     ImpliedConstraintsType,
-    compute_optimality_gap,
+    compute_optimality_gap_pct,
     get_gaussian_from_sdp_relaxation_solution,
     solve_sdp_relaxation,
 )
@@ -695,7 +695,9 @@ class RoundingTrial:
     result: MathematicalProgramResult
 
     def __str__(self) -> str:
-        return f"success: {self.success}, time: {self.time}, cost: {self.cost}"
+        return (
+            f"success: {self.success}, time: {self.time:.4f} s, cost: {self.cost:.4f}"
+        )
 
 
 def plot_rounding_trials(
@@ -770,16 +772,16 @@ class CartPoleConfig(YamlMixin):
 
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([10, 100, 0.1, 0.1])
+    Q = np.diag([10, 100, 1, 10])
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
+            N=10,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
-        x0=np.array([0.2, 0, 0.1, 0]),
+        x0=np.array([0.3, 0, 0.1, 0]),
         implied_constraints="strongest",
         trace_cost=None,
         use_chain_sparsity=True,
@@ -817,15 +819,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
 
-    trajopt.update_program_result(relaxed_result, Y[:-1, -1])
-    relaxed_trajectory_2 = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(relaxed_result),
-        sys,
-        cfg.trajopt_params.T_s,
-    )
-    relaxed_trajectory_2.plot(output_dir / "relaxed_trajectory_2.pdf")
-    relaxed_trajectory_2.animate(output_dir / "relaxed_animation_2.mp4")
-
     # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
@@ -856,7 +849,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     for idx, trial in enumerate(trials):
         logger.info(
-            f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap(trial.cost, relaxed_cost):.4f}"
+            f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
 
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
@@ -875,7 +868,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     logger.info(f"Best trial: {best_trial_idx}")
     logger.info(
-        f"Best optimality gap: {compute_optimality_gap(best_trial.cost, relaxed_cost):.4f}%"
+        f"Best optimality gap: {compute_optimality_gap_pct(best_trial.cost, relaxed_cost):.4f}%"
     )
 
 

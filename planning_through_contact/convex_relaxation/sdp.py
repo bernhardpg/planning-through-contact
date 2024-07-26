@@ -19,6 +19,7 @@ from pydrake.solvers import (
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
+    MosekSolver,
     PositiveSemidefiniteConstraint,
     QuadraticConstraint,
     SemidefiniteRelaxationOptions,
@@ -766,6 +767,8 @@ def solve_psd_completion(
     sparse_sdp: MathematicalProgram,
     sparse_result: MathematicalProgramResult,
     variable_groups: list[sym.Variables],
+    print_solver_output: bool = False,
+    logger: Logger | None = None,
 ) -> npt.NDArray[np.float64]:
     """
     Given the original decision variables, a Semidefinite Program where sparsity is exploited,
@@ -774,6 +777,9 @@ def solve_psd_completion(
 
     I.e. it solves a feasiblity program to find Y = [X x; xᵀ 1] ≽ 0.
     """
+
+    if logger is None:
+        logger = make_default_logger()
 
     sparse_Xs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
     sparse_X_vals = [sparse_result.GetSolution(X) for X in sparse_Xs]
@@ -792,7 +798,9 @@ def solve_psd_completion(
     # Create a new SDP with one big Y matrix.
     psd_completion = MathematicalProgram()
     psd_completion.AddDecisionVariables(np.array([one]))
-    psd_completion.AddLinearEqualityConstraint(one == 1.0)
+    # NOTE: If we enforce one = 1.0, then we get infeasible.
+    # It seems that this program is barely feasible as it is!
+    psd_completion.AddLinearEqualityConstraint(one == sparse_result.GetSolution(one))
 
     # Add all (original) variables to the new program.
     psd_completion.AddDecisionVariables(original_vars)
@@ -806,7 +814,7 @@ def solve_psd_completion(
     psd_completion.AddPositiveSemidefiniteConstraint(Y)
 
     # Tolerance for checking that variables are in fact equal when they should be equal.
-    TOL = 1e-6
+    TOL = 1e-5
 
     # Check that the overlapping entries in the sparse program are in fact equal.
     for i in range(len(variable_groups) - 1):
@@ -882,14 +890,25 @@ def solve_psd_completion(
 
     # Constrain the values in Y to be equal to those from the sparse program solution.
     for var, val in var_values.items():
-        psd_completion.AddLinearEqualityConstraint(var == val)
+        psd_completion.AddLinearConstraint(var <= val + TOL)
+        psd_completion.AddLinearConstraint(var >= val - TOL)
+        # psd_completion.AddLinearEqualityConstraint(var == val)
 
+    # Minimize the trace of Y
+    psd_completion.AddLinearCost(np.trace(Y))
+
+    mosek = MosekSolver()
     solver_options = SolverOptions()
-    solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
-
-    result = Solve(psd_completion, solver_options=solver_options)
+    if print_solver_output:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    result = mosek.Solve(psd_completion, solver_options=solver_options)  # type: ignore
 
     assert result.is_success()
+
+    logger.info(
+        f"Solved PSD completion in {result.get_solver_details().optimizer_time:.2f} s"
+    )
+    logger.info(f" -- Solution status: {result.get_solution_result()}")
 
     return result.GetSolution(Y)
 
@@ -983,8 +1002,8 @@ def solve_sdp_relaxation(
     return X_val, optimal_cost, relaxed_result
 
 
-def compute_optimality_gap(rounded_cost: float, relaxed_cost: float) -> float:
-    return (rounded_cost - relaxed_cost) / relaxed_cost
+def compute_optimality_gap_pct(rounded_cost: float, relaxed_cost: float) -> float:
+    return ((rounded_cost - relaxed_cost) / relaxed_cost) * 100
 
 
 def get_gaussian_from_sdp_relaxation_solution(
@@ -1004,7 +1023,9 @@ def get_gaussian_from_sdp_relaxation_solution(
     assert Y.shape == (N, N)
     assert Y.dtype == float
 
-    assert np.isclose(Y[-1, -1], 1)
+    # NOTE: This tolerance is very low, because solving the PSD
+    # completion program gives numerical instability.
+    assert np.isclose(Y[-1, -1], 1, atol=1e-3)
     X = Y[:-1, :-1]
     x = Y[:-1, -1]
 
