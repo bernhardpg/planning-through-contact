@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
+from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
@@ -785,8 +786,6 @@ def solve_psd_completion(
                 Something must be wrong."
             )
 
-    all_vars_per_group = [sym.Variables(Z.flatten()) for Z in sparse_Xs]
-
     one = sparse_Xs[0][-1, -1]
     assert str(one) == "one"
 
@@ -800,11 +799,14 @@ def solve_psd_completion(
 
     # Add the constraint X ≽ xxᵀ as Y = [X x; xᵀ 1] ≽ 0
     # (using Schur complement).
+    N = len(original_vars)
     x = original_vars.reshape((-1, 1))
-    N = len(x)
     X = psd_completion.NewSymmetricContinuousVariables(N, "X")
     Y = np.block([[X, x], [x.T, np.array([[one]])]])
     psd_completion.AddPositiveSemidefiniteConstraint(Y)
+
+    # Tolerance for checking that variables are in fact equal when they should be equal.
+    TOL = 1e-6
 
     # Check that the overlapping entries in the sparse program are in fact equal.
     for i in range(len(variable_groups) - 1):
@@ -834,66 +836,53 @@ def solve_psd_completion(
         shared_submatrix_val = sparse_result.GetSolution(shared_submatrix)
         shared_submatrix_next_val = sparse_result.GetSolution(shared_submatrix_next)
         # The overlapping entries should be equal in the result.
-        if not np.allclose(shared_submatrix_val, shared_submatrix_next_val, atol=1e-6):
+        if not np.allclose(shared_submatrix_val, shared_submatrix_next_val, atol=TOL):
             raise RuntimeError("Overlapping entries in PSD matrix are NOT equal.")
 
-    def _get_variable_group_idx(vars: np.ndarray) -> int:
-        vs = sym.Variables(vars)
+    # Collect the values for the variables that should be fixed.
+    monomials_to_idx = EqualToDict({var: i for i, var in enumerate(original_vars)})
+    monomials_to_idx[one] = N
 
-        correct_group = lambda group: vs.IsSubsetOf(group)
-        index = next(
-            (i for i, group in enumerate(all_vars_per_group) if correct_group(group)),
-            None,
-        )
-        if index is None:
-            raise RuntimeError(
-                f"Could not find an existing variable group for variables {vars}"
-            )
-        return index
-
-    def _get_var_idx_in_matrix(var: sym.Variable, m: np.ndarray) -> tuple[int, int]:
-        for i in range(m.shape[0]):
-            for j in range(m.shape[1]):
-                if var.EqualTo(m[i, j]):
-                    return i, j
-        raise RuntimeError(f"Could not find {var} in {m}")
-
-    def _get_var_idx_in_prog(var_target: sym.Variable) -> int:
-        if var_target.EqualTo(one):
-            return N
-
-        index = next(
-            (i for i, var in enumerate(original_vars) if var.EqualTo(var_target)), None
-        )
-        if index is None:
-            raise RuntimeError(
-                f"Could not find variable {var_target} in {original_vars}"
-            )
-        return index
-
-    def get_vars_in_big_Y(vars: np.ndarray) -> np.ndarray:
-        group_idx = _get_variable_group_idx(vars)
-        Z = sparse_Xs[group_idx]
-        idxs = [_get_var_idx_in_matrix(var, Z) for var in vars]
-        monomials = [(Z[-1, i], Z[-1, j]) for (i, j) in idxs]
-        monomial_idxs = [
-            (_get_var_idx_in_prog(m), _get_var_idx_in_prog(n)) for m, n in monomials
-        ]
-        vars_in_Y = np.array([Y[i, j] for (i, j) in monomial_idxs])
-        return vars_in_Y
-
-    # Constrain the entries of Y to be equal to those of the sparse program
-    already_constrained_vars = (
-        []
-    )  # keep track of these so we don't add redundant constraints
+    var_values = EqualToDict()
     for sparse_X, sparse_X_val in zip(sparse_Xs, sparse_X_vals):
-        vars_in_Y = get_vars_in_big_Y(sparse_X.flatten())
-        for var, val in zip(vars_in_Y, sparse_X_val.flatten()):
-            print(f"{var} = {val}")
-            # TODO: Something is obviously wrong here, because many of the entries are constrained to be two different values....
-            # if not any((var.EqualTo(other) for other in already_constrained_vars)):
-            psd_completion.AddLinearEqualityConstraint(var == val)
-            already_constrained_vars.append(var)
+        assert sparse_X[-1, -1].EqualTo(one)
+        last_col = sparse_X[:, -1]
+        last_row = sparse_X[-1, :]
+        for i in range(sparse_X.shape[0]):
+            for j in range(sparse_X.shape[1]):
+                val = sparse_X_val[i, j]
+
+                # Find the corresponding entry in Y
+                i_monomial, j_monomial = last_row[i], last_col[j]
+
+                if i_monomial not in monomials_to_idx:
+                    raise RuntimeError(
+                        f"Could not find {i_monomial} in decision variables.\
+                    Something is likely wrong."
+                    )
+
+                if j_monomial not in monomials_to_idx:
+                    raise RuntimeError(
+                        f"Could not find {j_monomial} in decision variables.\
+                    Something is likely wrong."
+                    )
+
+                i_in_Y = monomials_to_idx[i_monomial]
+                j_in_Y = monomials_to_idx[j_monomial]
+                var = Y[i_in_Y, j_in_Y]
+
+                if var in var_values:
+                    if not np.isclose(var_values[var], val, atol=TOL):
+                        raise RuntimeError(
+                            f"Found conflicting values for {var},\
+                            old value = {var_values[var]}, new value = {val}"
+                        )
+                else:
+                    var_values[var] = val
+
+    # Constrain the values in Y to be equal to those from the sparse program solution.
+    for var, val in var_values.items():
+        psd_completion.AddLinearEqualityConstraint(var == val)
 
     solver_options = SolverOptions()
     solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
