@@ -1,8 +1,77 @@
 import argparse
 import inspect
 import logging
+import subprocess
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple, Type, TypeVar
+
+import numpy as np
+import yaml
+
+T = TypeVar("T", bound="YamlMixin")
+
+
+class YamlMixin:
+    """
+    A mixin that adds save/load functionality to a dataclass, and makes
+    sure that the output format (yaml) is also human readable, even for
+    numpy arrays.
+    """
+
+    def to_dict(self) -> dict:
+        if not is_dataclass(self):
+            raise TypeError("save method requires a dataclass instance")
+
+        def convert_ndarrays(obj: Any) -> Any:
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_ndarrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_ndarrays(i) for i in obj]
+            else:
+                return obj
+
+        data = asdict(self)
+        data = convert_ndarrays(data)
+        return data
+
+    def save(self, file_path: Path) -> None:
+        import yaml
+
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(
+                self.to_dict(),
+                yaml_file,
+                default_flow_style=False,
+                sort_keys=True,
+            )
+
+    @classmethod
+    def from_dict(cls: Type[T], data: dict) -> T:
+        def convert_lists_to_ndarrays(obj: Any) -> Any:
+            if isinstance(obj, list):
+                try:
+                    return np.array(obj)
+                except:
+                    return [convert_lists_to_ndarrays(i) for i in obj]
+            elif isinstance(obj, dict):
+                return {k: convert_lists_to_ndarrays(v) for k, v in obj.items()}
+            else:
+                return obj
+
+        data = convert_lists_to_ndarrays(data)
+        config = cls(**data)
+        return config
+
+    @classmethod
+    def load(cls: Type[T], file_path: Path) -> T:
+        import yaml
+
+        with open(file_path, "r") as yaml_file:
+            data = yaml.safe_load(yaml_file)
+        return cls.from_dict(data)
 
 
 def get_main_script_path() -> Optional[Path]:
@@ -15,6 +84,18 @@ def get_main_script_path() -> Optional[Path]:
         ):
             return Path(frame.filename)
     return None
+
+
+def get_current_git_commit() -> str:
+    try:
+        commit_hash = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        return commit_hash
+    except subprocess.CalledProcessError:
+        raise RuntimeError("Could not get current git commit")
 
 
 def make_output_folder() -> Path:

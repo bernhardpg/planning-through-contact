@@ -1,26 +1,35 @@
 from enum import Enum
 from itertools import permutations
-from typing import Any, Callable, List, Tuple
+from logging import Logger
+from pathlib import Path
+from typing import Any, Callable, List, Literal, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
+from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
 from pydrake.solvers import (
     Binding,
+    CommonSolverOption,
     LinearConstraint,
+    LinearCost,
     LinearEqualityConstraint,
     MakeSemidefiniteRelaxation,
     MathematicalProgram,
     MathematicalProgramResult,
+    MosekSolver,
     PositiveSemidefiniteConstraint,
     QuadraticConstraint,
     SemidefiniteRelaxationOptions,
     SnoptSolver,
     Solve,
+    SolverOptions,
 )
 
 from planning_through_contact.geometry.utilities import unit_vector
+from planning_through_contact.tools.script_utils import make_default_logger
 from planning_through_contact.tools.types import (
     NpExpressionArray,
     NpFormulaArray,
@@ -584,6 +593,16 @@ def get_X_from_semidefinite_relaxation(relaxation: MathematicalProgram):
     return X
 
 
+def get_Xs_from_semidefinite_relaxation(
+    relaxation: MathematicalProgram,
+) -> list[np.ndarray]:
+    Xs = [
+        get_X_from_psd_constraint(c)
+        for c in relaxation.positive_semidefinite_constraints()
+    ]
+    return Xs
+
+
 def get_X_from_psd_constraint(binding) -> npt.NDArray:
     assert type(binding.evaluator()) == PositiveSemidefiniteConstraint
     X = binding.variables()
@@ -611,7 +630,9 @@ def approximate_sdp_cones_with_linear_cones(prog: MathematicalProgram) -> None:
             prog.AddLinearConstraint(X_i >= 0)
 
 
-def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) -> List:
+def add_trace_cost_on_psd_cones(
+    prog: MathematicalProgram, eps: float = 1e-6
+) -> List[Binding[LinearCost]]:
     added_costs = []
     for psd_constraint in prog.positive_semidefinite_constraints():
         X = get_X_from_psd_constraint(psd_constraint)
@@ -619,6 +640,399 @@ def add_trace_cost_on_psd_cones(prog: MathematicalProgram, eps: float = 1e-6) ->
         added_costs.append(c)
 
     return added_costs
+
+
+def plot_eigenvalues(
+    X: npt.NDArray[np.float64] | list[npt.NDArray[np.float64]],
+    output_dir: Path | None = None,
+    postfix: str = "",
+) -> None:
+    def compute_and_sort_eigenvalues(
+        matrix: npt.NDArray[np.float64],
+    ) -> npt.NDArray[np.float64]:
+        eigenvalues = np.linalg.eigvalsh(matrix)
+        return np.sort(eigenvalues)[::-1]
+
+    if isinstance(X, list):
+        assert all(
+            matrix.shape == X[0].shape for matrix in X
+        ), "All matrices must have the same shape."
+        N = X[0].shape[0]
+        assert all(
+            matrix.shape == (N, N) for matrix in X
+        ), "Each matrix must be square."
+
+        sorted_eigenvalues_list = [compute_and_sort_eigenvalues(matrix) for matrix in X]
+        eigenvalues_array = np.array(sorted_eigenvalues_list)
+
+        mean_eigenvalues = np.mean(eigenvalues_array, axis=0)
+        std_eigenvalues = np.std(eigenvalues_array, axis=0)
+
+        sorted_eigenvalues = mean_eigenvalues
+        yerr = std_eigenvalues
+        title = f"Eigenvalues of the {len(X)} PSD Matrices (sorted)"
+    else:
+        N = X.shape[0]
+        assert X.shape == (N, N), "The input matrix must be square."
+
+        sorted_eigenvalues = compute_and_sort_eigenvalues(X)
+        yerr = None
+        title = "Eigenvalues of the PSD Matrix (sorted)"
+
+    indices = np.arange(len(sorted_eigenvalues))
+    plt.bar(
+        indices, sorted_eigenvalues, yerr=yerr, capsize=5 if yerr is not None else 0
+    )
+    plt.xlabel("Index")
+    plt.ylabel("Eigenvalue")
+    plt.title(title)
+
+    if output_dir is None:
+        plt.show()
+    else:
+        plt.savefig(output_dir / f"eigenvalues{postfix}.pdf")
+        plt.close()
+
+
+def print_eigenvalues(
+    X: npt.NDArray[np.float64], threshold: float = 1e-4, logger: Logger | None = None
+) -> None:
+    if logger is None:
+        logger = make_default_logger()
+
+    N = X.shape[0]
+    assert X.shape == (N, N)
+
+    # Compute eigenvalues
+    # (note: eigvalsh is more stable for real symmetric matrices)
+    eigenvalues = np.linalg.eigvalsh(X)
+
+    # Sort eigenvalues in descending order
+    sorted_eigenvalues = np.sort(eigenvalues)[::-1]
+
+    # Filter eigenvalues above the threshold
+    filtered_eigenvalues = sorted_eigenvalues[sorted_eigenvalues > threshold]
+
+    # Print the filtered eigenvalues
+    logger.info("Eigenvalues above the threshold of {}: ".format(threshold))
+    for i, eigenvalue in enumerate(filtered_eigenvalues, start=1):
+        logger.info("    Eigenvalue {}: {:.4f}".format(i, eigenvalue))
+
+    if len(filtered_eigenvalues) == 1:
+        logger.info("Solution is rank-tight!")
+
+
+def get_principal_minor(matrix: np.ndarray, indices: list[int]) -> np.ndarray:
+    """
+    Returns the principal minor of a matrix for a given list of indices.
+
+    Parameters:
+    matrix (np.ndarray): The input square matrix.
+    indices (list of int): The list of indices for the principal minor.
+
+    Returns:
+    np.ndarray: The principal minor submatrix.
+
+    Raises:
+    ValueError: If the matrix is not square or indices are invalid.
+    """
+    # Check if the input is a NumPy array
+    if not isinstance(matrix, np.ndarray):
+        raise ValueError("Input matrix must be a NumPy array.")
+
+    # Check if the matrix is square
+    rows, cols = matrix.shape
+    if rows != cols:
+        raise ValueError("Input matrix must be square.")
+
+    # Check if all indices are valid
+    if not all(isinstance(i, int) and 0 <= i < rows for i in indices):
+        raise ValueError("All indices must be integers within the matrix dimensions.")
+
+    # Check for duplicate indices
+    if len(indices) != len(set(indices)):
+        raise ValueError("Indices must not contain duplicates.")
+
+    # Convert the indices to a numpy array for advanced indexing
+    indices = np.array(indices)  # type: ignore
+
+    # Get the submatrix corresponding to the given indices
+    principal_minor = matrix[np.ix_(indices, indices)]
+
+    return principal_minor
+
+
+def solve_psd_completion(
+    original_vars: npt.NDArray[Any],
+    sparse_sdp: MathematicalProgram,
+    sparse_result: MathematicalProgramResult,
+    variable_groups: list[sym.Variables],
+    print_solver_output: bool = False,
+    logger: Logger | None = None,
+) -> npt.NDArray[np.float64]:
+    """
+    Given the original decision variables, a Semidefinite Program where sparsity is exploited,
+    the solution result for the sparse program, and a list of variable groups used to generate
+    the sparse program, this solves the PSD completion problem for the sparse program.
+
+    I.e. it solves a feasiblity program to find Y = [X x; xᵀ 1] ≽ 0.
+    """
+
+    if logger is None:
+        logger = make_default_logger()
+
+    sparse_Xs = get_Xs_from_semidefinite_relaxation(sparse_sdp)
+    sparse_X_vals = [sparse_result.GetSolution(X) for X in sparse_Xs]
+
+    # Check that the dimensions in the provided prog are correct.
+    for group, sparse_X, sparse_X_val in zip(variable_groups, sparse_Xs, sparse_X_vals):
+        if not len(group) == sparse_X.shape[0] - 1:
+            raise RuntimeError(
+                "Dimensions of variable groups and sparse PSD matrices do not match. \
+                Something must be wrong."
+            )
+
+    one = sparse_Xs[0][-1, -1]
+    assert str(one) == "one"
+
+    # Create a new SDP with one big Y matrix.
+    psd_completion = MathematicalProgram()
+    psd_completion.AddDecisionVariables(np.array([one]))
+    # NOTE: If we enforce one = 1.0, then we get infeasible.
+    # It seems that this program is barely feasible as it is!
+    psd_completion.AddLinearEqualityConstraint(one == sparse_result.GetSolution(one))
+
+    # Add all (original) variables to the new program.
+    psd_completion.AddDecisionVariables(original_vars)
+
+    # Add the constraint X ≽ xxᵀ as Y = [X x; xᵀ 1] ≽ 0
+    # (using Schur complement).
+    N = len(original_vars)
+    x = original_vars.reshape((-1, 1))
+    X = psd_completion.NewSymmetricContinuousVariables(N, "X")
+    Y = np.block([[X, x], [x.T, np.array([[one]])]])
+    psd_completion.AddPositiveSemidefiniteConstraint(Y)
+
+    # Tolerance for checking that variables are in fact equal when they should be equal.
+    TOL = 1e-5
+
+    # Check that the overlapping entries in the sparse program are in fact equal.
+    for i in range(len(variable_groups) - 1):
+        group = variable_groups[i]
+        group_next = variable_groups[i + 1]
+        common_variables = sym.intersect(group, group_next)
+
+        sparse_X = sparse_Xs[i]
+        sparse_X_next = sparse_Xs[i + 1]
+
+        def _get_submatrix_of_common_variables_in_matrix(M: np.ndarray):
+            """
+            Gets the submatrix (principal minor) in M associated with all variables in common_variables.
+            """
+            submatrix_idxs = []
+            for v in common_variables:
+                for var_idx in range(M.shape[0]):
+                    if v.EqualTo(M[var_idx, -1]):
+                        submatrix_idxs.append(var_idx)
+            return get_principal_minor(M, submatrix_idxs)
+
+        shared_submatrix = _get_submatrix_of_common_variables_in_matrix(sparse_X)
+        shared_submatrix_next = _get_submatrix_of_common_variables_in_matrix(
+            sparse_X_next
+        )
+
+        shared_submatrix_val = sparse_result.GetSolution(shared_submatrix)
+        shared_submatrix_next_val = sparse_result.GetSolution(shared_submatrix_next)
+        # The overlapping entries should be equal in the result.
+        if not np.allclose(shared_submatrix_val, shared_submatrix_next_val, atol=TOL):
+            raise RuntimeError("Overlapping entries in PSD matrix are NOT equal.")
+
+    # Collect the values for the variables that should be fixed.
+    monomials_to_idx = EqualToDict({var: i for i, var in enumerate(original_vars)})
+    monomials_to_idx[one] = N
+
+    var_values = EqualToDict()
+    for sparse_X, sparse_X_val in zip(sparse_Xs, sparse_X_vals):
+        assert sparse_X[-1, -1].EqualTo(one)
+        last_col = sparse_X[:, -1]
+        last_row = sparse_X[-1, :]
+        for i in range(sparse_X.shape[0]):
+            for j in range(sparse_X.shape[1]):
+                val = sparse_X_val[i, j]
+
+                # Find the corresponding entry in Y
+                i_monomial, j_monomial = last_row[i], last_col[j]
+
+                if i_monomial not in monomials_to_idx:
+                    raise RuntimeError(
+                        f"Could not find {i_monomial} in decision variables.\
+                    Something is likely wrong."
+                    )
+
+                if j_monomial not in monomials_to_idx:
+                    raise RuntimeError(
+                        f"Could not find {j_monomial} in decision variables.\
+                    Something is likely wrong."
+                    )
+
+                i_in_Y = monomials_to_idx[i_monomial]
+                j_in_Y = monomials_to_idx[j_monomial]
+                var = Y[i_in_Y, j_in_Y]
+
+                if var in var_values:
+                    if not np.isclose(var_values[var], val, atol=TOL):
+                        raise RuntimeError(
+                            f"Found conflicting values for {var},\
+                            old value = {var_values[var]}, new value = {val}"
+                        )
+                else:
+                    var_values[var] = val
+
+    # Constrain the values in Y to be equal to those from the sparse program solution.
+    for var, val in var_values.items():
+        psd_completion.AddLinearConstraint(var <= val + TOL)
+        psd_completion.AddLinearConstraint(var >= val - TOL)
+        # psd_completion.AddLinearEqualityConstraint(var == val)
+
+    # Minimize the trace of Y
+    psd_completion.AddLinearCost(np.trace(Y))
+
+    mosek = MosekSolver()
+    solver_options = SolverOptions()
+    if print_solver_output:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+    result = mosek.Solve(psd_completion, solver_options=solver_options)  # type: ignore
+
+    assert result.is_success()
+
+    logger.info(
+        f"Solved PSD completion in {result.get_solver_details().optimizer_time:.2f} s"
+    )
+    logger.info(f" -- Solution status: {result.get_solution_result()}")
+
+    return result.GetSolution(Y)
+
+
+ImpliedConstraintsType = Literal["weakest", "strongest"]
+
+
+def solve_sdp_relaxation(
+    qcqp: MathematicalProgram,
+    trace_cost: float | None = None,
+    implied_constraints: ImpliedConstraintsType = "weakest",
+    variable_groups: list[sym.Variables] | None = None,
+    print_solver_output: bool = False,
+    plot_eigvals: bool = False,
+    print_eigvals: bool = False,
+    print_time: bool = False,
+    logger: Logger | None = None,
+    output_dir: Path | None = None,
+) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
+    """
+    @return Y, cost (without trace penalty), MathematicalProgramResult
+    """
+    if logger is None:
+        logger = make_default_logger()
+
+    options = SemidefiniteRelaxationOptions()
+    if implied_constraints == "weakest":
+        options.set_to_weakest()
+    else:
+        options.set_to_strongest()
+
+    if variable_groups is None:
+        sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, options)
+    else:
+        sdp_relaxation = MakeSemidefiniteRelaxation(qcqp, variable_groups, options)
+
+    solver_options = SolverOptions()
+    if print_solver_output:
+        solver_options.SetOption(CommonSolverOption.kPrintToConsole, 1)  # type: ignore
+
+    trace_costs = None
+    if trace_cost is not None:
+        trace_costs = add_trace_cost_on_psd_cones(sdp_relaxation, eps=trace_cost)
+
+    relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
+    assert relaxed_result.is_success()
+    logger.info("Found solution.")
+    if print_time:
+        logger.info(
+            f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
+        )
+        logger.info(
+            f"Relaxed cost: {relaxed_result.get_optimal_cost():.4f}"  # type: ignore
+        )
+
+    if variable_groups is None:
+        X = get_X_from_semidefinite_relaxation(sdp_relaxation)
+        X_val = relaxed_result.GetSolution(X)
+        X_vals = None
+    else:
+        Xs = get_Xs_from_semidefinite_relaxation(sdp_relaxation)
+        X_vals = [relaxed_result.GetSolution(X_k) for X_k in Xs]
+
+        plot_eigenvalues(X_vals, output_dir, postfix="_sparse_Xs")
+
+        X_val = solve_psd_completion(
+            qcqp.decision_variables(), sdp_relaxation, relaxed_result, variable_groups
+        )
+
+    if plot_eigvals:
+        if X_vals is not None:
+            plot_eigenvalues(X_vals, output_dir, postfix="_sparse_Xs")
+        plot_eigenvalues(X_val, output_dir)
+
+    if print_eigvals:
+        print_eigenvalues(X_val)
+
+    if trace_cost and trace_costs is not None:
+
+        def eval_cost(cost: Binding[LinearCost]) -> float:
+            return cost.evaluator().Eval(relaxed_result.GetSolution(cost.variables()))
+
+        trace_cost_val = np.sum([eval_cost(cost) for cost in trace_costs])
+        logger.info(f"Total trace cost: ε * Tr X = {trace_cost_val:.4f}")
+
+        optimal_cost = relaxed_result.get_optimal_cost() - trace_cost_val
+
+    else:
+        optimal_cost = relaxed_result.get_optimal_cost()
+
+    return X_val, optimal_cost, relaxed_result
+
+
+def compute_optimality_gap_pct(rounded_cost: float, relaxed_cost: float) -> float:
+    return ((rounded_cost - relaxed_cost) / relaxed_cost) * 100
+
+
+def get_gaussian_from_sdp_relaxation_solution(
+    Y: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Follows the sceme from Section 3.3 in
+    J. Park and S. P. Boyd, “General Heuristics for
+    Nonconvex Quadratically Constrained Quadratic Programming,” 2017
+
+    Y = [X  x
+         xᵀ 1]
+
+    @return (mean vector, covariance matrix)
+    """
+    N = Y.shape[0]
+    assert Y.shape == (N, N)
+    assert Y.dtype == float
+
+    # NOTE: This tolerance is very low, because solving the PSD
+    # completion program gives numerical instability.
+    assert np.isclose(Y[-1, -1], 1, atol=1e-3)
+    X = Y[:-1, :-1]
+    x = Y[:-1, -1]
+
+    μ = x
+    Σ = X - np.outer(x, x)
+
+    return μ, Σ
 
 
 def to_symmetric_matrix_from_lower_triangular_columns(
