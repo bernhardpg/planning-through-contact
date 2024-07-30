@@ -275,7 +275,7 @@ def test_so_2_relaxation_multiple_points(
     assert np.allclose(rs[:, -1], create_r_vec_from_angle(th_target))
 
 
-###### DEPRECATED
+###### DEPRECATED (end)
 
 
 def test_eq_elimination_formulation() -> None:
@@ -290,7 +290,7 @@ def test_eq_elimination_formulation() -> None:
     prog.AddBoundingBoxConstraint(-5, np.inf, y)
     prog.AddBoundingBoxConstraint(-5, np.inf, z)
 
-    smaller_prog, _ = eliminate_equality_constraints(prog)
+    smaller_prog, _, _ = eliminate_equality_constraints(prog)
 
     assert (
         len(smaller_prog.linear_constraints()) == 1
@@ -327,8 +327,12 @@ def test_eq_elimination_formulation() -> None:
     assert np.allclose(b, b_target)
 
 
-def get_x_as_float(get_x: Callable) -> Callable:
-    return lambda x: sym.Evaluate(get_x(x)).flatten()
+def _get_x(
+    F: npt.NDArray[np.float64],
+    x_hat: npt.NDArray[np.float64],
+    z: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    return F @ z + x_hat.flatten()
 
 
 def test_eq_elimination_qp_solution() -> None:
@@ -345,8 +349,7 @@ def test_eq_elimination_qp_solution() -> None:
 
     prog.AddCost(x**2 + y + z)
 
-    smaller_prog, get_x = eliminate_equality_constraints(prog)
-    get_x = get_x_as_float(get_x)
+    smaller_prog, F, x_hat = eliminate_equality_constraints(prog)
 
     prog.SetInitialGuess(prog.decision_variables(), np.array([0.1, -3, -3]))
     result = Solve(prog)
@@ -356,16 +359,21 @@ def test_eq_elimination_qp_solution() -> None:
 
     smaller_initial_guess = np.array([-5, -5])
     # make sure we provide the right initial guess
-    assert np.allclose(sol, get_x(smaller_initial_guess))
+    assert np.allclose(sol, _get_x(F, x_hat, smaller_initial_guess))
 
     smaller_prog.SetInitialGuess(
         smaller_prog.decision_variables(), smaller_initial_guess
     )
     smaller_result = Solve(smaller_prog)
     assert smaller_result.is_success()  # this should not fail
-    smaller_sol = get_x(smaller_result.GetSolution(smaller_prog.decision_variables()))
+    smaller_sol = _get_x(
+        F, x_hat, smaller_result.GetSolution(smaller_prog.decision_variables())
+    )
 
     assert np.allclose(sol, smaller_sol)
+
+    # Make sure the costs are the same
+    assert np.isclose(smaller_result.get_optimal_cost(), result.get_optimal_cost())
 
 
 def test_so2_equality_elimination_with_initial_guess(
@@ -381,15 +389,14 @@ def test_so2_equality_elimination_with_initial_guess(
 
     sol = result.GetSolution(prog.decision_variables())
 
-    smaller_prog, get_x = eliminate_equality_constraints(prog)
-    get_x = get_x_as_float(get_x)
+    smaller_prog, F, x_hat = eliminate_equality_constraints(prog)
 
     z = smaller_prog.decision_variables()
     smaller_prog.SetInitialGuess(z, np.array([-0.7]))
     smaller_result = Solve(smaller_prog)
     assert smaller_result.is_success()
 
-    sol = get_x(smaller_result.GetSolution(z))
+    sol = _get_x(F, x_hat, smaller_result.GetSolution(z))
     # There are only two feasible points
     assert np.allclose(np.abs(sol), np.abs(true_sol))
 
@@ -406,8 +413,7 @@ def test_eq_elimination_with_relaxation(
     ) = so_2_prog_multiple_points
 
     # Find solution by eliminating equalities first
-    smaller_prog, get_x = eliminate_equality_constraints(prog)
-    get_x = get_x_as_float(get_x)
+    smaller_prog, F, x_hat = eliminate_equality_constraints(prog)
 
     relaxed_prog = MakeSemidefiniteRelaxation(smaller_prog)
     result = Solve(relaxed_prog)
@@ -434,7 +440,7 @@ def test_eq_elimination_with_relaxation(
     )
     assert num_nonzero_eigvals == 1
     z = result.GetSolution(smaller_prog.decision_variables())
-    x = get_x(z)
+    x = _get_x(F, x_hat, z)
 
     # Find solution from relaxing the program directly
     relaxed_prog = MakeSemidefiniteRelaxation(prog)

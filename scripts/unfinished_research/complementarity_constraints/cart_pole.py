@@ -12,6 +12,7 @@ import numpy.typing as npt
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
+from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
 from pydrake.symbolic import Variable, Variables
@@ -211,13 +212,13 @@ class CartPoleWithWallsTrajectory:
         T_s: float,
     ) -> "CartPoleWithWallsTrajectory":
         if state.shape[1] != 4:
-            raise ValueError("Input array must have shape (N, 4)")
+            raise ValueError("States must have shape (N, 4)")
 
-        if len(input.shape) != 1:
-            raise ValueError("Input array must have shape (N, )")
+        if input.shape[1] != 1:
+            raise ValueError("Inputs must have shape (N, 1)")
 
         if forces.shape[1] != 2:
-            raise ValueError("Input array must have shape (N, 2)")
+            raise ValueError("Forces must have shape (N, 2)")
 
         cart_pos = state[:, 0]
         pole_pos = state[:, 1]
@@ -606,9 +607,40 @@ class LcsTrajectoryOptimization:
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
         xs_sol = evaluate_np_expressions_array(self.xs, result)
-        us_sol = result.GetSolution(self.us)
+        us_sol = result.GetSolution(self.us).reshape(self.us.shape)
         λs_sol = result.GetSolution(self.λs)
         return xs_sol, us_sol, λs_sol
+
+    def get_state_input_forces_from_decision_var_values(
+        self, vals: npt.NDArray[np.float64]
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]:
+        """
+        Given an array of decision variable values, return the corresponding xs, us, λs.
+        """
+        if not len(vals) == len(self.qcqp.decision_variables()):
+            raise RuntimeError(
+                f"Number of provided values does not match number of decision\
+                variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
+            )
+
+        var_to_idx = EqualToDict(
+            {var: idx for idx, var in enumerate(self.qcqp.decision_variables())}
+        )
+
+        def get_val_or_keep(var_or_val: float | Variable) -> float:
+            if type(var_or_val) == float:
+                return var_or_val
+            elif type(var_or_val) == Variable:
+                val_idx = var_to_idx[var_or_val]
+                return float(vals[val_idx])
+            else:
+                breakpoint()
+                raise RuntimeError("Wrong type")
+
+        get_vals = np.vectorize(get_val_or_keep)
+        return get_vals(self.xs), get_vals(self.us), get_vals(self.λs)
 
     def get_vars_at_time_step(self, k: int) -> np.ndarray:
         assert k <= self.params.N
@@ -626,6 +658,7 @@ class LcsTrajectoryOptimization:
         ]
         return variable_groups
 
+    # TODO(bernhardpg): Unused, so we can delete this!
     def update_program_result(
         self, result: MathematicalProgramResult, values: npt.NDArray[np.float64]
     ) -> None:
@@ -685,6 +718,32 @@ def test_lcs_trajectory_optimization():
     for group in groups:
         assert isinstance(group, Variables)
         assert len(group) == (sys.num_states + sys.num_inputs + sys.num_forces) * 2
+
+
+def test_lcs_get_state_input_forces_from_vals():
+    sys = CartPoleWithWalls()
+    params = TrajectoryOptimizationParameters(
+        N=10,
+        T_s=0.01,
+        Q=np.diag([1, 1, 1, 1]),
+        Q_N=np.diag([1, 1, 1, 1]),
+        R=np.array([1]),
+    )
+
+    x0 = np.array([0.0, 0.0, 0.0, 0.0])
+
+    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+    prog = trajopt.qcqp
+
+    np.random.seed(0)
+    vals = np.random.rand(*prog.decision_variables().shape)
+    assert isinstance(vals, type(np.array([])))
+    xs, us, λs = trajopt.get_state_input_forces_from_decision_var_values(vals)
+
+    assert np.allclose(xs[0, :], x0)
+    assert xs.shape == trajopt.xs.shape
+    assert us.shape == trajopt.us.shape
+    assert λs.shape == trajopt.λs.shape
 
 
 @dataclass
@@ -763,7 +822,8 @@ class CartPoleConfig(YamlMixin):
     trajopt_params: TrajectoryOptimizationParameters
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
-    trace_cost: float | None
+    use_equality_elimination: bool
+    use_trace_cost: float | None
     use_chain_sparsity: bool
     seed: int
     num_rounding_trials: int
@@ -776,15 +836,17 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=10,
+            N=20,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
         x0=np.array([0.3, 0, 0.1, 0]),
-        implied_constraints="strongest",
-        trace_cost=None,
-        use_chain_sparsity=True,
+        implied_constraints="weakest",
+        use_equality_elimination=True,
+        use_trace_cost=1e-5,
+        # use_chain_sparsity=True,
+        use_chain_sparsity=False,
         seed=0,
         num_rounding_trials=5,
         git_commit=get_current_git_commit(),
@@ -797,9 +859,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     trajopt = LcsTrajectoryOptimization(sys, cfg.trajopt_params, cfg.x0)
 
     logger.info("Solving SDP relaxation...")
-    Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
+
+    Y, relaxed_cost, _ = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
-        trace_cost=cfg.trace_cost,
+        trace_cost=cfg.use_trace_cost,
         implied_constraints=cfg.implied_constraints,
         variable_groups=(
             trajopt.get_variable_groups() if cfg.use_chain_sparsity else None
@@ -809,18 +872,20 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
+        use_eq_elimination=cfg.use_equality_elimination,
     )
 
+    # Rounding
+    μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+
+    # Save "mean"/relaxed trajectory
     relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.evaluate_state_input_forces(relaxed_result),
+        *trajopt.get_state_input_forces_from_decision_var_values(μ),
         sys,
         cfg.trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
-
-    # Rounding
-    μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
     initial_guesses = [μ]  # use the mean as an initial guess
     initial_guesses.extend(
@@ -875,6 +940,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     test_cart_pole_w_walls()
     test_lcs_trajectory_optimization()
+    test_lcs_get_state_input_forces_from_vals()
 
     cart_pole_experiment_1(output_dir, debug, logger)
 
