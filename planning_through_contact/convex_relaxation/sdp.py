@@ -295,8 +295,15 @@ def eliminate_equality_constraints(
     )
     F = get_nullspace_matrix(A_eq)
 
+    LIN_INDEP_TOL = 1e-4
+    if not np.linalg.matrix_rank(A_eq, tol=LIN_INDEP_TOL) == A_eq.shape[0]:
+        raise ValueError(
+            f"A_eq has linearly independent rows (up to tolerance {LIN_INDEP_TOL})."
+        )
+
     if sparsity_viz_output_dir is not None:
-        visualize_sparsity(F, output_dir=sparsity_viz_output_dir)
+        visualize_sparsity(A_eq, output_dir=sparsity_viz_output_dir, postfix="_A_eq")
+        visualize_sparsity(F, output_dir=sparsity_viz_output_dir, postfix="_F")
 
     x_hat = find_solution(
         A_eq, -b_eq

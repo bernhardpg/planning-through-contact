@@ -587,7 +587,7 @@ class LcsTrajectoryOptimization:
         if params.Q_N is not None:
             Q_N = params.Q_N
         else:
-            _, S = res = DiscreteTimeLinearQuadraticRegulator(
+            _, S = DiscreteTimeLinearQuadraticRegulator(
                 sys.A, sys.B, params.Q, params.R
             )
             Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
