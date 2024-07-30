@@ -224,7 +224,7 @@ class CartPoleWithWallsTrajectory:
         pole_pos = state[:, 1]
         cart_vel = state[:, 2]
         pole_vel = state[:, 3]
-        applied_force = input
+        applied_force = input.flatten()
         right_wall_force = forces[:, 0]
         left_wall_force = forces[:, 1]
 
