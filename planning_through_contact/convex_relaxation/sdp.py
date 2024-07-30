@@ -984,7 +984,7 @@ def solve_sdp_relaxation(
                 "Cannot use variable groups when using equality elimination"
             )
         qcqp, F, x_hat = eliminate_equality_constraints(
-            qcqp, sparsity_viz_output_dir=output_dir
+            qcqp, sparsity_viz_output_dir=output_dir, logger=logger
         )
     else:
         F, x_hat = None, None
@@ -1052,7 +1052,7 @@ def solve_sdp_relaxation(
         plot_eigenvalues(Y_val, output_dir)
 
     if print_eigvals:
-        print_eigenvalues(Y_val)
+        print_eigenvalues(Y_val, logger=logger)
 
     if trace_cost and trace_costs is not None:
 
