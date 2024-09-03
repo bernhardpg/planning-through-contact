@@ -841,8 +841,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
             Q=Q,
             R=np.array([1]),
         ),
-        x0=np.array([0.3, 0, 0.1, 0]),
+        x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
+        # use_equality_elimination=False,
         use_equality_elimination=True,
         use_trace_cost=1e-5,
         # use_chain_sparsity=True,
@@ -943,6 +944,7 @@ def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     test_lcs_get_state_input_forces_from_vals()
 
     cart_pole_experiment_1(output_dir, debug, logger)
+    # cart_pole_experiment_2(output_dir, debug, logger)
 
 
 if __name__ == "__main__":

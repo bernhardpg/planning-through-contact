@@ -336,9 +336,13 @@ def eliminate_equality_constraints(
         B, d = _linear_bindings_to_affine_terms(
             prog.linear_constraints(), bounding_box_ineqs, decision_vars
         )  # B x >= -d becomes B F z >= -d - B x_hat
+
         new_prog.AddLinearConstraint(
             B.dot(F), -d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
         )
+
+        visualize_sparsity(B, output_dir=sparsity_viz_output_dir, postfix="_B")
+        visualize_sparsity(B @ F, output_dir=sparsity_viz_output_dir, postfix="_BF")
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
@@ -347,7 +351,7 @@ def eliminate_equality_constraints(
         )
 
     if len(prog.quadratic_constraints()) > 0:
-        for binding in prog.quadratic_constraints():
+        for idx, binding in enumerate(prog.quadratic_constraints()):
             e = binding.evaluator()
             Q = np.zeros((old_dim, old_dim))
             binding_Q = e.Q()
@@ -380,6 +384,13 @@ def eliminate_equality_constraints(
 
             new_prog.AddQuadraticConstraint(
                 new_Q, new_b, new_lb, new_ub, new_decision_vars
+            )
+
+            visualize_sparsity(
+                Q, output_dir=sparsity_viz_output_dir, postfix=f"_Q_{idx}"
+            )
+            visualize_sparsity(
+                new_Q, output_dir=sparsity_viz_output_dir, postfix=f"_new_Q_{idx}"
             )
             # Better way of doing this:
             # Q = binding.evaluator().Q()
@@ -681,6 +692,7 @@ def visualize_sparsity(
     if output_dir is None:
         plt.show()
     else:
+        output_dir.mkdir(parents=True, exist_ok=True)
         plt.savefig(output_dir / f"sparsity{postfix}.pdf")
         plt.close()
 
@@ -991,7 +1003,11 @@ def solve_sdp_relaxation(
                 "Cannot use variable groups when using equality elimination"
             )
         qcqp, F, x_hat = eliminate_equality_constraints(
-            qcqp, sparsity_viz_output_dir=output_dir, logger=logger
+            qcqp,
+            sparsity_viz_output_dir=(
+                output_dir / "sparsity_patterns" if output_dir is not None else None
+            ),
+            logger=logger,
         )
     else:
         F, x_hat = None, None
