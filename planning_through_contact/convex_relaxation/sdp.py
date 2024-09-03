@@ -341,8 +341,9 @@ def eliminate_equality_constraints(
             B.dot(F), -d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
         )
 
-        visualize_sparsity(B, output_dir=sparsity_viz_output_dir, postfix="_B")
-        visualize_sparsity(B @ F, output_dir=sparsity_viz_output_dir, postfix="_BF")
+        if sparsity_viz_output_dir is not None:
+            visualize_sparsity(B, output_dir=sparsity_viz_output_dir, postfix="_B")
+            visualize_sparsity(B @ F, output_dir=sparsity_viz_output_dir, postfix="_BF")
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
@@ -386,12 +387,13 @@ def eliminate_equality_constraints(
                 new_Q, new_b, new_lb, new_ub, new_decision_vars
             )
 
-            visualize_sparsity(
-                Q, output_dir=sparsity_viz_output_dir, postfix=f"_Q_{idx}"
-            )
-            visualize_sparsity(
-                new_Q, output_dir=sparsity_viz_output_dir, postfix=f"_new_Q_{idx}"
-            )
+            if sparsity_viz_output_dir is not None:
+                visualize_sparsity(
+                    Q, output_dir=sparsity_viz_output_dir, postfix=f"_Q_{idx}"
+                )
+                visualize_sparsity(
+                    new_Q, output_dir=sparsity_viz_output_dir, postfix=f"_new_Q_{idx}"
+                )
             # Better way of doing this:
             # Q = binding.evaluator().Q()
             # b = binding.evaluator().b()
