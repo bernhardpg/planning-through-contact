@@ -290,7 +290,7 @@ def test_eq_elimination_formulation() -> None:
     prog.AddBoundingBoxConstraint(-5, np.inf, y)
     prog.AddBoundingBoxConstraint(-5, np.inf, z)
 
-    smaller_prog, _, _ = eliminate_equality_constraints(prog)
+    smaller_prog, _, _ = eliminate_equality_constraints(prog, null_space_method="svd")
 
     assert (
         len(smaller_prog.linear_constraints()) == 1
@@ -349,7 +349,9 @@ def test_eq_elimination_qp_solution() -> None:
 
     prog.AddCost(x**2 + y + z)
 
-    smaller_prog, F, x_hat = eliminate_equality_constraints(prog)
+    smaller_prog, F, x_hat = eliminate_equality_constraints(
+        prog, null_space_method="svd"
+    )
 
     prog.SetInitialGuess(prog.decision_variables(), np.array([0.1, -3, -3]))
     result = Solve(prog)
