@@ -398,11 +398,28 @@ def eliminate_equality_constraints(
             )
 
             if sparsity_viz_output_dir is not None:
+                if not new_lb == new_ub:
+                    raise NotImplementedError(
+                        "Quadratic inequality constraints are not supported."
+                    )
+
+                def _make_homogenuous(Q, b, c):
+                    b = b.reshape((-1, 1))
+                    # fmt: off
+                    Q_hom = np.block([[0.5 * Q, 0.5 * b],
+                                      [0.5 * b.T, c]])
+                    # fmt: on
+                    return Q_hom
+
                 visualize_sparsity(
-                    Q, output_dir=sparsity_viz_output_dir, postfix=f"_Q_{idx}"
+                    _make_homogenuous(Q, b, lb),
+                    output_dir=sparsity_viz_output_dir,
+                    postfix=f"_Q_{idx}",
                 )
                 visualize_sparsity(
-                    new_Q, output_dir=sparsity_viz_output_dir, postfix=f"_new_Q_{idx}"
+                    _make_homogenuous(new_Q, new_b, new_lb),
+                    output_dir=sparsity_viz_output_dir,
+                    postfix=f"_new_Q_{idx}",
                 )
             # Better way of doing this:
             # Q = binding.evaluator().Q()
