@@ -10,7 +10,7 @@ import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.common.containers import EqualToDict
-from pydrake.math import eq, ge
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     Binding,
     CommonSolverOption,
@@ -338,22 +338,70 @@ def eliminate_equality_constraints(
     )
     logger.info(f"Total number of vars in SDP relaxation eliminated: {diff}")
 
-    has_linear_ineq_constraints = (
-        len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
-    )
-    if has_linear_ineq_constraints:
-        # Notice sign change on d
-        B, d = _linear_bindings_to_affine_terms(
-            prog.linear_constraints(), bounding_box_ineqs, decision_vars
-        )  # B x >= -d becomes B F z >= -d - B x_hat
+    for idx, b in enumerate(prog.bounding_box_constraints()):
+        e = b.evaluator()
+        num_constraints = len(b.variables())
+        var_idxs = prog.FindDecisionVariableIndices(b.variables())
 
-        new_prog.AddLinearConstraint(
-            B.dot(F), -d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
-        )
+        # Construct a matrix that picks out the corresponding bbox variables
+        A = np.zeros((num_constraints, old_dim))
+        for constraint_i, prog_var_j in enumerate(var_idxs):
+            A[constraint_i, prog_var_j] = 1.0
+
+        lb = e.lower_bound()
+        ub = e.upper_bound()
+
+        # lb <= A x <= ub becomes lb - A x_hat <= A F z <= ub - A x_hat
+        # (Remember that x = Fx + x_hat)
+        A_x_hat = (A @ x_hat).flatten()
+        new_lb = lb - A_x_hat
+        new_ub = ub - A_x_hat
+        new_A = A @ F
+
+        # NOTE: We multiply out result when adding the constraint to make sure that
+        # Drake does not add the constraint as a dense constraint.
+        b_new = new_prog.AddLinearConstraint(new_A @ new_decision_vars, new_lb, new_ub)
 
         if sparsity_viz_output_dir is not None:
-            visualize_sparsity(B, output_dir=sparsity_viz_output_dir, postfix="_B")
-            visualize_sparsity(B @ F, output_dir=sparsity_viz_output_dir, postfix="_BF")
+            visualize_sparsity(
+                A, output_dir=sparsity_viz_output_dir, postfix=f"_bbox_{idx}"
+            )
+            visualize_sparsity(
+                new_A, output_dir=sparsity_viz_output_dir, postfix=f"_new_bbox_{idx}"
+            )
+
+    for idx, b in enumerate(prog.linear_constraints()):
+        e = b.evaluator()
+        binding_A = e.GetDenseA()
+        num_constraints = binding_A.shape[0]
+        A = np.zeros((num_constraints, old_dim))
+        var_idxs = prog.FindDecisionVariableIndices(b.variables())
+
+        for constraint_i in range(num_constraints):
+            for binding_var_j, prog_var_j in enumerate(var_idxs):
+                A[constraint_i, prog_var_j] = binding_A[constraint_i, binding_var_j]
+
+        lb = e.lower_bound()
+        ub = e.upper_bound()
+
+        # lb <= A x <= ub becomes lb - A x_hat <= A F z <= ub - A x_hat
+        # (Remember that x = Fx + x_hat)
+        A_x_hat = (A @ x_hat).flatten()
+        new_lb = lb - A_x_hat
+        new_ub = ub - A_x_hat
+        new_A = A @ F
+
+        # NOTE: We multiply out result when adding the constraint to make sure that
+        # Drake does not add the constraint as a dense constraint.
+        new_prog.AddLinearConstraint(new_A @ new_decision_vars, new_lb, new_ub)
+
+        if sparsity_viz_output_dir is not None:
+            visualize_sparsity(
+                A, output_dir=sparsity_viz_output_dir, postfix=f"_A_{idx}"
+            )
+            visualize_sparsity(
+                new_A, output_dir=sparsity_viz_output_dir, postfix=f"_new_A_{idx}"
+            )
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
