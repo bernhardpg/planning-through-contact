@@ -529,10 +529,13 @@ class LcsTrajectoryOptimization:
     ):
 
         qcqp = MathematicalProgram()
-        xs = qcqp.NewContinuousVariables(params.N, sys.num_states, "x")
-        xs = np.vstack([x0, xs])  # First entry of xs is x0
+        xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
         us = qcqp.NewContinuousVariables(params.N, sys.num_inputs, "u")
         λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
+
+        initial_condition = eq(xs[0], x0)
+        for c in initial_condition:
+            qcqp.AddLinearConstraint(c)
 
         # Dynamics
         for k in range(params.N):
@@ -939,9 +942,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    test_cart_pole_w_walls()
-    test_lcs_trajectory_optimization()
-    test_lcs_get_state_input_forces_from_vals()
+    # test_cart_pole_w_walls()
+    # test_lcs_trajectory_optimization()
+    # test_lcs_get_state_input_forces_from_vals()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
