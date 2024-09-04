@@ -30,6 +30,10 @@ from pydrake.solvers import (
 from scipy.linalg import qr
 
 from planning_through_contact.geometry.utilities import unit_vector
+from planning_through_contact.tools.math import (
+    null_space_basis_qr_pivot,
+    null_space_basis_svd,
+)
 from planning_through_contact.tools.script_utils import make_default_logger
 from planning_through_contact.tools.types import (
     NpExpressionArray,
@@ -247,21 +251,6 @@ def _collect_bounding_box_constraints(
     return bounding_box_eqs, bounding_box_ineqs
 
 
-# TODO: Move to some utils file
-def get_nullspace_matrix(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    U, s, V_hermitian_transpose = np.linalg.svd(A)
-    eps = 1e-6
-    zero_idxs = np.where(np.abs(s) <= eps)[0].tolist()
-    V = V_hermitian_transpose.T  # Real matrix, so conjugate transpose = transpose
-
-    remaining_idxs = list(range(len(s), len(V)))
-
-    V_zero = V[:, zero_idxs + remaining_idxs]
-
-    nullspace_matrix = V_zero
-    return nullspace_matrix
-
-
 def find_solution(
     A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
@@ -269,10 +258,14 @@ def find_solution(
     return x
 
 
+EqualityEliminationType = Literal["svd", "qr_pivot"]
+
+
 def eliminate_equality_constraints(
     prog: MathematicalProgram,
     sparsity_viz_output_dir: Path | None = None,
     logger: Logger | None = None,
+    null_space_method: EqualityEliminationType = "qr_pivot",
 ) -> Tuple[MathematicalProgram, npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     if logger is None:
         logger = make_default_logger()
@@ -294,7 +287,13 @@ def eliminate_equality_constraints(
     A_eq, b_eq = _linear_bindings_to_affine_terms(
         prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
     )
-    F = get_nullspace_matrix(A_eq)
+
+    if null_space_method == "qr_pivot":
+        F = null_space_basis_qr_pivot(A_eq)
+    elif null_space_method == "svd":
+        F = null_space_basis_svd(A_eq)
+    else:
+        raise NotImplementedError
 
     LIN_INDEP_TOL = 1e-4
     if not np.linalg.matrix_rank(A_eq, tol=LIN_INDEP_TOL) == A_eq.shape[0]:
@@ -985,7 +984,7 @@ def solve_sdp_relaxation(
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
-    use_eq_elimination: bool = False,
+    eq_elimination_method: EqualityEliminationType | None = None,
 ) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
     """
     @return Y, cost (without trace penalty), MathematicalProgramResult
@@ -1000,17 +999,19 @@ def solve_sdp_relaxation(
     else:
         options.set_to_strongest()
 
-    if use_eq_elimination:
+    if eq_elimination_method is not None:
         if variable_groups:
             raise NotImplementedError(
                 "Cannot use variable groups when using equality elimination"
             )
+        logger.info(f"Eliminating equality constraints with {eq_elimination_method}")
         qcqp, F, x_hat = eliminate_equality_constraints(
             qcqp,
             sparsity_viz_output_dir=(
                 output_dir / "sparsity_patterns" if output_dir is not None else None
             ),
             logger=logger,
+            null_space_method=eq_elimination_method,
         )
     else:
         F, x_hat = None, None
@@ -1046,7 +1047,7 @@ def solve_sdp_relaxation(
         Y_val = relaxed_result.GetSolution(Y)
         Y_vals = None
 
-        if use_eq_elimination:
+        if eq_elimination_method is not None:
             assert F is not None and x_hat is not None
             Z = Y_val[:-1, :-1]
             z = Y_val[-1, :-1]

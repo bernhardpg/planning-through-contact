@@ -20,6 +20,7 @@ from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
+    EqualityEliminationType,
     ImpliedConstraintsType,
     compute_optimality_gap_pct,
     get_gaussian_from_sdp_relaxation_solution,
@@ -822,7 +823,7 @@ class CartPoleConfig(YamlMixin):
     trajopt_params: TrajectoryOptimizationParameters
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
-    use_equality_elimination: bool
+    equality_elimination_method: EqualityEliminationType | None
     use_trace_cost: float | None
     use_chain_sparsity: bool
     seed: int
@@ -843,8 +844,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        # use_equality_elimination=False,
-        use_equality_elimination=True,
+        equality_elimination_method="qr_pivot",
         use_trace_cost=1e-5,
         # use_chain_sparsity=True,
         use_chain_sparsity=False,
@@ -873,7 +873,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
-        use_eq_elimination=cfg.use_equality_elimination,
+        eq_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding

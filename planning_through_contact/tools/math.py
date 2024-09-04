@@ -3,6 +3,20 @@ import numpy.typing as npt
 from scipy.linalg import qr
 
 
+def null_space_basis_svd(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    U, s, V_hermitian_transpose = np.linalg.svd(A)
+    eps = 1e-6
+    zero_idxs = np.where(np.abs(s) <= eps)[0].tolist()
+    V = V_hermitian_transpose.T  # Real matrix, so conjugate transpose = transpose
+
+    remaining_idxs = list(range(len(s), len(V)))
+
+    V_zero = V[:, zero_idxs + remaining_idxs]
+
+    nullspace_matrix = V_zero
+    return nullspace_matrix
+
+
 def permutation_matrix_from_vec(
     vec: npt.NDArray[np.int32] | list[int],
 ) -> npt.NDArray[np.float64]:
