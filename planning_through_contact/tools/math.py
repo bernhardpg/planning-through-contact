@@ -35,7 +35,7 @@ def permutation_matrix_from_vec(
     return P
 
 
-def null_space_basis_qr_pivot(A: npt.NDArray[np.float64], tol=1e-12):
+def null_space_basis_qr_pivot(A: npt.NDArray[np.float64], tol=1e-8):
     """
     Compute a basis for the null space of matrix A using QR decomposition with pivoting.
 
@@ -46,32 +46,33 @@ def null_space_basis_qr_pivot(A: npt.NDArray[np.float64], tol=1e-12):
     Returns:
     numpy.ndarray: A matrix whose columns form a basis for the null space of A
     """
-    # Perform QR decomposition with column pivoting: AP = QR
+    # Perform QR decomposition with column pivoting: A[:, p] = QR
     # A: n x m
     # Q: n x n (orthogonal)
     # R: n x m (upper triangular)
     # p: n x 1 (permutation vector)
     Q, R, p = qr(A, pivoting=True)
 
-    P = permutation_matrix_from_vec(p)
-
     # Determine the rank based on the tolerance
     # (remember that R is upper triangular with nonzero diagonal entries)
     diag_R = np.abs(np.diag(R))
     rank = int(np.sum(diag_R > tol))
+
+    # Set elements close to zero to exactly zero
+    R[np.abs(R) < tol] = 0
 
     # Partition R into R₁ and R₂
     R1 = R[:rank, :rank]  # Upper triangular part
     R2 = R[:rank, rank:]  # Remaining columns
 
     # Form the matrix: [-R₁⁻¹ R₂; I]
-    R1_inv_R2 = -np.linalg.solve(R1, R2)  # Solving R₁ * X = R₂ gives X = R₁⁻¹R₂
+    R1_inv_R2 = np.linalg.solve(R1, R2)  # Solving R₁ * X = R₂ gives X = R₁⁻¹R₂
     identity_block = np.eye(A.shape[1] - rank)
 
     # The null space basis matrix in terms of permutation P
-    null_space_matrix = np.vstack([R1_inv_R2, identity_block])
+    null_space_matrix = np.vstack([R1_inv_R2, -identity_block])
 
-    # Apply the permutation matrix P to get the null space basis in the correct order
+    P = permutation_matrix_from_vec(p)
     null_space_basis = P @ null_space_matrix
 
     # Set elements close to zero to exactly zero

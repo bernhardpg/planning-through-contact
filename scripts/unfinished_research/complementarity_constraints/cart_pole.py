@@ -610,7 +610,7 @@ class LcsTrajectoryOptimization:
     ) -> tuple[
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
-        xs_sol = evaluate_np_expressions_array(self.xs, result)
+        xs_sol = result.GetSolution(self.xs)
         us_sol = result.GetSolution(self.us).reshape(self.us.shape)
         λs_sol = result.GetSolution(self.λs)
         return xs_sol, us_sol, λs_sol
@@ -847,7 +847,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        equality_elimination_method="qr_pivot",
+        equality_elimination_method="svd",
         use_trace_cost=1e-5,
         # use_chain_sparsity=True,
         use_chain_sparsity=False,
