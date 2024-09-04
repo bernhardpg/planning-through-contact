@@ -27,6 +27,7 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
+from scipy.linalg import qr
 
 from planning_through_contact.geometry.utilities import unit_vector
 from planning_through_contact.tools.script_utils import make_default_logger
