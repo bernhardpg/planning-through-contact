@@ -27,7 +27,6 @@ from pydrake.solvers import (
     Solve,
     SolverOptions,
 )
-from scipy.linalg import qr
 
 from planning_through_contact.geometry.utilities import unit_vector
 from planning_through_contact.tools.math import (
@@ -287,9 +286,12 @@ def eliminate_equality_constraints(
     A_eq, b_eq = _linear_bindings_to_affine_terms(
         prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
     )
+    logger.info(f"Number of equality constraints: {A_eq.shape[0]}")
+    if np.linalg.matrix_rank(A_eq, tol=1e-4) != A_eq.shape[0]:
+        raise RuntimeError("Equality constraints are linearly dependent!")
 
     if null_space_method == "qr_pivot":
-        F = null_space_basis_qr_pivot(A_eq)
+        F = null_space_basis_qr_pivot(A_eq, tol=1e-8)
     elif null_space_method == "svd":
         F = null_space_basis_svd(A_eq)
     else:
@@ -441,17 +443,6 @@ def eliminate_equality_constraints(
             new_prog.AddQuadraticCost(
                 new_Q, new_b, new_c, new_decision_vars, e.is_convex()
             )
-
-    # def get_x_from_z(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    #     z = z.reshape((-1, 1))  # make sure z is (N, 1)
-    #     x = F.dot(z) + x_hat
-    #
-    #     remove_small_coeffs = lambda expr: (
-    #         sym.Polynomial(expr).RemoveTermsWithSmallCoefficients(1e-5).ToExpression()
-    #     )
-    #
-    #     x = np.array([remove_small_coeffs(e) for e in x.flatten()])
-    #     return x  # (n_vars, )
 
     return new_prog, F, x_hat
 
@@ -1006,6 +997,9 @@ def solve_sdp_relaxation(
     else:
         options.set_to_strongest()
 
+    SPARSITY_OUTPUT_DIR = (
+        output_dir / "sparsity_patterns" if output_dir is not None else None
+    )
     if eq_elimination_method is not None:
         if variable_groups:
             raise NotImplementedError(
@@ -1014,9 +1008,7 @@ def solve_sdp_relaxation(
         logger.info(f"Eliminating equality constraints with {eq_elimination_method}")
         qcqp, F, x_hat = eliminate_equality_constraints(
             qcqp,
-            sparsity_viz_output_dir=(
-                output_dir / "sparsity_patterns" if output_dir is not None else None
-            ),
+            sparsity_viz_output_dir=SPARSITY_OUTPUT_DIR,
             logger=logger,
             null_space_method=eq_elimination_method,
         )

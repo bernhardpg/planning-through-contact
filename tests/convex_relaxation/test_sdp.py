@@ -23,10 +23,10 @@ from planning_through_contact.convex_relaxation.sdp import (
     create_sdp_relaxation,
     eliminate_equality_constraints,
     find_solution,
-    get_nullspace_matrix,
     get_principal_minor,
     to_symmetric_matrix_from_lower_triangular_columns,
 )
+from planning_through_contact.tools.math import null_space_basis_svd
 from planning_through_contact.tools.types import NpExpressionArray, NpVariableArray
 from planning_through_contact.visualize.analysis import plot_cos_sine_trajs
 
@@ -74,9 +74,9 @@ def test_find_solution_underdetermined(
     assert x_hat.shape == (3, 1)
 
 
-def test_get_nullspace_matrix(underdetermined_linear_system: LinearSystem) -> None:
+def test_null_space_basis_svd(underdetermined_linear_system: LinearSystem) -> None:
     A, b, _ = underdetermined_linear_system
-    F = get_nullspace_matrix(A)
+    F = null_space_basis_svd(A)
 
     assert np.allclose(A.dot(F), 0)
 
@@ -310,7 +310,7 @@ def test_eq_elimination_formulation() -> None:
     A_eq, b_eq = _linear_bindings_to_affine_terms(
         prog.linear_equality_constraints(), bounding_box_eqs, prog.decision_variables()
     )
-    F = get_nullspace_matrix(A_eq)
+    F = null_space_basis_svd(A_eq)
     x_hat = find_solution(A_eq, -b_eq)
 
     B = np.array([[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])

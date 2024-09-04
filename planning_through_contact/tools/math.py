@@ -74,4 +74,7 @@ def null_space_basis_qr_pivot(A: npt.NDArray[np.float64], tol=1e-12):
     # Apply the permutation matrix P to get the null space basis in the correct order
     null_space_basis = P @ null_space_matrix
 
+    # Set elements close to zero to exactly zero
+    null_space_basis[np.abs(null_space_basis) < tol] = 0
+
     return null_space_basis
