@@ -4,6 +4,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, List, Literal, Tuple
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -675,19 +676,39 @@ def visualize_sparsity(
     output_dir: Path | None = None,
     precision: float = 1e-6,
     postfix: str = "",
+    color: bool = True,
 ):
     """
-    Visualize the sparsity pattern of a given matrix.
+    Visualize the sparsity pattern of a given matrix, color-coded with a color bar.
+
+    Values close to zero will appear white.
 
     Parameters:
     matrix (numpy.ndarray): The matrix to visualize.
+    output_dir (Path, optional): Directory to save the output figure, if provided.
+    precision (float): Threshold to define "sparsity" in the visualization.
+    postfix (str): A string to add to the saved file name, if saving the plot.
     """
-    # Plot the sparsity pattern
-    plt.figure(figsize=(10, 10))
-    plt.spy(matrix, precision=precision)
-    plt.title("Sparsity Pattern")
-    plt.xlabel("Columns")
-    plt.ylabel("Rows")
+
+    if color:
+        # Define a colormap where zero values are white
+        cmap = plt.get_cmap("viridis").copy()
+        cmap.set_bad(color="white")
+
+        plt.figure(figsize=(10, 10))
+
+        max_val = (np.abs(matrix)).max()
+
+        # Normalize the color map to ensure proper scaling (vmin, vmax exclude small values)
+        norm = mcolors.Normalize(vmin=-max_val, vmax=max_val)
+
+        # Plot the matrix using imshow with masked values and a color map
+        plt.imshow(matrix, cmap=cmap, norm=norm, aspect="auto", interpolation="nearest")
+        plt.colorbar(label="Matrix Values")
+    else:
+        # Plot the sparsity pattern
+        plt.figure(figsize=(10, 10))
+        plt.spy(matrix, precision=precision)
 
     if output_dir is None:
         plt.show()
