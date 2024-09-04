@@ -320,13 +320,20 @@ def eliminate_equality_constraints(
     num_vars_without_elimination = calc_num_vars(old_dim)
     num_vars_with_elimination = calc_num_vars(new_dim)
     diff = num_vars_without_elimination - num_vars_with_elimination
+    logger.info(f"Total number of vars in original problem: {len(decision_vars)}")
+    logger.info(
+        f"Total number of vars in original problem after elimination: {len(new_decision_vars)}"
+    )
+    logger.info(
+        f"Total number of vars in original problem liminated: {len(decision_vars) - len(new_decision_vars)}"
+    )
     logger.info(
         f"Total number of vars in SDP relaxation of original problem: {num_vars_without_elimination}"
     )
     logger.info(
-        f"Total number of vars after elimination in SDP relaxation: {num_vars_with_elimination}"
+        f"Total number of vars in SDP relaxation after elimination: {num_vars_with_elimination}"
     )
-    logger.info(f"Total number of variables eliminated: {diff}")
+    logger.info(f"Total number of vars in SDP relaxation eliminated: {diff}")
 
     has_linear_ineq_constraints = (
         len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
