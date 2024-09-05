@@ -775,6 +775,8 @@ def visualize_sparsity(
         plt.figure(figsize=(10, 10))
         plt.spy(matrix, precision=precision)
 
+    plt.axis("equal")
+
     if output_dir is None:
         plt.show()
     else:
