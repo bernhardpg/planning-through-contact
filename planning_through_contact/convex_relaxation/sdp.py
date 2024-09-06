@@ -758,13 +758,15 @@ def visualize_sparsity(
     # Get the dimensions of the matrix
     rows, cols = matrix.shape
 
+    scaling = max(rows, cols)
+
     if color:
         # Define a colormap where zero values are white
         cmap = plt.get_cmap("viridis").copy()
         cmap.set_bad(color="white")
 
         # Set figure size to match matrix dimensions
-        plt.figure(figsize=(cols / 13, rows / 13))
+        plt.figure(figsize=(cols / scaling * 7, rows / scaling * 7))
 
         max_val = (np.abs(matrix)).max()
 
