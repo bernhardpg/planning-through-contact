@@ -34,11 +34,22 @@ from planning_through_contact.tools.script_utils import (
 from planning_through_contact.tools.utils import evaluate_np_expressions_array
 from planning_through_contact.visualize.colors import BROWN2, BURLYWOOD3, BURLYWOOD4
 
+IntegratorType = Literal["forward_euler", "backward_euler"]
+
 
 @dataclass
 class LinearComplementaritySystem:
     """
-    ẋ = Ax + Bu + Dλ + a
+    Continuous time:
+    ẋ(t) = f(x(t), u(t), λ(t)) = Ax(t) + Bu(t) + Dλ(t) + d
+
+    or
+
+    Discrete time:
+    x[k+1] = f(x[k], u[k], λ[k]) = Ax[k] + Bu[k] + Dλ[k] + d
+
+    and
+
     0 ≤ λ ⊥ Ex + Fλ + Hu + c ≥ 0
     """
 
@@ -50,6 +61,7 @@ class LinearComplementaritySystem:
     F: npt.NDArray[np.float64]
     H: npt.NDArray[np.float64]
     c: npt.NDArray[np.float64]
+    discrete_or_continuous: Literal["discrete", "continuous"]
 
     @property
     def num_states(self) -> int:
@@ -63,13 +75,42 @@ class LinearComplementaritySystem:
     def num_forces(self) -> int:
         return self.D.shape[1]
 
-    def get_x_dot(self, x: np.ndarray, u: np.ndarray, λ: np.ndarray) -> np.ndarray:
+    def get_f(self, x: np.ndarray, u: np.ndarray, λ: np.ndarray) -> np.ndarray:
         return self.A @ x + self.B @ u + self.D @ λ + self.d
 
     def get_complementarity_rhs(
         self, x: np.ndarray, u: np.ndarray, λ: np.ndarray
     ) -> np.ndarray:
         return self.E @ x + self.F @ λ + self.H @ u + self.c
+
+    def discretize(
+        self, integrator: IntegratorType, T_s: float
+    ) -> "LinearComplementaritySystem":
+        if self.discrete_or_continuous != "continuous":
+            raise RuntimeError("System is already discrete!")
+
+        # Discretize the continuous time system (self.sys)
+        if integrator == "forward_euler":
+            A_discrete = np.eye(self.num_states) + T_s * self.A
+            B_discrete = T_s * self.B
+            D_discrete = T_s * self.D
+            d_discrete = T_s * self.d
+        else:
+            raise NotImplementedError(
+                f"Integrator type {integrator} is not implemented."
+            )
+
+        return LinearComplementaritySystem(
+            A_discrete,
+            B_discrete,
+            D_discrete,
+            d_discrete,
+            self.E,
+            self.F,
+            self.H,
+            self.c,
+            "discrete",
+        )
 
 
 class CartPoleWithWalls(LinearComplementaritySystem):
@@ -132,7 +173,7 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         c = np.array([0.35, 0.35])
         # fmt: on
 
-        super().__init__(A, B, D, d, E, F, H, c)
+        super().__init__(A, B, D, d, E, F, H, c, "continuous")
 
         self.distance_to_walls = 0.35
         self.pole_length = 0.6
@@ -477,8 +518,8 @@ def test_cart_pole_w_walls():
     x = np.zeros((sys.num_states,))
     u = np.zeros((sys.num_inputs,))
     λ = np.zeros((sys.num_forces,))
-    assert isinstance(sys.get_x_dot(x, u, λ), type(np.array([])))
-    assert sys.get_x_dot(x, u, λ).shape == (sys.num_states,)
+    assert isinstance(sys.get_f(x, u, λ), type(np.array([])))
+    assert sys.get_f(x, u, λ).shape == (sys.num_states,)
 
     assert isinstance(sys.get_complementarity_rhs(x, u, λ), type(np.array([])))
     assert sys.get_complementarity_rhs(x, u, λ).shape == (sys.num_forces,)
@@ -517,23 +558,25 @@ class TrajectoryOptimizationParameters:
     Q: npt.NDArray[np.float64]
     R: npt.NDArray[np.float64]
     Q_N: npt.NDArray[np.float64] | None = None
+    integrator: IntegratorType = "forward_euler"
 
 
 class LcsTrajectoryOptimization:
     def __init__(
         self,
-        sys: LinearComplementaritySystem,
+        continuous_sys: LinearComplementaritySystem,
         params: TrajectoryOptimizationParameters,
         x0: npt.NDArray[np.float64],
-        integrator: Literal["forward_euler", "backward_euler"] = "forward_euler",
     ):
+        discrete_sys = continuous_sys.discretize(params.integrator, params.T_s)
 
         qcqp = MathematicalProgram()
-        xs = qcqp.NewContinuousVariables(params.N, sys.num_states, "x")
+        xs = qcqp.NewContinuousVariables(params.N, discrete_sys.num_states, "x")
         xs = np.vstack([x0, xs])  # First entry of xs is x0
-        us = qcqp.NewContinuousVariables(params.N, sys.num_inputs, "u")
-        λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
+        us = qcqp.NewContinuousVariables(params.N, discrete_sys.num_inputs, "u")
+        λs = qcqp.NewContinuousVariables(params.N, discrete_sys.num_forces, "λ")
 
+        # TODO: remove (code for not eliminating x0 manually)
         # xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
         # initial_condition = eq(xs[0], x0)
         # for c in initial_condition:
@@ -544,21 +587,16 @@ class LcsTrajectoryOptimization:
             x, u, λ = xs[k], us[k], λs[k]
             x_next = xs[k + 1]
 
-            if integrator == "forward_euler":
-                # Forward euler: x_next = x_curr + h * f(x_curr, u_curr)
-                x_dot = sys.get_x_dot(x, u, λ)
-                forward_euler = eq(x_next, x + params.T_s * x_dot)
-                for c in forward_euler:
-                    qcqp.AddLinearEqualityConstraint(c)
-            else:  # "backward_euler"
-                # Backward euler: x_next = x_curr + h * f(x_next, u_next)
-                raise NotImplementedError()
+            f = discrete_sys.get_f(x, u, λ)
+            forward_euler = eq(x_next, f)
+            for c in forward_euler:
+                qcqp.AddLinearEqualityConstraint(c)
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
 
-            rhs = sys.get_complementarity_rhs(x, u, λ)
+            rhs = discrete_sys.get_complementarity_rhs(x, u, λ)
             qcqp.AddLinearConstraint(ge(rhs, 0))
 
         # LHs nonnegativity of complementarity constraint
@@ -569,7 +607,7 @@ class LcsTrajectoryOptimization:
         # Complementarity constraint (element-wise)
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
-            rhs = sys.get_complementarity_rhs(x, u, λ)
+            rhs = discrete_sys.get_complementarity_rhs(x, u, λ)
 
             elementwise_product = λ * rhs
             for p in elementwise_product:
@@ -594,7 +632,7 @@ class LcsTrajectoryOptimization:
             Q_N = params.Q_N
         else:
             _, S = DiscreteTimeLinearQuadraticRegulator(
-                sys.A, sys.B, params.Q, params.R
+                discrete_sys.A, discrete_sys.B, params.Q, params.R
             )
             Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
 
@@ -605,7 +643,7 @@ class LcsTrajectoryOptimization:
         self.us = us
         self.λs = λs
         self.params = params
-        self.sys = sys
+        self.sys = discrete_sys
 
     def evaluate_state_input_forces(
         self, result: MathematicalProgramResult
@@ -850,11 +888,8 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        # equality_elimination_method="qr_pivot",
         equality_elimination_method="qr_pivot",
-        # use_trace_cost=1e-5,
-        use_trace_cost=None,
-        # use_chain_sparsity=True,
+        use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
         num_rounding_trials=5,
@@ -947,9 +982,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    # test_cart_pole_w_walls()
-    # test_lcs_trajectory_optimization()
-    # test_lcs_get_state_input_forces_from_vals()
+    test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
+    test_lcs_get_state_input_forces_from_vals()
+    # test_lcs_trajopt_sparsity()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
