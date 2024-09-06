@@ -4,12 +4,13 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, List, Literal, Tuple
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pydrake.symbolic as sym
 from pydrake.common.containers import EqualToDict
-from pydrake.math import eq, ge
+from pydrake.math import eq, ge, le
 from pydrake.solvers import (
     Binding,
     CommonSolverOption,
@@ -29,6 +30,10 @@ from pydrake.solvers import (
 )
 
 from planning_through_contact.geometry.utilities import unit_vector
+from planning_through_contact.tools.math import (
+    null_space_basis_qr_pivot,
+    null_space_basis_svd,
+)
 from planning_through_contact.tools.script_utils import make_default_logger
 from planning_through_contact.tools.types import (
     NpExpressionArray,
@@ -246,21 +251,6 @@ def _collect_bounding_box_constraints(
     return bounding_box_eqs, bounding_box_ineqs
 
 
-# TODO: Move to some utils file
-def get_nullspace_matrix(A: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    U, s, V_hermitian_transpose = np.linalg.svd(A)
-    eps = 1e-6
-    zero_idxs = np.where(np.abs(s) <= eps)[0].tolist()
-    V = V_hermitian_transpose.T  # Real matrix, so conjugate transpose = transpose
-
-    remaining_idxs = list(range(len(s), len(V)))
-
-    V_zero = V[:, zero_idxs + remaining_idxs]
-
-    nullspace_matrix = V_zero
-    return nullspace_matrix
-
-
 def find_solution(
     A: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
@@ -268,10 +258,14 @@ def find_solution(
     return x
 
 
+EqualityEliminationType = Literal["svd", "qr_pivot"]
+
+
 def eliminate_equality_constraints(
     prog: MathematicalProgram,
     sparsity_viz_output_dir: Path | None = None,
     logger: Logger | None = None,
+    null_space_method: EqualityEliminationType = "qr_pivot",
 ) -> Tuple[MathematicalProgram, npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     if logger is None:
         logger = make_default_logger()
@@ -293,7 +287,16 @@ def eliminate_equality_constraints(
     A_eq, b_eq = _linear_bindings_to_affine_terms(
         prog.linear_equality_constraints(), bounding_box_eqs, decision_vars
     )
-    F = get_nullspace_matrix(A_eq)
+    logger.info(f"Number of equality constraints: {A_eq.shape[0]}")
+    if np.linalg.matrix_rank(A_eq, tol=1e-4) != A_eq.shape[0]:
+        raise RuntimeError("Equality constraints are linearly dependent!")
+
+    if null_space_method == "qr_pivot":
+        F = null_space_basis_qr_pivot(A_eq, tol=1e-8)
+    elif null_space_method == "svd":
+        F = null_space_basis_svd(A_eq)
+    else:
+        raise NotImplementedError
 
     LIN_INDEP_TOL = 1e-4
     if not np.linalg.matrix_rank(A_eq, tol=LIN_INDEP_TOL) == A_eq.shape[0]:
@@ -320,30 +323,85 @@ def eliminate_equality_constraints(
     num_vars_without_elimination = calc_num_vars(old_dim)
     num_vars_with_elimination = calc_num_vars(new_dim)
     diff = num_vars_without_elimination - num_vars_with_elimination
+    logger.info(f"Total number of vars in original problem: {len(decision_vars)}")
+    logger.info(
+        f"Total number of vars in original problem after elimination: {len(new_decision_vars)}"
+    )
+    logger.info(
+        f"Total number of vars in original problem liminated: {len(decision_vars) - len(new_decision_vars)}"
+    )
     logger.info(
         f"Total number of vars in SDP relaxation of original problem: {num_vars_without_elimination}"
     )
     logger.info(
-        f"Total number of vars after elimination in SDP relaxation: {num_vars_with_elimination}"
+        f"Total number of vars in SDP relaxation after elimination: {num_vars_with_elimination}"
     )
-    logger.info(f"Total number of variables eliminated: {diff}")
+    logger.info(f"Total number of vars in SDP relaxation eliminated: {diff}")
 
-    has_linear_ineq_constraints = (
-        len(prog.linear_constraints()) > 0 or len(bounding_box_ineqs) > 0
-    )
-    if has_linear_ineq_constraints:
-        # Notice sign change on d
-        B, d = _linear_bindings_to_affine_terms(
-            prog.linear_constraints(), bounding_box_ineqs, decision_vars
-        )  # B x >= -d becomes B F z >= -d - B x_hat
+    for idx, b in enumerate(prog.bounding_box_constraints()):
+        e = b.evaluator()
+        num_constraints = len(b.variables())
+        var_idxs = prog.FindDecisionVariableIndices(b.variables())
 
-        new_prog.AddLinearConstraint(
-            B.dot(F), -d - B.dot(x_hat), np.ones_like(d) * np.inf, new_decision_vars
-        )
+        # Construct a matrix that picks out the corresponding bbox variables
+        A = np.zeros((num_constraints, old_dim))
+        for constraint_i, prog_var_j in enumerate(var_idxs):
+            A[constraint_i, prog_var_j] = 1.0
+
+        lb = e.lower_bound()
+        ub = e.upper_bound()
+
+        # lb <= A x <= ub becomes lb - A x_hat <= A F z <= ub - A x_hat
+        # (Remember that x = Fx + x_hat)
+        A_x_hat = (A @ x_hat).flatten()
+        new_lb = lb - A_x_hat
+        new_ub = ub - A_x_hat
+        new_A = A @ F
+
+        # NOTE: We multiply out result when adding the constraint to make sure that
+        # Drake does not add the constraint as a dense constraint.
+        b_new = new_prog.AddLinearConstraint(new_A @ new_decision_vars, new_lb, new_ub)
 
         if sparsity_viz_output_dir is not None:
-            visualize_sparsity(B, output_dir=sparsity_viz_output_dir, postfix="_B")
-            visualize_sparsity(B @ F, output_dir=sparsity_viz_output_dir, postfix="_BF")
+            visualize_sparsity(
+                A, output_dir=sparsity_viz_output_dir, postfix=f"_bbox_{idx}"
+            )
+            visualize_sparsity(
+                new_A, output_dir=sparsity_viz_output_dir, postfix=f"_new_bbox_{idx}"
+            )
+
+    for idx, b in enumerate(prog.linear_constraints()):
+        e = b.evaluator()
+        binding_A = e.GetDenseA()
+        num_constraints = binding_A.shape[0]
+        A = np.zeros((num_constraints, old_dim))
+        var_idxs = prog.FindDecisionVariableIndices(b.variables())
+
+        for constraint_i in range(num_constraints):
+            for binding_var_j, prog_var_j in enumerate(var_idxs):
+                A[constraint_i, prog_var_j] = binding_A[constraint_i, binding_var_j]
+
+        lb = e.lower_bound()
+        ub = e.upper_bound()
+
+        # lb <= A x <= ub becomes lb - A x_hat <= A F z <= ub - A x_hat
+        # (Remember that x = Fx + x_hat)
+        A_x_hat = (A @ x_hat).flatten()
+        new_lb = lb - A_x_hat
+        new_ub = ub - A_x_hat
+        new_A = A @ F
+
+        # NOTE: We multiply out result when adding the constraint to make sure that
+        # Drake does not add the constraint as a dense constraint.
+        new_prog.AddLinearConstraint(new_A @ new_decision_vars, new_lb, new_ub)
+
+        if sparsity_viz_output_dir is not None:
+            visualize_sparsity(
+                A, output_dir=sparsity_viz_output_dir, postfix=f"_A_{idx}"
+            )
+            visualize_sparsity(
+                new_A, output_dir=sparsity_viz_output_dir, postfix=f"_new_A_{idx}"
+            )
 
     has_generic_constaints = len(prog.generic_constraints()) > 0
     if has_generic_constaints:
@@ -388,11 +446,28 @@ def eliminate_equality_constraints(
             )
 
             if sparsity_viz_output_dir is not None:
+                if not new_lb == new_ub:
+                    raise NotImplementedError(
+                        "Quadratic inequality constraints are not supported."
+                    )
+
+                def _make_homogenuous(Q, b, c):
+                    b = b.reshape((-1, 1))
+                    # fmt: off
+                    Q_hom = np.block([[0.5 * Q, 0.5 * b],
+                                      [0.5 * b.T, c]])
+                    # fmt: on
+                    return Q_hom
+
                 visualize_sparsity(
-                    Q, output_dir=sparsity_viz_output_dir, postfix=f"_Q_{idx}"
+                    _make_homogenuous(Q, b, lb),
+                    output_dir=sparsity_viz_output_dir,
+                    postfix=f"_Q_{idx}",
                 )
                 visualize_sparsity(
-                    new_Q, output_dir=sparsity_viz_output_dir, postfix=f"_new_Q_{idx}"
+                    _make_homogenuous(new_Q, new_b, new_lb),
+                    output_dir=sparsity_viz_output_dir,
+                    postfix=f"_new_Q_{idx}",
                 )
             # Better way of doing this:
             # Q = binding.evaluator().Q()
@@ -434,17 +509,6 @@ def eliminate_equality_constraints(
             new_prog.AddQuadraticCost(
                 new_Q, new_b, new_c, new_decision_vars, e.is_convex()
             )
-
-    # def get_x_from_z(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    #     z = z.reshape((-1, 1))  # make sure z is (N, 1)
-    #     x = F.dot(z) + x_hat
-    #
-    #     remove_small_coeffs = lambda expr: (
-    #         sym.Polynomial(expr).RemoveTermsWithSmallCoefficients(1e-5).ToExpression()
-    #     )
-    #
-    #     x = np.array([remove_small_coeffs(e) for e in x.flatten()])
-    #     return x  # (n_vars, )
 
     return new_prog, F, x_hat
 
@@ -677,19 +741,41 @@ def visualize_sparsity(
     output_dir: Path | None = None,
     precision: float = 1e-6,
     postfix: str = "",
+    color: bool = True,
 ):
     """
-    Visualize the sparsity pattern of a given matrix.
+    Visualize the sparsity pattern of a given matrix, color-coded with a color bar.
+
+    Values close to zero will appear white.
 
     Parameters:
     matrix (numpy.ndarray): The matrix to visualize.
+    output_dir (Path, optional): Directory to save the output figure, if provided.
+    precision (float): Threshold to define "sparsity" in the visualization.
+    postfix (str): A string to add to the saved file name, if saving the plot.
     """
-    # Plot the sparsity pattern
-    plt.figure(figsize=(10, 10))
-    plt.spy(matrix, precision=precision)
-    plt.title("Sparsity Pattern")
-    plt.xlabel("Columns")
-    plt.ylabel("Rows")
+
+    if color:
+        # Define a colormap where zero values are white
+        cmap = plt.get_cmap("viridis").copy()
+        cmap.set_bad(color="white")
+
+        plt.figure(figsize=(10, 10))
+
+        max_val = (np.abs(matrix)).max()
+
+        # Normalize the color map to ensure proper scaling (vmin, vmax exclude small values)
+        norm = mcolors.Normalize(vmin=-max_val, vmax=max_val)
+
+        # Plot the matrix using imshow with masked values and a color map
+        plt.imshow(matrix, cmap=cmap, norm=norm, aspect="auto", interpolation="nearest")
+        plt.colorbar(label="Matrix Values")
+    else:
+        # Plot the sparsity pattern
+        plt.figure(figsize=(10, 10))
+        plt.spy(matrix, precision=precision)
+
+    plt.axis("equal")
 
     if output_dir is None:
         plt.show()
@@ -984,7 +1070,7 @@ def solve_sdp_relaxation(
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
-    use_eq_elimination: bool = False,
+    eq_elimination_method: EqualityEliminationType | None = None,
 ) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
     """
     @return Y, cost (without trace penalty), MathematicalProgramResult
@@ -999,17 +1085,20 @@ def solve_sdp_relaxation(
     else:
         options.set_to_strongest()
 
-    if use_eq_elimination:
+    SPARSITY_OUTPUT_DIR = (
+        output_dir / "sparsity_patterns" if output_dir is not None else None
+    )
+    if eq_elimination_method is not None:
         if variable_groups:
             raise NotImplementedError(
                 "Cannot use variable groups when using equality elimination"
             )
+        logger.info(f"Eliminating equality constraints with {eq_elimination_method}")
         qcqp, F, x_hat = eliminate_equality_constraints(
             qcqp,
-            sparsity_viz_output_dir=(
-                output_dir / "sparsity_patterns" if output_dir is not None else None
-            ),
+            sparsity_viz_output_dir=SPARSITY_OUTPUT_DIR,
             logger=logger,
+            null_space_method=eq_elimination_method,
         )
     else:
         F, x_hat = None, None
@@ -1045,7 +1134,7 @@ def solve_sdp_relaxation(
         Y_val = relaxed_result.GetSolution(Y)
         Y_vals = None
 
-        if use_eq_elimination:
+        if eq_elimination_method is not None:
             assert F is not None and x_hat is not None
             Z = Y_val[:-1, :-1]
             z = Y_val[-1, :-1]

@@ -20,6 +20,7 @@ from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
 from planning_through_contact.convex_relaxation.sdp import (
+    EqualityEliminationType,
     ImpliedConstraintsType,
     compute_optimality_gap_pct,
     get_gaussian_from_sdp_relaxation_solution,
@@ -533,6 +534,11 @@ class LcsTrajectoryOptimization:
         us = qcqp.NewContinuousVariables(params.N, sys.num_inputs, "u")
         λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
+        # xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
+        # initial_condition = eq(xs[0], x0)
+        # for c in initial_condition:
+        #     qcqp.AddLinearConstraint(c)
+
         # Dynamics
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
@@ -606,6 +612,7 @@ class LcsTrajectoryOptimization:
     ) -> tuple[
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
+        # xs_sol = result.GetSolution(self.xs)
         xs_sol = evaluate_np_expressions_array(self.xs, result)
         us_sol = result.GetSolution(self.us).reshape(self.us.shape)
         λs_sol = result.GetSolution(self.λs)
@@ -822,7 +829,7 @@ class CartPoleConfig(YamlMixin):
     trajopt_params: TrajectoryOptimizationParameters
     x0: npt.NDArray[np.float64]
     implied_constraints: ImpliedConstraintsType
-    use_equality_elimination: bool
+    equality_elimination_method: EqualityEliminationType | None
     use_trace_cost: float | None
     use_chain_sparsity: bool
     seed: int
@@ -843,9 +850,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        # use_equality_elimination=False,
-        use_equality_elimination=True,
-        use_trace_cost=1e-5,
+        # equality_elimination_method="qr_pivot",
+        equality_elimination_method="qr_pivot",
+        # use_trace_cost=1e-5,
+        use_trace_cost=None,
         # use_chain_sparsity=True,
         use_chain_sparsity=False,
         seed=0,
@@ -873,7 +881,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
-        use_eq_elimination=cfg.use_equality_elimination,
+        eq_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding
@@ -939,9 +947,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    test_cart_pole_w_walls()
-    test_lcs_trajectory_optimization()
-    test_lcs_get_state_input_forces_from_vals()
+    # test_cart_pole_w_walls()
+    # test_lcs_trajectory_optimization()
+    # test_lcs_get_state_input_forces_from_vals()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
