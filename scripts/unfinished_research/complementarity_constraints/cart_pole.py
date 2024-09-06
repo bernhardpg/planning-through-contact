@@ -578,6 +578,8 @@ class LcsTrajectoryOptimization:
 
         if equality_elimination_method is None:
             xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
+            # Add initial state to state vector
+            xs = np.vstack([x0, xs])
             us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
             λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
@@ -586,12 +588,18 @@ class LcsTrajectoryOptimization:
             xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
                 params, prog, sys, F, ŷ
             )
+            xs = np.vstack([x0, xs])
+            initial_condition = eq(xs[0], x0)
+            for c in initial_condition:
+                prog.AddLinearEqualityConstraint(c)
+
+            for x_next_1, x_next_2 in zip(xs, xs_next):
+                for c in eq(x_next_1, x_next_2):
+                    prog.AddLinearEqualityConstraint(c)
 
         else:
             raise NotImplementedError("")
 
-        # Add initial state to state vector
-        xs = np.vstack([x0, xs])
         self.add_trajopt_cost_and_constraints(params, sys, prog, xs, us, λs)
 
         self.sys = sys
@@ -626,14 +634,14 @@ class LcsTrajectoryOptimization:
         """
 
         # Dynamics
-        for k in range(params.N):
-            x, u, λ = xs[k], us[k], λs[k]
-            x_next = xs[k + 1]
-
-            f = sys.get_f(x, u, λ)
-            dynamics = eq(x_next, f)
-            for c in dynamics:
-                prog.AddLinearEqualityConstraint(c)
+        # for k in range(params.N):
+        #     x, u, λ = xs[k], us[k], λs[k]
+        #     x_next = xs[k + 1]
+        #
+        #     f = sys.get_f(x, u, λ)
+        #     dynamics = eq(x_next, f)
+        #     const = prog.AddLinearConstraint(dynamics)
+        #     breakpoint()
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
@@ -733,9 +741,7 @@ class LcsTrajectoryOptimization:
                 val_idx = var_to_idx[var_or_val_or_expr]
                 return float(vals[val_idx])
             elif type(var_or_val_or_expr) == Expression:
-                val = var_or_val_or_expr.Evaluate(var_values)
-                if type(val) == Expression:
-                    breakpoint()
+                val = var_or_val_or_expr.Evaluate(var_values)  # type: ignore
                 return val
             else:
                 breakpoint()
@@ -789,7 +795,7 @@ class LcsTrajectoryOptimization:
         # y = Fz + ŷ
         F = null_space_basis_qr_pivot(A_eq)
 
-        # visualize_sparsity(F, color=False)
+        # visualize_sparsity(F, color=True)
 
         # TODO: It seems that 0 is always a solution?
         ŷ = find_solution(A_eq, b_eq)
@@ -1073,8 +1079,8 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         sys,
         cfg.trajopt_params,
         cfg.x0,
-        # equality_elimination_method=cfg.equality_elimination_method,
-        equality_elimination_method=None,
+        equality_elimination_method=cfg.equality_elimination_method,
+        # equality_elimination_method=None,
     )
 
     logger.info("Solving SDP relaxation...")
@@ -1090,7 +1096,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
-        equality_elimination_method=cfg.equality_elimination_method,
+        # equality_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding
@@ -1157,10 +1163,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    test_cart_pole_w_walls()
-    test_lcs_trajectory_optimization()
+    # test_cart_pole_w_walls()
+    # test_lcs_trajectory_optimization()
     # test_lcs_get_state_input_forces_from_vals()
-    test_lcs_trajopt_with_sparsity_construction()
+    # test_lcs_trajopt_with_sparsity_construction()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
