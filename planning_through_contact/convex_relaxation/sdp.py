@@ -764,7 +764,7 @@ def visualize_sparsity(
         cmap.set_bad(color="white")
 
         # Set figure size to match matrix dimensions
-        plt.figure(figsize=(cols, rows))
+        plt.figure(figsize=(cols / 13, rows / 13))
 
         max_val = (np.abs(matrix)).max()
 
@@ -782,8 +782,8 @@ def visualize_sparsity(
     plt.axis("equal")
 
     # Set proper ticks and labels for x and y axes
-    plt.xticks(np.arange(cols), labels=np.arange(cols))
-    plt.yticks(np.arange(rows), labels=np.arange(rows))
+    # plt.xticks(np.arange(cols), labels=np.arange(cols))
+    # plt.yticks(np.arange(rows), labels=np.arange(rows))
 
     if output_dir is None:
         plt.show()
@@ -1078,7 +1078,7 @@ def solve_sdp_relaxation(
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
-    eq_elimination_method: EqualityEliminationType | None = None,
+    equality_elimination_method: EqualityEliminationType | None = None,
 ) -> tuple[npt.NDArray[np.float64], float, MathematicalProgramResult]:
     """
     @return Y, cost (without trace penalty), MathematicalProgramResult
@@ -1096,17 +1096,19 @@ def solve_sdp_relaxation(
     SPARSITY_OUTPUT_DIR = (
         output_dir / "sparsity_patterns" if output_dir is not None else None
     )
-    if eq_elimination_method is not None:
+    if equality_elimination_method is not None:
         if variable_groups:
             raise NotImplementedError(
                 "Cannot use variable groups when using equality elimination"
             )
-        logger.info(f"Eliminating equality constraints with {eq_elimination_method}")
+        logger.info(
+            f"Eliminating equality constraints with {equality_elimination_method}"
+        )
         qcqp, F, x_hat = eliminate_equality_constraints(
             qcqp,
             sparsity_viz_output_dir=SPARSITY_OUTPUT_DIR,
             logger=logger,
-            null_space_method=eq_elimination_method,
+            null_space_method=equality_elimination_method,
         )
     else:
         F, x_hat = None, None
@@ -1142,7 +1144,7 @@ def solve_sdp_relaxation(
         Y_val = relaxed_result.GetSolution(Y)
         Y_vals = None
 
-        if eq_elimination_method is not None:
+        if equality_elimination_method is not None:
             assert F is not None and x_hat is not None
             Z = Y_val[:-1, :-1]
             z = Y_val[-1, :-1]

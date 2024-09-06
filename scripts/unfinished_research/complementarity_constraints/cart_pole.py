@@ -686,10 +686,19 @@ class LcsTrajectoryOptimization:
     ) -> tuple[
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
-        # xs_sol = result.GetSolution(self.xs)
+        # We always evaluate xs as an expression, because it is a mix of floats (initial condition) and vars
         xs_sol = evaluate_np_expressions_array(self.xs, result)
-        us_sol = evaluate_np_expressions_array(self.us, result)
-        λs_sol = evaluate_np_expressions_array(self.λs, result)
+
+        if type(self.us[0]) is Expression:
+            us_sol = evaluate_np_expressions_array(self.us, result)
+        else:
+            us_sol = result.GetSolution(self.us).reshape((-1, 1))
+
+        if type(self.λs[0]) is Expression:
+            λs_sol = evaluate_np_expressions_array(self.λs, result)
+        else:
+            λs_sol = result.GetSolution(self.λs)
+
         return xs_sol, us_sol, λs_sol
 
     def get_state_input_forces_from_decision_var_values(
@@ -1061,7 +1070,11 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     np.random.seed(cfg.seed)
 
     trajopt = LcsTrajectoryOptimization(
-        sys, cfg.trajopt_params, cfg.x0, cfg.equality_elimination_method
+        sys,
+        cfg.trajopt_params,
+        cfg.x0,
+        # equality_elimination_method=cfg.equality_elimination_method,
+        equality_elimination_method=None,
     )
 
     logger.info("Solving SDP relaxation...")
@@ -1077,6 +1090,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
+        equality_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding
