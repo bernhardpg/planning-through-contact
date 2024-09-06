@@ -529,13 +529,15 @@ class LcsTrajectoryOptimization:
     ):
 
         qcqp = MathematicalProgram()
-        xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
+        xs = qcqp.NewContinuousVariables(params.N, sys.num_states, "x")
+        xs = np.vstack([x0, xs])  # First entry of xs is x0
         us = qcqp.NewContinuousVariables(params.N, sys.num_inputs, "u")
         λs = qcqp.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
-        initial_condition = eq(xs[0], x0)
-        for c in initial_condition:
-            qcqp.AddLinearConstraint(c)
+        # xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
+        # initial_condition = eq(xs[0], x0)
+        # for c in initial_condition:
+        #     qcqp.AddLinearConstraint(c)
 
         # Dynamics
         for k in range(params.N):
@@ -610,7 +612,8 @@ class LcsTrajectoryOptimization:
     ) -> tuple[
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
-        xs_sol = result.GetSolution(self.xs)
+        # xs_sol = result.GetSolution(self.xs)
+        xs_sol = evaluate_np_expressions_array(self.xs, result)
         us_sol = result.GetSolution(self.us).reshape(self.us.shape)
         λs_sol = result.GetSolution(self.λs)
         return xs_sol, us_sol, λs_sol
@@ -847,8 +850,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        equality_elimination_method="svd",
-        use_trace_cost=1e-5,
+        # equality_elimination_method="qr_pivot",
+        equality_elimination_method="qr_pivot",
+        # use_trace_cost=1e-5,
+        use_trace_cost=None,
         # use_chain_sparsity=True,
         use_chain_sparsity=False,
         seed=0,
