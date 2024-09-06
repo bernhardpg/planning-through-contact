@@ -588,12 +588,13 @@ class LcsTrajectoryOptimization:
             xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
                 params, prog, sys, F, ŷ
             )
-            xs = np.vstack([x0, xs])
+            # xs = np.vstack([x0, xs])
             initial_condition = eq(xs[0], x0)
             for c in initial_condition:
                 prog.AddLinearEqualityConstraint(c)
 
-            for x_next_1, x_next_2 in zip(xs, xs_next):
+            xs = np.vstack([xs, xs_next[-1]])
+            for x_next_1, x_next_2 in zip(xs[1:], xs_next[:-1]):
                 for c in eq(x_next_1, x_next_2):
                     prog.AddLinearEqualityConstraint(c)
 
