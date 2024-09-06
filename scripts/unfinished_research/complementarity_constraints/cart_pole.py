@@ -15,7 +15,7 @@ from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
 from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
-from pydrake.symbolic import Variable, Variables
+from pydrake.symbolic import Expression, Variable, Variables
 from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
 
@@ -688,12 +688,14 @@ class LcsTrajectoryOptimization:
     ]:
         # xs_sol = result.GetSolution(self.xs)
         xs_sol = evaluate_np_expressions_array(self.xs, result)
-        us_sol = result.GetSolution(self.us).reshape(self.us.shape)
-        λs_sol = result.GetSolution(self.λs)
+        us_sol = evaluate_np_expressions_array(self.us, result)
+        λs_sol = evaluate_np_expressions_array(self.λs, result)
         return xs_sol, us_sol, λs_sol
 
     def get_state_input_forces_from_decision_var_values(
-        self, vals: npt.NDArray[np.float64]
+        self,
+        vals: npt.NDArray[np.float64],
+        equality_elimination_method: EqualityEliminationType | None = None,
     ) -> tuple[
         npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
     ]:
@@ -706,16 +708,26 @@ class LcsTrajectoryOptimization:
                 variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
             )
 
+        if equality_elimination_method is not None:
+            var_values = {
+                var: val for var, val in zip(self.qcqp.decision_variables(), vals)
+            }
+
         var_to_idx = EqualToDict(
             {var: idx for idx, var in enumerate(self.qcqp.decision_variables())}
         )
 
-        def get_val_or_keep(var_or_val: float | Variable) -> float:
-            if type(var_or_val) == float:
-                return var_or_val
-            elif type(var_or_val) == Variable:
-                val_idx = var_to_idx[var_or_val]
+        def get_val_or_keep(var_or_val_or_expr: float | Variable | Expression) -> float:
+            if type(var_or_val_or_expr) == float:
+                return var_or_val_or_expr
+            elif type(var_or_val_or_expr) == Variable:
+                val_idx = var_to_idx[var_or_val_or_expr]
                 return float(vals[val_idx])
+            elif type(var_or_val_or_expr) == Expression:
+                val = var_or_val_or_expr.Evaluate(var_values)
+                if type(val) == Expression:
+                    breakpoint()
+                return val
             else:
                 breakpoint()
                 raise RuntimeError("Wrong type")
@@ -855,7 +867,7 @@ def test_lcs_trajectory_optimization():
 
 
 # TODO: Move to unit test
-def test_lcs_trajopt_sparsity():
+def test_lcs_trajopt_with_sparsity_construction():
     sys = CartPoleWithWalls()
 
     F, ŷ = LcsTrajectoryOptimization.compute_nullspace_basis(sys)
@@ -893,7 +905,19 @@ def test_lcs_trajopt_sparsity():
     assert λs.shape[1] == sys.num_forces
     assert xs_next.shape[1] == sys.num_states
 
+
+# TODO: Move to unit test
+def test_lcs_trajopt_with_sparsity():
+    sys = CartPoleWithWalls()
+    params = TrajectoryOptimizationParameters(
+        N=10,
+        T_s=0.01,
+        Q=np.diag([1, 1, 1, 1]),
+        Q_N=np.diag([1, 1, 1, 1]),
+        R=np.array([1]),
+    )
     x0 = np.array([0, 0, 0, 0])
+
     trajopt = LcsTrajectoryOptimization(
         sys, params, x0, equality_elimination_method="qr_pivot"
     )
@@ -1041,7 +1065,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     )
 
     logger.info("Solving SDP relaxation...")
-
     Y, relaxed_cost, _ = solve_sdp_relaxation(
         qcqp=trajopt.qcqp,
         trace_cost=cfg.use_trace_cost,
@@ -1054,7 +1077,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
-        eq_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding
@@ -1062,7 +1084,9 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     # Save "mean"/relaxed trajectory
     relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-        *trajopt.get_state_input_forces_from_decision_var_values(μ),
+        *trajopt.get_state_input_forces_from_decision_var_values(
+            μ, cfg.equality_elimination_method
+        ),
         sys,
         cfg.trajopt_params.T_s,
     )
@@ -1098,7 +1122,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         logger.info(
             f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
-
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
             *trajopt.evaluate_state_input_forces(trial.result),
             sys,
@@ -1120,10 +1143,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    # test_cart_pole_w_walls()
-    # test_lcs_trajectory_optimization()
+    test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
     # test_lcs_get_state_input_forces_from_vals()
-    test_lcs_trajopt_sparsity()
+    test_lcs_trajopt_with_sparsity_construction()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
