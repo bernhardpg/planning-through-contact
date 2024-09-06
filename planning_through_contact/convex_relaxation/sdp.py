@@ -755,12 +755,16 @@ def visualize_sparsity(
     postfix (str): A string to add to the saved file name, if saving the plot.
     """
 
+    # Get the dimensions of the matrix
+    rows, cols = matrix.shape
+
     if color:
         # Define a colormap where zero values are white
         cmap = plt.get_cmap("viridis").copy()
         cmap.set_bad(color="white")
 
-        plt.figure(figsize=(10, 10))
+        # Set figure size to match matrix dimensions
+        plt.figure(figsize=(cols, rows))
 
         max_val = (np.abs(matrix)).max()
 
@@ -772,10 +776,14 @@ def visualize_sparsity(
         plt.colorbar(label="Matrix Values")
     else:
         # Plot the sparsity pattern
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=(cols, rows))
         plt.spy(matrix, precision=precision)
 
     plt.axis("equal")
+
+    # Set proper ticks and labels for x and y axes
+    plt.xticks(np.arange(cols), labels=np.arange(cols))
+    plt.yticks(np.arange(rows), labels=np.arange(rows))
 
     if output_dir is None:
         plt.show()
