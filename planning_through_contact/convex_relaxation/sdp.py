@@ -258,7 +258,7 @@ def find_solution(
     return x
 
 
-EqualityEliminationType = Literal["svd", "qr_pivot"]
+EqualityEliminationType = Literal["svd", "qr_pivot", "shooting"]
 
 
 def eliminate_equality_constraints(
@@ -759,16 +759,15 @@ def visualize_sparsity(
     rows, cols = matrix.shape
 
     scaling = max(rows, cols)
+    # Set figure size to match matrix dimensions
+    plt.figure(figsize=(cols / scaling * 7, rows / scaling * 7))
+
+    max_val = (np.abs(matrix)).max()
 
     if color:
         # Define a colormap where zero values are white
         cmap = plt.get_cmap("viridis").copy()
         cmap.set_bad(color="white")
-
-        # Set figure size to match matrix dimensions
-        plt.figure(figsize=(cols / scaling * 7, rows / scaling * 7))
-
-        max_val = (np.abs(matrix)).max()
 
         # Normalize the color map to ensure proper scaling (vmin, vmax exclude small values)
         norm = mcolors.Normalize(vmin=-max_val, vmax=max_val)
@@ -777,8 +776,6 @@ def visualize_sparsity(
         plt.imshow(matrix, cmap=cmap, norm=norm, aspect="auto", interpolation="nearest")
         plt.colorbar(label="Matrix Values")
     else:
-        # Plot the sparsity pattern
-        plt.figure(figsize=(cols, rows))
         plt.spy(matrix, precision=precision)
 
     plt.axis("equal")

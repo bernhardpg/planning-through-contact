@@ -584,7 +584,7 @@ class LcsTrajectoryOptimization:
             λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
         elif equality_elimination_method == "qr_pivot":
-            F, ŷ = self.compute_nullspace_basis(sys)
+            F, ŷ = self.compute_nullspace_basis(params, sys)
             xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
                 params, prog, sys, F, ŷ
             )
@@ -597,6 +597,22 @@ class LcsTrajectoryOptimization:
             for x_next_1, x_next_2 in zip(xs[1:], xs_next[:-1]):
                 for c in eq(x_next_1, x_next_2):
                     prog.AddLinearEqualityConstraint(c)
+        elif equality_elimination_method == "shooting":
+            us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
+            λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+
+            breakpoint()
+            # test = np.linalg.matrix_power(sys.A, 50)
+            breakpoint()
+
+            # Dynamics
+            xs = np.zeros((params.N + 1, sys.num_states), dtype=object)
+            xs[0] = x0
+            for k in range(params.N):
+                x, u, λ = xs[k], us[k], λs[k]
+
+                f = sys.get_f(x, u, λ)
+                xs[k + 1] = f
 
         else:
             raise NotImplementedError("")
@@ -642,7 +658,6 @@ class LcsTrajectoryOptimization:
         #     f = sys.get_f(x, u, λ)
         #     dynamics = eq(x_next, f)
         #     const = prog.AddLinearConstraint(dynamics)
-        #     breakpoint()
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
@@ -769,6 +784,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def compute_nullspace_basis(
+        params: TrajectoryOptimizationParameters,
         sys: LinearComplementaritySystem,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
@@ -886,7 +902,15 @@ def test_lcs_trajectory_optimization():
 def test_lcs_trajopt_with_sparsity_construction():
     sys = CartPoleWithWalls()
 
-    F, ŷ = LcsTrajectoryOptimization.compute_nullspace_basis(sys)
+    params = TrajectoryOptimizationParameters(
+        N=10,
+        T_s=0.01,
+        Q=np.diag([1, 1, 1, 1]),
+        Q_N=np.diag([1, 1, 1, 1]),
+        R=np.array([1]),
+    )
+
+    F, ŷ = LcsTrajectoryOptimization.compute_nullspace_basis(params, sys)
     num_original_vars = 2 * sys.num_states + sys.num_inputs + sys.num_forces
     num_latent_space_vars = F.shape[1]
 
@@ -896,14 +920,6 @@ def test_lcs_trajopt_with_sparsity_construction():
 
     assert F.shape[0] == num_original_vars
     assert ŷ.shape[0] == num_original_vars
-
-    params = TrajectoryOptimizationParameters(
-        N=10,
-        T_s=0.01,
-        Q=np.diag([1, 1, 1, 1]),
-        Q_N=np.diag([1, 1, 1, 1]),
-        R=np.array([1]),
-    )
 
     xs, us, λs, xs_next = (
         LcsTrajectoryOptimization.define_decision_vars_in_latent_space(
@@ -1057,13 +1073,14 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
+            N=10,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
+        # equality_elimination_method="shooting",
         equality_elimination_method="qr_pivot",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
@@ -1076,6 +1093,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     np.random.seed(cfg.seed)
 
+    logger.info("Building trajopt program...")
     trajopt = LcsTrajectoryOptimization(
         sys,
         cfg.trajopt_params,
