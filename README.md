@@ -62,52 +62,6 @@ To activate the environment, run:
 poetry shell
 ```
 
-### Installing customized Drake version
-
-**⚠️ At the moment, the code relies on a custom build of Drake. This will only be the case for another week or so, meaning that this step will not be necessary very soon⚠️**
-
-At the moment, this code relies on a
-[customized version](https://github.com/bernhardpg/drake/tree/towards-tight-convex-relaxations)
-of Drake. To install, follow these instructions:
-
-Navigate to a desired installation location and run:
-
-```console
-git clone git@github.com:bernhardpg/drake.git
-cd drake
-git checkout towards-tight-convex-relaxations
-```
-
-To build Drake and the python bindings, run:
-
-```console
-cd ../
-mkdir drake-build
-cd drake-build
-cmake -DWITH_MOSEK=ON -DWITH_SNOPT=ON ../drake
-make install
-```
-
-if you are a member of the RLG, run:
-
-```console
-cd ../
-mkdir drake-build
-cd drake-build
-cmake -DWITH_MOSEK=ON -DWITH_ROBOTLOCOMOTION_SNOPT=ON ../drake
-make install
-```
-
-See [the docs](https://drake.mit.edu/from_source.html) for more information on building Drake.
-
-To tell the environment to use the customized Drake build, run:
-
-```console
-export PYTHONPATH={DRAKE_BUILD_DIR_PATH}/install/lib/python3.11/site-packages:${PYTHONPATH}
-```
-
-where `{DRAKE_BUILD_DIR_PATH}` should be replaced with the absolute path to the `drake-build` directory above.
-
 ---
 
 ## Generating planar pushing plans
