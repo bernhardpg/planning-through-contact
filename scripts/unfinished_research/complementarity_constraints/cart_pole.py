@@ -876,14 +876,40 @@ class LcsTrajectoryOptimization:
             us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
             λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
+            # Compute A̅ and B̅ such that
+            # x[k+1] = A̅[k]* x[k] + B̅[k]* u̅[k]
+            # where
+            # u̅[k] = [u[0], …, u[k-1]],
+            # A̅[k] = Aᵏ, and B̅[k] = [Aᵏ⁻¹B, …, AB, B]
+
+            A_bars = [np.linalg.matrix_power(sys.A, k) for k in range(params.N + 1)]
+
+            def _get_next_matrix(
+                k: int, M: npt.NDArray[np.float64]
+            ) -> npt.NDArray[np.float64]:
+                """
+                Given a matrix M, returns M̅[k] = [Aᵏ⁻¹M, …, AM, M]
+                """
+                M̅_blocks = [A̅_k @ M for A̅_k in reversed(A_bars[: k + 1])]
+                return np.block(M̅_blocks)
+
+            B_bars = [_get_next_matrix(k, sys.B) for k in range(params.N)]
+            D_bars = [_get_next_matrix(k, sys.D) for k in range(params.N)]
+            d_bars = [M @ sys.d for M in np.cumsum(A_bars, axis=0)]
+
             # Dynamics
             xs = np.zeros((params.N + 1, sys.num_states), dtype=object)
             xs[0] = x0
             for k in range(params.N):
-                x, u, λ = xs[k], us[k], λs[k]
+                # TODO: It might be worth adding some unit tests here because this is very prone to an index error!
+                u_bar, λ_bar = us[: k + 1].flatten(), λs[: k + 1].flatten()
+                A_bar = A_bars[k + 1]
+                B_bar = B_bars[k]
+                D_bar = D_bars[k]
+                d_bar = d_bars[k]
+                x_next = A_bar @ x0 + B_bar @ u_bar + D_bar @ λ_bar + d_bar
 
-                f = sys.get_f(x, u, λ)
-                xs[k + 1] = f
+                xs[k + 1] = x_next
 
             add_dynamics = False
 
@@ -965,7 +991,9 @@ class LcsTrajectoryOptimization:
         # Cost
         for k in range(params.N):
             x, u = xs[k], us[k]
-            prog.AddQuadraticCost(x.T @ params.Q @ x)
+            cost = prog.AddQuadraticCost(x.T @ params.Q @ x)
+            if not cost.evaluator().Q().shape == (0, 0):
+                print(f"abs(Q).max(): {np.abs(cost.evaluator().Q()).max()}")
 
             u = u.reshape((-1, 1))  # handle the case where u.shape = (1,)
             prog.AddQuadraticCost((u.T @ params.R @ u).item())
