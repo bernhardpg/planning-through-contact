@@ -91,11 +91,13 @@ class BandSparseSemidefiniteRelaxation:
 
         return constraint
 
-    def add_quadratic_constraint(self, group_idx_1: int, group_idx_2: int, *args):
+    def add_quadratic_constraint(
+        self, group_idx_1: int, group_idx_2: int, *args, **kwargs
+    ):
         group_idx_1 = self._find_numbered_idx(group_idx_1)
         group_idx_2 = self._find_numbered_idx(group_idx_2)
 
-        constraint = self.prog.AddQuadraticConstraint(*args)
+        constraint = self.prog.AddQuadraticConstraint(*args, **kwargs)
         self.quadratic_constraints[(group_idx_1, group_idx_2)].append(constraint)
 
         return constraint
