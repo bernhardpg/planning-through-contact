@@ -102,6 +102,8 @@ if __name__ == "__main__":
     else:
         use_case = "normal"
 
+    print("For help on how to use this script, run `--help`")
+
     print(
         f'Generating {num_trajs} different random trajectories for slider type "{slider_type}"'
     )
