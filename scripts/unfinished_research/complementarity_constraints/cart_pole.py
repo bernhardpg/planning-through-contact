@@ -564,93 +564,75 @@ class TrajectoryOptimizationParameters:
     integrator: IntegratorType = "forward_euler"
 
 
-class LcsTrajectoryOptimization:
+# TODO: Delete this, this was just to test something quick
+class CartPoleMechanicalEliminationTrajopt:
     def __init__(
         self,
         continuous_sys: LinearComplementaritySystem,
         params: TrajectoryOptimizationParameters,
         x0: npt.NDArray[np.float64],
-        equality_elimination_method: EqualityEliminationType | None = None,
     ):
         sys = continuous_sys.discretize(params.integrator, params.T_s)
 
         prog = MathematicalProgram()
 
-        if equality_elimination_method is None:
-            xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
-            # Add initial state to state vector
-            xs = np.vstack([x0, xs])
-            us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
-            λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+        pos_idxs = [0, 1]
+        num_pos = len(pos_idxs)
 
-        elif equality_elimination_method == "qr_pivot":
-            F, ŷ = self.compute_nullspace_basis(params, sys)
-            xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
-                params, prog, sys, F, ŷ
-            )
-            # xs = np.vstack([x0, xs])
-            initial_condition = eq(xs[0], x0)
-            for c in initial_condition:
-                prog.AddLinearEqualityConstraint(c)
+        ps = prog.NewContinuousVariables(params.N + 1, num_pos, "p")
 
-            xs = np.vstack([xs, xs_next[-1]])
-            for x_next_1, x_next_2 in zip(xs[1:], xs_next[:-1]):
-                for c in eq(x_next_1, x_next_2):
-                    prog.AddLinearEqualityConstraint(c)
-        elif equality_elimination_method == "shooting":
-            us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
-            λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+        # p0, v0 = np.split(x0, [2])
+        # ps = np.vstack([p0, ps])  # add the initial condition
 
-            breakpoint()
-            # test = np.linalg.matrix_power(sys.A, 50)
-            breakpoint()
+        vs = np.vstack(
+            [(p_next - p) / params.T_s for p, p_next in zip(ps[:-1], ps[1:])]
+        )
+        vs = np.vstack(
+            [vs, np.zeros_like(vs[0], dtype=float)]
+        )  # add an extra zero at the end
+        # vs = np.vstack([v0, vs])  # add the initial condition
 
-            # Dynamics
-            xs = np.zeros((params.N + 1, sys.num_states), dtype=object)
-            xs[0] = x0
-            for k in range(params.N):
-                x, u, λ = xs[k], us[k], λs[k]
-
-                f = sys.get_f(x, u, λ)
-                xs[k + 1] = f
-
-        else:
-            raise NotImplementedError("")
-
-        self.add_trajopt_cost_and_constraints(params, sys, prog, xs, us, λs)
+        xs = np.hstack([ps, vs])
+        # xs = np.vstack([x0, xs])  # add the initial condition
+        us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
+        λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
         self.sys = sys
         self.params = params
         self.qcqp = prog
         self.xs = xs
+        self.ps = ps
+        self.vs = vs
         self.us = us
         self.λs = λs
 
+        initial_condition = eq(xs[0], x0)
+        for c in initial_condition:
+            prog.AddLinearConstraint(c)
+
         # TODO: remove (code for not eliminating x0 manually)
         # xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
-        # initial_condition = eq(xs[0], x0)
+        # initial_condition = eq(vs[0], v0)
         # for c in initial_condition:
-        #     qcqp.AddLinearConstraint(c)
+        #     prog.AddLinearConstraint(c)
+        # breakpoint()
 
-    @staticmethod
-    def add_trajopt_cost_and_constraints(
-        params: TrajectoryOptimizationParameters,
-        sys: LinearComplementaritySystem,
-        prog: MathematicalProgram,
-        xs: np.ndarray,
-        us: np.ndarray,
-        λs: np.ndarray,
-    ) -> None:
-        """
-        Given a MathematicalProgram and the state variables (`xs`), input variables (`us`), and force variables (`λs`),
-        this function adds all the trajectory optimization constraints and costs to it according to the provided `sys`
-        and `params`.
-
-        The variables are assumed to have shape (N, m) where N is the trajectory optimization horizon length and m is
-        the number of variables per time step.
-        """
-
+        vel_idxs = [2, 3]
         # Dynamics
+        for k in range(params.N):
+            x, u, λ = xs[k], us[k], λs[k]
+            v_next = vs[k + 1]
+
+            A_a = sys.A[vel_idxs, :]
+            B_a = sys.B[vel_idxs, :]
+            D_a = sys.D[vel_idxs, :]
+            # TODO: Remember affine term later (For cart pole it is zero)
+
+            dynamics = eq(v_next, A_a @ x + B_a @ u + D_a @ λ)
+
+            prog.AddLinearConstraint(dynamics)
+
+        # # Dynamics
         # for k in range(params.N):
         #     x, u, λ = xs[k], us[k], λs[k]
         #     x_next = xs[k + 1]
@@ -812,7 +794,290 @@ class LcsTrajectoryOptimization:
         # y = Fz + ŷ
         F = null_space_basis_qr_pivot(A_eq)
 
-        # visualize_sparsity(F, color=True)
+        visualize_sparsity(F, color=True)
+
+        # TODO: It seems that 0 is always a solution?
+        ŷ = find_solution(A_eq, b_eq)
+
+        return F, ŷ
+
+    @staticmethod
+    def define_decision_vars_in_latent_space(
+        params: TrajectoryOptimizationParameters,
+        prog: MathematicalProgram,
+        sys: LinearComplementaritySystem,
+        nullspace_basis: npt.NDArray[np.float64],
+        particular_solution: npt.NDArray[np.float64],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Define the decision variables through a latent space variable obtained
+        from elimination of equality constraints.
+        """
+
+        F, ŷ = nullspace_basis, particular_solution
+        N_latent_vars = F.shape[1]
+        zs = prog.NewContinuousVariables(params.N, N_latent_vars, "z")
+        concatenated_vars = np.vstack([F @ z_k + ŷ for z_k in zs])
+
+        split_sizes = [
+            sys.num_states,
+            sys.num_inputs,
+            sys.num_forces,
+        ]
+        split_idxs = np.cumsum(split_sizes)
+        xs, us, λs, xs_next = np.split(concatenated_vars, split_idxs, axis=1)
+        return xs, us, λs, xs_next
+
+
+class LcsTrajectoryOptimization:
+    def __init__(
+        self,
+        continuous_sys: LinearComplementaritySystem,
+        params: TrajectoryOptimizationParameters,
+        x0: npt.NDArray[np.float64],
+        equality_elimination_method: EqualityEliminationType | None = None,
+    ):
+        sys = continuous_sys.discretize(params.integrator, params.T_s)
+
+        prog = MathematicalProgram()
+
+        if equality_elimination_method is None:
+            xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
+            # Add initial state to state vector
+            xs = np.vstack([x0, xs])
+            us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
+            λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+
+        elif equality_elimination_method == "qr_pivot":
+            F, ŷ = self.compute_nullspace_basis(params, sys)
+            xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
+                params, prog, sys, F, ŷ
+            )
+            # xs = np.vstack([x0, xs])
+            initial_condition = eq(xs[0], x0)
+            for c in initial_condition:
+                prog.AddLinearEqualityConstraint(c)
+
+            xs = np.vstack([xs, xs_next[-1]])
+            for x_next_1, x_next_2 in zip(xs[1:], xs_next[:-1]):
+                for c in eq(x_next_1, x_next_2):
+                    prog.AddLinearEqualityConstraint(c)
+        elif equality_elimination_method == "shooting":
+            us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
+            λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
+
+            breakpoint()
+            # test = np.linalg.matrix_power(sys.A, 50)
+            breakpoint()
+
+            # Dynamics
+            xs = np.zeros((params.N + 1, sys.num_states), dtype=object)
+            xs[0] = x0
+            for k in range(params.N):
+                x, u, λ = xs[k], us[k], λs[k]
+
+                f = sys.get_f(x, u, λ)
+                xs[k + 1] = f
+
+        else:
+            raise NotImplementedError("")
+
+        self.add_trajopt_cost_and_constraints(params, sys, prog, xs, us, λs)
+
+        self.sys = sys
+        self.params = params
+        self.qcqp = prog
+        self.xs = xs
+        self.us = us
+        self.λs = λs
+
+        # TODO: remove (code for not eliminating x0 manually)
+        # xs = qcqp.NewContinuousVariables(params.N + 1, sys.num_states, "x")
+        # initial_condition = eq(xs[0], x0)
+        # for c in initial_condition:
+        #     qcqp.AddLinearConstraint(c)
+
+    @staticmethod
+    def add_trajopt_cost_and_constraints(
+        params: TrajectoryOptimizationParameters,
+        sys: LinearComplementaritySystem,
+        prog: MathematicalProgram,
+        xs: np.ndarray,
+        us: np.ndarray,
+        λs: np.ndarray,
+    ) -> None:
+        """
+        Given a MathematicalProgram and the state variables (`xs`), input variables (`us`), and force variables (`λs`),
+        this function adds all the trajectory optimization constraints and costs to it according to the provided `sys`
+        and `params`.
+
+        The variables are assumed to have shape (N, m) where N is the trajectory optimization horizon length and m is
+        the number of variables per time step.
+        """
+
+        # Dynamics
+        for k in range(params.N):
+            x, u, λ = xs[k], us[k], λs[k]
+            x_next = xs[k + 1]
+
+            f = sys.get_f(x, u, λ)
+            dynamics = eq(x_next, f)
+            const = prog.AddLinearConstraint(dynamics)
+
+        # RHS nonnegativity of complementarity constraint
+        for k in range(params.N):
+            x, u, λ = xs[k], us[k], λs[k]
+
+            rhs = sys.get_complementarity_rhs(x, u, λ)
+            prog.AddLinearConstraint(ge(rhs, 0))
+
+        # LHs nonnegativity of complementarity constraint
+        for k in range(params.N):
+            λ = λs[k]
+            prog.AddLinearConstraint(ge(λ, 0))
+
+        # Complementarity constraint (element-wise)
+        for k in range(params.N):
+            x, u, λ = xs[k], us[k], λs[k]
+            rhs = sys.get_complementarity_rhs(x, u, λ)
+
+            elementwise_product = λ * rhs
+            for p in elementwise_product:
+                prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+
+        # Input limits
+        # TODO
+
+        # State limits
+        # TODO
+
+        # Cost
+        for k in range(params.N):
+            x, u = xs[k], us[k]
+            prog.AddQuadraticCost(x.T @ params.Q @ x)
+
+            u = u.reshape((-1, 1))  # handle the case where u.shape = (1,)
+            prog.AddQuadraticCost((u.T @ params.R @ u).item())
+
+        # Terminal cost
+        if params.Q_N is not None:
+            Q_N = params.Q_N
+        else:
+            _, S = DiscreteTimeLinearQuadraticRegulator(
+                sys.A, sys.B, params.Q, params.R
+            )
+            Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
+
+        prog.AddQuadraticCost(xs[params.N].T @ Q_N @ xs[params.N])
+
+    def evaluate_state_input_forces(
+        self, result: MathematicalProgramResult
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]:
+        # We always evaluate xs as an expression, because it is a mix of floats (initial condition) and vars
+        xs_sol = evaluate_np_expressions_array(self.xs, result)
+
+        if type(self.us[0]) is Expression:
+            us_sol = evaluate_np_expressions_array(self.us, result)
+        else:
+            us_sol = result.GetSolution(self.us).reshape((-1, 1))
+
+        if type(self.λs[0]) is Expression:
+            λs_sol = evaluate_np_expressions_array(self.λs, result)
+        else:
+            λs_sol = result.GetSolution(self.λs)
+
+        return xs_sol, us_sol, λs_sol
+
+    def get_state_input_forces_from_decision_var_values(
+        self,
+        vals: npt.NDArray[np.float64],
+        equality_elimination_method: EqualityEliminationType | None = None,
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]:
+        """
+        Given an array of decision variable values, return the corresponding xs, us, λs.
+        """
+        if not len(vals) == len(self.qcqp.decision_variables()):
+            raise RuntimeError(
+                f"Number of provided values does not match number of decision\
+                variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
+            )
+
+        if equality_elimination_method is not None:
+            var_values = {
+                var: val for var, val in zip(self.qcqp.decision_variables(), vals)
+            }
+
+        var_to_idx = EqualToDict(
+            {var: idx for idx, var in enumerate(self.qcqp.decision_variables())}
+        )
+
+        def get_val_or_keep(var_or_val_or_expr: float | Variable | Expression) -> float:
+            if type(var_or_val_or_expr) == float:
+                return var_or_val_or_expr
+            elif type(var_or_val_or_expr) == Variable:
+                val_idx = var_to_idx[var_or_val_or_expr]
+                return float(vals[val_idx])
+            elif type(var_or_val_or_expr) == Expression:
+                val = var_or_val_or_expr.Evaluate(var_values)  # type: ignore
+                return val
+            else:
+                breakpoint()
+                raise RuntimeError("Wrong type")
+
+        get_vals = np.vectorize(get_val_or_keep)
+        return get_vals(self.xs), get_vals(self.us), get_vals(self.λs)
+
+    def get_vars_at_time_step(self, k: int) -> np.ndarray:
+        assert k <= self.params.N
+        # First entry of self.xs is just x0 (which is a constant)
+        return np.concatenate([self.xs[k + 1], self.us[k], self.λs[k]])
+
+    def get_variable_groups(self) -> list[Variables]:
+        variable_groups = [
+            Variables(
+                np.concatenate(
+                    [self.get_vars_at_time_step(k), self.get_vars_at_time_step(k + 1)]
+                )
+            )
+            for k in range(self.params.N - 1)
+        ]
+        return variable_groups
+
+    @staticmethod
+    def compute_nullspace_basis(
+        params: TrajectoryOptimizationParameters,
+        sys: LinearComplementaritySystem,
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """
+        Compute the null space basis for equality constraints arising
+        from the dynamics constraints:
+
+             x[k+1] = Ax[k] + Bu[k] + Dλ[k] + d
+           ⟹ x[k+1] = Ax[k] + Bu[k] + Dλ[k] - x[k+1] = -d
+           ⟹ [A B D -I] [x[k]  ] = -d
+                        [u[k]  ]
+                        [λ[k]  ]
+                        [x[k+1]]
+
+        which we rename as:
+
+            A_eq y = b_eq
+
+        This function computes F and ŷ such that y = Fz + ŷ.
+
+        """
+        I = np.eye(sys.num_states)
+        A_eq = np.block([sys.A, sys.B, sys.D, -I])
+        b_eq = -sys.d
+
+        # y = Fz + ŷ
+        F = null_space_basis_qr_pivot(A_eq)
+
+        visualize_sparsity(F, color=True)
 
         # TODO: It seems that 0 is always a solution?
         ŷ = find_solution(A_eq, b_eq)
@@ -1067,6 +1332,136 @@ class CartPoleConfig(YamlMixin):
     git_commit: str
 
 
+# TODO: This is just to quickly see if only eliminating some variables maintains tightness.
+# If not, this code can be deleted.
+def cart_pole_test_mechanical_elimination(
+    output_dir: Path, debug: bool, logger: Logger
+) -> None:
+    sys = CartPoleWithWalls()
+    Q = np.diag([10, 100, 1, 10])
+
+    cfg = CartPoleConfig(
+        trajopt_params=TrajectoryOptimizationParameters(
+            N=20,
+            T_s=0.1,
+            Q=Q,
+            R=np.array([1]),
+        ),
+        x0=np.array([0.3, 0, 0.10, 0]),
+        implied_constraints="weakest",
+        # equality_elimination_method="shooting",
+        equality_elimination_method="qr_pivot",
+        use_trace_cost=1e-5,
+        use_chain_sparsity=False,
+        seed=0,
+        num_rounding_trials=5,
+        git_commit=get_current_git_commit(),
+    )
+
+    cfg.save(output_dir / "config.yaml")
+
+    np.random.seed(cfg.seed)
+
+    logger.info("Building trajopt program...")
+    trajopt = CartPoleMechanicalEliminationTrajopt(
+        sys,
+        cfg.trajopt_params,
+        cfg.x0,
+    )
+
+    logger.info("Solving SDP relaxation...")
+    Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
+        qcqp=trajopt.qcqp,
+        trace_cost=cfg.use_trace_cost,
+        implied_constraints=cfg.implied_constraints,
+        variable_groups=(
+            trajopt.get_variable_groups() if cfg.use_chain_sparsity else None
+        ),
+        print_time=True,
+        plot_eigvals=True,
+        print_eigvals=True,
+        logger=logger,
+        output_dir=output_dir,
+        equality_elimination_method=cfg.equality_elimination_method,
+    )
+
+    # Rounding
+    μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+
+    eigvec = np.linalg.eig(Y).eigenvectors[0]
+    eigvec = eigvec / eigvec[0]
+
+    # Save "mean"/relaxed trajectory
+    relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+        *trajopt.get_state_input_forces_from_decision_var_values(
+            μ, cfg.equality_elimination_method
+        ),
+        sys,
+        cfg.trajopt_params.T_s,
+    )
+    relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
+    relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
+
+    # Save "mean"/relaxed trajectory
+    eigenvector_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+        *trajopt.get_state_input_forces_from_decision_var_values(
+            μ, cfg.equality_elimination_method
+        ),
+        sys,
+        cfg.trajopt_params.T_s,
+    )
+    eigenvector_trajectory.plot(output_dir / "eigenvector_trajectory.pdf")
+    eigenvector_trajectory.animate(output_dir / "eigenvector_animation.mp4")
+
+    initial_guesses = [μ]  # use the mean as an initial guess
+    initial_guesses.extend(
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
+    )
+
+    trials = []
+    logger.info(f"Rounding {len(initial_guesses)} trials...")
+    for initial_guess in tqdm(initial_guesses):
+        snopt = SnoptSolver()
+
+        start = time()
+        result = snopt.Solve(trajopt.qcqp, initial_guess)  # type: ignore
+        end = time()
+        rounding_time = end - start
+
+        trial = RoundingTrial(
+            result.is_success(), rounding_time, result.get_optimal_cost(), result
+        )
+        trials.append(trial)
+
+    plot_rounding_trials(trials, output_dir)
+
+    best_trial_idx = np.argmin([trial.cost for trial in trials])
+    best_trial = trials[best_trial_idx]
+
+    for idx, trial in enumerate(trials):
+        logger.info(
+            f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
+        )
+        trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+            *trajopt.evaluate_state_input_forces(trial.result),
+            sys,
+            cfg.trajopt_params.T_s,
+        )
+
+        trial_dir = output_dir / f"trial_{idx}"
+
+        if idx == best_trial_idx:
+            trial_dir = Path(str(trial_dir) + "_BEST")
+        trial_dir.mkdir(exist_ok=True)
+        trajectory.plot(trial_dir / "trajectory.pdf")
+        trajectory.animate(trial_dir / "animation.mp4")
+
+    logger.info(f"Best trial: {best_trial_idx}")
+    logger.info(
+        f"Best optimality gap: {compute_optimality_gap_pct(best_trial.cost, relaxed_cost):.4f}%"
+    )
+
+
 def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
     Q = np.diag([10, 100, 1, 10])
@@ -1187,7 +1582,8 @@ def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     # test_lcs_get_state_input_forces_from_vals()
     # test_lcs_trajopt_with_sparsity_construction()
 
-    cart_pole_experiment_1(output_dir, debug, logger)
+    # cart_pole_experiment_1(output_dir, debug, logger)
+    cart_pole_test_mechanical_elimination(output_dir, debug, logger)
     # cart_pole_experiment_2(output_dir, debug, logger)
 
 
