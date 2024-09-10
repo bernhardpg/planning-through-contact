@@ -43,6 +43,7 @@ from planning_through_contact.tools.utils import (
 
 GcsVertex = opt.GraphOfConvexSets.Vertex
 GcsEdge = opt.GraphOfConvexSets.Edge
+kIndefinite = QuadraticConstraint.HessianType.kIndefinite
 
 
 @dataclass
@@ -466,14 +467,18 @@ class FaceContactMode(AbstractContactMode):
             constraint = []
             for c in trans_vel_constraint.flatten():
                 constraint.append(
-                    self.prog_wrapper.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                    self.prog_wrapper.add_quadratic_constraint(
+                        k, k + 1, c, 0, 0, hessian_type=kIndefinite
+                    )
                 )
             self.constraints["translational_dynamics"].append(np.array(constraint))
 
             trans_vel_constraint = R_WB.T @ v_WB - (c_f * f_c_B)
             constraint = []
             for c in trans_vel_constraint.flatten():
-                c = self.prog_wrapper.add_quadratic_constraint(k, k + 1, c, 0, 0)
+                c = self.prog_wrapper.add_quadratic_constraint(
+                    k, k + 1, c, 0, 0, hessian_type=kIndefinite
+                )
                 constraint.append(c)
                 self.redundant_constraints.append(c)
 
@@ -483,7 +488,7 @@ class FaceContactMode(AbstractContactMode):
             torque = c_tau * cross_2d(p_Bc, f_c_B)
             ang_vel_constraint = theta_WB_dot - torque
             constraint = self.prog_wrapper.add_quadratic_constraint(
-                k, k + 1, ang_vel_constraint, 0, 0
+                k, k + 1, ang_vel_constraint, 0, 0, hessian_type=kIndefinite
             )
             self.constraints["rotational_dynamics"].append(constraint)
 
