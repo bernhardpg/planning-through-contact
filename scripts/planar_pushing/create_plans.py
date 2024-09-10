@@ -96,6 +96,9 @@ if __name__ == "__main__":
     else:
         use_case = "normal"
 
+    print(
+        f'Generating {num_trajs} different random trajectories for slider type "{slider_type}"'
+    )
     config = get_default_plan_config(
         slider_type=slider_type,
         pusher_radius=pusher_radius,
@@ -111,6 +114,8 @@ if __name__ == "__main__":
     else:
         folder_name = create_output_folder(output_dir, slider_type, traj_number)
         plans = get_default_experiment_plans(seed, num_trajs, config)
+
+    print(f"Output folder: {folder_name}")
 
     if traj_number is not None:
         plans_to_plan_for = [plans[traj_number]]

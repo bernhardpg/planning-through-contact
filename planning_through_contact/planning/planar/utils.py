@@ -402,7 +402,11 @@ def get_plan_start_and_goals_to_point(
     pusher_pose = PlanarPose(ws.x_min, 0, 0)
 
     plans = []
-    for _ in range(num_plans):
+    from tqdm import tqdm
+
+    print(f"Sampling {num_plans} random initial conditions with random seed {seed}")
+
+    for _ in tqdm(range(num_plans)):
         slider_initial_pose = _get_slider_pose_within_workspace(
             workspace, slider, pusher_pose, config, limit_rotations
         )
