@@ -647,18 +647,19 @@ def create_quasistatic_pushing_analysis(
     fig.suptitle("Violation of quasi-static dynamics with ellipsoidal limit surface")
 
     axs[0].plot(x_axis, dynamics_violation[:, 0])
-    axs[0].set_title("Violation in $\dot x$")
+    axs[0].set_title(r"Violation in $\dot x$")
+
     axs[0].set(ylabel="[m/s]")
     axs[0].set_ylim(-trans_axis_max, trans_axis_max)
 
     axs[1].plot(x_axis, dynamics_violation[:, 1])
-    axs[1].set_title("Violation in $\dot y$")
+    axs[1].set_title(r"Violation in $\dot y$")
     axs[1].set(xlabel="Time [s]", ylabel="[m/s]")
     axs[1].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
     axs[1].set_ylim(-trans_axis_max, trans_axis_max)
 
     axs[2].plot(x_axis, dynamics_violation[:, 2])
-    axs[2].set_title("Violation in $\omega$")
+    axs[2].set_title(r"Violation in $\omega$")
     axs[2].set(xlabel="Time [s]", ylabel="[rad/s]")
     axs[2].xaxis.set_ticks(np.arange(0, num_ctrl_points + 1))
     axs[2].set_ylim(-ang_axis_max, ang_axis_max)
