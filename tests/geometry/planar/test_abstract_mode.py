@@ -76,7 +76,8 @@ def test_add_continuity_constraints_between_non_collision_modes() -> None:
         VertexModePair(source_vertex, source_mode),
     )
 
-    save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
+    if DEBUG:
+        save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
     result = gcs.SolveShortestPath(source_vertex, target_vertex)
     assert result.is_success()
 
@@ -152,7 +153,8 @@ def test_add_velocity_constraints_between_non_collision_modes() -> None:
         continuity_on_pusher_velocities=True,
     )
 
-    save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
+    if DEBUG:
+        save_gcs_graph_diagram(gcs, Path("test_continuity.svg"))
     result = gcs.SolveShortestPath(source_vertex, target_vertex)
     assert result.is_success()
 

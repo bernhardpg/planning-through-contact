@@ -32,7 +32,11 @@ def save_gcs_graph_diagram(
     filepath: Path,
     result: Optional[MathematicalProgramResult] = None,
 ) -> None:
-    graphviz = gcs.GetGraphvizString(result, precision=1)
+    if result:
+        graphviz = gcs.GetGraphvizString(result, precision=1, active_path=[])
+    else:
+        graphviz = gcs.GetGraphvizString(precision=1, active_path=[])
+
     import pydot
 
     data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
