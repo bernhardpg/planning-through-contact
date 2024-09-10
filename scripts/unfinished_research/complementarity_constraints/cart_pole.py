@@ -992,8 +992,12 @@ class LcsTrajectoryOptimization:
         for k in range(params.N):
             x, u = xs[k], us[k]
             cost = prog.AddQuadraticCost(x.T @ params.Q @ x)
-            if not cost.evaluator().Q().shape == (0, 0):
-                print(f"abs(Q).max(): {np.abs(cost.evaluator().Q()).max()}")
+
+            if k > 0:
+                WARNING_TRESH = 1e8
+                abs_val = np.abs(cost.evaluator().Q()).max()
+                if abs_val > WARNING_TRESH:
+                    logger.warning(f"Huge value found in Q: {abs_val}")
 
             u = u.reshape((-1, 1))  # handle the case where u.shape = (1,)
             prog.AddQuadraticCost((u.T @ params.R @ u).item())
@@ -1506,7 +1510,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     cfg = CartPoleConfig(
         trajopt_params=TrajectoryOptimizationParameters(
-            N=10,
+            N=20,
             T_s=0.1,
             Q=Q,
             R=np.array([1]),
