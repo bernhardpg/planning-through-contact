@@ -44,7 +44,7 @@ poetry shell
 
 ---
 
-## Generating planar pushing plans
+## 🦾 Generating planar pushing plans
 
 Currently, the main entrypoint for generating planar pushing plans is the
 following script:
