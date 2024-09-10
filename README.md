@@ -46,7 +46,9 @@ poetry shell
 
 ## 🦾 Generating planar pushing plans
 
-Currently, the main entrypoint for generating planar pushing plans is the
+📘 You can find an introduction notebook to generate planar pushing trajectories [here](https://github.com/bernhardpg/planning-through-contact/blob/introductory-notebook/notebooks/planar_pushing.ipynb).
+
+Otherwise, the main entrypoint for generating planar pushing plans is the
 following script:
 
 ```console
@@ -85,8 +87,6 @@ which will generate plans that look like this:
 💻 The exact code used for generating the results in the paper can be found on the branch: [rss24-towards-tight-convex](https://github.com/bernhardpg/planning-through-contact/tree/rss24-towards-tight-convex).
 The trajectories and data in the paper are generated with `scripts/planar_pushing/create_plans.py`, see the user guide below.
 However, if you are simply interested in using the code, it is recommended to use the updated code on the `main` branch.
-
----
 
 ---
 
