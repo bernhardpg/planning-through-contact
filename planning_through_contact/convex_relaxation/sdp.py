@@ -258,7 +258,7 @@ def find_solution(
     return x
 
 
-EqualityEliminationType = Literal["svd", "qr_pivot", "shooting"]
+EqualityEliminationType = Literal["svd", "qr_pivot", "blockwise_qr_pivot", "shooting"]
 
 
 def eliminate_equality_constraints(

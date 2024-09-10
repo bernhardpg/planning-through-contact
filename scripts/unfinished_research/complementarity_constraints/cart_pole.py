@@ -794,7 +794,7 @@ class CartPoleMechanicalEliminationTrajopt:
         # y = Fz + ŷ
         F = null_space_basis_qr_pivot(A_eq)
 
-        visualize_sparsity(F, color=True)
+        # visualize_sparsity(F, color=True)
 
         # TODO: It seems that 0 is always a solution?
         ŷ = find_solution(A_eq, b_eq)
@@ -841,6 +841,7 @@ class LcsTrajectoryOptimization:
 
         prog = MathematicalProgram()
 
+        # Define states, inputs, and forces
         if equality_elimination_method is None:
             xs = prog.NewContinuousVariables(params.N, sys.num_states, "x")
             # Add initial state to state vector
@@ -848,11 +849,17 @@ class LcsTrajectoryOptimization:
             us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
             λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
 
-        elif equality_elimination_method == "qr_pivot":
+            add_dynamics = True
+
+        # TODO: Remove this, it does absolutely nothing more than
+        # adding variables which are then later removed.
+        elif equality_elimination_method == "blockwise_qr_pivot":
             F, ŷ = self.compute_nullspace_basis(params, sys)
             xs, us, λs, xs_next = self.define_decision_vars_in_latent_space(
                 params, prog, sys, F, ŷ
             )
+            # Either add initial condition as a constraint or by substitution
+            # (uncomment the next line)
             # xs = np.vstack([x0, xs])
             initial_condition = eq(xs[0], x0)
             for c in initial_condition:
@@ -862,13 +869,12 @@ class LcsTrajectoryOptimization:
             for x_next_1, x_next_2 in zip(xs[1:], xs_next[:-1]):
                 for c in eq(x_next_1, x_next_2):
                     prog.AddLinearEqualityConstraint(c)
+
+            add_dynamics = True
+
         elif equality_elimination_method == "shooting":
             us = prog.NewContinuousVariables(params.N, sys.num_inputs, "u")
             λs = prog.NewContinuousVariables(params.N, sys.num_forces, "λ")
-
-            breakpoint()
-            # test = np.linalg.matrix_power(sys.A, 50)
-            breakpoint()
 
             # Dynamics
             xs = np.zeros((params.N + 1, sys.num_states), dtype=object)
@@ -879,10 +885,14 @@ class LcsTrajectoryOptimization:
                 f = sys.get_f(x, u, λ)
                 xs[k + 1] = f
 
+            add_dynamics = False
+
         else:
             raise NotImplementedError("")
 
-        self.add_trajopt_cost_and_constraints(params, sys, prog, xs, us, λs)
+        self.add_trajopt_cost_and_constraints(
+            params, sys, prog, xs, us, λs, add_dynamics
+        )
 
         self.sys = sys
         self.params = params
@@ -905,6 +915,7 @@ class LcsTrajectoryOptimization:
         xs: np.ndarray,
         us: np.ndarray,
         λs: np.ndarray,
+        add_dynamics: bool = True,
     ) -> None:
         """
         Given a MathematicalProgram and the state variables (`xs`), input variables (`us`), and force variables (`λs`),
@@ -915,14 +926,14 @@ class LcsTrajectoryOptimization:
         the number of variables per time step.
         """
 
-        # Dynamics
-        for k in range(params.N):
-            x, u, λ = xs[k], us[k], λs[k]
-            x_next = xs[k + 1]
+        if add_dynamics:
+            for k in range(params.N):
+                x, u, λ = xs[k], us[k], λs[k]
+                x_next = xs[k + 1]
 
-            f = sys.get_f(x, u, λ)
-            dynamics = eq(x_next, f)
-            const = prog.AddLinearConstraint(dynamics)
+                f = sys.get_f(x, u, λ)
+                dynamics = eq(x_next, f)
+                prog.AddLinearConstraint(dynamics)
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
@@ -1077,7 +1088,7 @@ class LcsTrajectoryOptimization:
         # y = Fz + ŷ
         F = null_space_basis_qr_pivot(A_eq)
 
-        visualize_sparsity(F, color=True)
+        # visualize_sparsity(F, color=True)
 
         # TODO: It seems that 0 is always a solution?
         ŷ = find_solution(A_eq, b_eq)
@@ -1349,7 +1360,6 @@ def cart_pole_test_mechanical_elimination(
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        # equality_elimination_method="shooting",
         equality_elimination_method="qr_pivot",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
@@ -1475,8 +1485,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         ),
         x0=np.array([0.3, 0, 0.10, 0]),
         implied_constraints="weakest",
-        # equality_elimination_method="shooting",
-        equality_elimination_method="qr_pivot",
+        equality_elimination_method="shooting",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
@@ -1494,7 +1503,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         cfg.trajopt_params,
         cfg.x0,
         equality_elimination_method=cfg.equality_elimination_method,
-        # equality_elimination_method=None,
     )
 
     logger.info("Solving SDP relaxation...")
@@ -1510,7 +1518,6 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         print_eigvals=True,
         logger=logger,
         output_dir=output_dir,
-        # equality_elimination_method=cfg.equality_elimination_method,
     )
 
     # Rounding
@@ -1582,9 +1589,8 @@ def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     # test_lcs_get_state_input_forces_from_vals()
     # test_lcs_trajopt_with_sparsity_construction()
 
-    # cart_pole_experiment_1(output_dir, debug, logger)
-    cart_pole_test_mechanical_elimination(output_dir, debug, logger)
-    # cart_pole_experiment_2(output_dir, debug, logger)
+    cart_pole_experiment_1(output_dir, debug, logger)
+    # cart_pole_test_mechanical_elimination(output_dir, debug, logger)
 
 
 if __name__ == "__main__":
