@@ -760,7 +760,6 @@ def plot_simple_traj(
 
     fig.tight_layout()
     if filename:
-        print(filename)
         fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
         plt.close()
     else:
@@ -1172,7 +1171,6 @@ def make_traj_figure(
 
     fig.tight_layout()
     if filename:
-        print(filename)
         fig.savefig(filename + f"_trajectory.pdf", format="pdf")  # type: ignore
         plt.close()
     else:
@@ -2049,7 +2047,6 @@ def visualize_initial_conditions(
 
     fig.tight_layout()
     if filename:
-        print(filename)
         fig.savefig(filename + ".pdf", format="pdf")  # type: ignore
         plt.close()
     else:

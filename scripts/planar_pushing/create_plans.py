@@ -87,6 +87,12 @@ if __name__ == "__main__":
     save_analysis = args.save_analysis or debug
     save_relaxed = args.save_relaxed or debug
 
+    if not debug:
+        import logging
+
+        # Set the logging level to WARNING to suppress INFO-level messages
+        logging.getLogger("drake").setLevel(logging.WARNING)
+
     pusher_radius = 0.015
 
     if hardware_demos:
@@ -99,6 +105,11 @@ if __name__ == "__main__":
     print(
         f'Generating {num_trajs} different random trajectories for slider type "{slider_type}"'
     )
+    if not debug:
+        print("For more detailed information, run with the `--debug` flag.")
+
+    print("")
+
     config = get_default_plan_config(
         slider_type=slider_type,
         pusher_radius=pusher_radius,
@@ -115,6 +126,7 @@ if __name__ == "__main__":
         folder_name = create_output_folder(output_dir, slider_type, traj_number)
         plans = get_default_experiment_plans(seed, num_trajs, config)
 
+    print("")
     print(f"Output folder: {folder_name}")
 
     if traj_number is not None:
@@ -122,7 +134,10 @@ if __name__ == "__main__":
     else:
         plans_to_plan_for = plans
 
-    for idx, plan in enumerate(plans_to_plan_for):
+    print("Generating plans...")
+    from tqdm import tqdm
+
+    for idx, plan in enumerate(tqdm(plans_to_plan_for)):
         create_plan(
             plan,
             config,
