@@ -116,7 +116,7 @@ Currently, the main entrypoint for generating planar pushing plans is the
 following script:
 
 ```python
-python scripts/planar_pushing/create_plan.py
+python scripts/planar_pushing/create_plans.py
 ```
 
 which takes a number of command line arguments. Add the flag `--help` for a
@@ -125,7 +125,7 @@ description of these.
 For instance, to generate 10 plans for a rectangular slider geometry, run
 
 ```python
-python scripts/planar_pushing/create_plan.py --body sugar_box --seed 0 --num 10
+python scripts/planar_pushing/create_plans.py --body sugar_box --seed 0 --num 10
 ```
 
 which will generate plans that look like this:
