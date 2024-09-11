@@ -125,9 +125,9 @@ class CartPoleWithWalls(LinearComplementaritySystem):
     Contact-Aware Controllers.” 2021
 
     x_1 = cart position
-    x_2 = pole position
+    x_2 = pole angle
     x_3 = cart velocity
-    x_4 = pole velocity
+    x_4 = pole angular velocity
 
     u_1 = force applied to cart
 
@@ -557,7 +557,7 @@ def test_cart_pole_w_walls():
 
 
 @dataclass
-class TrajectoryOptimizationParameters:
+class TrajoptParams(YamlMixin):
     N: int
     T_s: float
     Q: npt.NDArray[np.float64]
@@ -571,7 +571,7 @@ class CartPoleMechanicalEliminationTrajopt:
     def __init__(
         self,
         continuous_sys: LinearComplementaritySystem,
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         x0: npt.NDArray[np.float64],
     ):
         sys = continuous_sys.discretize(params.integrator, params.T_s)
@@ -768,7 +768,7 @@ class CartPoleMechanicalEliminationTrajopt:
 
     @staticmethod
     def compute_nullspace_basis(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
@@ -805,7 +805,7 @@ class CartPoleMechanicalEliminationTrajopt:
 
     @staticmethod
     def define_decision_vars_in_latent_space(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         prog: MathematicalProgram,
         sys: LinearComplementaritySystem,
         nullspace_basis: npt.NDArray[np.float64],
@@ -835,7 +835,7 @@ class LcsTrajectoryOptimization:
     def __init__(
         self,
         continuous_sys: LinearComplementaritySystem,
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         x0: npt.NDArray[np.float64],
         equality_elimination_method: EqualityEliminationType | None = None,
     ):
@@ -937,7 +937,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def add_trajopt_cost_and_constraints(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
         prog: MathematicalProgram,
         xs: np.ndarray,
@@ -1095,7 +1095,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def compute_nullspace_basis(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
@@ -1132,7 +1132,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def define_decision_vars_in_latent_space(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         prog: MathematicalProgram,
         sys: LinearComplementaritySystem,
         nullspace_basis: npt.NDArray[np.float64],
@@ -1161,7 +1161,7 @@ class LcsTrajectoryOptimization:
 # TODO: Move to unit test
 def test_lcs_trajectory_optimization():
     sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1215,7 +1215,7 @@ def test_lcs_trajectory_optimization():
 def test_lcs_trajopt_with_sparsity_construction():
     sys = CartPoleWithWalls()
 
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1254,7 +1254,7 @@ def test_lcs_trajopt_with_sparsity_construction():
 # TODO: Move to unit test
 def test_lcs_trajopt_with_sparsity():
     sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1272,7 +1272,7 @@ def test_lcs_trajopt_with_sparsity():
 
 def test_lcs_get_state_input_forces_from_vals():
     sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1368,9 +1368,7 @@ def plot_rounding_trials(
 
 
 @dataclass
-class CartPoleConfig(YamlMixin):
-    trajopt_params: TrajectoryOptimizationParameters
-    x0: npt.NDArray[np.float64]
+class LcsTrajoptSolverConfig(YamlMixin):
     implied_constraints: ImpliedConstraintsType
     equality_elimination_method: EqualityEliminationType | None
     use_trace_cost: float | None
@@ -1378,6 +1376,147 @@ class CartPoleConfig(YamlMixin):
     seed: int
     num_rounding_trials: int
     git_commit: str
+
+
+@dataclass
+class LcsAblationStudyParams(YamlMixin):
+    random_seed: int
+    x0_center: npt.NDArray[np.float64]
+    x0_spread: npt.NDArray[np.float64]
+    num_samples: int
+
+    def __post_init__(self) -> None:
+        assert self.x0_center.shape == self.x0_spread.shape
+
+
+class LcsAblationStudy:
+    def __init__(
+        self,
+        continuous_sys: CartPoleWithWalls,  # TODO: Make nonspecific for Cart Pole with Walls
+        study_params: LcsAblationStudyParams,
+        trajopt_params: TrajoptParams,
+        solver_config: LcsTrajoptSolverConfig,
+    ) -> None:
+
+        self.continuous_sys = continuous_sys
+        self.params = study_params
+        self.trajopt_params = trajopt_params
+        self.solver_config = solver_config
+
+    @staticmethod
+    def generate_x0s(
+        x0_center: npt.NDArray[np.float64], x0_spread: npt.NDArray[np.float64], N: int
+    ) -> list[npt.NDArray[np.float64]]:
+        x0_low = x0_center - x0_spread
+        x0_high = x0_center + x0_spread
+
+        samples = np.random.uniform(low=x0_low, high=x0_high, size=(N, len(x0_low)))
+        return [sample for sample in samples]
+
+    def run(self, logger: Logger, output_dir: Path) -> None:
+        x0s = self.generate_x0s(
+            self.params.x0_center, self.params.x0_spread, self.params.num_samples
+        )
+
+        logger.info(
+            f"Running ablation study with {self.params.num_samples} randomly sampled initial conditions."
+        )
+        logger.info(f"Saving results to {output_dir}")
+
+        from tqdm import tqdm
+
+        for idx, x0 in enumerate(tqdm(x0s)):
+
+            curr_dir = output_dir / str(idx)
+            curr_dir.mkdir(exist_ok=True, parents=True)
+
+            np.savetxt(curr_dir / "x0.txt", x0, delimiter=" ", fmt="%.2f")
+
+            trajopt = LcsTrajectoryOptimization(
+                self.continuous_sys,
+                self.trajopt_params,
+                x0,
+                equality_elimination_method="shooting",  # TODO
+            )
+
+            Y, _, _ = solve_sdp_relaxation(
+                qcqp=trajopt.qcqp,
+                trace_cost=self.solver_config.use_trace_cost,
+                implied_constraints=self.solver_config.implied_constraints,
+                variable_groups=None,
+                print_time=False,
+                plot_eigvals=True,
+                print_eigvals=False,
+                logger=logger,
+                output_dir=curr_dir,
+            )
+
+            # Rounding
+            μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+
+            # Save "mean"/relaxed trajectory
+            relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
+                *trajopt.get_state_input_forces_from_decision_var_values(
+                    μ, self.solver_config.equality_elimination_method
+                ),
+                self.continuous_sys,
+                self.trajopt_params.T_s,
+            )
+            relaxed_trajectory.plot(curr_dir / "mean_trajectory.pdf")
+            relaxed_trajectory.animate(curr_dir / "mean_trajectory.mp4")
+
+            # Save eigvec trajectory
+            eigvec = np.linalg.eig(Y).eigenvectors[0]
+            eigvec = eigvec / eigvec[-1]  # make last entry one
+            eigvec = eigvec[:-1]  # remove last entry
+
+            eigenvector_trajectory = (
+                CartPoleWithWallsTrajectory.from_state_input_forces(
+                    *trajopt.get_state_input_forces_from_decision_var_values(
+                        eigvec, self.solver_config.equality_elimination_method
+                    ),
+                    self.continuous_sys,
+                    self.trajopt_params.T_s,
+                )
+            )
+            eigenvector_trajectory.plot(curr_dir / "eigenvector_trajectory.pdf")
+            eigenvector_trajectory.animate(curr_dir / "eigenvector_animation.mp4")
+
+        print("Finished ablation study.")
+
+
+def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> None:
+    sys = CartPoleWithWalls()
+    Q = np.diag([10, 100, 1, 10])
+    trajopt_params = TrajoptParams(
+        N=10,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([1]),
+    )
+
+    solver_config = LcsTrajoptSolverConfig(
+        implied_constraints="weakest",
+        equality_elimination_method="qr_pivot",
+        use_trace_cost=1e-5,
+        use_chain_sparsity=False,
+        seed=0,
+        num_rounding_trials=5,
+        git_commit=get_current_git_commit(),
+    )
+
+    cart_position_max = sys.distance_to_walls - 0.05
+    DEG_TO_RAD = np.pi / 180
+    pole_angle_max = 20 * DEG_TO_RAD
+
+    study_params = LcsAblationStudyParams(
+        random_seed=0,
+        x0_center=np.array([0, 0, 0, 0]),
+        x0_spread=np.array([cart_position_max, pole_angle_max, 0.01, 0.01]),
+        num_samples=10,
+    )
+    study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
+    study.run(logger, output_dir)
 
 
 # TODO: This is just to quickly see if only eliminating some variables maintains tightness.
@@ -1388,14 +1527,14 @@ def cart_pole_test_mechanical_elimination(
     sys = CartPoleWithWalls()
     Q = np.diag([10, 100, 1, 10])
 
-    cfg = CartPoleConfig(
-        trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
-            T_s=0.1,
-            Q=Q,
-            R=np.array([1]),
-        ),
-        x0=np.array([0.3, 0, 0.10, 0]),
+    x0 = np.array([0.3, 0, 0.10, 0])
+    trajopt_params = TrajoptParams(
+        N=20,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([1]),
+    )
+    cfg = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
         equality_elimination_method="qr_pivot",
         use_trace_cost=1e-5,
@@ -1405,15 +1544,16 @@ def cart_pole_test_mechanical_elimination(
         git_commit=get_current_git_commit(),
     )
 
-    cfg.save(output_dir / "config.yaml")
+    cfg.save(output_dir / "solver_config.yaml")
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
 
     np.random.seed(cfg.seed)
 
     logger.info("Building trajopt program...")
     trajopt = CartPoleMechanicalEliminationTrajopt(
         sys,
-        cfg.trajopt_params,
-        cfg.x0,
+        trajopt_params,
+        x0,
     )
 
     logger.info("Solving SDP relaxation...")
@@ -1435,27 +1575,27 @@ def cart_pole_test_mechanical_elimination(
     # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
-    eigvec = np.linalg.eig(Y).eigenvectors[0]
-    eigvec = eigvec / eigvec[0]
-
     # Save "mean"/relaxed trajectory
     relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.get_state_input_forces_from_decision_var_values(
             μ, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
 
-    # Save "mean"/relaxed trajectory
+    # Save eigvec trajectory
+    eigvec = np.linalg.eig(Y).eigenvectors[0]
+    eigvec = eigvec / eigvec[0]
+
     eigenvector_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.get_state_input_forces_from_decision_var_values(
-            μ, cfg.equality_elimination_method
+            eigvec, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     eigenvector_trajectory.plot(output_dir / "eigenvector_trajectory.pdf")
     eigenvector_trajectory.animate(output_dir / "eigenvector_animation.mp4")
@@ -1513,14 +1653,15 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     sys = CartPoleWithWalls()
     Q = np.diag([10, 100, 1, 10])
 
-    cfg = CartPoleConfig(
-        trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
-            T_s=0.1,
-            Q=Q,
-            R=np.array([1]),
-        ),
-        x0=np.array([0.3, 0, 0.10, 0]),
+    trajopt_params = TrajoptParams(
+        N=20,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([1]),
+    )
+    x0 = np.array([0.3, 0, 0.10, 0])
+
+    cfg = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
         equality_elimination_method="shooting",
         use_trace_cost=1e-5,
@@ -1530,15 +1671,16 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         git_commit=get_current_git_commit(),
     )
 
-    cfg.save(output_dir / "config.yaml")
+    cfg.save(output_dir / "solver_config.yaml")
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
 
     np.random.seed(cfg.seed)
 
     logger.info("Building trajopt program...")
     trajopt = LcsTrajectoryOptimization(
         sys,
-        cfg.trajopt_params,
-        cfg.x0,
+        trajopt_params,
+        x0,
         equality_elimination_method=cfg.equality_elimination_method,
     )
 
@@ -1566,7 +1708,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
             μ, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
@@ -1603,7 +1745,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
             *trajopt.evaluate_state_input_forces(trial.result),
             sys,
-            cfg.trajopt_params.T_s,
+            trajopt_params.T_s,
         )
 
         trial_dir = output_dir / f"trial_{idx}"
@@ -1626,7 +1768,8 @@ def main(output_dir: Path, debug: bool, logger: Logger) -> None:
     test_lcs_get_state_input_forces_from_vals()
     test_lcs_trajopt_with_sparsity_construction()
 
-    cart_pole_experiment_1(output_dir, debug, logger)
+    cart_pole_ablation_study(output_dir, debug, logger)
+    # cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_test_mechanical_elimination(output_dir, debug, logger)
 
 
