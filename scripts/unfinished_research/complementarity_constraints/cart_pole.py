@@ -959,7 +959,8 @@ class LcsTrajectoryOptimization:
 
                 f = sys.get_f(x, u, λ)
                 dynamics = eq(x_next, f)
-                prog.AddLinearConstraint(dynamics)
+                for c in dynamics:
+                    prog.AddLinearEqualityConstraint(c)
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
@@ -1168,7 +1169,9 @@ def test_lcs_trajectory_optimization():
 
     x0 = np.array([0, 0, 0, 0])
 
-    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+    trajopt = LcsTrajectoryOptimization(
+        sys, params, x0, equality_elimination_method=None
+    )
 
     assert trajopt.xs.shape == (params.N + 1, sys.num_states)
     assert trajopt.us.shape == (params.N, sys.num_inputs)
@@ -1616,10 +1619,10 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    # test_cart_pole_w_walls()
-    # test_lcs_trajectory_optimization()
-    # test_lcs_get_state_input_forces_from_vals()
-    # test_lcs_trajopt_with_sparsity_construction()
+    test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
+    test_lcs_get_state_input_forces_from_vals()
+    test_lcs_trajopt_with_sparsity_construction()
 
     cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_test_mechanical_elimination(output_dir, debug, logger)
