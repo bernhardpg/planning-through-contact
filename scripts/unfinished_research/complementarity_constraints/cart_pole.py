@@ -643,7 +643,7 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
             pole.set_data(pole_x, pole_y)
 
             # Define a threshold for plotting forces
-            FORCE_THRESHOLD = 1e-3
+            FORCE_THRESHOLD = 0.05
 
             # Helper function to update force arrows conditionally
             def update_horizontal_force_arrow(arrow, start_pos, force):
@@ -1555,7 +1555,7 @@ class LcsTrajectoryOptimization:
             attempt = LcsSolveAttempt(
                 result.is_success(),
                 rounding_time,
-                result.get_optimal_cost(),
+                result.get_optimal_cost() if result.is_success() else np.inf,
                 relaxed_or_rounded="rounded",
                 traj=LcsTrajectory(
                     self.sys, *self.evaluate_state_input_forces(result), self.params.T_s
@@ -1815,6 +1815,8 @@ class LcsAblationStudy:
             curr_dir = output_dir / f"initial_conditions_{idx}"
             curr_dir.mkdir(exist_ok=True, parents=True)
 
+            logger.info(f"Running initial guess sample {idx}")
+
             # Log this run to the local folder as well
             file_handler = logging.FileHandler(curr_dir / "script.log")
             logger.addHandler(file_handler)
@@ -1877,10 +1879,11 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
     DEG_TO_RAD = np.pi / 180
     pole_angle_max = 5 * DEG_TO_RAD
 
+    # TODO: Throw away infeasible initial conditions
     study_params = LcsAblationStudyParams(
         random_seed=0,
         x0_center=np.array([0, 0, 0, 0]),
-        x0_spread=np.array([cart_position_max, pole_angle_max, 0.0, 0.0]),
+        x0_spread=np.array([cart_position_max, pole_angle_max, 0.1, 0.1]),
         num_samples=20,
     )
     study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
