@@ -477,7 +477,9 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
             "purple",
         )
         # Plot wall positions
-        axs[3][1].axhline(y=self.sys.distance_to_walls, color="grey", linestyle="--")
+        axs[3][1].axhline(
+            y=self.sys.distance_to_walls, color="grey", linestyle="--", label="wall"
+        )
         axs[3][1].axhline(y=-self.sys.distance_to_walls, color="grey", linestyle="--")
 
         # Set the x-axis label for the last subplots.
@@ -551,7 +553,7 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
         ax.add_patch(right_wall)
 
         # Initialize force arrows using FancyArrowPatch
-        FORCE_SCALE = 1
+        FORCE_SCALE = 0.1
 
         def create_force_patch(color):
             return FancyArrowPatch(
@@ -995,6 +997,7 @@ class LcsSolveAttempt:
     cost: float
     relaxed_or_rounded: Literal["relaxed", "rounded"]
     traj: LcsTrajectory | None = None
+    traj_initial_guess: LcsTrajectory | None = None
 
     def __str__(self) -> str:
         return (
@@ -1013,6 +1016,12 @@ class LcsSolveAttempt:
             traj = traj_type.from_lcs_trajectory(self.traj)
             traj.plot(output_dir, name)
             traj.animate(output_dir, name)
+
+        if self.traj_initial_guess is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            traj = traj_type.from_lcs_trajectory(self.traj_initial_guess)
+            traj.plot(output_dir, "initial_guess")
+            traj.animate(output_dir, "initial_guess")
 
         import yaml
 
@@ -1496,6 +1505,7 @@ class LcsTrajectoryOptimization:
 
         attempts = []
         logger.info(f"Rounding {len(initial_guesses)} attempts...")
+
         for initial_guess in tqdm(initial_guesses):
             snopt = SnoptSolver()
 
@@ -1504,17 +1514,21 @@ class LcsTrajectoryOptimization:
             end = time()
             rounding_time = end - start
 
-            (
-                xs,
-                us,
-                λs,
-            ) = self.evaluate_state_input_forces(result)
             attempt = LcsSolveAttempt(
                 result.is_success(),
                 rounding_time,
                 result.get_optimal_cost(),
                 relaxed_or_rounded="rounded",
-                traj=LcsTrajectory(self.sys, xs, us, λs, self.params.T_s),
+                traj=LcsTrajectory(
+                    self.sys, *self.evaluate_state_input_forces(result), self.params.T_s
+                ),
+                traj_initial_guess=LcsTrajectory(
+                    self.sys,
+                    *self.get_state_input_forces_from_decision_var_values(
+                        initial_guess, solver_config.equality_elimination_method
+                    ),
+                    self.params.T_s,
+                ),
             )
 
             attempts.append(attempt)
@@ -1793,12 +1807,12 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
         N=20,
         T_s=0.1,
         Q=Q,
-        R=np.array([0.1]),
+        R=np.array([0.01]),
     )
 
     solver_config = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
-        equality_elimination_method="qr_pivot",
+        equality_elimination_method="shooting",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
