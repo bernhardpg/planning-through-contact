@@ -396,15 +396,17 @@ class CartPoleWithWallsTrajectory:
         wall_height = 0.4
         wall_width = 0.1
 
+        # NOTE: xy (first argument) to Rectangle is lower left corner.
+        WALL_LOWER_HEIGHT = 0.3
         left_wall = Rectangle(
-            (-wall_distance - wall_width / 2, 0.3),
+            (-wall_distance - wall_width, WALL_LOWER_HEIGHT),
             wall_width,
             wall_height,
             fc="grey",
             ec="black",
         )
         right_wall = Rectangle(
-            (wall_distance + wall_width / 2, 0.3),
+            (wall_distance, WALL_LOWER_HEIGHT),
             wall_width,
             wall_height,
             fc="grey",
