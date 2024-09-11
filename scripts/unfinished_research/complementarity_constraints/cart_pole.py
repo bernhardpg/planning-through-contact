@@ -1,3 +1,5 @@
+import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from functools import cached_property
 from logging import Logger
@@ -182,6 +184,7 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         self.pole_length = 0.6
         self.cart_mass = 0.978
         self.pole_mass = 0.35
+        self.traj_type = CartPoleWithWallsTrajectory
 
     def get_linearized_pole_top_position(self, x: float, θ: float) -> float:
         """
@@ -208,9 +211,99 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         else:  # left:
             return self.distance_to_walls + self.get_linearized_pole_top_position(x, θ)
 
+    def discretize(self, integrator: IntegratorType, T_s: float) -> "CartPoleWithWalls":
+        if self.discrete_or_continuous != "continuous":
+            raise RuntimeError("System is already discrete!")
+
+        # Use the super class's discretize method to get a new LinearComplementaritySystem
+        lcs_discretized = super().discretize(integrator, T_s)
+
+        # Create a new CartPoleWithWalls object using the discretized matrices
+        discretized_cart_pole = CartPoleWithWalls()
+
+        # Overwrite the system matrices with the discretized values from the parent class
+        discretized_cart_pole.A = lcs_discretized.A
+        discretized_cart_pole.B = lcs_discretized.B
+        discretized_cart_pole.D = lcs_discretized.D
+        discretized_cart_pole.d = lcs_discretized.d
+
+        # The complementarity matrices (E, F, H, c) remain unchanged
+        discretized_cart_pole.E = self.E
+        discretized_cart_pole.F = self.F
+        discretized_cart_pole.H = self.H
+        discretized_cart_pole.c = self.c
+
+        # The system is now discrete
+        discretized_cart_pole.discrete_or_continuous = "discrete"
+
+        # Inherit additional attributes like distance_to_walls, pole_length, etc.
+        discretized_cart_pole.distance_to_walls = self.distance_to_walls
+        discretized_cart_pole.pole_length = self.pole_length
+        discretized_cart_pole.cart_mass = self.cart_mass
+        discretized_cart_pole.pole_mass = self.pole_mass
+
+        return discretized_cart_pole
+
 
 @dataclass
-class CartPoleWithWallsTrajectory:
+class LcsTrajectory:
+    sys: LinearComplementaritySystem
+    xs: npt.NDArray[np.float64]
+    us: npt.NDArray[np.float64]
+    λs: npt.NDArray[np.float64]
+    T_s: float
+
+    def __len__(self) -> int:
+        return self.xs.shape[0] - 1
+
+    @property
+    def num_states(self) -> int:
+        return self.sys.num_states
+
+    @property
+    def num_inputs(self) -> int:
+        return self.sys.num_inputs
+
+    @property
+    def num_forces(self) -> int:
+        return self.sys.num_forces
+
+    def __post_init__(self):
+        trajectories = "xs", "us", "λs"
+
+        for field in fields(self):
+            if not field in trajectories:
+                continue
+
+            if field.name == "xs":
+                if len(getattr(self, field.name)) != len(self) + 1:
+                    raise ValueError(
+                        f"State trajectory must be length {len(self) + 1}."
+                    )
+            else:
+                if len(getattr(self, field.name)) != len(self):
+                    raise ValueError(
+                        f"Input and force trajectory must be length {len(self)}."
+                    )
+
+
+class AbstractLcsTrajectory(ABC):
+    @classmethod
+    @abstractmethod
+    def from_lcs_trajectory(cls, lcs_traj: LcsTrajectory) -> "AbstractLcsTrajectory":
+        pass
+
+    @abstractmethod
+    def plot(self, output_dir: Path | None = None, name: str | None = None) -> None:
+        pass
+
+    @abstractmethod
+    def animate(self, output_dir: Path | None = None, name: str | None = None) -> None:
+        pass
+
+
+@dataclass
+class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
     cart_position: npt.NDArray[np.float64]
     pole_angle: npt.NDArray[np.float64]
     cart_velocity: npt.NDArray[np.float64]
@@ -245,6 +338,42 @@ class CartPoleWithWallsTrajectory:
                 self.sys.get_linearized_pole_top_position(x, θ)
                 for x, θ in zip(self.cart_position, self.pole_angle)
             ]
+        )
+
+    @classmethod
+    def from_lcs_trajectory(
+        cls, lcs_traj: LcsTrajectory
+    ) -> "CartPoleWithWallsTrajectory":
+        state, input, forces = lcs_traj.xs, lcs_traj.us, lcs_traj.λs
+        if state.shape[1] != 4:
+            raise ValueError("States must have shape (N, 4)")
+
+        if input.shape[1] != 1:
+            raise ValueError("Inputs must have shape (N, 1)")
+
+        if forces.shape[1] != 2:
+            raise ValueError("Forces must have shape (N, 2)")
+
+        cart_pos = state[:, 0]
+        pole_pos = state[:, 1]
+        cart_vel = state[:, 2]
+        pole_vel = state[:, 3]
+        applied_force = input.flatten()
+        right_wall_force = forces[:, 0]
+        left_wall_force = forces[:, 1]
+
+        assert isinstance(lcs_traj.sys, CartPoleWithWalls)
+
+        return cls(
+            cart_pos,
+            pole_pos,
+            cart_vel,
+            pole_vel,
+            applied_force,
+            right_wall_force,
+            left_wall_force,
+            lcs_traj.sys,
+            lcs_traj.T_s,
         )
 
     @classmethod
@@ -293,7 +422,7 @@ class CartPoleWithWallsTrajectory:
     def input_length(self) -> int:
         return len(self.cart_position) - 1
 
-    def plot(self, filepath: Path | None = None) -> None:
+    def plot(self, output_dir: Path | None = None, name: str | None = None) -> None:
         # Create a figure and subplots.
         fig, axs = plt.subplots(4, 2, figsize=(12, 6), sharex=True)
 
@@ -358,13 +487,18 @@ class CartPoleWithWallsTrajectory:
         # Display the plots
         plt.tight_layout()
 
-        if filepath is not None:
-            fig.savefig(filepath)
+        if output_dir is not None:
+            if name is not None:
+                filename = output_dir / (name + "_trajectories.pdf")
+            else:
+                filename = output_dir / "trajectories.pdf"
+
+            fig.savefig(filename)
             plt.close()
         else:
             plt.show()
 
-    def animate(self, output_file: Path | None = None) -> None:
+    def animate(self, output_dir: Path | None = None, name: str | None = None) -> None:
         # Set up the figure and axis
         fig, ax = plt.subplots()
         ax.set_xlim(-0.8, 0.8)
@@ -512,8 +646,18 @@ class CartPoleWithWallsTrajectory:
             interval=interval_ms,
         )
 
-        if output_file is not None:
-            ani.save(output_file, writer="ffmpeg")
+        if output_dir is not None:
+            if name is not None:
+                filename = output_dir / (name + "_animation.mp4")
+            else:
+                filename = output_dir / "animation.mp4"
+
+            ani.save(filename, writer="ffmpeg")
+            plt.close()
+        else:
+            plt.show()
+
+        if output_dir is not None:
             plt.close()
         else:
             plt.show()
@@ -833,6 +977,150 @@ class CartPoleMechanicalEliminationTrajopt:
         return xs, us, λs, xs_next
 
 
+@dataclass
+class LcsTrajoptSolverConfig(YamlMixin):
+    implied_constraints: ImpliedConstraintsType
+    equality_elimination_method: EqualityEliminationType | None
+    use_trace_cost: float | None
+    use_chain_sparsity: bool
+    seed: int
+    num_rounding_attempts: int
+    git_commit: str
+
+
+@dataclass
+class LcsSolveAttempt:
+    success: bool
+    time: float
+    cost: float
+    relaxed_or_rounded: Literal["relaxed", "rounded"]
+    traj: LcsTrajectory | None = None
+
+    def __str__(self) -> str:
+        return (
+            f"success: {self.success}, time: {self.time:.4f} s, cost: {self.cost:.4f}"
+        )
+
+    def save(
+        self,
+        output_dir: Path,
+        traj_type: AbstractLcsTrajectory,
+        cost_lower_bound: float | None = None,
+        name: str | None = None,
+    ) -> None:
+        if self.traj is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            traj = traj_type.from_lcs_trajectory(self.traj)
+            traj.plot(output_dir, name)
+            traj.animate(output_dir, name)
+
+        import yaml
+
+        # Prepare the data to be saved, excluding `traj`
+        data_to_save = {
+            "success": self.success,
+            "time": float(self.time),
+            "cost": float(self.cost),
+            "relaxed_or_rounded": self.relaxed_or_rounded,
+        }
+
+        if cost_lower_bound:
+            data_to_save["optimality_gap_upper_bound_pct"] = float(
+                compute_optimality_gap_pct(self.cost, cost_lower_bound)
+            )
+
+        # Determine the filename for the YAML file
+        file_name = "result.yaml"
+        file_path = output_dir / file_name
+
+        # Save the data to a YAML file
+        with open(file_path, "w") as file:
+            yaml.dump(data_to_save, file)
+
+
+@dataclass
+class LcsTrajoptResult:
+    best: LcsSolveAttempt
+    best_idx: int
+    relaxed_mean: LcsSolveAttempt
+    all_attempts: list[LcsSolveAttempt]
+
+    def save_attempts(
+        self, output_dir: Path, trajectory_type: AbstractLcsTrajectory
+    ) -> None:
+        self.relaxed_mean.save(output_dir / "relaxed", trajectory_type)
+
+        for idx, attempt in enumerate(self.all_attempts):
+
+            dir_name = f"rounding_attempt_{idx}"
+            if idx == self.best_idx:
+                dir_name += "_BEST"
+
+            attempt.save(
+                output_dir / dir_name,
+                trajectory_type,
+                cost_lower_bound=self.relaxed_mean.cost,
+                name="rounded",
+            )
+
+    def plot_rounding_overview(self, output_dir: Path | None = None) -> None:
+        attempts = self.all_attempts
+        num_rounding_attempts = len(attempts)
+
+        # Extract attributes for plotting
+        success_values = [trial.success for trial in attempts]
+        time_values = [trial.time for trial in attempts]
+        cost_values = [trial.cost for trial in attempts]
+
+        # Find the index of the trial with the lowest cost
+        best_trial_index = cost_values.index(min(cost_values))
+
+        # Plotting the attributes
+        fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+
+        # Ensure axs is a list of Axes
+        if isinstance(axs, Axes):
+            axs = [axs]
+
+        # Plot success values
+        axs[0].bar(range(num_rounding_attempts), success_values, color="grey")
+        axs[0].bar(
+            best_trial_index, success_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[0].set_xlabel("Attempt Index")
+        axs[0].set_ylabel("Success")
+        axs[0].set_title("Rounding Attempt Success")
+        axs[0].set_xticks(range(num_rounding_attempts))
+
+        # Plot time values
+        axs[1].bar(range(num_rounding_attempts), time_values, color="grey")
+        axs[1].bar(
+            best_trial_index, time_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[1].set_xlabel("Attempt Index")
+        axs[1].set_ylabel("Time (s)")
+        axs[1].set_title("Rounding Attempt Time")
+        axs[1].set_xticks(range(num_rounding_attempts))
+
+        # Plot cost values
+        axs[2].bar(range(num_rounding_attempts), cost_values, color="grey")
+        axs[2].bar(
+            best_trial_index, cost_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[2].set_xlabel("Attempt Index")
+        axs[2].set_ylabel("Cost")
+        axs[2].set_title("Rounding Attempt Cost")
+        axs[2].set_xticks(range(num_rounding_attempts))
+
+        plt.tight_layout()
+
+        if output_dir is None:
+            plt.show()
+        else:
+            plt.savefig(output_dir / "rounding_attempts.pdf")
+            plt.close()
+
+
 class LcsTrajectoryOptimization:
     def __init__(
         self,
@@ -924,6 +1212,7 @@ class LcsTrajectoryOptimization:
             params, sys, prog, xs, us, λs, add_dynamics
         )
 
+        self.x0 = x0
         self.sys = sys
         self.params = params
         self.qcqp = prog
@@ -1159,6 +1448,129 @@ class LcsTrajectoryOptimization:
         xs, us, λs, xs_next = np.split(concatenated_vars, split_idxs, axis=1)
         return xs, us, λs, xs_next
 
+    def solve(
+        self,
+        solver_config: LcsTrajoptSolverConfig,
+        output_dir: Path,
+        logger: Logger,
+    ) -> LcsTrajoptResult:
+        Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
+            qcqp=self.qcqp,
+            trace_cost=solver_config.use_trace_cost,
+            implied_constraints=solver_config.implied_constraints,
+            variable_groups=None,
+            print_time=False,
+            plot_eigvals=True,
+            print_eigvals=False,
+            logger=logger,
+            output_dir=output_dir,
+        )
+
+        logger.info(f"Solving LcsTrajopt problem from initial condition: {self.x0}")
+
+        # Rounding
+        μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+
+        (
+            xs_mean,
+            us_mean,
+            λs_mean,
+        ) = self.get_state_input_forces_from_decision_var_values(
+            μ, solver_config.equality_elimination_method
+        )
+        relaxed_attempt = LcsSolveAttempt(
+            success=relaxed_result.is_success(),
+            time=relaxed_result.get_solver_details().optimizer_time,  # type: ignore
+            cost=relaxed_cost,
+            relaxed_or_rounded="relaxed",
+            traj=LcsTrajectory(self.sys, xs_mean, us_mean, λs_mean, self.params.T_s),
+        )
+
+        initial_guesses = [μ]  # Also use the mean as an initial guess
+        initial_guesses.extend(
+            np.random.multivariate_normal(
+                mean=μ, cov=Σ, size=solver_config.num_rounding_attempts
+            )
+        )
+
+        attempts = []
+        logger.info(f"Rounding {len(initial_guesses)} attempts...")
+        for initial_guess in tqdm(initial_guesses):
+            snopt = SnoptSolver()
+
+            start = time()
+            result = snopt.Solve(self.qcqp, initial_guess)  # type: ignore
+            end = time()
+            rounding_time = end - start
+
+            (
+                xs,
+                us,
+                λs,
+            ) = self.evaluate_state_input_forces(result)
+            attempt = LcsSolveAttempt(
+                result.is_success(),
+                rounding_time,
+                result.get_optimal_cost(),
+                relaxed_or_rounded="rounded",
+                traj=LcsTrajectory(self.sys, xs, us, λs, self.params.T_s),
+            )
+
+            attempts.append(attempt)
+
+        best_attempt_idx = int(np.argmin([attempt.cost for attempt in attempts]))
+        best_attempt = attempts[best_attempt_idx]
+
+        logger.info("Rounding results:")
+        for idx, attempt in enumerate(attempts):
+            logger.info(
+                f"   Attempt {idx}: {attempt}, optimality gap (upper bound): {compute_optimality_gap_pct(attempt.cost, relaxed_cost):.3f} %"
+            )
+        logger.info(
+            f"Best trial: {best_attempt_idx}, optimality gap: {compute_optimality_gap_pct(best_attempt.cost, relaxed_cost):.4f}%"
+        )
+
+        res = LcsTrajoptResult(
+            best=best_attempt,
+            best_idx=best_attempt_idx,
+            relaxed_mean=relaxed_attempt,
+            all_attempts=attempts,
+        )
+
+        return res
+
+        breakpoint()
+
+        # mean_traj = CartPoleWithWallsTrajectory.from_state_input_forces(
+        #     *self.get_state_input_forces_from_decision_var_values(
+        #         μ, solver_config.equality_elimination_method
+        #     ),
+        #     self.sys,  # type: ignore
+        #     self.trajopt_params.T_s,
+        # )
+        #
+        # mean_traj.plot(curr_dir / "mean_trajectory.pdf")
+        # mean_traj.animate(curr_dir / "mean_trajectory.mp4")
+
+        # # Save eigvec trajectory
+        # # TODO: Figure out what is the problem with this!
+        # eigs, eigvecs = np.linalg.eig(Y)
+        # nu = eigs[0]
+        # v = eigvecs[0]
+        # x = np.sqrt(nu) * v
+        #
+        # eigenvector_trajectory = (
+        #     CartPoleWithWallsTrajectory.from_state_input_forces(
+        #         *trajopt.get_state_input_forces_from_decision_var_values(
+        #             x[:-1], self.solver_config.equality_elimination_method
+        #         ),
+        #         self.continuous_sys,
+        #         self.trajopt_params.T_s,
+        #     )
+        # )
+        # eigenvector_trajectory.plot(curr_dir / "eigenvector_trajectory.pdf")
+        # eigenvector_trajectory.animate(curr_dir / "eigenvector_animation.mp4")
+
 
 # TODO: Move to unit test
 def test_lcs_trajectory_optimization():
@@ -1299,88 +1711,6 @@ def test_lcs_get_state_input_forces_from_vals():
 
 
 @dataclass
-class RoundingTrial:
-    success: bool
-    time: float
-    cost: float
-    result: MathematicalProgramResult
-
-    def __str__(self) -> str:
-        return (
-            f"success: {self.success}, time: {self.time:.4f} s, cost: {self.cost:.4f}"
-        )
-
-
-def plot_rounding_trials(
-    trials: list[RoundingTrial], output_dir: Path | None = None
-) -> None:
-    num_rounding_trials = len(trials)
-
-    # Extract attributes for plotting
-    success_values = [trial.success for trial in trials]
-    time_values = [trial.time for trial in trials]
-    cost_values = [trial.cost for trial in trials]
-
-    # Find the index of the trial with the lowest cost
-    best_trial_index = cost_values.index(min(cost_values))
-
-    # Plotting the attributes
-    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
-
-    # Ensure axs is a list of Axes
-    if isinstance(axs, Axes):
-        axs = [axs]
-
-    # Plot success values
-    axs[0].bar(range(num_rounding_trials), success_values, color="grey")
-    axs[0].bar(
-        best_trial_index, success_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[0].set_xlabel("Trial Index")
-    axs[0].set_ylabel("Success")
-    axs[0].set_title("Rounding Trial Success")
-    axs[0].set_xticks(range(num_rounding_trials))
-
-    # Plot time values
-    axs[1].bar(range(num_rounding_trials), time_values, color="grey")
-    axs[1].bar(
-        best_trial_index, time_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[1].set_xlabel("Trial Index")
-    axs[1].set_ylabel("Time (s)")
-    axs[1].set_title("Rounding Trial Time")
-    axs[1].set_xticks(range(num_rounding_trials))
-
-    # Plot cost values
-    axs[2].bar(range(num_rounding_trials), cost_values, color="grey")
-    axs[2].bar(
-        best_trial_index, cost_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[2].set_xlabel("Trial Index")
-    axs[2].set_ylabel("Cost")
-    axs[2].set_title("Rounding Trial Cost")
-    axs[2].set_xticks(range(num_rounding_trials))
-
-    plt.tight_layout()
-
-    if output_dir is None:
-        plt.show()
-    else:
-        plt.savefig(output_dir / "rounding_trials.pdf")
-
-
-@dataclass
-class LcsTrajoptSolverConfig(YamlMixin):
-    implied_constraints: ImpliedConstraintsType
-    equality_elimination_method: EqualityEliminationType | None
-    use_trace_cost: float | None
-    use_chain_sparsity: bool
-    seed: int
-    num_rounding_trials: int
-    git_commit: str
-
-
-@dataclass
 class LcsAblationStudyParams(YamlMixin):
     random_seed: int
     x0_center: npt.NDArray[np.float64]
@@ -1415,7 +1745,7 @@ class LcsAblationStudy:
         samples = np.random.uniform(low=x0_low, high=x0_high, size=(N, len(x0_low)))
         return [sample for sample in samples]
 
-    def run(self, logger: Logger, output_dir: Path) -> None:
+    def run(self, logger: Logger, output_dir: Path, debug: bool = False) -> None:
         x0s = self.generate_x0s(
             self.params.x0_center, self.params.x0_spread, self.params.num_samples
         )
@@ -1428,9 +1758,12 @@ class LcsAblationStudy:
         from tqdm import tqdm
 
         for idx, x0 in enumerate(tqdm(x0s)):
-
-            curr_dir = output_dir / str(idx)
+            curr_dir = output_dir / f"initial_conditions_{idx}"
             curr_dir.mkdir(exist_ok=True, parents=True)
+
+            # Log this run to the local folder as well
+            file_handler = logging.FileHandler(curr_dir / "script.log")
+            logger.addHandler(file_handler)
 
             np.savetxt(curr_dir / "x0.txt", x0, delimiter=" ", fmt="%.2f")
 
@@ -1441,60 +1774,25 @@ class LcsAblationStudy:
                 equality_elimination_method="shooting",  # TODO
             )
 
-            Y, _, _ = solve_sdp_relaxation(
-                qcqp=trajopt.qcqp,
-                trace_cost=self.solver_config.use_trace_cost,
-                implied_constraints=self.solver_config.implied_constraints,
-                variable_groups=None,
-                print_time=False,
-                plot_eigvals=True,
-                print_eigvals=False,
-                logger=logger,
-                output_dir=curr_dir,
-            )
+            res = trajopt.solve(self.solver_config, curr_dir, logger)
 
-            # Rounding
-            μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+            res.plot_rounding_overview(curr_dir)
+            res.save_attempts(curr_dir, self.continuous_sys.traj_type)  # type: ignore
 
-            # Save "mean"/relaxed trajectory
-            relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
-                *trajopt.get_state_input_forces_from_decision_var_values(
-                    μ, self.solver_config.equality_elimination_method
-                ),
-                self.continuous_sys,
-                self.trajopt_params.T_s,
-            )
-            relaxed_trajectory.plot(curr_dir / "mean_trajectory.pdf")
-            relaxed_trajectory.animate(curr_dir / "mean_trajectory.mp4")
-
-            # Save eigvec trajectory
-            eigvec = np.linalg.eig(Y).eigenvectors[0]
-            eigvec = eigvec / eigvec[-1]  # make last entry one
-            eigvec = eigvec[:-1]  # remove last entry
-
-            eigenvector_trajectory = (
-                CartPoleWithWallsTrajectory.from_state_input_forces(
-                    *trajopt.get_state_input_forces_from_decision_var_values(
-                        eigvec, self.solver_config.equality_elimination_method
-                    ),
-                    self.continuous_sys,
-                    self.trajopt_params.T_s,
-                )
-            )
-            eigenvector_trajectory.plot(curr_dir / "eigenvector_trajectory.pdf")
-            eigenvector_trajectory.animate(curr_dir / "eigenvector_animation.mp4")
+            # Stop logging to local folder
+            logger.removeHandler(file_handler)
 
         print("Finished ablation study.")
 
 
 def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([10, 100, 1, 10])
+    Q = np.diag([10, 10, 1, 1])
     trajopt_params = TrajoptParams(
-        N=10,
+        N=20,
         T_s=0.1,
         Q=Q,
-        R=np.array([1]),
+        R=np.array([0.1]),
     )
 
     solver_config = LcsTrajoptSolverConfig(
@@ -1503,22 +1801,25 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_trials=5,
+        num_rounding_attempts=5,
         git_commit=get_current_git_commit(),
     )
 
-    cart_position_max = sys.distance_to_walls - 0.05
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
+    solver_config.save(output_dir / "solver_config.yaml")
+
+    cart_position_max = sys.distance_to_walls
     DEG_TO_RAD = np.pi / 180
-    pole_angle_max = 20 * DEG_TO_RAD
+    pole_angle_max = 5 * DEG_TO_RAD
 
     study_params = LcsAblationStudyParams(
         random_seed=0,
         x0_center=np.array([0, 0, 0, 0]),
-        x0_spread=np.array([cart_position_max, pole_angle_max, 0.01, 0.01]),
+        x0_spread=np.array([cart_position_max, pole_angle_max, 0.0, 0.0]),
         num_samples=10,
     )
     study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
-    study.run(logger, output_dir)
+    study.run(logger, output_dir, debug=True)
 
 
 # TODO: This is just to quickly see if only eliminating some variables maintains tightness.
@@ -1527,7 +1828,7 @@ def cart_pole_test_mechanical_elimination(
     output_dir: Path, debug: bool, logger: Logger
 ) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([10, 100, 1, 10])
+    Q = np.diag([10, 100, 10, 100])
 
     x0 = np.array([0.3, 0, 0.10, 0])
     trajopt_params = TrajoptParams(
@@ -1542,7 +1843,7 @@ def cart_pole_test_mechanical_elimination(
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_trials=5,
+        num_rounding_attempts=5,
         git_commit=get_current_git_commit(),
     )
 
@@ -1604,11 +1905,11 @@ def cart_pole_test_mechanical_elimination(
 
     initial_guesses = [μ]  # use the mean as an initial guess
     initial_guesses.extend(
-        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_attempts)
     )
 
-    trials = []
-    logger.info(f"Rounding {len(initial_guesses)} trials...")
+    attempts = []
+    logger.info(f"Rounding {len(initial_guesses)} attempts...")
     for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
@@ -1617,17 +1918,17 @@ def cart_pole_test_mechanical_elimination(
         end = time()
         rounding_time = end - start
 
-        trial = RoundingTrial(
+        trial = LcsSolveAttempt(
             result.is_success(), rounding_time, result.get_optimal_cost(), result
         )
-        trials.append(trial)
+        attempts.append(trial)
 
-    plot_rounding_trials(trials, output_dir)
+    plot_rounding_attempts(attempts, output_dir)
 
-    best_trial_idx = np.argmin([trial.cost for trial in trials])
-    best_trial = trials[best_trial_idx]
+    best_trial_idx = np.argmin([trial.cost for trial in attempts])
+    best_trial = attempts[best_trial_idx]
 
-    for idx, trial in enumerate(trials):
+    for idx, trial in enumerate(attempts):
         logger.info(
             f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
@@ -1669,7 +1970,7 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_trials=5,
+        num_rounding_attempts=5,
         git_commit=get_current_git_commit(),
     )
 
@@ -1717,11 +2018,11 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
     initial_guesses = [μ]  # use the mean as an initial guess
     initial_guesses.extend(
-        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_attempts)
     )
 
-    trials = []
-    logger.info(f"Rounding {len(initial_guesses)} trials...")
+    attempts = []
+    logger.info(f"Rounding {len(initial_guesses)} attempts...")
     for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
@@ -1730,17 +2031,17 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         end = time()
         rounding_time = end - start
 
-        trial = RoundingTrial(
+        trial = LcsSolveAttempt(
             result.is_success(), rounding_time, result.get_optimal_cost(), result
         )
-        trials.append(trial)
+        attempts.append(trial)
 
-    plot_rounding_trials(trials, output_dir)
+    plot_rounding_attempts(attempts, output_dir)
 
-    best_trial_idx = np.argmin([trial.cost for trial in trials])
-    best_trial = trials[best_trial_idx]
+    best_trial_idx = np.argmin([trial.cost for trial in attempts])
+    best_trial = attempts[best_trial_idx]
 
-    for idx, trial in enumerate(trials):
+    for idx, trial in enumerate(attempts):
         logger.info(
             f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
