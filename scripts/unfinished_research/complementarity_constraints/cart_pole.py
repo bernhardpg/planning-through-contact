@@ -360,6 +360,7 @@ class CartPoleWithWallsTrajectory:
 
         if filepath is not None:
             fig.savefig(filepath)
+            plt.close()
         else:
             plt.show()
 
@@ -513,6 +514,7 @@ class CartPoleWithWallsTrajectory:
 
         if output_file is not None:
             ani.save(output_file, writer="ffmpeg")
+            plt.close()
         else:
             plt.show()
 
