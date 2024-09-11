@@ -286,6 +286,33 @@ class LcsTrajectory:
                         f"Input and force trajectory must be length {len(self)}."
                     )
 
+    @classmethod
+    def merge(cls, trajectories: list["LcsTrajectory"]) -> "LcsTrajectory":
+        if not trajectories:
+            raise ValueError("No trajectories provided for merging.")
+
+        # Check that all systems and T_s are the same across the trajectories
+        sys = trajectories[0].sys
+        T_s = trajectories[0].T_s
+
+        for traj in trajectories:
+            if traj.T_s != T_s:
+                raise ValueError(
+                    "All trajectories must have the same sampling time (T_s)."
+                )
+
+        # Concatenate trajectories
+        xs = np.concatenate(
+            [traj.xs[:-1] for traj in trajectories] + [trajectories[-1].xs[-1:]], axis=0
+        )
+        us = np.concatenate([traj.us for traj in trajectories], axis=0)
+        λs = np.concatenate([traj.λs for traj in trajectories], axis=0)
+
+        # Create a new LcsTrajectory with the concatenated arrays
+        merged_trajectory = cls(sys=sys, xs=xs, us=us, λs=λs, T_s=T_s)
+
+        return merged_trajectory
+
 
 class AbstractLcsTrajectory(ABC):
     @classmethod
@@ -608,8 +635,8 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
                 raise NotImplementedError(
                     "This code is not tested and might be wrong! Double check before using."
                 )
-                rod_x = x - pole_length * np.cos(theta)
-                rod_y = pole_length * np.sin(theta)
+                rod_x = x - pole_length * np.sin(theta)
+                rod_y = pole_length * np.cos(theta)
 
             pole_x = [x, rod_x]
             pole_y = [0, rod_y]
@@ -1783,6 +1810,7 @@ class LcsAblationStudy:
 
         from tqdm import tqdm
 
+        results = []
         for idx, x0 in enumerate(tqdm(x0s)):
             curr_dir = output_dir / f"initial_conditions_{idx}"
             curr_dir.mkdir(exist_ok=True, parents=True)
@@ -1805,8 +1833,19 @@ class LcsAblationStudy:
             res.plot_rounding_overview(curr_dir)
             res.save_attempts(curr_dir, self.continuous_sys.traj_type)  # type: ignore
 
+            results.append(res)
+
             # Stop logging to local folder
             logger.removeHandler(file_handler)
+
+        # TODO: Make one long video of all relaxed results
+        all_trajs_merged = self.continuous_sys.traj_type.from_lcs_trajectory(
+            LcsTrajectory.merge([res.relaxed_mean.traj for res in results])
+        )
+        all_trajs_merged.plot(output_dir, "all_relaxed_trajs")
+        all_trajs_merged.animate(output_dir, "all_relaxed_trajs")
+
+        # TODO: Print statistics
 
         print("Finished ablation study.")
 
@@ -1827,7 +1866,7 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_attempts=5,
+        num_rounding_attempts=0,
         git_commit=get_current_git_commit(),
     )
 
@@ -1842,7 +1881,7 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
         random_seed=0,
         x0_center=np.array([0, 0, 0, 0]),
         x0_spread=np.array([cart_position_max, pole_angle_max, 0.0, 0.0]),
-        num_samples=10,
+        num_samples=20,
     )
     study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
     study.run(logger, output_dir, debug=True)
