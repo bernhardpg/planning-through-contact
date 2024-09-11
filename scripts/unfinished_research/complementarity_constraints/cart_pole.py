@@ -1048,7 +1048,7 @@ class LcsTrajoptResult:
     def save_attempts(
         self, output_dir: Path, trajectory_type: AbstractLcsTrajectory
     ) -> None:
-        self.relaxed_mean.save(output_dir / "relaxed", trajectory_type)
+        self.relaxed_mean.save(output_dir / "relaxation", trajectory_type)
 
         for idx, attempt in enumerate(self.all_attempts):
 
@@ -1463,9 +1463,10 @@ class LcsTrajectoryOptimization:
             plot_eigvals=True,
             print_eigvals=False,
             logger=logger,
-            output_dir=output_dir,
+            output_dir=output_dir / "relaxation",
         )
 
+        np.set_printoptions(precision=2, suppress=True)
         logger.info(f"Solving LcsTrajopt problem from initial condition: {self.x0}")
 
         # Rounding

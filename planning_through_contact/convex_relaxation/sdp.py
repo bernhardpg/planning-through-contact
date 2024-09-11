@@ -1093,6 +1093,9 @@ def solve_sdp_relaxation(
     else:
         options.set_to_strongest()
 
+    if output_dir:
+        output_dir.mkdir(exist_ok=True, parents=True)
+
     SPARSITY_OUTPUT_DIR = (
         output_dir / "sparsity_patterns" if output_dir is not None else None
     )
