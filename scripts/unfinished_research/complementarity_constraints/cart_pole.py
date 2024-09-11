@@ -507,6 +507,10 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
         ax.set_ylim(-0.8, 0.8)
         ax.set_aspect("equal")
 
+        # If ANIMATE_LINEARIZED is True, then we will plot the pole top position as
+        # [l * theta, l] instead of [l * cos(theta), l * sin(theta)]
+        ANIMATE_LINEARIZED = True
+
         # Initialize the cart and pole
         cart_width = 0.4
         cart_height = 0.3
@@ -597,8 +601,15 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
 
             cart.set_xy((x - cart_width / 2, -cart_height / 2))
 
-            rod_x = x + pole_length * np.sin(theta)
-            rod_y = pole_length * np.cos(theta)
+            if ANIMATE_LINEARIZED:
+                rod_x = self.sys.get_linearized_pole_top_position(x, theta)
+                rod_y = pole_length
+            else:
+                raise NotImplementedError(
+                    "This code is not tested and might be wrong! Double check before using."
+                )
+                rod_x = x - pole_length * np.cos(theta)
+                rod_y = pole_length * np.sin(theta)
 
             pole_x = [x, rod_x]
             pole_y = [0, rod_y]
