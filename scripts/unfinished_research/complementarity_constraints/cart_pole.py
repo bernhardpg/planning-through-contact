@@ -16,7 +16,12 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
-from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
+from pydrake.solvers import (
+    Binding,
+    MathematicalProgram,
+    MathematicalProgramResult,
+    SnoptSolver,
+)
 from pydrake.symbolic import Expression, Variable, Variables
 from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
@@ -1108,7 +1113,44 @@ class LcsTrajoptResult:
                 trajectory_type,
                 cost_lower_bound=self.relaxed_mean.cost,
                 name="rounded",
+                realtime_rate=realtime_rate,
             )
+
+    def plot_violations(self, output_dir: Path | None = None) -> None:
+        assert self.relaxed_mean.traj is not None
+        force_trajs = self.relaxed_mean.traj.λs
+        SCALE = 1 / 10
+        max_force = np.abs(force_trajs.max())
+
+        data = self.relaxed_complementarity_violations
+        N, m = data.shape
+
+        # Create subplots
+        _, axes = plt.subplots(m, 1, figsize=(5, 3 * m))
+
+        # Plot each column of the array in a separate subplot
+        for i in range(m):
+            axes[i].bar(np.arange(N), data[:, i])
+            axes[i].set_title(f"Complementarity constraint {i+1}")
+            axes[i].set_xlabel("Timestep")
+            axes[i].axhline(
+                y=max_force * SCALE,
+                color="gray",
+                linestyle="--",
+                label=f"{SCALE} * max force",
+            )
+
+        axes[0].set_ylabel("Violation")
+        axes[1].legend()
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+
+        if output_dir is None:
+            plt.show()
+        else:
+            plt.savefig(output_dir / "complementarity_violations.pdf")
+            plt.close()
 
     def plot_rounding_overview(self, output_dir: Path | None = None) -> None:
         attempts = self.all_attempts
@@ -1255,7 +1297,7 @@ class LcsTrajectoryOptimization:
         else:
             raise NotImplementedError("")
 
-        self.add_trajopt_cost_and_constraints(
+        self.complementarity_constraint = self.add_trajopt_cost_and_constraints(
             params, sys, prog, xs, us, λs, add_dynamics
         )
 
@@ -1282,7 +1324,7 @@ class LcsTrajectoryOptimization:
         us: np.ndarray,
         λs: np.ndarray,
         add_dynamics: bool = True,
-    ) -> None:
+    ) -> list[list[Binding]]:
         """
         Given a MathematicalProgram and the state variables (`xs`), input variables (`us`), and force variables (`λs`),
         this function adds all the trajectory optimization constraints and costs to it according to the provided `sys`
@@ -1315,13 +1357,18 @@ class LcsTrajectoryOptimization:
             prog.AddLinearConstraint(ge(λ, 0))
 
         # Complementarity constraint (element-wise)
+        complementarity_constraints = []
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
             rhs = sys.get_complementarity_rhs(x, u, λ)
 
             elementwise_product = λ * rhs
+            consts_at_k = []
             for p in elementwise_product:
-                prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+                const = prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+                consts_at_k.append(const)
+
+            complementarity_constraints.append(consts_at_k)
 
         # Input limits
         # TODO
@@ -1353,6 +1400,8 @@ class LcsTrajectoryOptimization:
             Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
 
         prog.AddQuadraticCost(xs[params.N].T @ Q_N @ xs[params.N])
+
+        return complementarity_constraints
 
     def evaluate_state_input_forces(
         self, result: MathematicalProgramResult
@@ -1513,8 +1562,22 @@ class LcsTrajectoryOptimization:
             output_dir=output_dir / "relaxation",
         )
 
-        np.set_printoptions(precision=2, suppress=True)
-        logger.info(f"Solving LcsTrajopt problem from initial condition: {self.x0}")
+        complementarity_violations = []
+        for consts_at_k in self.complementarity_constraint:
+            violations_at_k = []
+            for const in consts_at_k:
+                eval = const.evaluator()
+                if not eval.upper_bound() == eval.lower_bound():
+                    raise RuntimeError(
+                        "All complementarity constraints should be equality constraints!"
+                    )
+
+                vals = relaxed_result.GetSolution(const.variables())
+                violation = np.abs(eval.Eval(vals) - eval.upper_bound()).item()
+                violations_at_k.append(violation)
+
+            complementarity_violations.append(np.array(violations_at_k))
+        complementarity_violations = np.array(complementarity_violations)
 
         # Rounding
         μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
@@ -1588,6 +1651,7 @@ class LcsTrajectoryOptimization:
             best_idx=best_attempt_idx,
             relaxed_mean=relaxed_attempt,
             all_attempts=attempts,
+            relaxed_complementarity_violations=complementarity_violations,
         )
 
         return res
@@ -1718,25 +1782,6 @@ def test_lcs_trajopt_with_sparsity_construction():
     assert xs_next.shape[1] == sys.num_states
 
 
-# TODO: Move to unit test
-def test_lcs_trajopt_with_sparsity():
-    sys = CartPoleWithWalls()
-    params = TrajoptParams(
-        N=10,
-        T_s=0.01,
-        Q=np.diag([1, 1, 1, 1]),
-        Q_N=np.diag([1, 1, 1, 1]),
-        R=np.array([1]),
-    )
-    x0 = np.array([0, 0, 0, 0])
-
-    trajopt = LcsTrajectoryOptimization(
-        sys, params, x0, equality_elimination_method="qr_pivot"
-    )
-
-    breakpoint()
-
-
 def test_lcs_get_state_input_forces_from_vals():
     sys = CartPoleWithWalls()
     params = TrajoptParams(
@@ -1827,13 +1872,14 @@ class LcsAblationStudy:
                 self.continuous_sys,
                 self.trajopt_params,
                 x0,
-                equality_elimination_method="shooting",  # TODO
+                equality_elimination_method=self.solver_config.equality_elimination_method,
             )
 
             res = trajopt.solve(self.solver_config, curr_dir, logger)
 
             res.plot_rounding_overview(curr_dir)
-            res.save_attempts(curr_dir, self.continuous_sys.traj_type)  # type: ignore
+            res.plot_violations(curr_dir / "relaxation")
+            res.save_attempts(curr_dir, self.continuous_sys.traj_type, realtime_rate=0.5)  # type: ignore
 
             results.append(res)
 
