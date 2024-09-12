@@ -1583,6 +1583,25 @@ class LcsTrajectoryOptimization:
             output_dir=output_dir / "relaxation",
         )
 
+        μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+        (
+            xs_mean,
+            us_mean,
+            λs_mean,
+        ) = self.get_state_input_forces_from_decision_var_values(
+            μ, solver_config.equality_elimination_method
+        )
+
+        relaxed_attempt = LcsSolveAttempt(
+            success=relaxed_result.is_success(),
+            time=relaxed_result.get_solver_details().optimizer_time,  # type: ignore
+            cost=relaxed_cost,
+            relaxed_or_rounded="relaxed",
+            traj=LcsTrajectory(self.sys, xs_mean, us_mean, λs_mean, self.params.T_s),
+        )
+
+        logger.info(f"Solved relaxed problem. {relaxed_attempt}")
+
         complementarity_violations = []
         for consts_at_k in self.complementarity_constraint:
             violations_at_k = []
@@ -1601,23 +1620,6 @@ class LcsTrajectoryOptimization:
         complementarity_violations = np.array(complementarity_violations)
 
         # Rounding
-        μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
-
-        (
-            xs_mean,
-            us_mean,
-            λs_mean,
-        ) = self.get_state_input_forces_from_decision_var_values(
-            μ, solver_config.equality_elimination_method
-        )
-        relaxed_attempt = LcsSolveAttempt(
-            success=relaxed_result.is_success(),
-            time=relaxed_result.get_solver_details().optimizer_time,  # type: ignore
-            cost=relaxed_cost,
-            relaxed_or_rounded="relaxed",
-            traj=LcsTrajectory(self.sys, xs_mean, us_mean, λs_mean, self.params.T_s),
-        )
-
         initial_guesses = [μ]  # Also use the mean as an initial guess
         initial_guesses.extend(
             np.random.multivariate_normal(
