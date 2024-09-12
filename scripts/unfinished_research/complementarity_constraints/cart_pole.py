@@ -1457,10 +1457,9 @@ class LcsTrajectoryOptimization:
                 variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
             )
 
-        if equality_elimination_method is None:
-            var_values = {
-                var: val for var, val in zip(self.qcqp.decision_variables(), vals)
-            }
+        var_values = {
+            var: val for var, val in zip(self.qcqp.decision_variables(), vals)
+        }
 
         var_to_idx = EqualToDict(
             {var: idx for idx, var in enumerate(self.qcqp.decision_variables())}
@@ -1473,7 +1472,7 @@ class LcsTrajectoryOptimization:
                 val_idx = var_to_idx[var_or_val_or_expr]
                 return float(vals[val_idx])
             elif type(var_or_val_or_expr) == Expression:
-                val = var_or_val_or_expr.Evaluate(var_values)  # type: ignore
+                val = var_or_val_or_expr.Evaluate(var_values)
                 return val
             else:
                 breakpoint()
@@ -1936,8 +1935,8 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
 
     solver_config = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
-        # equality_elimination_method="shooting",
-        equality_elimination_method=None,
+        equality_elimination_method="shooting",
+        # equality_elimination_method=None,
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
