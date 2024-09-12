@@ -330,7 +330,12 @@ class AbstractLcsTrajectory(ABC):
         pass
 
     @abstractmethod
-    def animate(self, output_dir: Path | None = None, name: str | None = None) -> None:
+    def animate(
+        self,
+        output_dir: Path | None = None,
+        name: str | None = None,
+        realtime_rate: float = 1.0,
+    ) -> None:
         pass
 
 
@@ -466,7 +471,7 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
 
         # Plot each trajectory and adjust y-axis limits.
         def plot_with_dynamic_limits(ax, data, label, color):
-            ax.plot(data, label=label, color=color)
+            ax.plot(data, color=color)
             ax.scatter(range(len(data)), data, color=color, s=10)  # Plot keypoints.
             ax.set_title(label)
 
@@ -512,6 +517,7 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
         axs[3][1].axhline(
             y=self.sys.distance_to_walls, color="grey", linestyle="--", label="wall"
         )
+        axs[3][1].legend()
         axs[3][1].axhline(y=-self.sys.distance_to_walls, color="grey", linestyle="--")
 
         # Set the x-axis label for the last subplots.
@@ -532,7 +538,12 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
         else:
             plt.show()
 
-    def animate(self, output_dir: Path | None = None, name: str | None = None) -> None:
+    def animate(
+        self,
+        output_dir: Path | None = None,
+        name: str | None = None,
+        realtime_rate: float = 1.0,
+    ) -> None:
         # Set up the figure and axis
         fig, ax = plt.subplots()
         ax.set_xlim(-0.8, 0.8)
@@ -681,7 +692,7 @@ class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
                 right_contact_force_arrow,
             )
 
-        interval_ms = int(self.T_s * 1000)
+        interval_ms = int(self.T_s * 1000 / realtime_rate)
         ani = animation.FuncAnimation(
             fig,
             update,
@@ -1053,18 +1064,19 @@ class LcsSolveAttempt:
         traj_type: AbstractLcsTrajectory,
         cost_lower_bound: float | None = None,
         name: str | None = None,
+        realtime_rate: float = 1.0,
     ) -> None:
         if self.traj is not None:
             output_dir.mkdir(parents=True, exist_ok=True)
             traj = traj_type.from_lcs_trajectory(self.traj)
             traj.plot(output_dir, name)
-            traj.animate(output_dir, name)
+            traj.animate(output_dir, name, realtime_rate)
 
         if self.traj_initial_guess is not None:
             output_dir.mkdir(parents=True, exist_ok=True)
             traj = traj_type.from_lcs_trajectory(self.traj_initial_guess)
             traj.plot(output_dir, "initial_guess")
-            traj.animate(output_dir, "initial_guess")
+            traj.animate(output_dir, "initial_guess", realtime_rate)
 
         import yaml
 
@@ -1096,11 +1108,17 @@ class LcsTrajoptResult:
     best_idx: int
     relaxed_mean: LcsSolveAttempt
     all_attempts: list[LcsSolveAttempt]
+    relaxed_complementarity_violations: npt.NDArray[np.float64]
 
     def save_attempts(
-        self, output_dir: Path, trajectory_type: AbstractLcsTrajectory
+        self,
+        output_dir: Path,
+        trajectory_type: AbstractLcsTrajectory,
+        realtime_rate: float = 1.0,
     ) -> None:
-        self.relaxed_mean.save(output_dir / "relaxation", trajectory_type)
+        self.relaxed_mean.save(
+            output_dir / "relaxation", trajectory_type, realtime_rate=realtime_rate
+        )
 
         for idx, attempt in enumerate(self.all_attempts):
 
@@ -1439,7 +1457,7 @@ class LcsTrajectoryOptimization:
                 variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
             )
 
-        if equality_elimination_method is not None:
+        if equality_elimination_method is None:
             var_values = {
                 var: val for var, val in zip(self.qcqp.decision_variables(), vals)
             }
@@ -1550,6 +1568,10 @@ class LcsTrajectoryOptimization:
         output_dir: Path,
         logger: Logger,
     ) -> LcsTrajoptResult:
+
+        np.set_printoptions(precision=2, suppress=True)
+        logger.info(f"Solving LcsTrajopt problem from initial condition: {self.x0}")
+
         Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
             qcqp=self.qcqp,
             trace_cost=solver_config.use_trace_cost,
@@ -1844,6 +1866,8 @@ class LcsAblationStudy:
         return [sample for sample in samples]
 
     def run(self, logger: Logger, output_dir: Path, debug: bool = False) -> None:
+        ANI_REALTIME_RATE = 0.5
+
         x0s = self.generate_x0s(
             self.params.x0_center, self.params.x0_spread, self.params.num_samples
         )
@@ -1879,7 +1903,7 @@ class LcsAblationStudy:
 
             res.plot_rounding_overview(curr_dir)
             res.plot_violations(curr_dir / "relaxation")
-            res.save_attempts(curr_dir, self.continuous_sys.traj_type, realtime_rate=0.5)  # type: ignore
+            res.save_attempts(curr_dir, self.continuous_sys.traj_type, realtime_rate=ANI_REALTIME_RATE)  # type: ignore
 
             results.append(res)
 
@@ -1891,7 +1915,9 @@ class LcsAblationStudy:
             LcsTrajectory.merge([res.relaxed_mean.traj for res in results])
         )
         all_trajs_merged.plot(output_dir, "all_relaxed_trajs")
-        all_trajs_merged.animate(output_dir, "all_relaxed_trajs")
+        all_trajs_merged.animate(
+            output_dir, "all_relaxed_trajs", realtime_rate=ANI_REALTIME_RATE
+        )
 
         # TODO: Print statistics
 
@@ -1910,7 +1936,8 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
 
     solver_config = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
-        equality_elimination_method="shooting",
+        # equality_elimination_method="shooting",
+        equality_elimination_method=None,
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
