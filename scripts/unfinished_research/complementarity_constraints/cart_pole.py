@@ -1854,12 +1854,12 @@ class LcsAblationStudy:
 
 def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([10, 10, 1, 1])
+    Q = np.diag([100, 10, 1, 1])
     trajopt_params = TrajoptParams(
-        N=20,
+        N=10,
         T_s=0.1,
         Q=Q,
-        R=np.array([0.01]),
+        R=np.array([0.05]),
     )
 
     solver_config = LcsTrajoptSolverConfig(
@@ -1883,7 +1883,7 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
     study_params = LcsAblationStudyParams(
         random_seed=0,
         x0_center=np.array([0, 0, 0, 0]),
-        x0_spread=np.array([cart_position_max, pole_angle_max, 0.1, 0.1]),
+        x0_spread=np.array([cart_position_max, pole_angle_max, 0.02, 0.1]),
         num_samples=20,
     )
     study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
