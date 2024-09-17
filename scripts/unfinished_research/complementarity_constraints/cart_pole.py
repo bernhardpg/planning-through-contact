@@ -1152,7 +1152,7 @@ class LcsTrajoptResult:
             axes[i].set_title(f"Complementarity constraint {i+1}")
             axes[i].set_xlabel("Timestep")
             axes[i].axhline(
-                y=max_force * SCALE,
+                y=np.max((max_force * SCALE, 1e-3)),
                 color="gray",
                 linestyle="--",
                 label=f"{SCALE} * max force",
@@ -1929,20 +1929,21 @@ def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> N
     sys = CartPoleWithWalls()
     Q = np.diag([100, 10, 1, 1])
     trajopt_params = TrajoptParams(
-        N=10,
-        T_s=0.1,
+        N=20,
+        T_s=0.05,
         Q=Q,
         R=np.array([0.05]),
     )
 
     solver_config = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
+        # implied_constraints="strongest",
         equality_elimination_method="shooting",
         # equality_elimination_method=None,
         use_trace_cost=1e-5,
-        use_chain_sparsity=False,
-        seed=0,
-        num_rounding_attempts=0,
+        use_chain_sparsity=True,
+        seed=1,
+        num_rounding_attempts=3,
         git_commit=get_current_git_commit(),
     )
 
