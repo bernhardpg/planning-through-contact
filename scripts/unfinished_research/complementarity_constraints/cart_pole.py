@@ -1,3 +1,5 @@
+import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from functools import cached_property
 from logging import Logger
@@ -14,7 +16,12 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Rectangle
 from pydrake.common.containers import EqualToDict
 from pydrake.math import eq, ge
-from pydrake.solvers import MathematicalProgram, MathematicalProgramResult, SnoptSolver
+from pydrake.solvers import (
+    Binding,
+    MathematicalProgram,
+    MathematicalProgramResult,
+    SnoptSolver,
+)
 from pydrake.symbolic import Expression, Variable, Variables
 from pydrake.systems.controllers import DiscreteTimeLinearQuadraticRegulator
 from tqdm import tqdm
@@ -125,9 +132,9 @@ class CartPoleWithWalls(LinearComplementaritySystem):
     Contact-Aware Controllers.” 2021
 
     x_1 = cart position
-    x_2 = pole position
+    x_2 = pole angle
     x_3 = cart velocity
-    x_4 = pole velocity
+    x_4 = pole angular velocity
 
     u_1 = force applied to cart
 
@@ -182,6 +189,7 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         self.pole_length = 0.6
         self.cart_mass = 0.978
         self.pole_mass = 0.35
+        self.traj_type = CartPoleWithWallsTrajectory
 
     def get_linearized_pole_top_position(self, x: float, θ: float) -> float:
         """
@@ -208,9 +216,131 @@ class CartPoleWithWalls(LinearComplementaritySystem):
         else:  # left:
             return self.distance_to_walls + self.get_linearized_pole_top_position(x, θ)
 
+    def discretize(self, integrator: IntegratorType, T_s: float) -> "CartPoleWithWalls":
+        if self.discrete_or_continuous != "continuous":
+            raise RuntimeError("System is already discrete!")
+
+        # Use the super class's discretize method to get a new LinearComplementaritySystem
+        lcs_discretized = super().discretize(integrator, T_s)
+
+        # Create a new CartPoleWithWalls object using the discretized matrices
+        discretized_cart_pole = CartPoleWithWalls()
+
+        # Overwrite the system matrices with the discretized values from the parent class
+        discretized_cart_pole.A = lcs_discretized.A
+        discretized_cart_pole.B = lcs_discretized.B
+        discretized_cart_pole.D = lcs_discretized.D
+        discretized_cart_pole.d = lcs_discretized.d
+
+        # The complementarity matrices (E, F, H, c) remain unchanged
+        discretized_cart_pole.E = self.E
+        discretized_cart_pole.F = self.F
+        discretized_cart_pole.H = self.H
+        discretized_cart_pole.c = self.c
+
+        # The system is now discrete
+        discretized_cart_pole.discrete_or_continuous = "discrete"
+
+        # Inherit additional attributes like distance_to_walls, pole_length, etc.
+        discretized_cart_pole.distance_to_walls = self.distance_to_walls
+        discretized_cart_pole.pole_length = self.pole_length
+        discretized_cart_pole.cart_mass = self.cart_mass
+        discretized_cart_pole.pole_mass = self.pole_mass
+
+        return discretized_cart_pole
+
 
 @dataclass
-class CartPoleWithWallsTrajectory:
+class LcsTrajectory:
+    sys: LinearComplementaritySystem
+    xs: npt.NDArray[np.float64]
+    us: npt.NDArray[np.float64]
+    λs: npt.NDArray[np.float64]
+    T_s: float
+
+    def __len__(self) -> int:
+        return self.xs.shape[0] - 1
+
+    @property
+    def num_states(self) -> int:
+        return self.sys.num_states
+
+    @property
+    def num_inputs(self) -> int:
+        return self.sys.num_inputs
+
+    @property
+    def num_forces(self) -> int:
+        return self.sys.num_forces
+
+    def __post_init__(self):
+        trajectories = "xs", "us", "λs"
+
+        for field in fields(self):
+            if not field in trajectories:
+                continue
+
+            if field.name == "xs":
+                if len(getattr(self, field.name)) != len(self) + 1:
+                    raise ValueError(
+                        f"State trajectory must be length {len(self) + 1}."
+                    )
+            else:
+                if len(getattr(self, field.name)) != len(self):
+                    raise ValueError(
+                        f"Input and force trajectory must be length {len(self)}."
+                    )
+
+    @classmethod
+    def merge(cls, trajectories: list["LcsTrajectory"]) -> "LcsTrajectory":
+        if not trajectories:
+            raise ValueError("No trajectories provided for merging.")
+
+        # Check that all systems and T_s are the same across the trajectories
+        sys = trajectories[0].sys
+        T_s = trajectories[0].T_s
+
+        for traj in trajectories:
+            if traj.T_s != T_s:
+                raise ValueError(
+                    "All trajectories must have the same sampling time (T_s)."
+                )
+
+        # Concatenate trajectories
+        xs = np.concatenate(
+            [traj.xs[:-1] for traj in trajectories] + [trajectories[-1].xs[-1:]], axis=0
+        )
+        us = np.concatenate([traj.us for traj in trajectories], axis=0)
+        λs = np.concatenate([traj.λs for traj in trajectories], axis=0)
+
+        # Create a new LcsTrajectory with the concatenated arrays
+        merged_trajectory = cls(sys=sys, xs=xs, us=us, λs=λs, T_s=T_s)
+
+        return merged_trajectory
+
+
+class AbstractLcsTrajectory(ABC):
+    @classmethod
+    @abstractmethod
+    def from_lcs_trajectory(cls, lcs_traj: LcsTrajectory) -> "AbstractLcsTrajectory":
+        pass
+
+    @abstractmethod
+    def plot(self, output_dir: Path | None = None, name: str | None = None) -> None:
+        pass
+
+    @abstractmethod
+    def animate(
+        self,
+        output_dir: Path | None = None,
+        name: str | None = None,
+        realtime_rate: float = 1.0,
+    ) -> None:
+        pass
+
+
+@dataclass
+class CartPoleWithWallsTrajectory(AbstractLcsTrajectory):
     cart_position: npt.NDArray[np.float64]
     pole_angle: npt.NDArray[np.float64]
     cart_velocity: npt.NDArray[np.float64]
@@ -245,6 +375,42 @@ class CartPoleWithWallsTrajectory:
                 self.sys.get_linearized_pole_top_position(x, θ)
                 for x, θ in zip(self.cart_position, self.pole_angle)
             ]
+        )
+
+    @classmethod
+    def from_lcs_trajectory(
+        cls, lcs_traj: LcsTrajectory
+    ) -> "CartPoleWithWallsTrajectory":
+        state, input, forces = lcs_traj.xs, lcs_traj.us, lcs_traj.λs
+        if state.shape[1] != 4:
+            raise ValueError("States must have shape (N, 4)")
+
+        if input.shape[1] != 1:
+            raise ValueError("Inputs must have shape (N, 1)")
+
+        if forces.shape[1] != 2:
+            raise ValueError("Forces must have shape (N, 2)")
+
+        cart_pos = state[:, 0]
+        pole_pos = state[:, 1]
+        cart_vel = state[:, 2]
+        pole_vel = state[:, 3]
+        applied_force = input.flatten()
+        right_wall_force = forces[:, 0]
+        left_wall_force = forces[:, 1]
+
+        assert isinstance(lcs_traj.sys, CartPoleWithWalls)
+
+        return cls(
+            cart_pos,
+            pole_pos,
+            cart_vel,
+            pole_vel,
+            applied_force,
+            right_wall_force,
+            left_wall_force,
+            lcs_traj.sys,
+            lcs_traj.T_s,
         )
 
     @classmethod
@@ -293,7 +459,7 @@ class CartPoleWithWallsTrajectory:
     def input_length(self) -> int:
         return len(self.cart_position) - 1
 
-    def plot(self, filepath: Path | None = None) -> None:
+    def plot(self, output_dir: Path | None = None, name: str | None = None) -> None:
         # Create a figure and subplots.
         fig, axs = plt.subplots(4, 2, figsize=(12, 6), sharex=True)
 
@@ -305,7 +471,7 @@ class CartPoleWithWallsTrajectory:
 
         # Plot each trajectory and adjust y-axis limits.
         def plot_with_dynamic_limits(ax, data, label, color):
-            ax.plot(data, label=label, color=color)
+            ax.plot(data, color=color)
             ax.scatter(range(len(data)), data, color=color, s=10)  # Plot keypoints.
             ax.set_title(label)
 
@@ -348,7 +514,10 @@ class CartPoleWithWallsTrajectory:
             "purple",
         )
         # Plot wall positions
-        axs[3][1].axhline(y=self.sys.distance_to_walls, color="grey", linestyle="--")
+        axs[3][1].axhline(
+            y=self.sys.distance_to_walls, color="grey", linestyle="--", label="wall"
+        )
+        axs[3][1].legend()
         axs[3][1].axhline(y=-self.sys.distance_to_walls, color="grey", linestyle="--")
 
         # Set the x-axis label for the last subplots.
@@ -358,17 +527,32 @@ class CartPoleWithWallsTrajectory:
         # Display the plots
         plt.tight_layout()
 
-        if filepath is not None:
-            fig.savefig(filepath)
+        if output_dir is not None:
+            if name is not None:
+                filename = output_dir / (name + "_trajectories.pdf")
+            else:
+                filename = output_dir / "trajectories.pdf"
+
+            fig.savefig(filename)
+            plt.close()
         else:
             plt.show()
 
-    def animate(self, output_file: Path | None = None) -> None:
+    def animate(
+        self,
+        output_dir: Path | None = None,
+        name: str | None = None,
+        realtime_rate: float = 1.0,
+    ) -> None:
         # Set up the figure and axis
         fig, ax = plt.subplots()
         ax.set_xlim(-0.8, 0.8)
         ax.set_ylim(-0.8, 0.8)
         ax.set_aspect("equal")
+
+        # If ANIMATE_LINEARIZED is True, then we will plot the pole top position as
+        # [l * theta, l] instead of [l * cos(theta), l * sin(theta)]
+        ANIMATE_LINEARIZED = True
 
         # Initialize the cart and pole
         cart_width = 0.4
@@ -396,15 +580,17 @@ class CartPoleWithWallsTrajectory:
         wall_height = 0.4
         wall_width = 0.1
 
+        # NOTE: xy (first argument) to Rectangle is lower left corner.
+        WALL_LOWER_HEIGHT = 0.3
         left_wall = Rectangle(
-            (-wall_distance - wall_width / 2, 0.3),
+            (-wall_distance - wall_width, WALL_LOWER_HEIGHT),
             wall_width,
             wall_height,
             fc="grey",
             ec="black",
         )
         right_wall = Rectangle(
-            (wall_distance + wall_width / 2, 0.3),
+            (wall_distance, WALL_LOWER_HEIGHT),
             wall_width,
             wall_height,
             fc="grey",
@@ -414,7 +600,7 @@ class CartPoleWithWallsTrajectory:
         ax.add_patch(right_wall)
 
         # Initialize force arrows using FancyArrowPatch
-        FORCE_SCALE = 1
+        FORCE_SCALE = 0.1
 
         def create_force_patch(color):
             return FancyArrowPatch(
@@ -458,15 +644,22 @@ class CartPoleWithWallsTrajectory:
 
             cart.set_xy((x - cart_width / 2, -cart_height / 2))
 
-            rod_x = x + pole_length * np.sin(theta)
-            rod_y = pole_length * np.cos(theta)
+            if ANIMATE_LINEARIZED:
+                rod_x = self.sys.get_linearized_pole_top_position(x, theta)
+                rod_y = pole_length
+            else:
+                raise NotImplementedError(
+                    "This code is not tested and might be wrong! Double check before using."
+                )
+                rod_x = x - pole_length * np.sin(theta)
+                rod_y = pole_length * np.cos(theta)
 
             pole_x = [x, rod_x]
             pole_y = [0, rod_y]
             pole.set_data(pole_x, pole_y)
 
             # Define a threshold for plotting forces
-            FORCE_THRESHOLD = 1e-3
+            FORCE_THRESHOLD = 0.05
 
             # Helper function to update force arrows conditionally
             def update_horizontal_force_arrow(arrow, start_pos, force):
@@ -499,7 +692,7 @@ class CartPoleWithWallsTrajectory:
                 right_contact_force_arrow,
             )
 
-        interval_ms = int(self.T_s * 1000)
+        interval_ms = int(self.T_s * 1000 / realtime_rate)
         ani = animation.FuncAnimation(
             fig,
             update,
@@ -509,8 +702,19 @@ class CartPoleWithWallsTrajectory:
             interval=interval_ms,
         )
 
-        if output_file is not None:
-            ani.save(output_file, writer="ffmpeg")
+        if output_dir is not None:
+            if name is not None:
+                filename = output_dir / (name + "_animation.mp4")
+            else:
+                filename = output_dir / "animation.mp4"
+
+            ani.save(filename, writer="ffmpeg")
+            plt.close()
+        else:
+            plt.show()
+
+        if output_dir is not None:
+            plt.close()
         else:
             plt.show()
 
@@ -555,7 +759,7 @@ def test_cart_pole_w_walls():
 
 
 @dataclass
-class TrajectoryOptimizationParameters:
+class TrajoptParams(YamlMixin):
     N: int
     T_s: float
     Q: npt.NDArray[np.float64]
@@ -569,7 +773,7 @@ class CartPoleMechanicalEliminationTrajopt:
     def __init__(
         self,
         continuous_sys: LinearComplementaritySystem,
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         x0: npt.NDArray[np.float64],
     ):
         sys = continuous_sys.discretize(params.integrator, params.T_s)
@@ -766,7 +970,7 @@ class CartPoleMechanicalEliminationTrajopt:
 
     @staticmethod
     def compute_nullspace_basis(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
@@ -803,7 +1007,7 @@ class CartPoleMechanicalEliminationTrajopt:
 
     @staticmethod
     def define_decision_vars_in_latent_space(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         prog: MathematicalProgram,
         sys: LinearComplementaritySystem,
         nullspace_basis: npt.NDArray[np.float64],
@@ -829,11 +1033,206 @@ class CartPoleMechanicalEliminationTrajopt:
         return xs, us, λs, xs_next
 
 
+@dataclass
+class LcsTrajoptSolverConfig(YamlMixin):
+    implied_constraints: ImpliedConstraintsType
+    equality_elimination_method: EqualityEliminationType | None
+    use_trace_cost: float | None
+    use_chain_sparsity: bool
+    seed: int
+    num_rounding_attempts: int
+    git_commit: str
+
+
+@dataclass
+class LcsSolveAttempt:
+    success: bool
+    time: float
+    cost: float
+    relaxed_or_rounded: Literal["relaxed", "rounded"]
+    traj: LcsTrajectory | None = None
+    traj_initial_guess: LcsTrajectory | None = None
+
+    def __str__(self) -> str:
+        return (
+            f"success: {self.success}, time: {self.time:.4f} s, cost: {self.cost:.4f}"
+        )
+
+    def save(
+        self,
+        output_dir: Path,
+        traj_type: AbstractLcsTrajectory,
+        cost_lower_bound: float | None = None,
+        name: str | None = None,
+        realtime_rate: float = 1.0,
+    ) -> None:
+        if self.traj is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            traj = traj_type.from_lcs_trajectory(self.traj)
+            traj.plot(output_dir, name)
+            traj.animate(output_dir, name, realtime_rate)
+
+        if self.traj_initial_guess is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            traj = traj_type.from_lcs_trajectory(self.traj_initial_guess)
+            traj.plot(output_dir, "initial_guess")
+            traj.animate(output_dir, "initial_guess", realtime_rate)
+
+        import yaml
+
+        # Prepare the data to be saved, excluding `traj`
+        data_to_save = {
+            "success": self.success,
+            "time": float(self.time),
+            "cost": float(self.cost),
+            "relaxed_or_rounded": self.relaxed_or_rounded,
+        }
+
+        if cost_lower_bound:
+            data_to_save["optimality_gap_upper_bound_pct"] = float(
+                compute_optimality_gap_pct(self.cost, cost_lower_bound)
+            )
+
+        # Determine the filename for the YAML file
+        file_name = "result.yaml"
+        file_path = output_dir / file_name
+
+        # Save the data to a YAML file
+        with open(file_path, "w") as file:
+            yaml.dump(data_to_save, file)
+
+
+@dataclass
+class LcsTrajoptResult:
+    best: LcsSolveAttempt
+    best_idx: int
+    relaxed_mean: LcsSolveAttempt
+    all_attempts: list[LcsSolveAttempt]
+    relaxed_complementarity_violations: npt.NDArray[np.float64]
+
+    def save_attempts(
+        self,
+        output_dir: Path,
+        trajectory_type: AbstractLcsTrajectory,
+        realtime_rate: float = 1.0,
+    ) -> None:
+        self.relaxed_mean.save(
+            output_dir / "relaxation", trajectory_type, realtime_rate=realtime_rate
+        )
+
+        for idx, attempt in enumerate(self.all_attempts):
+
+            dir_name = f"rounding_attempt_{idx}"
+            if idx == self.best_idx:
+                dir_name += "_BEST"
+
+            attempt.save(
+                output_dir / dir_name,
+                trajectory_type,
+                cost_lower_bound=self.relaxed_mean.cost,
+                name="rounded",
+                realtime_rate=realtime_rate,
+            )
+
+    def plot_violations(self, output_dir: Path | None = None) -> None:
+        assert self.relaxed_mean.traj is not None
+        force_trajs = self.relaxed_mean.traj.λs
+        SCALE = 1 / 10
+        max_force = np.abs(force_trajs.max())
+
+        data = self.relaxed_complementarity_violations
+        N, m = data.shape
+
+        # Create subplots
+        _, axes = plt.subplots(m, 1, figsize=(5, 3 * m))
+
+        # Plot each column of the array in a separate subplot
+        for i in range(m):
+            axes[i].bar(np.arange(N), data[:, i])
+            axes[i].set_title(f"Complementarity constraint {i+1}")
+            axes[i].set_xlabel("Timestep")
+            axes[i].axhline(
+                y=max_force * SCALE,
+                color="gray",
+                linestyle="--",
+                label=f"{SCALE} * max force",
+            )
+
+        axes[0].set_ylabel("Violation")
+        axes[1].legend()
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+
+        if output_dir is None:
+            plt.show()
+        else:
+            plt.savefig(output_dir / "complementarity_violations.pdf")
+            plt.close()
+
+    def plot_rounding_overview(self, output_dir: Path | None = None) -> None:
+        attempts = self.all_attempts
+        num_rounding_attempts = len(attempts)
+
+        # Extract attributes for plotting
+        success_values = [trial.success for trial in attempts]
+        time_values = [trial.time for trial in attempts]
+        cost_values = [trial.cost for trial in attempts]
+
+        # Find the index of the trial with the lowest cost
+        best_trial_index = cost_values.index(min(cost_values))
+
+        # Plotting the attributes
+        fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+
+        # Ensure axs is a list of Axes
+        if isinstance(axs, Axes):
+            axs = [axs]
+
+        # Plot success values
+        axs[0].bar(range(num_rounding_attempts), success_values, color="grey")
+        axs[0].bar(
+            best_trial_index, success_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[0].set_xlabel("Attempt Index")
+        axs[0].set_ylabel("Success")
+        axs[0].set_title("Rounding Attempt Success")
+        axs[0].set_xticks(range(num_rounding_attempts))
+
+        # Plot time values
+        axs[1].bar(range(num_rounding_attempts), time_values, color="grey")
+        axs[1].bar(
+            best_trial_index, time_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[1].set_xlabel("Attempt Index")
+        axs[1].set_ylabel("Time (s)")
+        axs[1].set_title("Rounding Attempt Time")
+        axs[1].set_xticks(range(num_rounding_attempts))
+
+        # Plot cost values
+        axs[2].bar(range(num_rounding_attempts), cost_values, color="grey")
+        axs[2].bar(
+            best_trial_index, cost_values[best_trial_index], color="red"
+        )  # Highlight the best trial
+        axs[2].set_xlabel("Attempt Index")
+        axs[2].set_ylabel("Cost")
+        axs[2].set_title("Rounding Attempt Cost")
+        axs[2].set_xticks(range(num_rounding_attempts))
+
+        plt.tight_layout()
+
+        if output_dir is None:
+            plt.show()
+        else:
+            plt.savefig(output_dir / "rounding_attempts.pdf")
+            plt.close()
+
+
 class LcsTrajectoryOptimization:
     def __init__(
         self,
         continuous_sys: LinearComplementaritySystem,
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         x0: npt.NDArray[np.float64],
         equality_elimination_method: EqualityEliminationType | None = None,
     ):
@@ -916,10 +1315,11 @@ class LcsTrajectoryOptimization:
         else:
             raise NotImplementedError("")
 
-        self.add_trajopt_cost_and_constraints(
+        self.complementarity_constraint = self.add_trajopt_cost_and_constraints(
             params, sys, prog, xs, us, λs, add_dynamics
         )
 
+        self.x0 = x0
         self.sys = sys
         self.params = params
         self.qcqp = prog
@@ -935,14 +1335,14 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def add_trajopt_cost_and_constraints(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
         prog: MathematicalProgram,
         xs: np.ndarray,
         us: np.ndarray,
         λs: np.ndarray,
         add_dynamics: bool = True,
-    ) -> None:
+    ) -> list[list[Binding]]:
         """
         Given a MathematicalProgram and the state variables (`xs`), input variables (`us`), and force variables (`λs`),
         this function adds all the trajectory optimization constraints and costs to it according to the provided `sys`
@@ -959,7 +1359,8 @@ class LcsTrajectoryOptimization:
 
                 f = sys.get_f(x, u, λ)
                 dynamics = eq(x_next, f)
-                prog.AddLinearConstraint(dynamics)
+                for c in dynamics:
+                    prog.AddLinearEqualityConstraint(c)
 
         # RHS nonnegativity of complementarity constraint
         for k in range(params.N):
@@ -974,13 +1375,18 @@ class LcsTrajectoryOptimization:
             prog.AddLinearConstraint(ge(λ, 0))
 
         # Complementarity constraint (element-wise)
+        complementarity_constraints = []
         for k in range(params.N):
             x, u, λ = xs[k], us[k], λs[k]
             rhs = sys.get_complementarity_rhs(x, u, λ)
 
             elementwise_product = λ * rhs
+            consts_at_k = []
             for p in elementwise_product:
-                prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+                const = prog.AddQuadraticConstraint(p, 0, 0)  # p == 0
+                consts_at_k.append(const)
+
+            complementarity_constraints.append(consts_at_k)
 
         # Input limits
         # TODO
@@ -1012,6 +1418,8 @@ class LcsTrajectoryOptimization:
             Q_N = S  # use the infinite-horizon optimal cost-to-go as the terminal cost
 
         prog.AddQuadraticCost(xs[params.N].T @ Q_N @ xs[params.N])
+
+        return complementarity_constraints
 
     def evaluate_state_input_forces(
         self, result: MathematicalProgramResult
@@ -1049,10 +1457,9 @@ class LcsTrajectoryOptimization:
                 variables: #vals = {len(vals)}, #decision_variables = {len(self.qcqp.decision_variables())}"
             )
 
-        if equality_elimination_method is not None:
-            var_values = {
-                var: val for var, val in zip(self.qcqp.decision_variables(), vals)
-            }
+        var_values = {
+            var: val for var, val in zip(self.qcqp.decision_variables(), vals)
+        }
 
         var_to_idx = EqualToDict(
             {var: idx for idx, var in enumerate(self.qcqp.decision_variables())}
@@ -1065,7 +1472,7 @@ class LcsTrajectoryOptimization:
                 val_idx = var_to_idx[var_or_val_or_expr]
                 return float(vals[val_idx])
             elif type(var_or_val_or_expr) == Expression:
-                val = var_or_val_or_expr.Evaluate(var_values)  # type: ignore
+                val = var_or_val_or_expr.Evaluate(var_values)
                 return val
             else:
                 breakpoint()
@@ -1092,7 +1499,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def compute_nullspace_basis(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         sys: LinearComplementaritySystem,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
@@ -1129,7 +1536,7 @@ class LcsTrajectoryOptimization:
 
     @staticmethod
     def define_decision_vars_in_latent_space(
-        params: TrajectoryOptimizationParameters,
+        params: TrajoptParams,
         prog: MathematicalProgram,
         sys: LinearComplementaritySystem,
         nullspace_basis: npt.NDArray[np.float64],
@@ -1154,11 +1561,161 @@ class LcsTrajectoryOptimization:
         xs, us, λs, xs_next = np.split(concatenated_vars, split_idxs, axis=1)
         return xs, us, λs, xs_next
 
+    def solve(
+        self,
+        solver_config: LcsTrajoptSolverConfig,
+        output_dir: Path,
+        logger: Logger,
+    ) -> LcsTrajoptResult:
+
+        np.set_printoptions(precision=2, suppress=True)
+        logger.info(f"Solving LcsTrajopt problem from initial condition: {self.x0}")
+
+        Y, relaxed_cost, relaxed_result = solve_sdp_relaxation(
+            qcqp=self.qcqp,
+            trace_cost=solver_config.use_trace_cost,
+            implied_constraints=solver_config.implied_constraints,
+            variable_groups=None,
+            print_time=False,
+            plot_eigvals=True,
+            print_eigvals=False,
+            logger=logger,
+            output_dir=output_dir / "relaxation",
+        )
+
+        μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
+        (
+            xs_mean,
+            us_mean,
+            λs_mean,
+        ) = self.get_state_input_forces_from_decision_var_values(
+            μ, solver_config.equality_elimination_method
+        )
+
+        relaxed_attempt = LcsSolveAttempt(
+            success=relaxed_result.is_success(),
+            time=relaxed_result.get_solver_details().optimizer_time,  # type: ignore
+            cost=relaxed_cost,
+            relaxed_or_rounded="relaxed",
+            traj=LcsTrajectory(self.sys, xs_mean, us_mean, λs_mean, self.params.T_s),
+        )
+
+        logger.info(f"Solved relaxed problem. {relaxed_attempt}")
+
+        complementarity_violations = []
+        for consts_at_k in self.complementarity_constraint:
+            violations_at_k = []
+            for const in consts_at_k:
+                eval = const.evaluator()
+                if not eval.upper_bound() == eval.lower_bound():
+                    raise RuntimeError(
+                        "All complementarity constraints should be equality constraints!"
+                    )
+
+                vals = relaxed_result.GetSolution(const.variables())
+                violation = np.abs(eval.Eval(vals) - eval.upper_bound()).item()
+                violations_at_k.append(violation)
+
+            complementarity_violations.append(np.array(violations_at_k))
+        complementarity_violations = np.array(complementarity_violations)
+
+        # Rounding
+        initial_guesses = [μ]  # Also use the mean as an initial guess
+        initial_guesses.extend(
+            np.random.multivariate_normal(
+                mean=μ, cov=Σ, size=solver_config.num_rounding_attempts
+            )
+        )
+
+        attempts = []
+        logger.info(f"Rounding {len(initial_guesses)} attempts...")
+
+        for initial_guess in tqdm(initial_guesses):
+            snopt = SnoptSolver()
+
+            start = time()
+            result = snopt.Solve(self.qcqp, initial_guess)  # type: ignore
+            end = time()
+            rounding_time = end - start
+
+            attempt = LcsSolveAttempt(
+                result.is_success(),
+                rounding_time,
+                result.get_optimal_cost() if result.is_success() else np.inf,
+                relaxed_or_rounded="rounded",
+                traj=LcsTrajectory(
+                    self.sys, *self.evaluate_state_input_forces(result), self.params.T_s
+                ),
+                traj_initial_guess=LcsTrajectory(
+                    self.sys,
+                    *self.get_state_input_forces_from_decision_var_values(
+                        initial_guess, solver_config.equality_elimination_method
+                    ),
+                    self.params.T_s,
+                ),
+            )
+
+            attempts.append(attempt)
+
+        best_attempt_idx = int(np.argmin([attempt.cost for attempt in attempts]))
+        best_attempt = attempts[best_attempt_idx]
+
+        logger.info("Rounding results:")
+        for idx, attempt in enumerate(attempts):
+            logger.info(
+                f"   Attempt {idx}: {attempt}, optimality gap (upper bound): {compute_optimality_gap_pct(attempt.cost, relaxed_cost):.3f} %"
+            )
+        logger.info(
+            f"Best trial: {best_attempt_idx}, optimality gap: {compute_optimality_gap_pct(best_attempt.cost, relaxed_cost):.4f}%"
+        )
+
+        res = LcsTrajoptResult(
+            best=best_attempt,
+            best_idx=best_attempt_idx,
+            relaxed_mean=relaxed_attempt,
+            all_attempts=attempts,
+            relaxed_complementarity_violations=complementarity_violations,
+        )
+
+        return res
+
+        breakpoint()
+
+        # mean_traj = CartPoleWithWallsTrajectory.from_state_input_forces(
+        #     *self.get_state_input_forces_from_decision_var_values(
+        #         μ, solver_config.equality_elimination_method
+        #     ),
+        #     self.sys,  # type: ignore
+        #     self.trajopt_params.T_s,
+        # )
+        #
+        # mean_traj.plot(curr_dir / "mean_trajectory.pdf")
+        # mean_traj.animate(curr_dir / "mean_trajectory.mp4")
+
+        # # Save eigvec trajectory
+        # # TODO: Figure out what is the problem with this!
+        # eigs, eigvecs = np.linalg.eig(Y)
+        # nu = eigs[0]
+        # v = eigvecs[0]
+        # x = np.sqrt(nu) * v
+        #
+        # eigenvector_trajectory = (
+        #     CartPoleWithWallsTrajectory.from_state_input_forces(
+        #         *trajopt.get_state_input_forces_from_decision_var_values(
+        #             x[:-1], self.solver_config.equality_elimination_method
+        #         ),
+        #         self.continuous_sys,
+        #         self.trajopt_params.T_s,
+        #     )
+        # )
+        # eigenvector_trajectory.plot(curr_dir / "eigenvector_trajectory.pdf")
+        # eigenvector_trajectory.animate(curr_dir / "eigenvector_animation.mp4")
+
 
 # TODO: Move to unit test
 def test_lcs_trajectory_optimization():
     sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1168,7 +1725,9 @@ def test_lcs_trajectory_optimization():
 
     x0 = np.array([0, 0, 0, 0])
 
-    trajopt = LcsTrajectoryOptimization(sys, params, x0)
+    trajopt = LcsTrajectoryOptimization(
+        sys, params, x0, equality_elimination_method=None
+    )
 
     assert trajopt.xs.shape == (params.N + 1, sys.num_states)
     assert trajopt.us.shape == (params.N, sys.num_inputs)
@@ -1210,7 +1769,7 @@ def test_lcs_trajectory_optimization():
 def test_lcs_trajopt_with_sparsity_construction():
     sys = CartPoleWithWalls()
 
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1246,28 +1805,9 @@ def test_lcs_trajopt_with_sparsity_construction():
     assert xs_next.shape[1] == sys.num_states
 
 
-# TODO: Move to unit test
-def test_lcs_trajopt_with_sparsity():
-    sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
-        N=10,
-        T_s=0.01,
-        Q=np.diag([1, 1, 1, 1]),
-        Q_N=np.diag([1, 1, 1, 1]),
-        R=np.array([1]),
-    )
-    x0 = np.array([0, 0, 0, 0])
-
-    trajopt = LcsTrajectoryOptimization(
-        sys, params, x0, equality_elimination_method="qr_pivot"
-    )
-
-    breakpoint()
-
-
 def test_lcs_get_state_input_forces_from_vals():
     sys = CartPoleWithWalls()
-    params = TrajectoryOptimizationParameters(
+    params = TrajoptParams(
         N=10,
         T_s=0.01,
         Q=np.diag([1, 1, 1, 1]),
@@ -1292,87 +1832,136 @@ def test_lcs_get_state_input_forces_from_vals():
 
 
 @dataclass
-class RoundingTrial:
-    success: bool
-    time: float
-    cost: float
-    result: MathematicalProgramResult
+class LcsAblationStudyParams(YamlMixin):
+    random_seed: int
+    x0_center: npt.NDArray[np.float64]
+    x0_spread: npt.NDArray[np.float64]
+    num_samples: int
 
-    def __str__(self) -> str:
-        return (
-            f"success: {self.success}, time: {self.time:.4f} s, cost: {self.cost:.4f}"
+    def __post_init__(self) -> None:
+        assert self.x0_center.shape == self.x0_spread.shape
+
+
+class LcsAblationStudy:
+    def __init__(
+        self,
+        continuous_sys: CartPoleWithWalls,  # TODO: Make nonspecific for Cart Pole with Walls
+        study_params: LcsAblationStudyParams,
+        trajopt_params: TrajoptParams,
+        solver_config: LcsTrajoptSolverConfig,
+    ) -> None:
+
+        self.continuous_sys = continuous_sys
+        self.params = study_params
+        self.trajopt_params = trajopt_params
+        self.solver_config = solver_config
+
+    @staticmethod
+    def generate_x0s(
+        x0_center: npt.NDArray[np.float64], x0_spread: npt.NDArray[np.float64], N: int
+    ) -> list[npt.NDArray[np.float64]]:
+        x0_low = x0_center - x0_spread
+        x0_high = x0_center + x0_spread
+
+        samples = np.random.uniform(low=x0_low, high=x0_high, size=(N, len(x0_low)))
+        return [sample for sample in samples]
+
+    def run(self, logger: Logger, output_dir: Path, debug: bool = False) -> None:
+        ANI_REALTIME_RATE = 0.5
+
+        x0s = self.generate_x0s(
+            self.params.x0_center, self.params.x0_spread, self.params.num_samples
         )
 
+        logger.info(
+            f"Running ablation study with {self.params.num_samples} randomly sampled initial conditions."
+        )
+        logger.info(f"Saving results to {output_dir}")
 
-def plot_rounding_trials(
-    trials: list[RoundingTrial], output_dir: Path | None = None
-) -> None:
-    num_rounding_trials = len(trials)
+        from tqdm import tqdm
 
-    # Extract attributes for plotting
-    success_values = [trial.success for trial in trials]
-    time_values = [trial.time for trial in trials]
-    cost_values = [trial.cost for trial in trials]
+        results = []
+        for idx, x0 in enumerate(tqdm(x0s)):
+            curr_dir = output_dir / f"initial_conditions_{idx}"
+            curr_dir.mkdir(exist_ok=True, parents=True)
 
-    # Find the index of the trial with the lowest cost
-    best_trial_index = cost_values.index(min(cost_values))
+            logger.info(f"Running initial guess sample {idx}")
 
-    # Plotting the attributes
-    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+            # Log this run to the local folder as well
+            file_handler = logging.FileHandler(curr_dir / "script.log")
+            logger.addHandler(file_handler)
 
-    # Ensure axs is a list of Axes
-    if isinstance(axs, Axes):
-        axs = [axs]
+            np.savetxt(curr_dir / "x0.txt", x0, delimiter=" ", fmt="%.2f")
 
-    # Plot success values
-    axs[0].bar(range(num_rounding_trials), success_values, color="grey")
-    axs[0].bar(
-        best_trial_index, success_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[0].set_xlabel("Trial Index")
-    axs[0].set_ylabel("Success")
-    axs[0].set_title("Rounding Trial Success")
-    axs[0].set_xticks(range(num_rounding_trials))
+            trajopt = LcsTrajectoryOptimization(
+                self.continuous_sys,
+                self.trajopt_params,
+                x0,
+                equality_elimination_method=self.solver_config.equality_elimination_method,
+            )
 
-    # Plot time values
-    axs[1].bar(range(num_rounding_trials), time_values, color="grey")
-    axs[1].bar(
-        best_trial_index, time_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[1].set_xlabel("Trial Index")
-    axs[1].set_ylabel("Time (s)")
-    axs[1].set_title("Rounding Trial Time")
-    axs[1].set_xticks(range(num_rounding_trials))
+            res = trajopt.solve(self.solver_config, curr_dir, logger)
 
-    # Plot cost values
-    axs[2].bar(range(num_rounding_trials), cost_values, color="grey")
-    axs[2].bar(
-        best_trial_index, cost_values[best_trial_index], color="red"
-    )  # Highlight the best trial
-    axs[2].set_xlabel("Trial Index")
-    axs[2].set_ylabel("Cost")
-    axs[2].set_title("Rounding Trial Cost")
-    axs[2].set_xticks(range(num_rounding_trials))
+            res.plot_rounding_overview(curr_dir)
+            res.plot_violations(curr_dir / "relaxation")
+            res.save_attempts(curr_dir, self.continuous_sys.traj_type, realtime_rate=ANI_REALTIME_RATE)  # type: ignore
 
-    plt.tight_layout()
+            results.append(res)
 
-    if output_dir is None:
-        plt.show()
-    else:
-        plt.savefig(output_dir / "rounding_trials.pdf")
+            # Stop logging to local folder
+            logger.removeHandler(file_handler)
+
+        # TODO: Make one long video of all relaxed results
+        all_trajs_merged = self.continuous_sys.traj_type.from_lcs_trajectory(
+            LcsTrajectory.merge([res.relaxed_mean.traj for res in results])
+        )
+        all_trajs_merged.plot(output_dir, "all_relaxed_trajs")
+        all_trajs_merged.animate(
+            output_dir, "all_relaxed_trajs", realtime_rate=ANI_REALTIME_RATE
+        )
+
+        # TODO: Print statistics
+
+        print("Finished ablation study.")
 
 
-@dataclass
-class CartPoleConfig(YamlMixin):
-    trajopt_params: TrajectoryOptimizationParameters
-    x0: npt.NDArray[np.float64]
-    implied_constraints: ImpliedConstraintsType
-    equality_elimination_method: EqualityEliminationType | None
-    use_trace_cost: float | None
-    use_chain_sparsity: bool
-    seed: int
-    num_rounding_trials: int
-    git_commit: str
+def cart_pole_ablation_study(output_dir: Path, debug: bool, logger: Logger) -> None:
+    sys = CartPoleWithWalls()
+    Q = np.diag([100, 10, 1, 1])
+    trajopt_params = TrajoptParams(
+        N=10,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([0.05]),
+    )
+
+    solver_config = LcsTrajoptSolverConfig(
+        implied_constraints="weakest",
+        equality_elimination_method="shooting",
+        # equality_elimination_method=None,
+        use_trace_cost=1e-5,
+        use_chain_sparsity=False,
+        seed=0,
+        num_rounding_attempts=0,
+        git_commit=get_current_git_commit(),
+    )
+
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
+    solver_config.save(output_dir / "solver_config.yaml")
+
+    cart_position_max = sys.distance_to_walls
+    DEG_TO_RAD = np.pi / 180
+    pole_angle_max = 5 * DEG_TO_RAD
+
+    # TODO: Throw away infeasible initial conditions
+    study_params = LcsAblationStudyParams(
+        random_seed=0,
+        x0_center=np.array([0, 0, 0, 0]),
+        x0_spread=np.array([cart_position_max, pole_angle_max, 0.02, 0.1]),
+        num_samples=20,
+    )
+    study = LcsAblationStudy(sys, study_params, trajopt_params, solver_config)
+    study.run(logger, output_dir, debug=True)
 
 
 # TODO: This is just to quickly see if only eliminating some variables maintains tightness.
@@ -1381,34 +1970,35 @@ def cart_pole_test_mechanical_elimination(
     output_dir: Path, debug: bool, logger: Logger
 ) -> None:
     sys = CartPoleWithWalls()
-    Q = np.diag([10, 100, 1, 10])
+    Q = np.diag([10, 100, 10, 100])
 
-    cfg = CartPoleConfig(
-        trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
-            T_s=0.1,
-            Q=Q,
-            R=np.array([1]),
-        ),
-        x0=np.array([0.3, 0, 0.10, 0]),
+    x0 = np.array([0.3, 0, 0.10, 0])
+    trajopt_params = TrajoptParams(
+        N=20,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([1]),
+    )
+    cfg = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
         equality_elimination_method="qr_pivot",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_trials=5,
+        num_rounding_attempts=5,
         git_commit=get_current_git_commit(),
     )
 
-    cfg.save(output_dir / "config.yaml")
+    cfg.save(output_dir / "solver_config.yaml")
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
 
     np.random.seed(cfg.seed)
 
     logger.info("Building trajopt program...")
     trajopt = CartPoleMechanicalEliminationTrajopt(
         sys,
-        cfg.trajopt_params,
-        cfg.x0,
+        trajopt_params,
+        x0,
     )
 
     logger.info("Solving SDP relaxation...")
@@ -1430,38 +2020,38 @@ def cart_pole_test_mechanical_elimination(
     # Rounding
     μ, Σ = get_gaussian_from_sdp_relaxation_solution(Y)
 
-    eigvec = np.linalg.eig(Y).eigenvectors[0]
-    eigvec = eigvec / eigvec[0]
-
     # Save "mean"/relaxed trajectory
     relaxed_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.get_state_input_forces_from_decision_var_values(
             μ, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
 
-    # Save "mean"/relaxed trajectory
+    # Save eigvec trajectory
+    eigvec = np.linalg.eig(Y).eigenvectors[0]
+    eigvec = eigvec / eigvec[0]
+
     eigenvector_trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
         *trajopt.get_state_input_forces_from_decision_var_values(
-            μ, cfg.equality_elimination_method
+            eigvec, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     eigenvector_trajectory.plot(output_dir / "eigenvector_trajectory.pdf")
     eigenvector_trajectory.animate(output_dir / "eigenvector_animation.mp4")
 
     initial_guesses = [μ]  # use the mean as an initial guess
     initial_guesses.extend(
-        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_attempts)
     )
 
-    trials = []
-    logger.info(f"Rounding {len(initial_guesses)} trials...")
+    attempts = []
+    logger.info(f"Rounding {len(initial_guesses)} attempts...")
     for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
@@ -1470,17 +2060,17 @@ def cart_pole_test_mechanical_elimination(
         end = time()
         rounding_time = end - start
 
-        trial = RoundingTrial(
+        trial = LcsSolveAttempt(
             result.is_success(), rounding_time, result.get_optimal_cost(), result
         )
-        trials.append(trial)
+        attempts.append(trial)
 
-    plot_rounding_trials(trials, output_dir)
+    plot_rounding_attempts(attempts, output_dir)
 
-    best_trial_idx = np.argmin([trial.cost for trial in trials])
-    best_trial = trials[best_trial_idx]
+    best_trial_idx = np.argmin([trial.cost for trial in attempts])
+    best_trial = attempts[best_trial_idx]
 
-    for idx, trial in enumerate(trials):
+    for idx, trial in enumerate(attempts):
         logger.info(
             f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
@@ -1508,32 +2098,34 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
     sys = CartPoleWithWalls()
     Q = np.diag([10, 100, 1, 10])
 
-    cfg = CartPoleConfig(
-        trajopt_params=TrajectoryOptimizationParameters(
-            N=20,
-            T_s=0.1,
-            Q=Q,
-            R=np.array([1]),
-        ),
-        x0=np.array([0.3, 0, 0.10, 0]),
+    trajopt_params = TrajoptParams(
+        N=20,
+        T_s=0.1,
+        Q=Q,
+        R=np.array([1]),
+    )
+    x0 = np.array([0.3, 0, 0.10, 0])
+
+    cfg = LcsTrajoptSolverConfig(
         implied_constraints="weakest",
         equality_elimination_method="shooting",
         use_trace_cost=1e-5,
         use_chain_sparsity=False,
         seed=0,
-        num_rounding_trials=5,
+        num_rounding_attempts=5,
         git_commit=get_current_git_commit(),
     )
 
-    cfg.save(output_dir / "config.yaml")
+    cfg.save(output_dir / "solver_config.yaml")
+    trajopt_params.save(output_dir / "trajopt_params.yaml")
 
     np.random.seed(cfg.seed)
 
     logger.info("Building trajopt program...")
     trajopt = LcsTrajectoryOptimization(
         sys,
-        cfg.trajopt_params,
-        cfg.x0,
+        trajopt_params,
+        x0,
         equality_elimination_method=cfg.equality_elimination_method,
     )
 
@@ -1561,18 +2153,18 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
             μ, cfg.equality_elimination_method
         ),
         sys,
-        cfg.trajopt_params.T_s,
+        trajopt_params.T_s,
     )
     relaxed_trajectory.plot(output_dir / "relaxed_trajectory.pdf")
     relaxed_trajectory.animate(output_dir / "relaxed_animation.mp4")
 
     initial_guesses = [μ]  # use the mean as an initial guess
     initial_guesses.extend(
-        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_trials)
+        np.random.multivariate_normal(mean=μ, cov=Σ, size=cfg.num_rounding_attempts)
     )
 
-    trials = []
-    logger.info(f"Rounding {len(initial_guesses)} trials...")
+    attempts = []
+    logger.info(f"Rounding {len(initial_guesses)} attempts...")
     for initial_guess in tqdm(initial_guesses):
         snopt = SnoptSolver()
 
@@ -1581,24 +2173,24 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
         end = time()
         rounding_time = end - start
 
-        trial = RoundingTrial(
+        trial = LcsSolveAttempt(
             result.is_success(), rounding_time, result.get_optimal_cost(), result
         )
-        trials.append(trial)
+        attempts.append(trial)
 
-    plot_rounding_trials(trials, output_dir)
+    plot_rounding_attempts(attempts, output_dir)
 
-    best_trial_idx = np.argmin([trial.cost for trial in trials])
-    best_trial = trials[best_trial_idx]
+    best_trial_idx = np.argmin([trial.cost for trial in attempts])
+    best_trial = attempts[best_trial_idx]
 
-    for idx, trial in enumerate(trials):
+    for idx, trial in enumerate(attempts):
         logger.info(
             f"Trial {idx}: {trial}, optimality gap (upper bound): {compute_optimality_gap_pct(trial.cost, relaxed_cost):.3f} %"
         )
         trajectory = CartPoleWithWallsTrajectory.from_state_input_forces(
             *trajopt.evaluate_state_input_forces(trial.result),
             sys,
-            cfg.trajopt_params.T_s,
+            trajopt_params.T_s,
         )
 
         trial_dir = output_dir / f"trial_{idx}"
@@ -1616,12 +2208,13 @@ def cart_pole_experiment_1(output_dir: Path, debug: bool, logger: Logger) -> Non
 
 
 def main(output_dir: Path, debug: bool, logger: Logger) -> None:
-    # test_cart_pole_w_walls()
-    # test_lcs_trajectory_optimization()
-    # test_lcs_get_state_input_forces_from_vals()
-    # test_lcs_trajopt_with_sparsity_construction()
+    test_cart_pole_w_walls()
+    test_lcs_trajectory_optimization()
+    test_lcs_get_state_input_forces_from_vals()
+    test_lcs_trajopt_with_sparsity_construction()
 
-    cart_pole_experiment_1(output_dir, debug, logger)
+    cart_pole_ablation_study(output_dir, debug, logger)
+    # cart_pole_experiment_1(output_dir, debug, logger)
     # cart_pole_test_mechanical_elimination(output_dir, debug, logger)
 
 

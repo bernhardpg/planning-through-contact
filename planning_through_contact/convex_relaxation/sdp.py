@@ -1074,6 +1074,7 @@ def solve_sdp_relaxation(
     print_solver_output: bool = False,
     plot_eigvals: bool = False,
     print_eigvals: bool = False,
+    print_trace_cost: bool = False,
     print_time: bool = False,
     logger: Logger | None = None,
     output_dir: Path | None = None,
@@ -1091,6 +1092,9 @@ def solve_sdp_relaxation(
         options.set_to_weakest()
     else:
         options.set_to_strongest()
+
+    if output_dir:
+        output_dir.mkdir(exist_ok=True, parents=True)
 
     SPARSITY_OUTPUT_DIR = (
         output_dir / "sparsity_patterns" if output_dir is not None else None
@@ -1129,7 +1133,7 @@ def solve_sdp_relaxation(
 
     relaxed_result = Solve(sdp_relaxation, solver_options=solver_options)
     # assert relaxed_result.is_success()
-    logger.info("Found solution.")
+    # logger.info("Found solution.")
     if print_time:
         logger.info(
             f"Elapsed solver time: {relaxed_result.get_solver_details().optimizer_time:.2f} s"  # type: ignore
@@ -1183,7 +1187,8 @@ def solve_sdp_relaxation(
             return cost.evaluator().Eval(relaxed_result.GetSolution(cost.variables()))
 
         trace_cost_val = np.sum([eval_cost(cost) for cost in trace_costs])
-        logger.info(f"Total trace cost: ε * Tr X = {trace_cost_val:.4f}")
+        if print_trace_cost:
+            logger.info(f"Total trace cost: ε * Tr X = {trace_cost_val:.4f}")
 
         optimal_cost = relaxed_result.get_optimal_cost() - trace_cost_val
 
