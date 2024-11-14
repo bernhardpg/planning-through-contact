@@ -27,13 +27,13 @@ if __name__ == "__main__":
         "--body",
         help="Which slider body to use.",
         type=str,
-        default="sugar_box",
+        default="box",
     )
     parser.add_argument(
         "--num",
         help="Number of trajectories to generate",
         type=int,
-        default=100,
+        default=10,
     )
     parser.add_argument(
         "--save_relaxed",

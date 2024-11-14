@@ -114,6 +114,11 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
+        ths = [0, np.pi / 2, np.pi, np.pi * 3 / 2]
+        self.slider_pose_targets = [
+            self.slider_pose_target + PlanarPose(0, 0, th) for th in ths
+        ]
+
         self.edges = {}
         if self.config.allow_teleportation:
             for i, j in combinations(range(self.num_contact_modes), 2):
@@ -146,10 +151,16 @@ class PlanarPushingPlanner:
 
             if self.config.use_entry_and_exit_subgraphs:
                 self.source_subgraph = self._create_entry_or_exit_subgraph("entry")
-                self.target_subgraph = self._create_entry_or_exit_subgraph("exit")
+                self.target_subgraphs = []
+                for idx, _ in enumerate(self.slider_pose_targets):
+                    self.target_subgraphs.append(
+                        self._create_entry_or_exit_subgraph(
+                            "exit", name_postfix=str(idx)
+                        )
+                    )
 
         self._set_initial_poses(self.pusher_pose_initial, self.slider_pose_initial)
-        self._set_target_poses(self.pusher_pose_target, self.slider_pose_target)
+        self._set_target_poses(self.pusher_pose_target, self.slider_pose_targets)
 
     def _build_subgraph_between_contact_modes(
         self,
@@ -223,15 +234,16 @@ class PlanarPushingPlanner:
             assert self.target is not None
 
             all_pairs[self.source.mode.name] = self.source
-            all_pairs[self.target.mode.name] = self.target
+            for target in self.targets:
+                all_pairs[target.mode.name] = target
         else:
-            for subgraph in (self.source_subgraph, self.target_subgraph):
+            for subgraph in [self.source_subgraph] + self.target_subgraphs:
                 all_pairs.update(subgraph.get_all_vertex_mode_pairs())
 
         return all_pairs
 
     def _create_entry_or_exit_subgraph(
-        self, entry_or_exit: Literal["entry", "exit"]
+        self, entry_or_exit: Literal["entry", "exit"], name_postfix: str | None = None
     ) -> NonCollisionSubGraph:
         if entry_or_exit == "entry":
             name = "ENTRY"
@@ -239,6 +251,9 @@ class PlanarPushingPlanner:
         else:
             name = "EXIT"
             kwargs = {"outgoing": False, "incoming": True}
+
+        if name_postfix is not None:
+            name += "_" + name_postfix
 
         subgraph = NonCollisionSubGraph.create_with_gcs(self.gcs, self.config, name)
 
@@ -271,18 +286,29 @@ class PlanarPushingPlanner:
     def _set_target_poses(
         self,
         pusher_pose: PlanarPose,
-        slider_pose: PlanarPose,
+        slider_poses: list[PlanarPose],
     ) -> None:
         if (
             self.config.allow_teleportation
             or not self.config.use_entry_and_exit_subgraphs
         ):
+            raise NotImplementedError("Not supported for symmetries")
             self.target = self._add_single_source_or_target(
                 pusher_pose, slider_pose, "final"
             )
         else:
-            self.target_subgraph.set_final_poses(pusher_pose, slider_pose)
-            self.target = self.target_subgraph.target
+            self.targets = []
+            for idx, (target_subgraph, slider_pose) in enumerate(
+                zip(self.target_subgraphs, slider_poses)
+            ):
+                target_subgraph.set_final_poses(
+                    pusher_pose, slider_pose, name_postfix=str(idx)
+                )
+                self.targets.append(target_subgraph.target)
+
+            self.target = self.gcs.AddVertex(opt.Point(np.zeros(1)), name="target")
+            for subgraph in self.target_subgraphs:
+                self.gcs.AddEdge(subgraph.target.vertex, self.target)
 
     def _add_single_source_or_target(
         self,
@@ -408,9 +434,7 @@ class PlanarPushingPlanner:
         # ]
         # result = self.gcs.SolveConvexRestriction(active_edges, options)
 
-        result = self.gcs.SolveShortestPath(
-            self.source.vertex, self.target.vertex, options
-        )
+        result = self.gcs.SolveShortestPath(self.source.vertex, self.target, options)
 
         if solver_params.print_flows:
             self._print_edge_flows(result)
@@ -438,9 +462,7 @@ class PlanarPushingPlanner:
 
         options.solver_options = self._get_mosek_params(solver_params, 1e-5)
 
-        paths = self.gcs.SamplePaths(
-            self.source.vertex, self.target.vertex, result, options
-        )
+        paths = self.gcs.SamplePaths(self.source.vertex, self.target, result, options)
         results = [self.gcs.SolveConvexRestriction(path, options) for path in paths]
 
         flows = [result.GetSolution(e.phi()) for e in self.gcs.Edges()]

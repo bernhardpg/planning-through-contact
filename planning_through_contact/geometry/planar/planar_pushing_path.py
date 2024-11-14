@@ -151,7 +151,8 @@ class PlanarPushingPath:
         Creates a Planar Pushing path from a given set of edges.
         """
         vertex_path = [e.u() for e in edge_path]
-        vertex_path.append(edge_path[-1].v())
+        # With symmetries we don't want to add the last artificial "target" vertex
+        # vertex_path.append(edge_path[-1].v())
 
         if assert_nan_values:
             # We need a result to do this

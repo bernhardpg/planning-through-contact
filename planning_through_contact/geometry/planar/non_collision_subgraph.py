@@ -189,9 +189,14 @@ class NonCollisionSubGraph:
         pusher_pose: PlanarPose,
         slider_pose: PlanarPose,
         initial_or_final: Literal["initial", "final"],
+        name_postfix: str | None = None,
     ) -> None:
         mode = NonCollisionMode.create_source_or_target_mode(
-            self.config, slider_pose, pusher_pose, initial_or_final
+            self.config,
+            slider_pose,
+            pusher_pose,
+            initial_or_final,
+            name_postfix=name_postfix,
         )
         vertex = self.gcs.AddVertex(mode.get_convex_set(), mode.name)
 
@@ -213,17 +218,21 @@ class NonCollisionSubGraph:
         self,
         pusher_initial_pose: PlanarPose,
         slider_initial_pose: PlanarPose,
+        name_postfix: str | None = None,
     ) -> None:
         self._set_initial_or_final_poses(
-            pusher_initial_pose, slider_initial_pose, "initial"
+            pusher_initial_pose, slider_initial_pose, "initial", name_postfix
         )
 
     def set_final_poses(
         self,
         pusher_final_pose: PlanarPose,
         slider_final_pose: PlanarPose,
+        name_postfix: str | None = None,
     ) -> None:
-        self._set_initial_or_final_poses(pusher_final_pose, slider_final_pose, "final")
+        self._set_initial_or_final_poses(
+            pusher_final_pose, slider_final_pose, "final", name_postfix
+        )
 
     def get_all_vertex_mode_pairs(self) -> Dict[str, VertexModePair]:
         all_pairs = {

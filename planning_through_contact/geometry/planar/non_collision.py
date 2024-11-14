@@ -191,6 +191,7 @@ class NonCollisionMode(AbstractContactMode):
         initial_or_final: Literal["initial", "final"],
         set_slider_pose: bool = True,
         terminal_cost: bool = False,
+        name_postfix: str | None = None,
     ) -> "NonCollisionMode":
         p_WP = pusher_pose_world.pos()
         R_WB = slider_pose_world.two_d_rot_matrix()
@@ -202,6 +203,9 @@ class NonCollisionMode(AbstractContactMode):
 
         loc = find_first_matching_location(pusher_pose_body, config)
         mode_name = "source" if initial_or_final == "initial" else "target"
+        if name_postfix is not None:
+            mode_name += "_" + name_postfix
+
         mode = cls.create_from_plan_spec(
             loc, config, mode_name, one_knot_point=True, terminal_cost=terminal_cost
         )
