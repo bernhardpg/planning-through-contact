@@ -58,6 +58,8 @@ from planning_through_contact.visualize.colors import (
     CRIMSON,
     DARKORCHID2,
     EMERALDGREEN,
+    GREEN,
+    RED1,
     RGB,
 )
 from planning_through_contact.visualize.visualizer_2d import (
@@ -1230,6 +1232,7 @@ def _add_slider_geometries(
     alpha: float = 1.0,
     color: RGB = AQUAMARINE4,
     show_com: bool = False,
+    show_orientation: bool = True,
 ) -> None:
     DEFAULT_HEIGHT = 0.3
 
@@ -1300,6 +1303,40 @@ def _add_slider_geometries(
         com_color = BLACK.diffuse(alpha)
         scene_graph.AssignRole(
             source_id, com_id, MakePhongIllustrationProperties(com_color)
+        )
+
+    if show_orientation:
+        LINE_LENGTH = 0.1
+        or_id = scene_graph.RegisterGeometry(
+            source_id,
+            slider_frame_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([0, LINE_LENGTH / 2, 0])  # type: ignore
+                ),
+                DrakeBox(0.005, LINE_LENGTH, DEFAULT_HEIGHT),
+                "line_1",
+            ),
+        )
+        or_color = RED1.diffuse(alpha)
+        scene_graph.AssignRole(
+            source_id, or_id, MakePhongIllustrationProperties(or_color)
+        )
+
+        od_id_2 = scene_graph.RegisterGeometry(
+            source_id,
+            slider_frame_id,
+            GeometryInstance(
+                RigidTransform(
+                    RotationMatrix.Identity(), np.array([LINE_LENGTH / 2, 0, 0])  # type: ignore
+                ),
+                DrakeBox(LINE_LENGTH, 0.005, DEFAULT_HEIGHT),
+                "line_2",
+            ),
+        )
+        or_2_color = GREEN.diffuse(alpha)
+        scene_graph.AssignRole(
+            source_id, od_id_2, MakePhongIllustrationProperties(or_2_color)
         )
 
 
