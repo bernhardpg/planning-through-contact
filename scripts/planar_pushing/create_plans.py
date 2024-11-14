@@ -7,6 +7,10 @@ from planning_through_contact.experiments.utils import (
     get_default_solver_params,
     get_hardware_plans,
 )
+from planning_through_contact.geometry.planar.planar_pose import PlanarPose
+from planning_through_contact.planning.planar.planar_plan_config import (
+    PlanarPushingStartAndGoal,
+)
 from planning_through_contact.planning.planar.utils import create_plan
 
 if __name__ == "__main__":
@@ -127,6 +131,30 @@ if __name__ == "__main__":
     else:
         folder_name = create_output_folder(output_dir, slider_type, traj_number)
         plans = get_default_experiment_plans(seed, num_trajs, config)
+
+    # HARDCODED OVERWRITE FOR TOMMY
+    target_pose = PlanarPose(0, 0, 0)
+    pusher_pose = PlanarPose(-0.25, 0, 0)
+    start_poses = [
+        PlanarPose(0.15, 0.15, 0.2),
+        PlanarPose(-0.15, 0.15, 0.9),
+        PlanarPose(0.05, -0.15, -0.4),
+    ]
+
+    import numpy as np
+
+    ths = [0, np.pi / 2, np.pi, np.pi * 3 / 2]
+
+    plans = [
+        PlanarPushingStartAndGoal(
+            slider_initial_pose=start_pose + PlanarPose(0, 0, th),
+            slider_target_pose=target_pose,
+            pusher_initial_pose=pusher_pose,
+            pusher_target_pose=pusher_pose,
+        )
+        for start_pose in start_poses
+        for th in ths
+    ]
 
     print("")
     print(f"Output folder: {folder_name}")

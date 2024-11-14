@@ -103,10 +103,10 @@ class PlanarPushingPlanner:
             for loc in self.contact_locations
         ]
 
-        for mode in self.contact_modes:
-            mode.add_so2_cut(
-                self.slider_pose_initial.theta, self.slider_pose_target.theta
-            )
+        # for mode in self.contact_modes:
+        #     mode.add_so2_cut(
+        #         self.slider_pose_initial.theta, self.slider_pose_target.theta
+        #     )
 
     def _build_graph(self):
         self.contact_vertices = [
@@ -114,7 +114,8 @@ class PlanarPushingPlanner:
             for mode in self.contact_modes
         ]
 
-        ths = [0, np.pi / 2, np.pi, np.pi * 3 / 2]
+        ths = [0, (1 / 2) * np.pi, np.pi, (3 / 2) * np.pi]
+        self.target_names = ["+0", "+(1/2)*pi", "+pi", "+(3/2)*pi"]
         self.slider_pose_targets = [
             self.slider_pose_target + PlanarPose(0, 0, th) for th in ths
         ]
@@ -155,7 +156,7 @@ class PlanarPushingPlanner:
                 for idx, _ in enumerate(self.slider_pose_targets):
                     self.target_subgraphs.append(
                         self._create_entry_or_exit_subgraph(
-                            "exit", name_postfix=str(idx)
+                            "exit", name_postfix=self.target_names[idx]
                         )
                     )
 
@@ -302,7 +303,7 @@ class PlanarPushingPlanner:
                 zip(self.target_subgraphs, slider_poses)
             ):
                 target_subgraph.set_final_poses(
-                    pusher_pose, slider_pose, name_postfix=str(idx)
+                    pusher_pose, slider_pose, name_postfix=self.target_names[idx]
                 )
                 self.targets.append(target_subgraph.target)
 
