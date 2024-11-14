@@ -617,7 +617,11 @@ class PlanarPushingPlanner:
         """
         if result:
             graphviz = self.gcs.GetGraphvizString(
-                result=result, show_slacks=False, precision=2, active_path=[]
+                result=result,
+                show_slacks=False,
+                precision=2,
+                active_path=[],
+                show_vars=False,
             )
         else:
             graphviz = self.gcs.GetGraphvizString(

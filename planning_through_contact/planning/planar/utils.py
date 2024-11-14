@@ -178,6 +178,12 @@ def do_one_run_get_path(
         planner.create_graph_diagram(graph_filename)
 
     paths = planner._plan_paths(solver_params)
+
+    if graph_filename is not None:
+        planner.create_graph_diagram(
+            graph_filename + "_result", planner.relaxed_gcs_result
+        )
+
     if paths is None:
         num_binary_rounded_paths = 0
         num_feasible_rounded_paths = None
