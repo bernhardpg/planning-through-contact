@@ -141,7 +141,8 @@ if __name__ == "__main__":
         # PlanarPose(0.05, -0.15, -0.4),
     ]
 
-    config.with_symmetrices = False
+    # config.with_symmetrices = False
+    config.with_symmetrices = True
 
     import numpy as np
 

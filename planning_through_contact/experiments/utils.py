@@ -99,7 +99,7 @@ def get_default_contact_cost() -> ContactCost:
         keypoint_velocity_regularization=100.0,
         trace=None,
         mode_transition_cost=None,
-        time=1.0,
+        time=3.0,
         angular_velocity_regularixation=100.0,
     )
     return contact_cost
