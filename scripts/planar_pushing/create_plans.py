@@ -137,9 +137,11 @@ if __name__ == "__main__":
     pusher_pose = PlanarPose(-0.25, 0, 0)
     start_poses = [
         PlanarPose(0.15, 0.15, 0.2),
-        PlanarPose(-0.15, 0.15, 0.9),
-        PlanarPose(0.05, -0.15, -0.4),
+        # PlanarPose(-0.15, 0.15, 0.9),
+        # PlanarPose(0.05, -0.15, -0.4),
     ]
+
+    config.with_symmetrices = False
 
     import numpy as np
 

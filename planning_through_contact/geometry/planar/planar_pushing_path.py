@@ -146,13 +146,17 @@ class PlanarPushingPath:
         edge_path: List[GcsEdge],
         all_pairs: Dict[str, VertexModePair],
         assert_nan_values: bool = True,
+        with_symmetries: bool = False,
     ) -> "PlanarPushingPath":
         """
         Creates a Planar Pushing path from a given set of edges.
         """
         vertex_path = [e.u() for e in edge_path]
-        # With symmetries we don't want to add the last artificial "target" vertex
-        # vertex_path.append(edge_path[-1].v())
+        if with_symmetries:
+            # With symmetries we don't want to add the last artificial "target" vertex
+            pass
+        else:
+            vertex_path.append(edge_path[-1].v())
 
         if assert_nan_values:
             # We need a result to do this

@@ -235,6 +235,7 @@ class PlanarPlanConfig:
         False  # TODO: Move this into a NonCollisionConfig
     )
     allow_teleportation: bool = False
+    with_symmetrices: bool = False
     use_eq_elimination: bool = False  # TODO: Remove
     use_entry_and_exit_subgraphs: bool = True
     no_cycles: bool = False  # TODO: remove, not used
