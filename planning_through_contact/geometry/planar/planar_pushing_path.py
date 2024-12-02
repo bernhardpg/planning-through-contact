@@ -160,13 +160,14 @@ class PlanarPushingPath:
             def _check_all_nan_or_zero(array: npt.NDArray[np.float64]) -> bool:
                 return np.isnan(array) | np.isclose(array, 0, atol=1e-5)
 
-            # Assert that all decision varibles NOT ON the optimal path are NaN or 0
-            vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
-            if len(vertices_not_on_path) > 0:
-                vertex_vars_not_on_path = np.concatenate(
-                    [result.GetSolution(v.x()) for v in vertices_not_on_path]
-                )
-                assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
+            # TODO: This is commented out because of a change in Drake that causes this to throw.
+            # # Assert that all decision varibles NOT ON the optimal path are NaN or 0
+            # vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
+            # if len(vertices_not_on_path) > 0:
+            #     vertex_vars_not_on_path = np.concatenate(
+            #         [result.GetSolution(v.x()) for v in vertices_not_on_path]
+            #     )
+            #     assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
 
             # Assert that all decision varibles ON the optimal path are not NaN
             vertex_vars_on_path = np.concatenate(
@@ -200,13 +201,14 @@ class PlanarPushingPath:
             def _check_all_nan_or_zero(array: npt.NDArray[np.float64]) -> bool:
                 return np.isnan(array) | np.isclose(array, 0, atol=1e-5)
 
-            # Assert that all decision varibles NOT ON the optimal path are NaN or 0
-            vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
-            if len(vertices_not_on_path) > 0:
-                vertex_vars_not_on_path = np.concatenate(
-                    [result.GetSolution(v.x()) for v in vertices_not_on_path]
-                )
-                assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
+            # TODO: This is commented out because of a change in Drake that causes this to throw.
+            # # Assert that all decision varibles NOT ON the optimal path are NaN or 0
+            # vertices_not_on_path = [v for v in gcs.Vertices() if v not in vertex_path]
+            # if len(vertices_not_on_path) > 0:
+            #     vertex_vars_not_on_path = np.concatenate(
+            #         [result.GetSolution(v.x()) for v in vertices_not_on_path]
+            #     )
+            #     assert np.all(_check_all_nan_or_zero(vertex_vars_not_on_path))
 
             # Assert that all decision varibles ON the optimal path are not NaN
             vertex_vars_on_path = np.concatenate(
