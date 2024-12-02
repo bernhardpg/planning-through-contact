@@ -692,21 +692,24 @@ class FaceContactMode(AbstractContactMode):
         This function only works when the slider initial pose and final pose are constant values.
         It is not yet clear how to implement something like this in the GCS case.
         """
-        ths = sorted([th1, th2])
-
-        if ths[0] == ths[1]:  # no rotation
+        if th1 == th2:  # no rotation
             # add the plane that is simply pointing outwards from the two points
-            th = ths[0]
+            th = th1
             a = np.array([np.cos(th), np.sin(th)])
             b = 1
         else:
-            p1 = np.array([np.cos(ths[0]), np.sin(ths[0]), 0])
-            p2 = np.array([np.cos(ths[1]), np.sin(ths[1]), 0])
+            p1 = np.array([np.cos(th1), np.sin(th1), 0])
+            p2 = np.array([np.cos(th2), np.sin(th2), 0])
             v = p2 - p1
             e3 = np.array([0, 0, 1])
             a = np.cross(v, e3)
             a = (a / np.linalg.norm(a))[:2]  # only want x and y components
             b = a.T @ p1[:2]
+
+            # flip a if a is not pointing outwards
+            midpoint = (p1 + p2)[:2] / 2
+            if midpoint.T @ a < 0:
+                a = -a
 
         for idx, (cos_th, sin_th) in enumerate(
             zip(self.variables.cos_ths, self.variables.sin_ths)
